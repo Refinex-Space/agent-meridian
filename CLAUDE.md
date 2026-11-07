@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-当前处于**M0 之前的工程基座阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）。内核与业务代码从 T03 开始。
+当前处于**M0 内核与运行时核心阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）；T03 定义了 `meridian-engine-spi` 的全部契约，实现了 `HarnessAgent` 装配与实例缓存、`ScriptedModel` 与内存端口夹具，P1 通过（ADR-0023、0024、0025）。执行一轮的逻辑从 T04 开始。
 
 ## 交付流程
 
@@ -88,7 +88,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 - `RuntimeContext.sessionId` 是线程 ID（`thr_…`），不是会话 ID。命名空间等会话级的值从 `PlatformContext` 取。
 - 子线程上下文必须用 `RuntimeContext.builder()` 从空白构建，禁止 `builder(parent)`。
 - 一轮的输入是四类 sealed `TurnInput` 之一，审批结果和自定义工具结果不能与普通消息混在同一轮。
-- `HarnessAgent` 的装配清单（`disableWebTools`、`disableToolsConfig`、`disableSubagents`、`disableTranscript`、`maxRetries(0)`、不设 `fallbackModel` 等）以"引擎装配"表为准，由 `AgentAssembler` 的单元测试逐项断言。
+- `HarnessAgent` 的装配清单（`disableWebTools`、`disableToolsConfig`、`disableSubagents`、`disableTranscript`、`maxRetries(1)`、不设 `fallbackModel`、`NoopAsyncToolRegistry` 等）以"引擎装配"表为准，由 `AgentAssemblerTest` 逐项断言。`maxRetries` 是含首次的总尝试次数，0 会抛异常（ADR-0023）。
 - 平台工具继承 `ToolBase` 并实现 `matchRule`；文件和命令操作传入 `ToolCallParam.getRuntimeContext()`。
 - 限流、预算、计量、重试与降级在 `RoutedModel` 内完成；压缩器会吞掉模型异常，由 `CompactionGuardMiddleware` 兜住。
 - `AgentEventType`（31 个）和 `GenerateReason` 的映射必须穷举，由单元测试保证。
@@ -97,4 +97,4 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 
 测试类名决定由谁运行：`*Test` 由 Surefire 跑，`*IT` 由 Failsafe 在 `verify` 阶段跑，`*LiveIT` 必须带 JUnit 标签 `live`，只在 `-Plive` 时运行；不符合命名的测试不会被执行。
 
-所有智能体行为必须能用 `ScriptedModel`（在 `meridian-engine-agentscope-test`）这个脚本化假模型跑通，测试不依赖真实模型。集成测试使用 Testcontainers（PostgreSQL、Redis、MinIO）；runtime 测试中开启 BlockHound。
+所有智能体行为必须能用 `ScriptedModel`（在 `meridian-engine-agentscope-test`）这个脚本化假模型跑通，测试不依赖真实模型；`meridian-engine-agentscope` 的装配与场景测试也放在该模块（反向依赖会成环），它可以依赖 common 与 engine-spi（ADR-0025）。集成测试使用 Testcontainers（PostgreSQL、Redis、MinIO）；runtime 测试中开启 BlockHound。

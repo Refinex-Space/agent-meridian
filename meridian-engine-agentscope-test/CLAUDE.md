@@ -1,0 +1,32 @@
+# meridian-engine-agentscope-test
+
+内核测试夹具：脚本化假模型 `ScriptedModel`、端口的内存实现、装配用的测试替身与测试工具，以及 `meridian-engine-agentscope` 的装配测试、缓存测试与场景测试。只以 test 作用域被依赖，不进入生产构件。
+
+## 命令
+
+- 编译与单测（含 engine-agentscope 的装配与场景测试）：`./mvnw -pl meridian-engine-agentscope-test -am test`
+- 单个测试：`./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=<类名> -Dsurefire.failIfNoSpecifiedTests=false`
+
+## 包地图
+
+- `testkit.model`：`ScriptedModel`（`respond`、`respondTo`、`failBeforeFirstChunk`、`failAfterChunks`）、`ScriptedResponse`（文本与思考按大小分块、工具调用入参分两块、`structuredOutput`、`rawChunk`、`usage`、`thenFail`）、`RecordedRequest`（`toolNames`、`lastUserText`、`toolResults`、`systemPrompt`、`options`）。
+- `testkit.port`：`InMemoryLeaseRegistry`、`InMemoryAgentStateRepository`（`activate`/`deactivate` 模拟数据库中的租约条件）、`InMemoryEventSink`、`InMemoryBlobStore`、`InMemoryAgentConfig`、`InMemoryInbox`、`InMemoryToolLedger`、`InMemoryThreadRegistry`。
+- `testkit.assembly`：`TestAssembly.builder(model)` 组装带替身的 `AgentAssembler`；`TestSpecs.agent()` 构建 `ResolvedAgentSpec`，`noneEnvironment()`/`sandboxEnvironment()`；`InMemoryWorkspaceFilesystems`（受保护路径各一个内存文件系统，`RecordingBaseStore` 记录访问）、`FakeSandboxFilesystemSpec`（能装配、不能建沙箱）。
+- `testkit.tool.RecordingTool`：继承 `ToolBase` 的测试工具，`echo(name)` 返回 `name:text`。
+- 测试：`assembly.AgentAssemblerTest`（装配表逐行）、`assembly.AgentInstanceCacheTest`、`testkit.model.ScriptedModelScenarioTest`；包名与被测类相同，可读包内常量。
+
+## 不变量
+
+- 可以依赖 common、engine-spi、engine-agentscope 与 AgentScope（ADR-0025）；被其他模块依赖时只能是 test 作用域（根 POM 的 enforcer）。
+- 智能体行为测试只用 `ScriptedModel`，不依赖真实模型（架构原则第 10 条）。
+
+## 易错点
+
+- `ScriptedModel` 每次模型调用取走一步，脚本用完以 `IllegalStateException` 失败；结构化输出、工具结果回传都会多一次模型调用，脚本步数要算上。
+- 共享一个 `HarnessAgent` 的多个用例要用不同的线程 ID（`RuntimeContext.sessionId`），否则状态互相串。
+- 对照实验用 `HarnessAgent.builder()` 直接构建时要 `disableTranscript()`，否则会在模块目录写 `.agentscope/`。
+- 并发测试的线程池大小不能小于"装配函数等待到达的调用者数"，否则会卡到超时。
+
+## 对外接口
+
+T04 起的引擎场景测试、runtime 的 `config` 包集成测试（P1 的 `AgentScopeRuntimeBaselineIT`）复用这里的夹具。

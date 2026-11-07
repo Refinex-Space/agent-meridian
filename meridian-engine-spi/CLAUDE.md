@@ -1,0 +1,35 @@
+# meridian-engine-spi
+
+平台与智能体内核之间的全部契约：`AgentEngine`、一轮的上下文与输入、平台事件模型、已解析的配置、runtime 实现的端口、沙箱与模型驱动接口。只有接口与值对象，不含实现。
+
+## 命令
+
+- 编译与单测：`./mvnw -pl meridian-engine-spi -am test`
+- 单个测试：`./mvnw -pl meridian-engine-spi -am test -Dtest=<类名> -Dsurefire.failIfNoSpecifiedTests=false`
+
+## 包地图
+
+- `engine`：`AgentEngine`（`runTurn`、`interrupt`、`shutdown`）、`TurnContext`（只带配置 ID 与修订号，配置经 `AgentConfigPort` 取）、`ThreadRef`、`RecoveryOrigin`（失败的 epoch、第几次恢复、`REPLAY_INPUT`/`RESUME_SAVED_STATE`）。
+- `engine.input`：`TurnInput` 四种输入（嵌套 record），`kind()` 给出 `rt.turns.kind`；`MessageContent`（文本、图片、文件引用）被用户消息、自定义工具结果、`agent.message` 共用。
+- `event`：`EngineEvent` 按域分为 `UserEvent`、`AgentOutputEvent`、`SessionEvent`、`SpanEvent`、`StreamEvent`，具体记录嵌套在域接口里；`EventType` 登记每种类型的取值、域与记录类，`type()` 由记录类反查。
+- `spec`：`ResolvedAgentSpec`（含 `SubagentSpec`、`McpServerSpec`、`SkillRef`、`KnowledgeSpec`、`CompactionSpec`）、`EnvironmentSpec`、`PermissionPolicy`/`PermissionRule`、`CustomToolDeclaration`、`PlatformToolNames`。
+- `port`：架构设计「端口」表的全部端口，加 `AgentConfigPort`（ADR-0024）。端口专用的值类型嵌套在端口接口里（如 `LeaseRegistry.Lease`、`AgentStateRepository.StateFence`）。
+- `driver`：`SandboxDriver`、`SandboxHandle`、`ModelInvoker`（OpenAI 兼容消息模型）。
+
+## 不变量
+
+- 签名只出现平台类型，不依赖 AgentScope 与 Spring（ArchUnit 规则 12）；只依赖 common 与 reactor-core。
+- `EventType` 与架构设计「事件」清单逐一对应，`EventTypeCatalogTest` 直接解析 `docs/architecture/architecture.md` 比对；新增事件类型要同时改文档、`EventType` 与域接口。
+- 被 AgentScope 同步接口调用的端口（`AgentStateRepository`、`WorkspaceStorePort`、`LeaseRegistry`）是同步方法，其余返回 `Mono`/`Flux`；租户、项目、会话、epoch 从 `PlatformContext` 取（架构设计「端口」）。
+- 配置记录在构造时校验取值范围：`maxIters` ∈ [1, 200]、子智能体超时 ≤ 600 秒、子智能体工具是父智能体工具的子集、`sandbox` 档必须有规格。
+
+## 易错点
+
+- 工具入参、JSON Schema 可能含 null 值，复制时用 `Collections.unmodifiableMap(new LinkedHashMap<>(m))`，不用 `Map.copyOf`。
+- `PendingAction.expiresAt` 由内核留空、runtime 写入待处理动作时用 `withExpiresAt` 补上；动作 ID 由产生方生成。
+- `SessionEvent.Error` 的名字会遮蔽 `java.lang.Error`，在 `SessionEvent` 内部引用 JDK 的 `Error` 要写全名。
+
+## 对外接口
+
+- 由 `meridian-engine-agentscope` 实现：`AgentEngine`（T04）、`SandboxDriver`（T11、T12a）、`ModelInvoker`（T09b）。
+- 由 runtime 实现：`port` 包全部端口（T05 起）；内存实现在 `meridian-engine-agentscope-test` 的 `testkit.port`。
