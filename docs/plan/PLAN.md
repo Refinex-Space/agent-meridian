@@ -184,7 +184,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - 2026-11-07 用户采纳 ADR-0023（`maxRetries(1)`）与 ADR-0025（testkit 可依赖 common 与 engine-spi），阻塞解除
 - [x] 5. 实例缓存：`acquire`/`release`、容量 500、空闲 30 分钟、引用计数归零才 `close()`；并发测试（A04）
 - [x] 6. `ScriptedModel` 驱动 `HarnessAgent` 的场景测试：纯文本、单工具、并行工具、首包前错误、首包后错误、请求断言（A05）
-- [ ] 7. P1：runtime `config` 包下的 Spring Boot WebFlux 集成测试（Jackson 3 Web 序列化 + 同 JVM 装配并 `streamEvents`，含工具调用）；报告 `docs/poc/P01-运行基线.md`、`docs/poc/README.md`（A06）
+- [x] 7. P1：runtime `config` 包下的 Spring Boot WebFlux 集成测试（Jackson 3 Web 序列化 + 同 JVM 装配并 `streamEvents`，含工具调用）；报告 `docs/poc/P01-运行基线.md`、`docs/poc/README.md`（A06）
 - [ ] 8. 收尾：Checkstyle/Javadoc 抽查（A07）、`scripts/dev/verify.sh`（A08）、三个模块 `CLAUDE.md`、根 `CLAUDE.md`、架构设计「端口」表同步、`acceptance.json`、`PLAN.md`、提交
 
 ## 控制台设计轨道
@@ -232,8 +232,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 |---|---|---|---|
 | D01 | T01 | 架构规则未落地：`JdbcClient` 与 `JdbcTemplate` 只能被 `TenantScopedRepository`、`SystemRepository` 的子类依赖；`SystemRepository` 的子类只在 `..infra.system..` 且带 `@CrossTenant`；`..api..` 不依赖 `SystemRepository` 的子类。基类尚不存在，说明写在 `meridian-arch-tests` 的 `ArchitectureRulesTest` 类注释中 | T02（已落地：`ArchitectureRulesTest` 规则 8 至 11） |
 | D02 | T01 | 架构规则未落地：平台工具继承 `ToolBase`（经 `PlatformTool`）；运行时 Toolkit 中的非 `ToolBase` 工具必须在白名单内（启动自检） | T10a |
-| D03 | T01 | Spring Boot 4.1.2 BOM 把 fabric8 `kubernetes-httpclient-vertx`（Vert.x 4.5.28）下的 Netty 从 4.1.135 提升到 4.2.19；Vert.x 4.5 基于 Netty 4.1 构建，需要在真实调用中确认兼容，不兼容时按决策分级处理。详见 `docs/poc/P01-运行基线.md` | T03（运行基线）、T11（沙箱驱动） |
+| D03 | T01 | Spring Boot 4.1.2 BOM 把 fabric8 `kubernetes-httpclient-vertx`（Vert.x 4.5.28）下的 Netty 从 4.1.135 提升到 4.2.19；Vert.x 4.5 基于 Netty 4.1 构建，需要在真实调用中确认兼容，不兼容时按决策分级处理。详见 `docs/poc/P01-运行基线.md` | T03（已验证：fabric8 Vert.x 客户端在 Netty 4.2.19 上对本地 WebFlux 服务的真实 HTTP 请求正常）、T11（对 Kubernetes API 的调用） |
 | D04 | T02 | outbox 发布到 Redis Stream（`usage`、`audit`）时不裁剪，条目在确认后仍留在 Stream 中；消费者确认后需按已确认的最小 ID 执行 `XTRIM MINID` 或定期裁剪，避免 Redis 内存增长 | T16 |
+| D05 | T03 | `HarnessAgent` 不设置 `workspace(...)` 时，本机工作区根取 `${user.dir}/.agentscope/workspace`：harness 会把其中的 `skills/` 作为第 3 层技能读取，`MarketplaceStager` 会在其中暂存技能资源。平台要求技能只来自平台技能仓库、会话数据不落本机磁盘，装配文件系统与技能仓库时需要确定一个平台控制的本机工作区根目录（或证明无写入）。详见 `docs/poc/P01-运行基线.md` | T10a |
 
 ## 技术债
 
