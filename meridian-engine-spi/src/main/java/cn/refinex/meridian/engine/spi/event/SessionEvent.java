@@ -209,7 +209,12 @@ public sealed interface SessionEvent extends EngineEvent {
         /** 租约过期，由回收器置回，{@code recovery_attempt} 加一。 */
         LEASE_EXPIRED("lease_expired"),
         /** 节点优雅下线，{@code recovery_attempt} 不变。 */
-        NODE_SHUTDOWN("node_shutdown");
+        NODE_SHUTDOWN("node_shutdown"),
+        /**
+         * 可重试的错误（限流等待超时、可重试的供应商错误），{@code recovery_attempt} 加一；之前一定有
+         * {@code session.error}（{@code retry_status=retryable}）（ADR-0026）。
+         */
+        RETRYABLE_ERROR("retryable_error");
 
         private final String value;
 

@@ -18,7 +18,9 @@ public interface AgentEngine {
      * 执行一轮，输出平台事件流。订阅被取消即中止执行，不再写入任何数据。
      *
      * <p>订阅方（Worker）负责把事件持久化并发布；失去租约时 Worker 只取消订阅，不调用 {@link #interrupt}，
-     * 因为中断会触发 AgentScope 保存状态（架构设计「租约与 fencing」）。
+     * 因为中断会触发 AgentScope 保存状态（架构设计「租约与 fencing」）。内核自己发现租约已失效时（状态写入或
+     * {@code LeaseGuardMiddleware} 抛出 {@code LeaseLostException}），不输出任何事件，以该异常结束事件流：
+     * 本节点已不拥有这一轮，终态由回收器或新的认领者给出（ADR-0026）。
      *
      * @param ctx 本轮的上下文
      * @param input 本轮的输入，四种之一
