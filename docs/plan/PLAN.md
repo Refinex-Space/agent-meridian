@@ -60,7 +60,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | 编号 | 任务 | 阶段 | 依赖 | effort | 规模 | 验证项 | 状态 | 完成提交 |
 |---|---|---|---|---|---|---|---|---|
 | T01 | [工程脚手架与质量门禁](tasks/T01-scaffold-and-quality-gates.md) | 0 | 无 | high | 中 | P1（依赖解析部分） | 已完成 | b29c1af |
-| T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 未开始 | — |
+| T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 进行中 | — |
 | T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 未开始 | — |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 未开始 | — |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 未开始 | — |
@@ -175,7 +175,18 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+### T02 通用基础库、持久化与本地基础设施
+
+开工基线：`scripts/dev/verify.sh` 通过（2026-11-07）。
+
+- [ ] 1. `meridian-common`：id、error、page、json、time、context、concurrent
+- [ ] 2. 本地基础设施：PostgreSQL 镜像（pgvector + zhparser）、compose、up.sh / down.sh、.env.example（T02-A08）
+- [ ] 3. `meridian-test-support`：单例容器与属性注册、JDBC 迁移与清理辅助
+- [ ] 4. `meridian-persistence`：jdbc、tenant、outbox、redis、objectstore、idempotency、flyway（T02-A04、A05、A06、A07）
+- [ ] 5. `meridian-security` 的 `web` 包：请求 ID、problem+json（T02-A02）
+- [ ] 6. 架构规则：JdbcClient 访问、SystemRepository 位置与注解、api 不依赖 SystemRepository（T02-A09）
+- [ ] 7. ADR-0020（T02-A10）
+- [ ] 8. 收尾：模块 CLAUDE.md、根 CLAUDE.md 命令、文档同步、verify.sh（T02-A11）、acceptance.json、down.sh
 
 ## 控制台设计轨道
 
