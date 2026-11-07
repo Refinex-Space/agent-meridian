@@ -13,14 +13,46 @@
     <name>AgentMeridian Test Support</name>
     <description>Testcontainers 夹具，只作为 test 作用域依赖。</description>
 
+    <!--
+      不依赖 meridian-persistence：persistence 自己的集成测试要以 test 作用域依赖本模块，
+      反向依赖会形成 Maven 循环。本模块只提供容器与 JDBC 辅助，不需要平台类型。
+    -->
     <dependencies>
         <dependency>
-            <groupId>cn.refinex.meridian</groupId>
-            <artifactId>meridian-common</artifactId>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
         </dependency>
         <dependency>
-            <groupId>cn.refinex.meridian</groupId>
-            <artifactId>meridian-persistence</artifactId>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-minio</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+        <!-- 纯 JDBC 测试的迁移辅助，约定与 meridian-persistence 的 flyway 包一致 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <!-- DynamicPropertyRegistry：为 Spring 测试注册容器的连接属性 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -38,7 +70,6 @@
                                     <!-- 按架构设计「模块依赖规则」放行（含传递依赖） -->
                                     <includes combine.children="append">
                                         <include>cn.refinex.meridian:meridian-common</include>
-                                        <include>cn.refinex.meridian:meridian-api</include>
                                         <include>cn.refinex.meridian:meridian-persistence</include>
                                     </includes>
                                 </bannedDependencies>
