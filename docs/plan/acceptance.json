@@ -160,57 +160,57 @@
       "id": "T03-A01",
       "task": "T03",
       "description": "`meridian-engine-spi` 不依赖任何 AgentScope 与 Spring 类型。验证：架构测试与依赖树。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-arch-tests -am test`：ArchitectureRulesTest Tests run: 12, Failures: 0，其中新增规则 12「cn.refinex.meridian.engine.spi.. 不依赖 io.agentscope.. 与 org.springframework..」与规则 3（模块依赖表）通过。`./mvnw -pl meridian-engine-spi -am dependency:tree`：compile 依赖只有 meridian-common（Jackson 3、reactor-core、ulid-creator）与 reactor-core，没有任何 io.agentscope 与 org.springframework 构件。"
     },
     {
       "id": "T03-A02",
       "task": "T03",
       "description": "`EngineEvent` 层级覆盖架构设计「事件」一节的全部事件类型。验证：一个列出全部类型的测试，与文档清单逐一对应。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`EventTypeCatalogTest`（meridian-engine-spi）Tests run: 4, Failures: 0：直接解析 docs/architecture/architecture.md「事件类型清单」表，29 种类型（user 5、agent 8、session 11、span 2、只在流上 3）与 EventType 的取值及所属域逐一相等；EngineEvent 封闭层级的全部叶子都是 record，且与 EventType 登记的记录类一一对应；只有 event_start、event_delta、ping 不持久化。"
     },
     {
       "id": "T03-A03",
       "task": "T03",
       "description": "装配表的每一行都有对应断言，`AgentAssemblerTest` 全部通过。验证：测试报告中的用例名与装配表的对照。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`AgentAssemblerTest`（meridian-engine-agentscope-test）Tests run: 20, Failures: 0。用例名以装配表配置项开头，覆盖 model、fallbackModel、maxRetries(1)、stateStore、enablePendingToolRecovery、maxIters、两个档位的文件系统、全部 disable* 项、messageBus/asyncToolRegistry、skillRepository、compaction、toolResultEviction、enablePlanMode、middlewares，以及 ADR-0024 补充的 enableAgentTracingLog(false)；tools.json 与消息总线两项带对照实验。对照表见 docs/poc/P01-运行基线.md「装配表与测试的对照」。"
     },
     {
       "id": "T03-A04",
       "task": "T03",
       "description": "实例缓存：同键并发 `acquire` 只装配一次；引用计数未归零时淘汰不会关闭实例；归零后关闭。验证：并发测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`RefCountedCacheTest`（meridian-engine-agentscope）Tests run: 9, Failures: 0，连续 5 次运行均通过：16 个调用者同时 acquire 同一键，装配函数只执行 1 次且都拿到同一实例；两个引用在用时空闲淘汰，实例不关闭、新 acquire 得到新实例，最后一个 release 后关闭且只关闭一次；8 个线程×2000 次租用与持续推进时钟的淘汰线程并发，租用期间实例从未被关闭，结束后每个实例恰好关闭一次。`AgentInstanceCacheTest`（真实装配）Tests run: 3, Failures: 0：8 个调用者并发只装配一次；键含环境修订与子智能体名；淘汰后归还才关闭平台资源。"
     },
     {
       "id": "T03-A05",
       "task": "T03",
       "description": "`ScriptedModel` 能驱动 `HarnessAgent` 完成：纯文本回答、单工具调用、并行工具调用、首包前错误、首包后错误，并能断言收到的请求。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`ScriptedModelScenarioTest`（meridian-engine-agentscope-test）Tests run: 8, Failures: 0：纯文本按 2 字符分 4 块流式输出且 MODEL_CALL_END 带 ChatUsage(42,7)；单工具调用执行一次、入参 JSON 分两块 TOOL_CALL_DELTA、第二次请求带回 call_1 的结果；并行工具调用 call_a、call_b 都执行且结果都回传；首包前错误原样结束流、没有文本事件；首包后错误在已输出\"前半句\"之后结束；另有思考块、结构化输出（generate_response）与脚本用完时明确失败。每个场景断言了 ScriptedModel 记录的请求（用户文本、系统提示词、工具 schema、工具结果）。"
     },
     {
       "id": "T03-A06",
       "task": "T03",
       "description": "P1：Spring Boot 4.1.2、JDK 25 下，同一 JVM 中 Jackson 3 的 Web 序列化与 AgentScope 的智能体调用都正常。验证：集成测试通过，报告 `docs/poc/P01-运行基线.md`。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=AgentScopeRuntimeBaselineIT -Dfailsafe.failIfNoSpecifiedTests=false`：Tests run: 6, Failures: 0（JDK 25.0.5、Spring Boot 4.1.2、BlockHound 已安装）。WebFlux 入口用平台 JsonMappers（Jackson 3）返回 snake_case 的 RunResult，内含经 AgentInstanceCache 装配、ScriptedModel 驱动的含 echo 工具调用的一轮 streamEvents 结果；入站未知字段 400；Jackson 3.x 与 AgentScope 的 Jackson 2.21.x 共存；fabric8 Vert.x 客户端在 Netty 4.2.19 上请求成功。报告 docs/poc/P01-运行基线.md，状态通过。"
     },
     {
       "id": "T03-A07",
       "task": "T03",
       "description": "所有公开类型有中文 Javadoc 并注明架构设计章节。验证：Checkstyle 通过，抽查说明。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`scripts/dev/verify.sh` 中 Checkstyle（MissingJavadocType、MissingJavadocMethod）对三个模块通过。脚本抽查 meridian-engine-spi、meridian-engine-agentscope、meridian-engine-agentscope-test 的 91 个源文件：全部公开顶层类型都有中文 Javadoc，且注明架构设计章节或 ADR（收尾时为 testkit 夹具与 AgentHandle 补了章节引用）；例如 TurnContext 引用「内核适配层」「身份映射」「权限判定」，AgentAssembler 引用「引擎装配」并逐段对应装配表。"
     },
     {
       "id": "T03-A08",
       "task": "T03",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "在提交 6038ef8 上运行 `scripts/dev/verify.sh`，EXIT=0：Reactor Summary 中 BOM、AgentMeridian、Common、API、Security、Test Support、Persistence、Engine SPI、Engine AgentScope、Engine AgentScope Test、Model Client、Control Plane、Runtime、Knowledge、Architecture Tests 共 15 项 SUCCESS，BUILD SUCCESS；check-pom-versions: OK；无 Maven [WARNING]。T03 相关：ResolvedAgentSpecTest 5、EventTypeCatalogTest 4、RefCountedCacheTest 9、AgentInstanceCacheTest 3、AgentAssemblerTest 20、ScriptedModelScenarioTest 8、AgentScopeRuntimeBaselineIT 6、ArchitectureRulesTest 12，全部 Failures: 0。"
     },
     {
       "id": "T04-A01",

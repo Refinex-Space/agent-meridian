@@ -61,7 +61,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 |---|---|---|---|---|---|---|---|---|
 | T01 | [工程脚手架与质量门禁](tasks/T01-scaffold-and-quality-gates.md) | 0 | 无 | high | 中 | P1（依赖解析部分） | 已完成 | b29c1af |
 | T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 已完成 | 4812ea7 |
-| T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 进行中 | — |
+| T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 已完成 | 6038ef8 |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 未开始 | — |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 未开始 | — |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 未开始 | — |
@@ -175,17 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-**T03 内核契约、ScriptedModel 与 HarnessAgent 装配**（开工基线：`scripts/dev/verify.sh` 通过，提交 693adcb）
-
-- [x] 1. 核对 AgentScope 2.0.4 源码：装配表中每个 Builder 方法、`Model`/`ChatModelBase`/`ChatResponse`/`ChatUsage`、`RuntimeContext`、`AgentStateStore`、`MiddlewareBase`、`AgentEventType`、`GenerateReason`、`PermissionContextState`
-- [x] 2. `meridian-engine-spi` 全部类型（engine、engine.input、event、spec、port、driver），中文 Javadoc 注明章节；架构测试：spi 不依赖 AgentScope 与 Spring（A01）；事件类型清单测试（A02）
-- [x] 3. `meridian-engine-agentscope-test`：`ScriptedModel` 与构建 DSL、内存端口夹具
-- [x] 4. `meridian-engine-agentscope` 的 `assembly`：模型工厂接口、`AgentAssembler`（装配表逐行落实，未实现组件经注入的提供者获得）、`AgentAssemblerTest` 逐行断言（A03）
-- 2026-11-07 用户采纳 ADR-0023（`maxRetries(1)`）与 ADR-0025（testkit 可依赖 common 与 engine-spi），阻塞解除
-- [x] 5. 实例缓存：`acquire`/`release`、容量 500、空闲 30 分钟、引用计数归零才 `close()`；并发测试（A04）
-- [x] 6. `ScriptedModel` 驱动 `HarnessAgent` 的场景测试：纯文本、单工具、并行工具、首包前错误、首包后错误、请求断言（A05）
-- [x] 7. P1：runtime `config` 包下的 Spring Boot WebFlux 集成测试（Jackson 3 Web 序列化 + 同 JVM 装配并 `streamEvents`，含工具调用）；报告 `docs/poc/P01-运行基线.md`、`docs/poc/README.md`（A06）
-- [ ] 8. 收尾：Checkstyle/Javadoc 抽查（A07）、`scripts/dev/verify.sh`（A08）、三个模块 `CLAUDE.md`、根 `CLAUDE.md`、架构设计「端口」表同步、`acceptance.json`、`PLAN.md`、提交
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -235,6 +225,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D03 | T01 | Spring Boot 4.1.2 BOM 把 fabric8 `kubernetes-httpclient-vertx`（Vert.x 4.5.28）下的 Netty 从 4.1.135 提升到 4.2.19；Vert.x 4.5 基于 Netty 4.1 构建，需要在真实调用中确认兼容，不兼容时按决策分级处理。详见 `docs/poc/P01-运行基线.md` | T03（已验证：fabric8 Vert.x 客户端在 Netty 4.2.19 上对本地 WebFlux 服务的真实 HTTP 请求正常）、T11（对 Kubernetes API 的调用） |
 | D04 | T02 | outbox 发布到 Redis Stream（`usage`、`audit`）时不裁剪，条目在确认后仍留在 Stream 中；消费者确认后需按已确认的最小 ID 执行 `XTRIM MINID` 或定期裁剪，避免 Redis 内存增长 | T16 |
 | D05 | T03 | `HarnessAgent` 不设置 `workspace(...)` 时，本机工作区根取 `${user.dir}/.agentscope/workspace`：harness 会把其中的 `skills/` 作为第 3 层技能读取，`MarketplaceStager` 会在其中暂存技能资源。平台要求技能只来自平台技能仓库、会话数据不落本机磁盘，装配文件系统与技能仓库时需要确定一个平台控制的本机工作区根目录（或证明无写入）。详见 `docs/poc/P01-运行基线.md` | T10a |
+| D06 | T03 | JDK 25 把 `System.loadLibrary` 列为受限方法，reactor-netty 加载 Netty 本地传输库时告警"将来会被阻止"；runtime 的集成测试已加 `--enable-native-access=ALL-UNNAMED`，生产与本地启动的 JVM 参数同样需要。详见 `docs/poc/P01-运行基线.md` | T28 |
 
 ## 技术债
 
@@ -265,6 +256,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：11 项通过，0 项阻塞
 - 决策：ADR-0020 持久化与上下文传递（含 type URN、游标校验和、幂等作用域、MinIO 改用 Chainguard 镜像、test-support 不依赖 persistence）
 - 遗留：登记事项 D04 Redis Stream 裁剪（T16）
+
+### 2026-11-07 T03 已完成（提交 6038ef8）
+- 交付：`meridian-engine-spi` 全部契约（engine、engine.input、event、spec、port、driver，含新增端口 `AgentConfigPort`）；`meridian-engine-agentscope` 的 `assembly`（`AgentAssembler` 按装配表配置 `HarnessAgent`、`AgentInstanceCache`/`RefCountedCache` 基于 Caffeine 的引用计数缓存、`NoopMessageBus`、`NoopAsyncToolRegistry`）；`meridian-engine-agentscope-test`（`ScriptedModel` 与 DSL、8 个内存端口、装配替身、`RecordingTool`）；runtime 引入 WebFlux 与 P1 集成测试；ArchUnit 规则 12；三个模块 CLAUDE.md；P1 报告
+- 验收：8 项通过，0 项阻塞
+- 决策：ADR-0023 `maxRetries(1)`（变更型，用户采纳）；ADR-0024 引擎装配与内核契约的补充约定；ADR-0025 testkit 可依赖 common 与 engine-spi（变更型，用户采纳）；架构设计升至 v1.2
+- 遗留：登记事项 D05 本机工作区根目录（T10a）；D03 对 Kubernetes API 的调用待 T11；D06 生产 JVM 需 `--enable-native-access=ALL-UNNAMED`（T28）
 
 ## 计划变更记录
 
