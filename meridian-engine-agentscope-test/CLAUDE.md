@@ -13,7 +13,8 @@
 - `testkit.port`：`InMemoryLeaseRegistry`、`InMemoryAgentStateRepository`（`activate`/`deactivate` 模拟数据库中的租约条件）、`InMemoryEventSink`、`InMemoryBlobStore`、`InMemoryAgentConfig`、`InMemoryInbox`、`InMemoryToolLedger`、`InMemoryThreadRegistry`。
 - `testkit.assembly`：`TestAssembly.builder(model)` 组装带替身的 `AgentAssembler`；`TestSpecs.agent()` 构建 `ResolvedAgentSpec`，`noneEnvironment()`/`sandboxEnvironment()`；`InMemoryWorkspaceFilesystems`（受保护路径各一个内存文件系统，`RecordingBaseStore` 记录访问）、`FakeSandboxFilesystemSpec`（能装配、不能建沙箱）。
 - `testkit.tool.RecordingTool`：继承 `ToolBase` 的测试工具，`echo(name)` 返回 `name:text`。
-- 测试：`assembly.AgentAssemblerTest`（装配表逐行）、`assembly.AgentInstanceCacheTest`、`testkit.model.ScriptedModelScenarioTest`；包名与被测类相同，可读包内常量。
+- 测试：`assembly.AgentAssemblerTest`（装配表逐行）、`assembly.AgentInstanceCacheTest`、`testkit.model.ScriptedModelScenarioTest`、`state.FencedAgentStateStoreTest`、`events.*`（穷举映射与映射器单测）、`turn.*`（引擎场景、下线、中间件链与 span、输入翻译）；包名与被测类相同，可读包内常量。
+- `turn.EngineHarness`（测试源码）：真实装配 + 平台中间件 + `FencedAgentStateStore` + 内存端口 + `AgentScopeEngine`；`claim(...)` 模拟 Worker 认领（同时登记 `LeaseRegistry` 与"数据库"的租约），`run(...)` 断言恰好一个终态且在最后。
 
 ## 不变量
 
@@ -26,6 +27,9 @@
 - 共享一个 `HarnessAgent` 的多个用例要用不同的线程 ID（`RuntimeContext.sessionId`），否则状态互相串。
 - 对照实验用 `HarnessAgent.builder()` 直接构建时要 `disableTranscript()`，否则会在模块目录写 `.agentscope/`。
 - 并发测试的线程池大小不能小于"装配函数等待到达的调用者数"，否则会卡到超时。
+- 动用 `GracefulShutdownManager`（JVM 单例）的用例放在独立的类里，`@AfterEach` 调 `resetForTesting()`，否则同一 JVM 中后面的用例都会以 `node_shutdown` 结束。
+- span 断言用 `OpenTelemetryExtension`（`opentelemetry-sdk-testing`，test 作用域）；它注册全局 `GlobalOpenTelemetry`，平台与 AgentScope 的 span 都取全局 tracer。
+- 要在执行中途中断、取消或下线，用阻塞到测试放行的工具（`AgentScopeEngineScenarioTest.LatchTool`）卡住执行；`ScriptedModel` 的回应不能延迟。
 
 ## 对外接口
 

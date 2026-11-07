@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-当前处于**M0 内核与运行时核心阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）；T03 定义了 `meridian-engine-spi` 的全部契约，实现了 `HarnessAgent` 装配与实例缓存、`ScriptedModel` 与内存端口夹具，P1 通过（ADR-0023、0024、0025）。执行一轮的逻辑从 T04 开始。
+当前处于**M0 内核与运行时核心阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）；T03 定义了 `meridian-engine-spi` 的全部契约，实现了 `HarnessAgent` 装配与实例缓存、`ScriptedModel` 与内存端口夹具，P1 通过（ADR-0023、0024、0025）；T04 实现了 `AgentScopeEngine`（执行一轮、中断、下线）、事件映射、`FencedAgentStateStore` 与首批平台中间件（ADR-0026）。数据库实现的端口与轮次调度从 T05 开始。
 
 ## 交付流程
 
@@ -37,7 +37,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 - 依赖树：`./mvnw -pl meridian-engine-agentscope -am dependency:tree`
 - 下载 AgentScope 2.0.4 源码包：`./mvnw -pl meridian-engine-agentscope -am compile dependency:sources -DincludeGroupIds=io.agentscope`
 
-`test`、`verify` 不清理 `target/`：删除或改名测试类后，旧的 class 仍会被执行，先跑 `./mvnw clean`。
+`test`、`verify` 不清理 `target/`：删除或改名测试类后，旧的 class 仍会被执行，先跑 `./mvnw clean`。IDE 的后台编译器也会把带编译错误的 class 写进 `target/`，Maven 的增量编译会沿用它们；测试报 `Unresolved compilation problems` 时同样先 `clean`。
 
 环境脚本：
 

@@ -15,6 +15,7 @@
 - `spec`：`ResolvedAgentSpec`（含 `SubagentSpec`、`McpServerSpec`、`SkillRef`、`KnowledgeSpec`、`CompactionSpec`）、`EnvironmentSpec`、`PermissionPolicy`/`PermissionRule`、`CustomToolDeclaration`、`PlatformToolNames`。
 - `port`：架构设计「端口」表的全部端口，加 `AgentConfigPort`（ADR-0024）。端口专用的值类型嵌套在端口接口里（如 `LeaseRegistry.Lease`、`AgentStateRepository.StateFence`）。
 - `driver`：`SandboxDriver`、`SandboxHandle`、`ModelInvoker`（OpenAI 兼容消息模型）。
+- `error`：决定一轮如何结束的异常与 `ModelErrorCode`：`BudgetExceededException`（`budget_exceeded`）、`RetryableTurnException`（可重试错误的基类，`RateLimitTimeoutException` 继承它）（ADR-0026）。
 
 ## 不变量
 
@@ -28,6 +29,7 @@
 - 工具入参、JSON Schema 可能含 null 值，复制时用 `Collections.unmodifiableMap(new LinkedHashMap<>(m))`，不用 `Map.copyOf`。
 - `PendingAction.expiresAt` 由内核留空、runtime 写入待处理动作时用 `withExpiresAt` 补上；动作 ID 由产生方生成。
 - `SessionEvent.Error` 的名字会遮蔽 `java.lang.Error`，在 `SessionEvent` 内部引用 JDK 的 `Error` 要写全名。
+- `session.status_rescheduled` 的原因有三种：`lease_expired`、`node_shutdown`（`recovery_attempt` 不变）、`retryable_error`（前面一定有 `session.error(retryable)`）。内核遇到 `LeaseLostException` 不输出事件，以该异常结束 `runTurn` 的流（ADR-0026）。
 
 ## 对外接口
 

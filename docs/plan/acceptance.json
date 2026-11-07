@@ -216,71 +216,71 @@
       "id": "T04-A01",
       "task": "T04",
       "description": "身份映射符合架构设计：`sessionId` 为线程 ID，`userId` 格式正确，`PlatformContext` 可从 `RuntimeContext` 与 Reactor Context 两处取到。验证：单元测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=AgentScopeEngineScenarioTest：identityAndPlatformContextFollowTheIdentityMapping 通过——工具看到的 RuntimeContext.sessionId=thr_identity（线程 ID），userId=prj_test:u_1024，无终端用户为 prj_test:_；RuntimeContext 类型键与 Reactor Context 中的 PlatformContext 都等于 TurnContext.platform()；MiddlewareChainTest.callsWithoutThePlatformEngineAreRejected 证明缺失时被拒绝"
     },
     {
       "id": "T04-A02",
       "task": "T04",
       "description": "31 个 `AgentEventType` 与全部 `GenerateReason` 都有映射或明确忽略，穷举测试通过。验证：测试报告。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=AgentEventDispositionTest,StopReasonMappingTest：4 个测试通过——AgentEventType.values() 恰好 31 个、逐一等于「事件映射」表的处理方式；GenerateReason 12 个值逐一等于「状态机」停止原因表，TOOL_CALLS 与缺失映射为 error（TurnEventMapper.complete 记录 WARN），映射本身是穷举 switch"
     },
     {
       "id": "T04-A03",
       "task": "T04",
       "description": "文本与工具入参由增量正确拼装，并行工具调用交错到达时不串。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=AgentScopeEngineScenarioTest,TurnEventMapperTest：interleavedParallelToolCallInputsDoNotMix（ScriptedModel 交错发出 call_a/call_b 的入参片段）输出 echo{text:左}、upper{text:right}，工具各执行一次且入参正确；plainTextIsStreamedAssembledAndEndsIdle 文本按 2 字一块流式到达并拼装为完整 agent.message；映射器单测覆盖多次推理块 ID 不相撞"
     },
     {
       "id": "T04-A04",
       "task": "T04",
       "description": "每轮恰好一个终态：正常结束、错误、关机中断、待处理动作四种情况都满足。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test：EngineHarness.run 对每个场景断言恰好一个终态且在最后——正常结束 idle(end_turn)、首包前/后错误 session.error(internal.error)+idle(error)、可重试错误 error(retryable)+rescheduled(retryable_error)、预算 error+idle(budget_exceeded)、AgentScopeEngineShutdownTest 关机中断只有 rescheduled(node_shutdown) 无 session.error、待处理动作 requires_action(tool_confirmation / custom_tool_result)、中断 idle(interrupted)、maxIters=1 idle(max_turns)"
     },
     {
       "id": "T04-A05",
       "task": "T04",
       "description": "审批续跑：ask 后以 `Confirmations` 输入续跑，批准的调用执行、拒绝的调用写入拒绝结果。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=AgentScopeEngineScenarioTest：askThenApproveResumesAndRunsTheApprovedCall（ask 规则→requires_action，Confirmations 批准后 echo 执行一次，tool_result permission=approved，模型收到结果）与 askThenDenyWritesTheDeniedResultAndContinues（拒绝后工具未执行，tool_result state=denied、内容为拒绝理由，模型据此回答）通过；TurnInputTranslatorTest 证明审批结果是 ConfirmResult 实例、确认消息不带普通文本（ADR-0016）"
     },
     {
       "id": "T04-A06",
       "task": "T04",
       "description": "自定义工具：挂起后以 `CustomToolResults` 续跑，智能体收到结果并继续。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=AgentScopeEngineScenarioTest：customToolSuspendsTheTurnAndResumesWithTheBusinessResult 通过——自定义工具经 ToolRequestConfig 出现在模型请求中，挂起时输出 agent.custom_tool_use 与 custom_tool_result 动作，CustomToolResults 续跑后模型请求含 call_c 的结果并以 idle(end_turn) 结束"
     },
     {
       "id": "T04-A07",
       "task": "T04",
       "description": "`FencedAgentStateStore`：租约有效时写入成功；租约失效时 `save`、`saveIfVersion`（含无条件写）、`delete` 都抛 `LeaseLostException` 且不写入；权限安装写入不更新 `content_epoch`，其他写入更新。验证：单元测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=FencedAgentStateStoreTest：8 个测试通过——租约有效时读写与版本号语义同 2.0.4；本节点无租约或数据库 epoch 不符时 save、saveIfVersion(1/0/UNVERSIONED)、列表 save、delete(key)、delete(全部) 都抛 LeaseLostException 且 writeCount 不变；权限安装写入不更新 content_epoch，内容写入更新为当前 epoch；子线程用父轮次租约"
     },
     {
       "id": "T04-A08",
       "task": "T04",
       "description": "订阅取消后不再输出事件、不再写状态。验证：场景测试（取消后检查内存端口无新写入）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=AgentScopeEngineScenarioTest：cancellingTheSubscriptionEmitsNothingAndWritesNothing 通过——工具执行中取消订阅后放行工具并等待 500ms，事件数与 InMemoryAgentStateRepository.writeCount 均不变、无终态、模型未再被调用；同一线程随后以新 epoch 正常执行（资源已归还）"
     },
     {
       "id": "T04-A09",
       "task": "T04",
       "description": "中间件执行顺序已测出并记录，`LeaseGuardMiddleware` 在租约失效时阻止下一次推理与工具执行。验证：测试与模块 `CLAUDE.md`。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=MiddlewareChainTest,AgentScopeEngineScenarioTest：链路实测为 GracefulShutdownMiddleware → PlatformContext(300) → PlatformTracing(200) → LeaseGuard(100) → ToolSpan(50) → harness 6 个(1)，span 父子关系 turn→invoke_agent→chat/execute_tool 批次→每个调用的 execute_tool 且都带 meridian.* 属性；leaseGuardStopsBeforeTheNextToolExecution（工具未执行）与 leaseGuardStopsBeforeTheNextReasoning（模型只调用 1 次）以 LeaseLostException 结束且无终态；顺序记录在 meridian-engine-agentscope/CLAUDE.md 与 docs/poc/README.md P13"
     },
     {
       "id": "T04-A10",
       "task": "T04",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw clean 后 scripts/dev/verify.sh：BUILD SUCCESS，15 个模块全部 SUCCESS（engine-agentscope-test 82 个测试、runtime AgentScopeRuntimeBaselineIT 6 个、ArchitectureRulesTest 12 个通过），check-pom-versions 通过，退出码 0"
     },
     {
       "id": "T05-A01",

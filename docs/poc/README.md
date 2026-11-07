@@ -18,6 +18,6 @@ M0 要用代码验证架构设计中依赖运行时行为、读源码无法确�
 | P10 | 四种终止方式下的恢复语义 | 未开始 | |
 | P11 | `clearStateCache` 后的内存稳定性 | 未开始 | |
 | P12 | `SpawnSubagentTool` 并行拉起与中断传递 | 未开始 | |
-| P13 | 平台中间件与 harness 中间件的执行顺序 | 未开始 | |
+| P13 | 平台中间件与 harness 中间件的执行顺序 | 进行中（T04 测得链路：`GracefulShutdownMiddleware` 固定最外层 → `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200) → `LeaseGuardMiddleware`(100) → `ToolSpanMiddleware`(50) → harness 自带的 6 个中间件（均为 1，按注册顺序）；span 层级 `turn` → `invoke_agent` → `chat`/`execute_tool` 批次 → 每个调用的 `execute_tool`，见 `MiddlewareChainTest`；压缩守护的结论由 T09a 给出） | 待 T09a |
 | P14 | 出网代理按源 Pod IP 鉴权 | 未开始 | |
 | P15 | 无人审批执行的权限改写 | 未开始 | |

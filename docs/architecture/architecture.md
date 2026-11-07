@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.2 |
+| 版本 | v1.3 |
 | 日期 | 2026-11-07 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -259,6 +259,7 @@ cn.refinex.meridian.engine.agentscope
 ├── tools/       平台工具（继承 ToolBase）、SpawnSubagentTool
 ├── middleware/  平台中间件
 ├── events/      AgentEvent → EngineEvent 映射与增量拼装
+├── turn/        AgentScopeEngine：执行一轮、中断、下线；输入与权限翻译（ADR-0026）
 └── sandbox/     SandboxDriver 实现、SingleStartSandbox、外部 SandboxContext 适配
 ```
 
@@ -490,7 +491,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `CompactionGuardMiddleware` | `onReasoning`，分内外两层，夹住 harness 的 `CompactionMiddleware` | 外层在压缩前预检预算、限流、租约，不满足就抛出平台异常；内层检查压缩结果，摘要以 `(Summarization failed` 开头时抛 `CompactionFailedException`，防止失败文本替换历史；新出现 `__compaction_summary__` 消息时发出压缩事件 |
 | `KnowledgePrefetchMiddleware` | `onAgent` | 智能体配置为"前置检索"时，用最后一条用户消息检索并注入 |
 | `ToolSpanMiddleware` | `onActing` | 每个工具调用单独建 span（AgentScope 一批工具只建一个 span） |
-| `OtelTracingMiddleware` | AgentScope 自带 | GenAI 语义约定的 span |
+| `OtelTracingMiddleware` | AgentScope 自带，由平台的 `PlatformTracingMiddleware` 委托装配 | GenAI 语义约定的 span；平台补上公共属性 |
 
 模型的限流、预算、计量不放在中间件里，而是在 `RoutedModel` 内实现。原因是压缩器直接调用 `model.stream(...)`，不经过 `onModelCall`。压缩器会吞掉模型异常，所以压缩前由 `CompactionGuardMiddleware` 预检；预检通过后压缩中途仍然失败，内层检查会拦住失败的摘要。中间件之间的实际执行顺序由 `order()` 决定，M0 验证（P13）。
 
@@ -596,7 +597,7 @@ UPDATE rt.turns SET status = 'running', lease_owner = :node, lease_epoch = lease
 | 原因 | `recovery_attempt` | 会话事件 |
 |---|---|---|
 | 租约过期，由回收器处理 | 加一 | `session.status_rescheduled` |
-| 可重试的错误，如供应商 5xx、限流等待超时 | 加一 | `session.error`（`retry_status=retryable`） |
+| 可重试的错误，如供应商 5xx、限流等待超时 | 加一 | `session.error`（`retry_status=retryable`），然后 `session.status_rescheduled`（`retryable_error`，ADR-0026） |
 | 节点优雅下线 | 不变 | `session.status_rescheduled` |
 
 **同节点重新认领。** `FencedAgentStateStore` 的接口拿不到调用上下文，只能按线程 ID 查 `LeaseRegistry`。所以同一节点上，一个线程的上一次执行在 `doFinally` 完成之前，本节点**禁止**再次认领这个线程，`LeaseRegistry` 也在执行结束时才移除条目。这样，旧执行的残余写入不会借用新 epoch 通过校验。事件、账本等经端口的写入，则直接使用 `PlatformContext` 中本次执行自己的 epoch。
@@ -623,7 +624,7 @@ stateDiagram-v2
     running --> requires_action: 产生待处理动作
     requires_action --> running: 所有待处理动作都有了回应
     running --> idle: 轮次结束
-    running --> rescheduled: 租约过期 / 节点下线
+    running --> rescheduled: 租约过期 / 节点下线 / 可重试错误
     rescheduled --> running: 其他 Worker 认领
     rescheduled --> requires_action: 恢复需要人工确认
     idle --> terminated: 归档 / 删除
@@ -643,8 +644,9 @@ stateDiagram-v2
 | GenerateReason `INTERRUPTED` | `interrupted` |
 | GenerateReason `MAX_ITERATIONS` | `max_turns` |
 | GenerateReason `ALL_TOOLS_DENIED` | `tools_denied` |
-| GenerateReason `REASONING_STOP_REQUESTED`、`ACTING_STOP_REQUESTED`、`MIDDLEWARE_STOP_REQUESTED` | 平台中间件发起时，取它记录的原因；否则为 `end_turn` |
+| GenerateReason `REASONING_STOP_REQUESTED`、`ACTING_STOP_REQUESTED`、`MIDDLEWARE_STOP_REQUESTED` | 平台中间件发起时，取它经 `PlatformStopRequest` 记录的原因；否则为 `end_turn`（ADR-0026） |
 | 异常 `BudgetExceededException` | `budget_exceeded` |
+| 可重试的异常（`RetryableTurnException`，如 `RateLimitTimeoutException`） | 不进入 idle，以 `session.status_rescheduled` 结束，见"置回队列的三种情况" |
 | 其他不可重试异常；`TOOL_CALLS` 或未知的 GenerateReason | `error`，并告警 |
 
 映射必须穷举。单元测试遍历 `GenerateReason.values()` 和 `AgentEventType.values()`，断言每个值都有映射；AgentScope 升级时新增的值会让测试失败。
@@ -663,8 +665,8 @@ AgentScope 的 `AgentEventType` 有 31 个值。结束类事件只带 ID，不�
 | `THINKING_BLOCK_*` | `agent.thinking`（配置 `expose_thinking=true` 时带内容） | 结束时 |
 | `DATA_BLOCK_*` | 结束时 `agent.message`，内容为数据块 | 结束时 |
 | `TOOL_CALL_START`、`TOOL_CALL_DELTA` | `event_start`、`event_delta` | 否 |
-| `TOOL_CALL_END` | `agent.tool_use` 或 `agent.mcp_tool_use`（拼装后的完整入参） | 是 |
-| `TOOL_RESULT_START`、`TOOL_RESULT_TEXT_DELTA`、`TOOL_RESULT_DATA_DELTA` | `event_delta` | 否 |
+| `TOOL_CALL_END` | `agent.tool_use` 或 `agent.mcp_tool_use`（拼装后的完整入参）。并行调用交错到达时同一调用会多次结束，所以在所在模型调用结束时输出；自定义工具不在这里输出（ADR-0026） | 是 |
+| `TOOL_RESULT_START`、`TOOL_RESULT_TEXT_DELTA`、`TOOL_RESULT_DATA_DELTA` | `event_start`（`TOOL_RESULT_START`）、`event_delta` | 否 |
 | `TOOL_RESULT_END` | `agent.tool_result` 或 `agent.mcp_tool_result`。`data.state` 取自 `ToolResultState`。`data.permission` 由平台推导：状态为 DENIED 时为 `denied`；本轮有对应的确认记录时为 `approved`；否则为 `allowed`。超过 16 KB 的结果存对象存储，事件里放引用 | 是 |
 | `REQUIRE_USER_CONFIRM` | `session.status_requires_action`（动作类型 `tool_confirmation` 或 `plan_exit`） | 是 |
 | `REQUIRE_EXTERNAL_EXECUTION` | `agent.custom_tool_use` 和 `session.status_requires_action`（动作类型 `custom_tool_result`） | 是 |
@@ -674,7 +676,7 @@ AgentScope 的 `AgentEventType` 有 31 个值。结束类事件只带 ID，不�
 | `SUBAGENT_EXPOSED`、`HINT_BLOCK`、`CUSTOM` | 不输出，只记日志。子线程事件由 `SpawnSubagentTool` 通过 `EventSinkPort` 直接写入 | — |
 | `Flux.error` | `session.error`（带 `retry_status`），然后输出终态事件 | 是 |
 
-AgentScope 没有 ERROR 事件类型，错误以 `Flux.error` 结束事件流。适配层**必须**捕获错误并补发终态事件，保证每个轮次有且只有一个终态。`AgentShuttingDownException` 映射为 `session.status_rescheduled`，不发 `session.error`。
+AgentScope 没有 ERROR 事件类型，错误以 `Flux.error` 结束事件流。适配层**必须**捕获错误并补发终态事件，保证每个轮次有且只有一个终态。`AgentShuttingDownException` 映射为 `session.status_rescheduled`，不发 `session.error`。内核自己发现租约丢失（`LeaseLostException`）时，本节点已不拥有这一轮，不输出任何事件，以该异常结束事件流，终态由回收器或新的认领者给出（ADR-0026）。
 
 ### 消息投递
 
@@ -1349,6 +1351,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.0 | 2026-11-07 | 基线 |
 | v1.1 | 2026-11-07 | 交付计划评审后修订：租户隔离改为三类基类（含 `SystemRepository`）；模块依赖表补充 reactor-core、test-support、sdk-java；端口表新增 `BlobStorePort`、`ThreadRegistryPort` 并明确新增端口属于补充；会话流与线程流的 `seq` 语义；租户并发计数行的创建与配额；`tenant_settings` 与租户级配置；知识库存储计量；本地沙箱改用 kind 加 gVisor；M2 清单措辞调整；控制台 SSE 改用 `fetch`、公开 API 接受控制台 OIDC 令牌 |
 | v1.2 | 2026-11-07 | T03：引擎装配表 `maxRetries(0)` 改为 `maxRetries(1)`（ADR-0023）；模块依赖规则放行 `meridian-engine-agentscope-test` 依赖 common 与 engine-spi（ADR-0025）；补充 `asyncToolRegistry`、`enableAgentTracingLog(false)` 两行、子智能体缓存键与端口 `AgentConfigPort`（ADR-0024） |
+| v1.3 | 2026-11-07 | T04：可重试错误以 `session.status_rescheduled`（`retryable_error`）结束；租约丢失时内核不输出事件；事件映射中工具调用在模型调用结束时输出、工具结果块的 `event_start`、自定义工具与平台中间件停止原因的处理；包结构增加 `turn/`；`OtelTracingMiddleware` 由 `PlatformTracingMiddleware` 装配（ADR-0026） |
 
 ## 待决问题
 
