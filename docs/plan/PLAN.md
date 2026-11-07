@@ -62,7 +62,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T01 | [工程脚手架与质量门禁](tasks/T01-scaffold-and-quality-gates.md) | 0 | 无 | high | 中 | P1（依赖解析部分） | 已完成 | b29c1af |
 | T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 已完成 | 4812ea7 |
 | T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 已完成 | 6038ef8 |
-| T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 未开始 | — |
+| T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 进行中 | — |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 未开始 | — |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 未开始 | — |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 未开始 | — |
@@ -175,7 +175,17 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+**T04 单轮执行适配与事件映射**（开工基线 `scripts/dev/verify.sh` 通过，2026-11-07）
+
+- [ ] 1. `FencedAgentStateStore`：全部方法、版本号、租约校验、`content_epoch` 区分权限安装、子线程用父租约（A07）
+- [ ] 2. 停止原因映射与事件类型穷举映射（A02）
+- [ ] 3. 事件映射与增量拼装：文本、思考、数据、工具调用、工具结果（16 KB 经 `BlobStorePort`）、`permission` 推导、子线程事件只记日志（A03）
+- [ ] 4. 输入翻译：`NewMessages`、`Confirmations`（`ConfirmResult` 实例）、`CustomToolResults`（`ToolResultBlock`）、`RecoveryOnly`；自定义工具经 `ToolRequestConfig` 注入（`MERGE_EXTERNAL_PRIORITY`）
+- [ ] 5. `AgentScopeEngine.runTurn`：身份映射、`clearStateCache`、权限安装（标记）、`contextWrite`、终态保证、取消不写入（A01、A04、A08）
+- [ ] 6. 中间件：`PlatformContextMiddleware`、`LeaseGuardMiddleware`、`ToolSpanMiddleware`、`OtelTracingMiddleware` 装配与属性；测出执行顺序（A09）
+- [ ] 7. `interrupt`、`shutdown`（45 秒 `GracefulShutdownConfig`、`performGracefulShutdown`、`awaitTermination`）
+- [ ] 8. 场景测试：纯文本、工具调用、并行工具、ask 后确认续跑、ask 后拒绝、自定义工具挂起与回传、首包前错误、首包后错误、中断、关机中断、失去租约；待确认调用不与普通消息同批（A03–A06、A08）
+- [ ] 9. 收尾：模块 `CLAUDE.md`、P13 进行中、架构与文档一致性、`acceptance.json`、`verify.sh`（A10）
 
 ## 控制台设计轨道
 
