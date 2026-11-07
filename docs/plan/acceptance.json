@@ -356,71 +356,71 @@
       "id": "T06-A01",
       "task": "T06",
       "description": "端到端：插入一轮输入后，Worker 认领并用 `ScriptedModel` 执行完成，事件按序写入数据库并出现在 Redis Stream 中，会话回到 `idle`，`stop_reason` 正确。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnWorkerIT -Dfailsafe.failIfNoSpecifiedTests=false：workerRunsATurnEndToEndPersistsEventsInOrderAndPublishesThem 通过——user.message 后依次写入 status_running、message_consumed、span/tool_use/tool_result/agent.message、status_idle(end_turn)，seq 从 1 连续；ev:{session_id} 中持久化条目的 seq 与数据库一致且有 event_delta；轮次 completed/end_turn，会话 idle，租户计数 0，outbox 有 turn.finished。EngineAutoConfigurationIT：Spring 容器装配内核后后台循环自动执行入队的一轮（dev-config/agents 配置）。"
     },
     {
       "id": "T06-A02",
       "task": "T06",
       "description": "本轮执行中到达的 queue 消息，在本轮结束时合并成下一轮，并被自动执行。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnWorkerIT -Dfailsafe.failIfNoSpecifiedTests=false：queueMessagesArrivingDuringATurnBecomeTheNextTurnAndRunAutomatically 通过——工具执行中发来的两条 queue 消息在本轮结束时合并成下一轮（consumed_turn_id 为下一轮），后台循环（TurnWorkerLifecycle）自动执行，模型按到达顺序收到两条；DatabaseInboxIT 覆盖合并与降级。"
     },
     {
       "id": "T06-A03",
       "task": "T06",
       "description": "P10 四种终止方式全部按上表恢复，且不重复用户消息、不重复执行 `non_idempotent` 工具；steer 的重新投递，通过直接写入 `consumed_epoch` 等于失败 epoch 的收件箱记录来验证（`SteerMiddleware` 在 T08 实现，届时重跑）。验证：故障注入测试；报告 `docs/poc/P10-恢复语义.md`。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnRecoveryIT -Dfailsafe.failIfNoSpecifiedTests=false：6/6 通过——强杀重放完整输入、用户消息只出现一次、失败 epoch 消费的 steer 重新投递并成为下一轮；出错（RateLimitTimeoutException）RecoveryOnly 续跑、non_idempotent 工具只执行一次；用户中断以 interrupted 结束、后续消息成为新一轮；优雅下线置回 recovery_attempt=0、另一节点续跑。报告 docs/poc/P10-恢复语义.md。steer 部分待 T08 的 SteerMiddleware 重跑。"
     },
     {
       "id": "T06-A04",
       "task": "T06",
       "description": "P2 完整路径：失去租约的旧 Worker 在中断、出错、停机路径上都写不进状态、事件、账本。验证：测试；补全 `docs/poc/P02-租约与fencing.md` 并定稿。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=WorkerLeaseFencingIT -Dfailsafe.failIfNoSpecifiedTests=false：4/4 通过——旧执行在中断、出错、停机路径上 AgentScope 的状态保存被拒（记录到的拒绝 >0），每个事件写入返回 LeaseLost、账本写入抛 LeaseLostException、结束/置回返回 Abandoned，ThreadSnapshot 前后相同；旧 Worker 续租 REVOKED 后放弃且不写数据。docs/poc/P02-租约与fencing.md 已定稿（通过）。"
     },
     {
       "id": "T06-A05",
       "task": "T06",
       "description": "P3：批次级 checkpoint 的验证结论与数据已写入 `docs/poc/P03-批次checkpoint.md`，并按结论实现或保持轮次级恢复。验证：报告与测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=BatchCheckpointIT -Dfailsafe.failIfNoSpecifiedTests=false：4/4 通过——开启时第一批后强杀从 checkpoint RecoveryOnly 续跑，tool_use/tool_result 一一配对，工具各执行 1 次；关闭时同一强杀重放输入；第二批中途强杀从第一批 checkpoint 续跑无悬空 tool_use；开销每批 +1 次状态写入（2→4）。结论通过，BatchCheckpointMiddleware 默认开启（meridian.runtime.worker.batch-checkpoint），ADR-0028；报告 docs/poc/P03-批次checkpoint.md。"
     },
     {
       "id": "T06-A06",
       "task": "T06",
       "description": "状态未知的 `non_idempotent` 调用产生 `recovery_confirmation` 待处理动作，会话进入 `requires_action`。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnRecoveryIT -Dfailsafe.failIfNoSpecifiedTests=false：unknownNonIdempotentCallCreatesARecoveryConfirmationAndTheSessionRequiresAction 通过——pending_actions 一行 recovery_confirmation（pending，payload 含 idempotency_key 与 recovery_mode，expires_at=认领时间+30 分钟），轮次 awaiting_action，会话 requires_action，最后事件 session.status_requires_action，模型未再调用、工具只执行一次。"
     },
     {
       "id": "T06-A07",
       "task": "T06",
       "description": "`recovery_attempt` 达到 2 次后以 `error` 结束。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnRecoveryIT -Dfailsafe.failIfNoSpecifiedTests=false：reachingTwoRecoveryAttemptsEndsTheTurnWithError 通过——两次强杀后 recovery_attempt=2 的认领不再执行，写 session.error(turn.recovery_exhausted, exhausted) 与 status_idle(error)，轮次 failed/error；单测 RecoveryPlannerTest.theRecoveryAttemptLimitEndsTheTurnBeforeAnythingElse。"
     },
     {
       "id": "T06-A08",
       "task": "T06",
       "description": "优雅下线：本节点轮次置回队列且 `recovery_attempt` 不变，另一节点续跑成功。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnRecoveryIT -Dfailsafe.failIfNoSpecifiedTests=false：gracefulShutdownRequeuesWithoutCountingARecoveryAndAnotherNodeResumes 通过——TurnWorkerLifecycle.stop() 后轮次 queued、recovery_attempt=0、只有一条 status_rescheduled(node_shutdown)、租户计数 0、本节点条目释放；另一节点 epoch 2 RecoveryOnly 续跑完成，下线前完成的工具不再执行。EngineAutoConfigurationIT 断言续租任务阶段小于 Worker（下线期间仍续租）。"
     },
     {
       "id": "T06-A09",
       "task": "T06",
       "description": "本任务列出的指标已注册并在测试中有值。验证：测试断言指标。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnMetricsIT -Dfailsafe.failIfNoSpecifiedTests=false：allTurnMetricsAreRecorded 通过——meridian.turns{completed,end_turn}=1、meridian.turn.duration 计数 1/2、meridian.turn.queue.wait 记 3 秒、meridian.dispatch.queue.depth 2→0、meridian.turn.recoveries{replay}=1、meridian.lease.lost=1（Prometheus 名 meridian_turns_total 等，见 TurnMetrics）。"
     },
     {
       "id": "T06-A10",
       "task": "T06",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw clean 后 scripts/dev/verify.sh：BUILD SUCCESS，exit=0（2026-11-07 11:09，01:23 min）；spotless:check、编译、各模块单元与集成测试全部通过（runtime 单元 77、集成 100；engine-agentscope-test 87；persistence 单元 15、集成 30 等）、ArchitectureRulesTest 12、enforcer、JaCoCo 覆盖率 All coverage checks have been met、check-pom-versions.sh 通过。"
     },
     {
       "id": "T07-A01",
