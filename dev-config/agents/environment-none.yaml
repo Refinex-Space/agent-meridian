@@ -1,0 +1,6 @@
+# 开发用的环境（FileAgentConfigProvider，T06）：none 档，没有沙箱。会话的 environment_id 与 environment_revision 引用这里。
+kind: environment
+environment_id: env_dev_none
+revision: 1
+tier: none
+egress_allowlist: []

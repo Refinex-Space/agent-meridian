@@ -1,0 +1,26 @@
+# 开发用的智能体版本（FileAgentConfigProvider，T06）。T15b 起智能体配置由 control-plane 下发，本目录只留给开发与测试。
+# 字段与 engine-spi 的 ResolvedAgentSpec 一致（snake_case，枚举取小写值）；会话的 agent_version_id 引用这里的 ID。
+kind: agent_version
+agent_id: agt_dev_assistant
+agent_version_id: agv_dev_assistant_1
+name: assistant
+model:
+  # 模型目录的模型 ID；RoutedModel（T09a）之前没有生产的模型工厂，内核不会装配
+  model_id: mdl_dev_default
+system_prompt: 你是企业内的通用助手，回答简洁、准确。
+tools: []
+mcp_servers: []
+skills: []
+subagents: []
+permissions:
+  mode: default
+  rules: []
+compaction:
+  reserved_tokens: 20000
+plan_mode: false
+knowledge:
+  knowledge_base_ids: []
+  prefetch: false
+  prefetch_top_k: 5
+max_iters: 50
+expose_thinking: false

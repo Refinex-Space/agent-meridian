@@ -22,6 +22,7 @@ import cn.refinex.meridian.runtime.dispatch.app.LeaseHandle;
 import cn.refinex.meridian.runtime.stream.domain.AppendResult;
 import cn.refinex.meridian.runtime.stream.domain.EventBatch;
 import cn.refinex.meridian.runtime.stream.domain.StoredEvent;
+import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import cn.refinex.meridian.runtime.support.DbAssertions;
 import cn.refinex.meridian.runtime.support.RuntimeTestDatabase;
 import cn.refinex.meridian.runtime.support.TestNode;
@@ -155,6 +156,24 @@ class SessionEventWriterIT {
         assertThat(otherNode).isInstanceOf(AppendResult.LeaseLost.class);
         assertThat(((AppendResult.Appended) next).lastSeq()).as("没有跳号").isEqualTo(2);
         assertThat(node.events().listAfter(session.sessionId(), 0, 100)).hasSize(2);
+    }
+
+    @Test
+    void nulCharactersInModelOutputDoNotBreakTheWrite() {
+        // 登记事项 D11：jsonb 拒绝 \u0000，写入前替换为 U+FFFD
+        AppendResult result = node.events()
+                .append(EventBatch.leased(
+                        session.sessionId(),
+                        session.mainThreadId(),
+                        lease.turn().turnId(),
+                        lease.epoch(),
+                        new AgentOutputEvent.Message("b1", List.of(new MessageContent.Text("前\u0000后")))));
+
+        assertThat(result).isInstanceOf(AppendResult.Appended.class);
+        AgentOutputEvent.Message stored = (AgentOutputEvent.Message) EngineJson.readEvent(
+                EventType.AGENT_MESSAGE,
+                node.events().listAfter(session.sessionId(), 0, 10).getLast().data());
+        assertThat(stored.content()).containsExactly(new MessageContent.Text("前\uFFFD后"));
     }
 
     @Test

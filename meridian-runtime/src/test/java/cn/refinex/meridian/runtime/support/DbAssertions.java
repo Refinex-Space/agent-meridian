@@ -84,6 +84,21 @@ public final class DbAssertions {
     }
 
     /**
+     * 执行一条查询，返回全部行。
+     *
+     * @param sql SQL
+     * @param params 位置参数
+     * @return 每行一个列名到值的映射
+     */
+    public static List<Map<String, Object>> rows(String sql, Object... params) {
+        JdbcClient.StatementSpec spec = JDBC.sql(sql);
+        for (Object param : params) {
+            spec = spec.param(param);
+        }
+        return spec.query().listOfRows();
+    }
+
+    /**
      * 执行一条更新语句（以迁移角色）。
      *
      * @param sql SQL

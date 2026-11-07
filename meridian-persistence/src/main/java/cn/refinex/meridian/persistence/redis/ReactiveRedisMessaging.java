@@ -17,6 +17,7 @@ import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
 
 /**
  * Redis Stream 与 Pub/Sub 的响应式客户端薄封装，供 runtime（WebFlux）使用，语义与 {@link RedisMessaging} 相同。
@@ -53,6 +54,9 @@ public final class ReactiveRedisMessaging {
      * 重置为 {@code ttl}。用于只做实时扇出、可以从数据库补齐的 Stream（例如 runtime 的 {@code ev:{session_id}}），
      * 避免不活跃的键长期占用内存。
      *
+     * <p>两条命令在订阅线程上依次发出，在同一连接上按发出顺序执行（EXPIRE 在 XADD 之后，键一定已存在）。不在 XADD 完成的回调里
+     * 再发 EXPIRE：回调运行在 Netty 事件循环上，并发写入时 Lettuce 的写锁会让事件循环线程阻塞。
+     *
      * @param stream Stream 的键
      * @param fields 消息字段
      * @param maxLen 保留的条目数上限（近似值，Redis 按宏节点整块裁剪，实际可能略多）
@@ -61,9 +65,11 @@ public final class ReactiveRedisMessaging {
      */
     public Mono<String> publish(String stream, Map<String, String> fields, long maxLen, Duration ttl) {
         XAddOptions options = XAddOptions.maxlen(maxLen).approximateTrimming(true);
-        return template.opsForStream()
+        Mono<String> add = template.opsForStream()
                 .add(StreamRecords.newRecord().in(stream).ofMap(fields), options)
-                .flatMap(id -> template.expire(stream, ttl).thenReturn(id.getValue()));
+                .map(RecordId::getValue);
+        // zip 按顺序订阅两个命令，二者都在订阅线程上发出
+        return Mono.zip(add, template.expire(stream, ttl)).map(Tuple2::getT1);
     }
 
     /**

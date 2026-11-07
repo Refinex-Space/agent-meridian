@@ -2,17 +2,24 @@ package cn.refinex.meridian.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
+import cn.refinex.meridian.engine.spi.port.BlobStorePort;
 import cn.refinex.meridian.engine.spi.port.EventSinkPort;
+import cn.refinex.meridian.engine.spi.port.InboxPort;
 import cn.refinex.meridian.engine.spi.port.LeaseRegistry;
+import cn.refinex.meridian.engine.spi.port.ToolLedgerPort;
 import cn.refinex.meridian.persistence.jdbc.PeriodicJob;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
+import cn.refinex.meridian.runtime.delivery.app.DatabaseInbox;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
 import cn.refinex.meridian.runtime.dispatch.app.NodeLeaseRegistry;
 import cn.refinex.meridian.runtime.dispatch.domain.NodeId;
 import cn.refinex.meridian.runtime.session.infra.system.JdbcAgentStateRepository;
 import cn.refinex.meridian.runtime.stream.app.DatabaseEventSink;
+import cn.refinex.meridian.runtime.stream.app.ObjectStoreBlobStore;
 import cn.refinex.meridian.runtime.support.DbAssertions;
+import cn.refinex.meridian.runtime.tooling.app.DatabaseToolLedger;
 import cn.refinex.meridian.testsupport.SpringContainerProperties;
 import java.time.Duration;
 import java.util.Map;
@@ -88,6 +95,12 @@ class RuntimeApplicationIT {
         assertThat(context.getBean(AgentStateRepository.class)).isInstanceOf(JdbcAgentStateRepository.class);
         assertThat(context.getBean(EventSinkPort.class)).isInstanceOf(DatabaseEventSink.class);
         assertThat(context.getBean(NodeId.class)).isEqualTo(new NodeId("test-node"));
+        assertThat(context.getBean(BlobStorePort.class)).isInstanceOf(ObjectStoreBlobStore.class);
+        assertThat(context.getBean(ToolLedgerPort.class)).isInstanceOf(DatabaseToolLedger.class);
+        assertThat(context.getBean(InboxPort.class)).isInstanceOf(DatabaseInbox.class);
+        assertThat(context.getBeansOfType(AgentEngine.class))
+                .as("没有模型、工具等提供者（T09a、T10a 交付）时不装配内核与 Worker，应用照常启动")
+                .isEmpty();
     }
 
     @Test

@@ -36,7 +36,8 @@ import reactor.core.publisher.Mono;
  * </ul>
  * Stream 只用于实时扇出，按 {@code MAXLEN ~ 1000} 裁剪，最后一次写入 1 小时后过期，不活跃会话的键不会长期占用内存。
  *
- * <p>线程安全：无状态。发布在调用方的序列里依次进行，同一会话的条目顺序与 {@code seq} 一致。
+ * <p>线程安全：无状态。命令在订阅线程上按顺序发出、在同一个 Redis 连接上按发出顺序执行，同一写入方的条目顺序与 {@code seq}
+ * 一致；不同写入方（主线程与子线程）的条目可能交错，SSE 按 {@code seq} 去重与回补（T07）。
  */
 @Component
 public class EventStreamPublisher {
@@ -88,8 +89,10 @@ public class EventStreamPublisher {
      * @return 全部发布（或失败已记录）后完成，不会以错误结束
      */
     public Mono<Void> publish(List<StoredEvent> events) {
+        // 全部命令在调用线程上按 seq 顺序发出（同一连接按发出顺序执行），不在前一条命令完成的回调（Netty 事件循环）上发下一条
         return Flux.fromIterable(events)
-                .concatMap(event -> xadd(event.sessionId(), event.type().value(), fields(event)))
+                .flatMapSequential(
+                        event -> xadd(event.sessionId(), event.type().value(), fields(event)), Integer.MAX_VALUE)
                 .then();
     }
 
