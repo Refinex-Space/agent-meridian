@@ -59,7 +59,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 | 编号 | 任务 | 阶段 | 依赖 | effort | 规模 | 验证项 | 状态 | 完成提交 |
 |---|---|---|---|---|---|---|---|---|
-| T01 | [工程脚手架与质量门禁](tasks/T01-scaffold-and-quality-gates.md) | 0 | 无 | high | 中 | P1（依赖解析部分） | 部分完成 | b29c1af |
+| T01 | [工程脚手架与质量门禁](tasks/T01-scaffold-and-quality-gates.md) | 0 | 无 | high | 中 | P1（依赖解析部分） | 已完成 | b29c1af |
 | T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 未开始 | — |
 | T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 未开始 | — |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 未开始 | — |
@@ -242,9 +242,9 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 遗留：……
 ```
 
-### 2026-11-07 T01 部分完成（提交 b29c1af）
+### 2026-11-07 T01 已完成（提交 b29c1af）
 - 交付：Maven Wrapper（3.9.16）、根 POM 与 14 个模块骨架、`meridian-bom`（Boot 4.1.2、AgentScope 2.0.4）、Spotless、Checkstyle、enforcer（默认拒绝的模块依赖规则）、Surefire、Failsafe、JaCoCo、`live` profile、`meridian-arch-tests` 7 条规则、`scripts/dev/verify.sh`、`scripts/ci/check-pom-versions.sh`、CI、根 `CLAUDE.md` 命令一节、P1 依赖解析报告
-- 验收：10 项通过，1 项阻塞（T01-A01：PATH 上的 `java` 是用户 shell 配置的 Zulu 21，`JAVA_HOME` 与 `./mvnw` 为 25）
+- 验收：11 项通过，0 项阻塞（T01-A01 初次为阻塞：`~/.zshrc` 中 `JAVA_HOME` 缺少 `/Contents/Home`；经用户授权修正后 `java -version` 与 `./mvnw -v` 均为 25）
 - 决策：ADR-0022 构建门禁与依赖规则的落地方式
 - 遗留：登记事项 D01（T02）、D02（T10a）、D03 Netty 4.2 与 Vert.x 4.5 兼容性（T03、T11）
 

@@ -6,8 +6,8 @@
       "id": "T01-A01",
       "task": "T01",
       "description": "`java -version` 与 `./mvnw -v` 显示 Java 25 与 Maven 3.9.x。验证：两条命令的输出。",
-      "status": "blocked",
-      "evidence": "`./mvnw -v` → Apache Maven 3.9.16，Java version: 25.0.5（Eclipse Adoptium，runtime 为 JAVA_HOME 的 temurin25）；`\"$JAVA_HOME/bin/java\" -version` → openjdk 25.0.5。但 PATH 上的 `java`（~/develop/jdk/zulu21/bin/java，来自用户 shell 配置）`java -version` → 21.0.10。构建只使用 JAVA_HOME，enforcer requireJavaVersion [25,26) 通过。修改 PATH 属于仓库外的系统配置，需要用户把 $JAVA_HOME/bin 放到 PATH 前面后复核。"
+      "status": "passing",
+      "evidence": "用户授权后把 ~/.zshrc 第 6 行 JAVA_HOME 由 ~/develop/jdk/temurin25 改为 ~/develop/jdk/temurin25/Contents/Home（原路径下没有 bin，java 落到 /usr/bin/java → Zulu 17）。新登录交互 shell（zsh -lic）中：JAVA_HOME=/Users/refinex/develop/jdk/temurin25/Contents/Home；command -v java → .../temurin25/Contents/Home/bin/java；`java -version` → openjdk version \"25.0.5\" 2026-10-20 LTS；`./mvnw -v` → Apache Maven 3.9.16，Java version: 25.0.5，vendor: Eclipse Adoptium。"
     },
     {
       "id": "T01-A02",
