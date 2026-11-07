@@ -184,7 +184,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 3. `meridian-test-support`：单例容器与属性注册、JDBC 迁移与清理辅助
 - [x] 4. `meridian-persistence`：jdbc、tenant、outbox、redis、objectstore、idempotency、flyway（T02-A04、A05、A06、A07）
 - [x] 5. `meridian-security` 的 `web` 包：请求 ID、problem+json（T02-A02）
-- [ ] 6. 架构规则：JdbcClient 访问、SystemRepository 位置与注解、api 不依赖 SystemRepository（T02-A09）
+- [x] 6. 架构规则：JdbcClient 访问、SystemRepository 位置与注解、api 不依赖 SystemRepository（T02-A09）
 - [ ] 7. ADR-0020（T02-A10）
 - [ ] 8. 收尾：模块 CLAUDE.md、根 CLAUDE.md 命令、文档同步、verify.sh（T02-A11）、acceptance.json、down.sh
 
@@ -231,7 +231,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 
 | 编号 | 发现于 | 内容 | 建议处理 |
 |---|---|---|---|
-| D01 | T01 | 架构规则未落地：`JdbcClient` 与 `JdbcTemplate` 只能被 `TenantScopedRepository`、`SystemRepository` 的子类依赖；`SystemRepository` 的子类只在 `..infra.system..` 且带 `@CrossTenant`；`..api..` 不依赖 `SystemRepository` 的子类。基类尚不存在，说明写在 `meridian-arch-tests` 的 `ArchitectureRulesTest` 类注释中 | T02 |
+| D01 | T01 | 架构规则未落地：`JdbcClient` 与 `JdbcTemplate` 只能被 `TenantScopedRepository`、`SystemRepository` 的子类依赖；`SystemRepository` 的子类只在 `..infra.system..` 且带 `@CrossTenant`；`..api..` 不依赖 `SystemRepository` 的子类。基类尚不存在，说明写在 `meridian-arch-tests` 的 `ArchitectureRulesTest` 类注释中 | T02（已落地：`ArchitectureRulesTest` 规则 8 至 11） |
 | D02 | T01 | 架构规则未落地：平台工具继承 `ToolBase`（经 `PlatformTool`）；运行时 Toolkit 中的非 `ToolBase` 工具必须在白名单内（启动自检） | T10a |
 | D03 | T01 | Spring Boot 4.1.2 BOM 把 fabric8 `kubernetes-httpclient-vertx`（Vert.x 4.5.28）下的 Netty 从 4.1.135 提升到 4.2.19；Vert.x 4.5 基于 Netty 4.1 构建，需要在真实调用中确认兼容，不兼容时按决策分级处理。详见 `docs/poc/P01-运行基线.md` | T03（运行基线）、T11（沙箱驱动） |
 

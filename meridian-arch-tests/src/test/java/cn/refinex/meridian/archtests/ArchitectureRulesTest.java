@@ -1,12 +1,24 @@
 package cn.refinex.meridian.archtests;
 
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.assignableTo;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import cn.refinex.meridian.persistence.tenant.CrossTenant;
+import cn.refinex.meridian.persistence.tenant.SystemRepository;
+import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.CompositeArchRule;
+import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
  * 架构规则，与架构设计「防漂移机制」逐条对应。
@@ -24,11 +36,8 @@ import com.tngtech.archunit.lang.CompositeArchRule;
  *       由各自任务的单元测试、契约测试与 gitleaks 落地，不属于 ArchUnit。
  * </ul>
  *
- * <p>本任务（T01）尚无法落地、由后续任务补上的规则（已在 {@code docs/plan/PLAN.md}「登记事项」登记）：
+ * <p>由后续任务补上的规则（已在 {@code docs/plan/PLAN.md}「登记事项」登记）：
  * <ul>
- *   <li>T02：{@code JdbcClient} 与 {@code JdbcTemplate} 只能被 {@code TenantScopedRepository} 与 {@code SystemRepository}
- *       的子类依赖；{@code SystemRepository} 的子类只能在 {@code ..infra.system..} 且必须标注 {@code @CrossTenant}；
- *       {@code ..api..} 不能依赖 {@code SystemRepository} 的子类。这些基类在 T02 创建（架构设计「租户隔离」）。
  *   <li>T10a：平台工具继承 {@code ToolBase}（经平台基类 {@code PlatformTool}）；运行时 Toolkit 中的非 {@code ToolBase}
  *       工具必须在白名单内（启动自检）。平台工具基类在 T10a 创建。
  * </ul>
@@ -109,5 +118,69 @@ class ArchitectureRulesTest {
             .resideInAPackage("reactor..")
             .as("规则 7：meridian-common 中只有 common.context.. 与 common.concurrent.. 可以依赖 reactor..")
             .because("见架构设计「模块依赖规则」中 meridian-common 一行")
+            .allowEmptyShould(true);
+
+    /** 两类仓储基类（含其子类）；基类自身也算，它们创建 {@code JdbcClient}。 */
+    private static final DescribedPredicate<JavaClass> REPOSITORY_BASE_SUBCLASSES = assignableTo(
+                    TenantScopedRepository.class)
+            .or(assignableTo(SystemRepository.class))
+            .as("TenantScopedRepository 或 SystemRepository 的子类");
+
+    @ArchTest
+    static final ArchRule rule8_jdbc_access_only_through_repository_bases = noClasses()
+            .that()
+            .resideInAPackage(MeridianModule.ROOT_PACKAGE + "..")
+            .and(DescribedPredicate.not(REPOSITORY_BASE_SUBCLASSES))
+            // ScopedStatement 是 TenantScopedRepository 交给子类的语句包装，与基类同属一个包
+            .and()
+            .resideOutsideOfPackage("cn.refinex.meridian.persistence.tenant..")
+            .should()
+            .dependOnClassesThat()
+            .belongToAnyOf(
+                    JdbcClient.class,
+                    JdbcTemplate.class,
+                    JdbcOperations.class,
+                    NamedParameterJdbcTemplate.class,
+                    NamedParameterJdbcOperations.class)
+            .as("规则 8：JdbcClient 与 JdbcTemplate 只能被 TenantScopedRepository 与 SystemRepository 的子类依赖")
+            .because("租户条件由仓储基类强制，绕开基类直接访问数据库会漏掉租户隔离，见架构设计「租户隔离」")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    static final ArchRule rule9_system_repositories_live_in_infra_system = classes()
+            .that()
+            .areAssignableTo(SystemRepository.class)
+            .and()
+            .doNotHaveFullyQualifiedName(SystemRepository.class.getName())
+            // meridian-persistence 自己的 outbox、幂等清理等基础设施不属于任何业务上下文，ADR-0020 豁免
+            .and()
+            .resideOutsideOfPackage("cn.refinex.meridian.persistence..")
+            .should()
+            .resideInAPackage("..infra.system..")
+            .as("规则 9：SystemRepository 的子类只能放在 ..infra.system.. 包中")
+            .because("跨租户的数据访问集中在各上下文的 infra.system 包，便于审查，见架构设计「租户隔离」")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    static final ArchRule rule10_system_repositories_declare_cross_tenant_reason = classes()
+            .that()
+            .areAssignableTo(SystemRepository.class)
+            .and()
+            .doNotHaveFullyQualifiedName(SystemRepository.class.getName())
+            .should()
+            .beAnnotatedWith(CrossTenant.class)
+            .as("规则 10：SystemRepository 的子类必须标注 @CrossTenant(reason = ...)")
+            .because("每个跨租户的仓储都要写明理由，见架构设计「租户隔离」")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    static final ArchRule rule11_api_does_not_use_system_repositories = noClasses()
+            .that()
+            .resideInAPackage("cn.refinex.meridian..api..")
+            .should()
+            .dependOnClassesThat()
+            .areAssignableTo(SystemRepository.class)
+            .as("规则 11：..api.. 不能依赖 SystemRepository 的子类")
+            .because("SystemRepository 只供本上下文的后台作业与端口实现使用，见架构设计「租户隔离」")
             .allowEmptyShould(true);
 }
