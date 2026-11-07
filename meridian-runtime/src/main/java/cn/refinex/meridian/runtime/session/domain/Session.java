@@ -1,7 +1,9 @@
 package cn.refinex.meridian.runtime.session.domain;
 
 import cn.refinex.meridian.common.context.Interaction;
+import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * 读出的会话，只含调度与执行需要的列；其余列由使用它们的任务按需加入。
@@ -18,6 +20,7 @@ import java.time.Instant;
  * @param lastSeq 已分配的最大事件序号，没有事件时为 0
  * @param createdAt 创建时间
  * @param updatedAt 最近一次修改时间
+ * @param customTools 会话声明的自定义工具，每轮注入（架构设计「待处理动作」中的"自定义工具"）；没有时为空列表
  */
 public record Session(
         String id,
@@ -31,4 +34,11 @@ public record Session(
         SessionStatus status,
         long lastSeq,
         Instant createdAt,
-        Instant updatedAt) {}
+        Instant updatedAt,
+        List<CustomToolDeclaration> customTools) {
+
+    /** 对自定义工具列表做不可变复制。 */
+    public Session {
+        customTools = customTools == null ? List.of() : List.copyOf(customTools);
+    }
+}

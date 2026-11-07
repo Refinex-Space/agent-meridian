@@ -69,6 +69,21 @@ public final class DbAssertions {
     }
 
     /**
+     * 执行一条查询，返回第一行的全部列。
+     *
+     * @param sql SQL
+     * @param params 位置参数
+     * @return 列名到值；没有结果时抛出异常
+     */
+    public static Map<String, Object> row(String sql, Object... params) {
+        JdbcClient.StatementSpec spec = JDBC.sql(sql);
+        for (Object param : params) {
+            spec = spec.param(param);
+        }
+        return spec.query().listOfRows().getFirst();
+    }
+
+    /**
      * 执行一条更新语句（以迁移角色）。
      *
      * @param sql SQL

@@ -7,6 +7,7 @@ import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
 import cn.refinex.meridian.runtime.session.domain.NewSession;
 import cn.refinex.meridian.runtime.session.domain.Session;
 import cn.refinex.meridian.runtime.session.domain.SessionStatus;
+import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -64,7 +65,8 @@ public class SessionRepository extends TenantScopedRepository {
     public Optional<Session> find(String sessionId) {
         return sql("""
                         SELECT id, tenant_id, project_id, agent_version_id, environment_id, environment_revision,
-                               end_user_id, interaction, status, last_seq, created_at, updated_at
+                               end_user_id, interaction, status, last_seq, created_at, updated_at,
+                               custom_tools::text AS custom_tools
                           FROM rt.sessions
                          WHERE tenant_id = :tenant_id AND project_id = :project_id AND id = :id
                         """).param("id", sessionId).query(SessionRepository::map).optional();
@@ -83,6 +85,7 @@ public class SessionRepository extends TenantScopedRepository {
                 SessionStatus.of(rs.getString("status")),
                 rs.getLong("last_seq"),
                 JdbcValues.instant(rs, "created_at"),
-                JdbcValues.instant(rs, "updated_at"));
+                JdbcValues.instant(rs, "updated_at"),
+                EngineJson.readCustomTools(rs.getString("custom_tools")));
     }
 }

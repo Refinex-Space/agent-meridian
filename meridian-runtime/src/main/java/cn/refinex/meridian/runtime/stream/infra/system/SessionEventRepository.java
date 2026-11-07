@@ -166,6 +166,31 @@ public class SessionEventRepository extends SystemRepository {
                 .list();
     }
 
+    /**
+     * 读取一轮写入的指定类型的事件，按 seq 升序。
+     *
+     * @param sessionId 会话 ID
+     * @param turnId 轮次 ID
+     * @param types 事件类型
+     * @return 事件
+     */
+    public List<StoredEvent> listByTurn(String sessionId, String turnId, List<EventType> types) {
+        return jdbc().sql("""
+                        SELECT session_id, seq, id, tenant_id, project_id, thread_id, turn_id, type, data, created_at
+                          FROM rt.session_events
+                         WHERE session_id = :session_id AND turn_id = :turn_id AND type = ANY (:types)
+                         ORDER BY seq
+                        """)
+                .param("session_id", sessionId)
+                .param("turn_id", turnId)
+                .param(
+                        "types",
+                        JdbcValues.textArray(
+                                types.stream().map(EventType::value).toList()))
+                .query(SessionEventRepository::map)
+                .list();
+    }
+
     private static StoredEvent map(ResultSet rs, int row) throws SQLException {
         return new StoredEvent(
                 rs.getString("session_id"),

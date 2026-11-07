@@ -39,6 +39,25 @@ public final class TestSessions {
      * @return 会话
      */
     public static TestSession create(String tenantId, Clock clock) {
+        return create(tenantId, clock, Ids.newId(IdPrefix.AGENT_VERSION), Ids.newId(IdPrefix.ENVIRONMENT), 1);
+    }
+
+    /**
+     * 在新租户、新项目下创建一个绑定指定智能体版本与环境的会话，Worker 执行它时按这些 ID 取配置。
+     *
+     * @param clock 时钟
+     * @param agentVersionId 智能体版本 ID
+     * @param environmentId 环境 ID
+     * @param environmentRevision 环境修订号
+     * @return 会话
+     */
+    public static TestSession create(
+            Clock clock, String agentVersionId, String environmentId, long environmentRevision) {
+        return create(Ids.newId(IdPrefix.TENANT), clock, agentVersionId, environmentId, environmentRevision);
+    }
+
+    private static TestSession create(
+            String tenantId, Clock clock, String agentVersionId, String environmentId, long environmentRevision) {
         TestSession session = new TestSession(
                 tenantId, Ids.newId(IdPrefix.PROJECT), Ids.newId(IdPrefix.SESSION), Ids.newId(IdPrefix.THREAD));
         PlatformContexts.run(session.context(), () -> {
@@ -46,9 +65,9 @@ public final class TestSessions {
                     .insert(
                             new NewSession(
                                     session.sessionId(),
-                                    Ids.newId(IdPrefix.AGENT_VERSION),
-                                    Ids.newId(IdPrefix.ENVIRONMENT),
-                                    1,
+                                    agentVersionId,
+                                    environmentId,
+                                    environmentRevision,
                                     "u_1024",
                                     Interaction.ATTENDED),
                             clock.instant());

@@ -209,6 +209,17 @@ public class TurnQueueRepository extends SystemRepository {
     }
 
     /**
+     * 统计等待认领的轮次数（指标 {@code meridian.dispatch.queue.depth}），走部分索引 {@code turns_queued_idx}。
+     *
+     * @return {@code status='queued'} 的轮次数
+     */
+    public long countQueued() {
+        return jdbc().sql("SELECT count(*) FROM rt.turns WHERE status = 'queued'")
+                .query(Long.class)
+                .single();
+    }
+
+    /**
      * 认领第 1 步选出的候选轮次。
      *
      * @param turnId 轮次 ID

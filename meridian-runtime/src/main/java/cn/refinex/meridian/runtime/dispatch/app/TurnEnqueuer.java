@@ -59,11 +59,21 @@ public class TurnEnqueuer {
      * @return 新轮次的 ID，或线程已有未结束的轮次
      */
     public EnqueueResult enqueue(NewTurn turn) {
+        return enqueue(Ids.newId(IdPrefix.TURN), turn);
+    }
+
+    /**
+     * 以调用方先生成的 ID 入队一个轮次。调用方需要在入队之前引用新轮次时使用，例如轮次结束时把收件箱消息记为被下一轮消费。
+     *
+     * @param turnId 新轮次的 ID（{@code trn_…}）
+     * @param turn 入队参数
+     * @return 新轮次的 ID，或线程已有未结束的轮次
+     */
+    public EnqueueResult enqueue(String turnId, NewTurn turn) {
         return transactions.execute(status -> {
             Instant now = clock.instant();
             // 先写计数行再写轮次：与同一线程、同一租户的并发入队保持相同的加锁顺序
             queue.ensureTenantCounter(turn.tenantId(), properties.defaultTenantMaxRunning(), now);
-            String turnId = Ids.newId(IdPrefix.TURN);
             if (!queue.insertQueued(turnId, turn, now)) {
                 return new EnqueueResult.ThreadBusy(turn.threadId());
             }

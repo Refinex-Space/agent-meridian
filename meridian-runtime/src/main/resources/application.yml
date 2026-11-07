@@ -18,6 +18,16 @@ meridian:
       reap-interval: 5s
       poll-interval: 1s
       default-tenant-max-running: 20
+    worker:
+      # 默认值的来源见 WorkerProperties：并发上限、下线等待（架构设计「崩溃恢复」）、待处理动作截止时长（「待处理动作」）
+      max-concurrent-turns: 300
+      shutdown-timeout: 60s
+      pending-action-timeout: 30m
+      # 每批工具执行完成后保存状态（P3，ADR-0028）
+      batch-checkpoint: true
+    dev-agent-config:
+      # 开发配置目录（FileAgentConfigProvider），相对于工作目录；T15b 起智能体配置改由 control-plane 下发
+      directory: dev-config/agents
 
 management:
   endpoints:

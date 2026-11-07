@@ -12,8 +12,10 @@ import cn.refinex.meridian.runtime.dispatch.infra.system.TurnLeaseRepository;
 import cn.refinex.meridian.runtime.dispatch.infra.system.TurnQueueRepository;
 import cn.refinex.meridian.runtime.session.infra.system.JdbcAgentStateRepository;
 import cn.refinex.meridian.runtime.stream.app.DatabaseEventSink;
+import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
 import cn.refinex.meridian.runtime.stream.app.SessionEventWriter;
 import cn.refinex.meridian.runtime.stream.infra.system.SessionEventRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
@@ -36,6 +38,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * @param states {@code AgentStateRepository} 的实现
  * @param queue 轮次队列仓储（读取轮次输入）
  * @param wakeups 已发布的唤醒通知次数
+ * @param publisher 事件的实时扇出（Testcontainers 中的 Redis）
+ * @param meters 本节点的指标注册表
  */
 public record TestNode(
         NodeId nodeId,
@@ -49,7 +53,9 @@ public record TestNode(
         DatabaseEventSink eventSink,
         JdbcAgentStateRepository states,
         TurnQueueRepository queue,
-        AtomicInteger wakeups) {
+        AtomicInteger wakeups,
+        EventStreamPublisher publisher,
+        SimpleMeterRegistry meters) {
 
     /**
      * 用默认调度配置创建节点。
@@ -89,8 +95,10 @@ public record TestNode(
         NodeLeaseRegistry registry = new NodeLeaseRegistry();
         TurnQueueRepository queue = new TurnQueueRepository(dataSource);
         TurnLeaseRepository leases = new TurnLeaseRepository(dataSource);
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        EventStreamPublisher publisher = new EventStreamPublisher(RuntimeTestRedis.reactiveMessaging(), clock, meters);
         SessionEventWriter events =
-                new SessionEventWriter(new SessionEventRepository(dataSource), transactions, node, clock);
+                new SessionEventWriter(new SessionEventRepository(dataSource), transactions, node, clock, publisher);
         TurnTransitions transitions = new TurnTransitions(leases, events, transactions, node, clock);
         AtomicInteger wakeups = new AtomicInteger();
         return new TestNode(
@@ -102,9 +110,11 @@ public record TestNode(
                 new LeaseReaper(transitions),
                 transitions,
                 events,
-                new DatabaseEventSink(events),
+                new DatabaseEventSink(events, publisher),
                 new JdbcAgentStateRepository(dataSource, transactions, node, clock),
                 queue,
-                wakeups);
+                wakeups,
+                publisher,
+                meters);
     }
 }

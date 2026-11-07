@@ -4,7 +4,9 @@ import cn.refinex.meridian.persistence.jdbc.PeriodicJob;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseReaper;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseRenewer;
+import cn.refinex.meridian.runtime.dispatch.app.QueueDepthGauge;
 import cn.refinex.meridian.runtime.dispatch.domain.NodeId;
+import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -14,8 +16,9 @@ import org.springframework.context.annotation.Configuration;
 /**
  * 调度的装配：节点身份，以及随容器启停的续租任务与回收器（架构设计「租约」「租约回收」）。
  *
- * <p>两个后台任务各在一个虚拟线程上按固定延迟执行（{@link PeriodicJob}），不占用 Reactor 线程；多节点同时运行回收器是安全的，
- * 它用 {@code SKIP LOCKED} 逐个处理过期租约。
+ * <p>后台任务各在一个虚拟线程上按固定延迟执行（{@link PeriodicJob}），不占用 Reactor 线程；多节点同时运行回收器是安全的，
+ * 它用 {@code SKIP LOCKED} 逐个处理过期租约。它们的生命周期阶段小于 Worker（{@link TurnWorkerLifecycle#LEASE_JOBS_PHASE}），
+ * 节点下线等待执行结束期间仍在续租。
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(DispatchProperties.class)
@@ -48,7 +51,8 @@ public class DispatchConfiguration {
      */
     @Bean
     public PeriodicJob leaseRenewerJob(LeaseRenewer renewer, DispatchProperties properties) {
-        return new PeriodicJob("lease-renewer", properties.renewInterval(), renewer::renewAll);
+        return new PeriodicJob(
+                "lease-renewer", properties.renewInterval(), renewer::renewAll, TurnWorkerLifecycle.LEASE_JOBS_PHASE);
     }
 
     /**
@@ -60,6 +64,23 @@ public class DispatchConfiguration {
      */
     @Bean
     public PeriodicJob leaseReaperJob(LeaseReaper reaper, DispatchProperties properties) {
-        return new PeriodicJob("lease-reaper", properties.reapInterval(), reaper::reapExpired);
+        return new PeriodicJob(
+                "lease-reaper", properties.reapInterval(), reaper::reapExpired, TurnWorkerLifecycle.LEASE_JOBS_PHASE);
+    }
+
+    /**
+     * 队列深度的统计任务，与回收器同周期（指标 {@code meridian.dispatch.queue.depth}）。
+     *
+     * @param gauge 队列深度量规
+     * @param properties 调度配置
+     * @return 后台任务
+     */
+    @Bean
+    public PeriodicJob queueDepthJob(QueueDepthGauge gauge, DispatchProperties properties) {
+        return new PeriodicJob(
+                "dispatch-queue-depth",
+                properties.reapInterval(),
+                gauge::refresh,
+                TurnWorkerLifecycle.LEASE_JOBS_PHASE);
     }
 }

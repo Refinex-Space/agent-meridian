@@ -177,10 +177,10 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 T06 轮次 Worker、事件流水线与崩溃恢复（开工 2026-11-07，基线 `verify.sh` 通过）：
 
-- [ ] 1. 端口实现：`InboxPort` 与收件箱仓储（queue 合并、按 `consumed_epoch` 重新投递）、`ToolLedgerPort`、`BlobStorePort`（对象存储加引用）、Redis Stream 写入侧（XADD `ev:{session_id}`，补上 `DatabaseEventSink` 的 `TODO(T06)`）
-- [ ] 2. 恢复判定纯逻辑（状态与账本快照 → 恢复方式与说明）及单测；`RecoveryNoteMiddleware`
-- [ ] 3. `TurnWorker`：认领 → 读输入/恢复判定 → `TurnContext` → `runTurn` → 事件写库与 XADD → 终态事务（结束轮次、计数、状态、outbox、下一轮）→ `finally` 释放；`recovery_confirmation` 与 `recovery_attempt` 用尽；`FileAgentConfigProvider`；D09、D11
-- [ ] 4. 优雅下线 `SmartLifecycle`
+- [x] 1. 端口实现：`InboxPort` 与收件箱仓储（queue 合并、按 `consumed_epoch` 重新投递）、`ToolLedgerPort`、`BlobStorePort`（对象存储加引用）、Redis Stream 写入侧（XADD `ev:{session_id}`，补上 `DatabaseEventSink` 的 `TODO(T06)`）
+- [x] 2. 恢复判定纯逻辑（状态与账本快照 → 恢复方式与说明）及单测；`RecoveryNoteMiddleware`
+- [x] 3. `TurnWorker`：认领 → 读输入/恢复判定 → `TurnContext` → `runTurn` → 事件写库与 XADD → 终态事务（结束轮次、计数、状态、outbox、下一轮）→ `finally` 释放；`recovery_confirmation` 与 `recovery_attempt` 用尽；`FileAgentConfigProvider`；D09、D11
+- [x] 4. 优雅下线 `SmartLifecycle`
 - [ ] 5. 指标 6 个
 - [ ] 6. 故障注入测试（P10 四种终止、P2 完整路径）与端到端、queue 合并、`requires_action`、`error` 用尽、下线集成测试（A01–A04、A06–A09）
 - [ ] 7. P3 批次级 checkpoint 验证与结论（A05）

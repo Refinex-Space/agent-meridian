@@ -13,7 +13,8 @@ import java.time.Instant;
  * @param kind 轮次类型：{@code messages}、{@code confirmations}、{@code custom_tool_results}、{@code recovery}
  * @param epoch 本次执行的租约 epoch，所有受租约约束的写入都以它为条件
  * @param claimCount 包括本次在内被认领的次数
- * @param recoveryAttempt 恢复次数；大于 0 表示这是恢复认领，失败那次执行的 epoch 为 {@code epoch - 1}
+ * @param recoveryAttempt 恢复次数：租约过期与可重试错误置回时加一，节点下线不变；恢复认领时失败那次执行的 epoch 为
+ *     {@code epoch - 1}
  * @param interruptRequestedAt 认领前已收到的中断请求时间；可为空，表示没有
  * @param createdAt 入队时间
  * @param claimedAt 本次认领的时间
@@ -35,11 +36,12 @@ public record ClaimedTurn(
         Instant leaseExpiresAt) {
 
     /**
-     * 是否为恢复认领：轮次曾因租约过期或可重试错误被置回队列。
+     * 是否为恢复认领：本轮此前执行过（被回收、因可重试错误或节点下线置回队列）。按 epoch 而不是 {@code recoveryAttempt} 判断，
+     * 因为节点优雅下线置回时恢复次数不变（ADR-0028）。
      *
-     * @return {@code recoveryAttempt} 大于 0 时为 true
+     * @return epoch 大于 1 时为 true
      */
     public boolean isRecovery() {
-        return recoveryAttempt > 0;
+        return epoch > 1;
     }
 }

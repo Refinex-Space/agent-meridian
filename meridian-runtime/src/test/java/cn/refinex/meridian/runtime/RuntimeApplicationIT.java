@@ -44,6 +44,7 @@ class RuntimeApplicationIT {
     static void containers(DynamicPropertyRegistry registry) {
         SpringContainerProperties.postgres(registry);
         SpringContainerProperties.redis(registry);
+        SpringContainerProperties.minio(registry);
     }
 
     @Autowired

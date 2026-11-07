@@ -1,0 +1,258 @@
+package cn.refinex.meridian.runtime.session.app;
+
+import cn.refinex.meridian.common.concurrent.Blocking;
+import cn.refinex.meridian.common.context.PlatformContext;
+import cn.refinex.meridian.common.context.PlatformContexts;
+import cn.refinex.meridian.common.error.LeaseLostException;
+import cn.refinex.meridian.engine.spi.engine.AgentEngine;
+import cn.refinex.meridian.engine.spi.engine.ThreadRef;
+import cn.refinex.meridian.engine.spi.event.EngineEvent;
+import cn.refinex.meridian.engine.spi.event.SessionEvent;
+import cn.refinex.meridian.runtime.dispatch.app.LeaseHandle;
+import cn.refinex.meridian.runtime.dispatch.app.LeaseListener;
+import cn.refinex.meridian.runtime.dispatch.domain.ClaimedTurn;
+import cn.refinex.meridian.runtime.dispatch.domain.LeaseLoss;
+import cn.refinex.meridian.runtime.dispatch.domain.RequeueReason;
+import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
+import cn.refinex.meridian.runtime.stream.app.SessionEventWriter;
+import cn.refinex.meridian.runtime.stream.domain.AppendResult;
+import cn.refinex.meridian.runtime.stream.domain.EventBatch;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
+
+/**
+ * 本节点认领到的一轮的一次执行，按架构设计「一轮执行的生命周期」：
+ *
+ * <ol>
+ *   <li>准备（{@link TurnPreparer}）：读取输入；恢复认领时先判定恢复方式；写 {@code session.status_running}。
+ *   <li>调用 {@link AgentEngine#runTurn}。每个事件经租约条件写入 {@code session_events}，提交后由写入入口 XADD 到
+ *       {@code ev:{session_id}}；只在流上的事件只发布。
+ *   <li>终态事件到达后由 {@link TurnFinisher} 在一个事务里结束轮次（或置回队列）。
+ *   <li>无论怎样结束（含取消），{@code finally} 中从 {@code LeaseRegistry} 移除本节点的条目。
+ * </ol>
+ *
+ * <p>失去租约（续租发现、写入被拒、内核抛出 {@link LeaseLostException}）时只取消订阅，不写任何数据，<b>禁止</b>调用
+ * {@code interrupt}：中断会触发 AgentScope 保存状态（架构设计「租约与 fencing」）。续租读到中断请求时调用
+ * {@link AgentEngine#interrupt}；请求早于内核开始执行时，在收到内核的第一个事件后补发。
+ *
+ * <p>线程安全：{@link #run()} 只能订阅一次；{@link #cancel} 与续租回调可以在任意线程调用。
+ */
+public final class TurnExecution {
+
+    private static final Logger log = LoggerFactory.getLogger(TurnExecution.class);
+
+    private final LeaseHandle lease;
+    private final ClaimedTurn turn;
+    private final TurnPreparer preparer;
+    private final TurnFinisher finisher;
+    private final AgentEngine engine;
+    private final SessionEventWriter events;
+    private final EventStreamPublisher publisher;
+    private final TurnMetrics metrics;
+    private final Clock clock;
+    private final Sinks.One<String> abandon = Sinks.one();
+    private final AtomicReference<String> abandonCause = new AtomicReference<>();
+    private final AtomicBoolean cancelledByNode = new AtomicBoolean();
+    private final AtomicBoolean interruptRequested = new AtomicBoolean();
+    private final AtomicBoolean interruptDelivered = new AtomicBoolean();
+    private final AtomicBoolean engineStarted = new AtomicBoolean();
+    private volatile String agentVersionId;
+
+    TurnExecution(
+            LeaseHandle lease,
+            TurnPreparer preparer,
+            TurnFinisher finisher,
+            AgentEngine engine,
+            SessionEventWriter events,
+            EventStreamPublisher publisher,
+            TurnMetrics metrics,
+            Clock clock) {
+        this.lease = lease;
+        this.turn = lease.turn();
+        this.preparer = preparer;
+        this.finisher = finisher;
+        this.engine = engine;
+        this.events = events;
+        this.publisher = publisher;
+        this.metrics = metrics;
+        this.clock = clock;
+    }
+
+    /**
+     * 认领到的轮次。
+     *
+     * @return 轮次
+     */
+    public ClaimedTurn turn() {
+        return turn;
+    }
+
+    /**
+     * 执行到结束。结束（含取消）时释放本节点的租约条目。不会以错误结束：Worker 自身的错误返回 {@link TurnResult.Failed}，
+     * 这时没有任何收尾，租约到期后由回收器置回队列。
+     *
+     * @return 执行结果
+     */
+    public Mono<TurnResult> run() {
+        Instant startedAt = clock.instant();
+        return Mono.defer(() -> {
+                    lease.listen(new Listener());
+                    return Blocking.call(() -> preparer.prepare(turn)).flatMap(this::execute);
+                })
+                .takeUntilOther(abandon.asMono())
+                .switchIfEmpty(Mono.defer(() -> Mono.just(abandoned())))
+                .onErrorResume(this::failed)
+                .doOnNext(this::countLeaseLoss)
+                .contextWrite(PlatformContexts.write(baseContext()))
+                .doFinally(signal -> {
+                    lease.release();
+                    metrics.executed(
+                            agentVersionId == null ? "unknown" : agentVersionId,
+                            Duration.between(startedAt, clock.instant()));
+                });
+    }
+
+    /**
+     * 放弃本次执行：取消订阅，不写任何数据。节点下线超时、或测试模拟进程被强杀时使用；失去租约由续租回调触发同样的处理。
+     *
+     * @param cause 原因，用于日志
+     */
+    public void cancel(String cause) {
+        cancelledByNode.set(true);
+        abandon(cause);
+    }
+
+    /**
+     * 节点下线时把本轮置回队列（{@code recovery_attempt} 不变），然后放弃本次执行。轮次已经结束或已被置回时，置回是空操作。
+     * 方法会阻塞。
+     */
+    void requeueForShutdown() {
+        PlatformContexts.run(baseContext(), () -> finisher.requeue(turn, RequeueReason.NODE_SHUTDOWN));
+        cancel("节点下线");
+    }
+
+    private Mono<TurnResult> execute(Prepared prepared) {
+        return switch (prepared) {
+            case Prepared.Done done -> {
+                agentVersionId = done.agentVersionId();
+                yield Mono.just(done.result());
+            }
+            case Prepared.Ready ready -> {
+                agentVersionId = ready.agentVersionId();
+                yield engine.runTurn(ready.context(), ready.input())
+                        .concatMap(event -> handle(ready, event))
+                        .singleOrEmpty()
+                        .switchIfEmpty(Mono.error(() -> new IllegalStateException("内核的事件流没有终态事件：" + turn.turnId())));
+            }
+        };
+    }
+
+    private Mono<TurnResult> handle(Prepared.Ready ready, EngineEvent event) {
+        if (engineStarted.compareAndSet(false, true)) {
+            deliverPendingInterrupt();
+        }
+        if (isTerminal(event)) {
+            return Blocking.call(() -> finisher.finish(turn, ready.agentVersionId(), (SessionEvent) event));
+        }
+        if (!event.type().isPersisted()) {
+            // 只订阅不等待，与提交后发布的持久化事件在同一连接上按订阅顺序写入
+            publisher
+                    .publishTransient(turn.sessionId(), turn.threadId(), turn.turnId(), event)
+                    .subscribe();
+            return Mono.empty();
+        }
+        EventBatch batch = EventBatch.leased(turn.sessionId(), turn.threadId(), turn.turnId(), turn.epoch(), event);
+        return Blocking.call(() -> events.append(batch))
+                .flatMap(result -> result instanceof AppendResult.LeaseLost
+                        ? Mono.error(new LeaseLostException("写入事件时租约已失去：" + turn.turnId() + " epoch " + turn.epoch()))
+                        : Mono.empty());
+    }
+
+    private void abandon(String cause) {
+        abandonCause.compareAndSet(null, cause);
+        abandon.tryEmitValue(cause);
+    }
+
+    private TurnResult abandoned() {
+        String cause = abandonCause.get() == null ? "执行被取消" : abandonCause.get();
+        log.warn("放弃本次执行，不写入任何数据 turnId={} epoch={} cause={}", turn.turnId(), turn.epoch(), cause);
+        return new TurnResult.Abandoned(turn.turnId(), cause);
+    }
+
+    private Mono<TurnResult> failed(Throwable error) {
+        if (causeOf(error, LeaseLostException.class) != null) {
+            log.warn("租约已失去，放弃本次执行 turnId={} epoch={}", turn.turnId(), turn.epoch());
+            return Mono.just(new TurnResult.Abandoned(turn.turnId(), "租约已失去"));
+        }
+        log.error("本次执行因 Worker 错误中止，等待租约到期后由回收器置回 turnId={} epoch={}", turn.turnId(), turn.epoch(), error);
+        return Mono.just(new TurnResult.Failed(turn.turnId(), error));
+    }
+
+    private void countLeaseLoss(TurnResult result) {
+        if (result instanceof TurnResult.Abandoned && !cancelledByNode.get()) {
+            metrics.leaseLost();
+        }
+    }
+
+    private void deliverPendingInterrupt() {
+        if (interruptRequested.get() && !interruptDelivered.get() && engine.interrupt(threadRef())) {
+            interruptDelivered.set(true);
+        }
+    }
+
+    private ThreadRef threadRef() {
+        return new ThreadRef(turn.sessionId(), turn.threadId());
+    }
+
+    private PlatformContext baseContext() {
+        return PlatformContext.builder()
+                .tenantId(turn.tenantId())
+                .projectId(turn.projectId())
+                .sessionId(turn.sessionId())
+                .threadId(turn.threadId())
+                .turnId(turn.turnId())
+                .leaseEpoch(turn.epoch())
+                .build();
+    }
+
+    private static boolean isTerminal(EngineEvent event) {
+        return event instanceof SessionEvent.StatusIdle
+                || event instanceof SessionEvent.StatusRequiresAction
+                || event instanceof SessionEvent.StatusRescheduled;
+    }
+
+    private static <T extends Throwable> T causeOf(Throwable error, Class<T> type) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+        }
+        return null;
+    }
+
+    /** 续租结果的回调：在续租任务的虚拟线程上执行，只做不阻塞的操作。 */
+    private final class Listener implements LeaseListener {
+
+        @Override
+        public void onInterruptRequested(Instant requestedAt) {
+            log.info("收到中断请求 turnId={} requestedAt={}", turn.turnId(), requestedAt);
+            interruptRequested.set(true);
+            if (engineStarted.get()) {
+                deliverPendingInterrupt();
+            }
+        }
+
+        @Override
+        public void onLeaseLost(LeaseLoss loss) {
+            // 只取消订阅，禁止 interrupt：中断会让 AgentScope 保存状态
+            abandon("租约丢失：" + loss);
+        }
+    }
+}

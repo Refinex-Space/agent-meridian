@@ -5,8 +5,10 @@ import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
 import cn.refinex.meridian.engine.spi.engine.input.TurnInput;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.engine.spi.event.EventType;
+import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import java.util.List;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.MapperFeature;
 import tools.jackson.databind.SerializationFeature;
@@ -87,6 +89,41 @@ public final class EngineJson {
             default -> throw new IllegalArgumentException("未知的轮次类型：" + kind);
         };
         return MAPPER.readValue(json, type);
+    }
+
+    /**
+     * 解析会话声明的自定义工具（{@code sessions.custom_tools}，JSON 数组）。
+     *
+     * @param json JSON 数组；为空表示没有声明
+     * @return 自定义工具声明
+     */
+    public static List<CustomToolDeclaration> readCustomTools(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        return List.of(MAPPER.readValue(json, CustomToolDeclaration[].class));
+    }
+
+    /**
+     * 把自定义工具声明写成 JSON 数组。
+     *
+     * @param tools 自定义工具声明
+     * @return JSON 数组
+     */
+    public static String writeCustomTools(List<CustomToolDeclaration> tools) {
+        return MAPPER.writeValueAsString(tools);
+    }
+
+    /**
+     * 把已解析的树结构（例如 YAML 读出的映射）按同样的约定转换为 engine-spi 的类型，开发配置用它读取智能体版本与环境。
+     *
+     * @param tree 映射、列表与标量组成的树
+     * @param type 目标类型
+     * @param <T> 目标类型
+     * @return 转换结果；构造函数的校验失败时抛出对应的异常
+     */
+    public static <T> T convert(Object tree, Class<T> type) {
+        return MAPPER.convertValue(tree, type);
     }
 
     /** 返回底层映射器，供同包的测试核对枚举与内容块的写法。 */

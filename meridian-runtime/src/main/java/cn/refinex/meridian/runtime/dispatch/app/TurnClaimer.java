@@ -1,9 +1,11 @@
 package cn.refinex.meridian.runtime.dispatch.app;
 
+import cn.refinex.meridian.engine.spi.engine.input.TurnInput;
 import cn.refinex.meridian.runtime.dispatch.domain.ClaimedTurn;
 import cn.refinex.meridian.runtime.dispatch.domain.NodeId;
 import cn.refinex.meridian.runtime.dispatch.infra.system.TurnQueueRepository;
 import cn.refinex.meridian.runtime.dispatch.infra.system.TurnQueueRepository.Candidate;
+import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -113,6 +115,19 @@ public class TurnClaimer {
             cancel(reserved.get());
         }
         return result;
+    }
+
+    /**
+     * 读取认领到的轮次在 {@code turn_inputs} 中的完整输入。方法会阻塞。
+     *
+     * @param turn 认领到的轮次
+     * @return 输入，类型由 {@code turns.kind} 决定
+     * @throws IllegalStateException 轮次没有输入时（入队时与轮次同事务写入，不会发生）
+     */
+    public TurnInput input(ClaimedTurn turn) {
+        String payload =
+                queue.findInput(turn.turnId()).orElseThrow(() -> new IllegalStateException("轮次没有输入：" + turn.turnId()));
+        return EngineJson.readInput(turn.kind(), payload);
     }
 
     private void cancel(LeaseHandle handle) {

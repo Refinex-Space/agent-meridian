@@ -13,6 +13,17 @@ spring:
       host: ${MERIDIAN_REDIS_HOST:localhost}
       port: ${MERIDIAN_REDIS_PORT:16379}
 
+meridian:
+  persistence:
+    objectstore:
+      # scripts/dev/up.sh 启动的 MinIO 与创建的桶；凭据只从环境变量读取（compose 的 env 文件）
+      endpoint: http://localhost:${MERIDIAN_MINIO_PORT:19000}
+      region: us-east-1
+      bucket: ${MERIDIAN_S3_BUCKET:meridian}
+      access-key: ${MINIO_ROOT_USER}
+      secret-key: ${MINIO_ROOT_PASSWORD}
+      path-style-access: true
+
 management:
   endpoint:
     health:
