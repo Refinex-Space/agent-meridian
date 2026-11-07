@@ -213,6 +213,8 @@
                             <generateJsonIncludeAnnotations>false</generateJsonIncludeAnnotations>
                             <generateJsonSetterNullsAnnotations>false</generateJsonSetterNullsAnnotations>
                             <hideGenerationTimestamp>true</hideGenerationTimestamp>
+                            <!-- 列表与映射字段默认为 null：PATCH 据此区分"未给出"与"给出空值" -->
+                            <containerDefaultToNull>true</containerDefaultToNull>
                         </configOptions>
                     </configuration>
                 </plugin>

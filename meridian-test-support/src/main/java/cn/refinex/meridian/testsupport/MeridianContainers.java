@@ -36,8 +36,8 @@ public final class MeridianContainers {
     /** MinIO 中预先创建的桶。 */
     public static final String MINIO_BUCKET = "meridian-test";
 
-    /** Redis 镜像，与 compose 一致。 */
-    static final String REDIS_IMAGE = "redis:7.4.11-alpine";
+    /** Redis 镜像，与 compose 一致；需要独占 Redis 的测试（例如制造 Redis 中断）用它另起容器。 */
+    public static final String REDIS_IMAGE = "redis:7.4.11-alpine";
 
     /** MinIO 镜像：官方镜像已停止发布，使用 Chainguard 从源码构建的版本，按摘要固定，与 compose 一致。 */
     static final String MINIO_IMAGE =

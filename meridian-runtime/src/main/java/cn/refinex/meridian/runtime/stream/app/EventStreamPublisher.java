@@ -1,16 +1,12 @@
 package cn.refinex.meridian.runtime.stream.app;
 
-import cn.refinex.meridian.common.json.JsonMappers;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.persistence.redis.ReactiveRedisMessaging;
 import cn.refinex.meridian.runtime.stream.domain.StoredEvent;
-import cn.refinex.meridian.runtime.stream.infra.EngineJson;
-import com.fasterxml.jackson.annotation.JsonRawValue;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,18 +102,9 @@ public class EventStreamPublisher {
      * @return 发布（或失败已记录）后完成，不会以错误结束
      */
     public Mono<Void> publishTransient(String sessionId, String threadId, String turnId, EngineEvent event) {
-        Envelope envelope = new Envelope(
-                null,
-                null,
-                sessionId,
-                threadId,
-                turnId,
-                event.type().value(),
-                clock.instant(),
-                EngineJson.writeEvent(event));
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("type", event.type().value());
-        fields.put("envelope", JsonMappers.lenient().writeValueAsString(envelope));
+        fields.put("envelope", EventEnvelopes.transientJson(sessionId, threadId, turnId, event, clock.instant()));
         return xadd(sessionId, event.type().value(), fields);
     }
 
@@ -133,41 +120,10 @@ public class EventStreamPublisher {
     }
 
     private static Map<String, String> fields(StoredEvent event) {
-        Envelope envelope = new Envelope(
-                event.id(),
-                event.seq(),
-                event.sessionId(),
-                event.threadId(),
-                event.turnId(),
-                event.type().value(),
-                event.createdAt(),
-                event.data());
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("type", event.type().value());
         fields.put("seq", Long.toString(event.seq()));
-        fields.put("envelope", JsonMappers.lenient().writeValueAsString(envelope));
+        fields.put("envelope", EventEnvelopes.json(event));
         return fields;
     }
-
-    /**
-     * 事件信封，字段与 API 的事件信封一致（架构设计「事件」）。
-     *
-     * @param id 事件 ID；只在流上的事件为空
-     * @param seq 会话内序号；只在流上的事件为空
-     * @param sessionId 会话 ID
-     * @param threadId 线程 ID；可为空
-     * @param turnId 轮次 ID；可为空
-     * @param type 事件类型
-     * @param createdAt 写入时间
-     * @param data 事件内容 JSON 原文
-     */
-    record Envelope(
-            String id,
-            Long seq,
-            String sessionId,
-            String threadId,
-            String turnId,
-            String type,
-            Instant createdAt,
-            @JsonRawValue String data) {}
 }

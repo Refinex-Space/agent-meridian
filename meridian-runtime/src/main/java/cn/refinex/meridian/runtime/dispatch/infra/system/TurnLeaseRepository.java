@@ -8,6 +8,7 @@ import cn.refinex.meridian.runtime.dispatch.domain.TurnOutcome;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import javax.sql.DataSource;
 import org.springframework.stereotype.Repository;
@@ -180,6 +181,53 @@ public class TurnLeaseRepository extends SystemRepository {
                 == 1;
     }
 
+    /**
+     * 锁定并读取会话的全部未结束轮次（{@code queued}、{@code running}、{@code awaiting_action}）。锁住后认领会跳过它们
+     * （{@code SKIP LOCKED}），回收与结束要等本事务提交，调用方据此判断会话能否归档。
+     *
+     * @param sessionId 会话 ID
+     * @return 未结束的轮次及其状态
+     */
+    public List<ActiveTurn> lockActive(String sessionId) {
+        return jdbc().sql("""
+                        SELECT id, tenant_id, status FROM rt.turns
+                         WHERE session_id = :session_id AND status IN ('queued', 'running', 'awaiting_action')
+                           FOR UPDATE
+                        """)
+                .param("session_id", sessionId)
+                .query((rs, row) ->
+                        new ActiveTurn(rs.getString("id"), rs.getString("tenant_id"), rs.getString("status")))
+                .list();
+    }
+
+    /**
+     * 取消会话的全部未结束轮次：会话归档或删除时调用（架构设计「状态机」「消息投递」中"删除会话：取消当前轮"）。
+     * 执行中的轮次失去租约条件，持有它的节点在下一次带租约的写入或续租时放弃本轮，不再写入任何数据。
+     *
+     * @param sessionId 会话 ID
+     * @param now 当前时间
+     * @return 被取消的轮次；{@code running()} 为 true 的需要释放租户并发名额
+     */
+    public List<ActiveTurn> cancelActive(String sessionId, Instant now) {
+        return jdbc().sql("""
+                        WITH active AS (
+                            SELECT id, status FROM rt.turns
+                             WHERE session_id = :session_id AND status IN ('queued', 'running', 'awaiting_action')
+                               FOR UPDATE
+                        )
+                        UPDATE rt.turns t
+                           SET status = 'cancelled', lease_expires_at = NULL, finished_at = :now, updated_at = :now
+                          FROM active a
+                         WHERE t.id = a.id
+                        RETURNING t.id, t.tenant_id, a.status AS previous_status
+                        """)
+                .param("session_id", sessionId)
+                .param("now", JdbcValues.timestamptz(now))
+                .query((rs, row) ->
+                        new ActiveTurn(rs.getString("id"), rs.getString("tenant_id"), rs.getString("previous_status")))
+                .list();
+    }
+
     private static ReleasedTurn mapReleased(ResultSet rs, int row) throws SQLException {
         return new ReleasedTurn(
                 rs.getString("id"),
@@ -217,4 +265,23 @@ public class TurnLeaseRepository extends SystemRepository {
      */
     public record ReleasedTurn(
             String turnId, String tenantId, String sessionId, String threadId, int recoveryAttempt) {}
+
+    /**
+     * 一个未结束的轮次。
+     *
+     * @param turnId 轮次 ID
+     * @param tenantId 租户 ID，用于释放并发名额
+     * @param status 状态：{@code queued}、{@code running} 或 {@code awaiting_action}；取消结果中为取消前的状态
+     */
+    public record ActiveTurn(String turnId, String tenantId, String status) {
+
+        /**
+         * 是否正在执行（占用租户并发名额）。
+         *
+         * @return 状态为 running 时为 true
+         */
+        public boolean running() {
+            return "running".equals(status);
+        }
+    }
 }

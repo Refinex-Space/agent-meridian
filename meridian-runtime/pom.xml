@@ -69,6 +69,12 @@
             <artifactId>meridian-test-support</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- 契约测试：按 meridian-v1.yaml 校验每个请求与响应（ADR-0029） -->
+        <dependency>
+            <groupId>com.atlassian.oai</groupId>
+            <artifactId>openapi-request-validator-core</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!--
           runtime 测试开启 BlockHound，检测 Reactor 线程上的阻塞调用（架构设计「测试策略」）。
           blockhound-junit-platform 在 JUnit Platform 启动时自动安装，单元测试与集成测试都生效，不依赖各测试类自己安装。

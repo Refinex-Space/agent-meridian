@@ -1,6 +1,9 @@
 package cn.refinex.meridian.runtime.session.domain;
 
 import cn.refinex.meridian.common.context.Interaction;
+import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -12,6 +15,9 @@ import java.util.Objects;
  * @param environmentRevision 环境修订号，从 1 开始
  * @param endUserId 终端用户标识；可为空，表示没有终端用户
  * @param interaction 值守方式；必填
+ * @param endUserAttributes 终端用户属性；可为空，表示没有
+ * @param metadata 调用方附加的元数据；可为空，表示没有
+ * @param customTools 自定义工具声明；可为空，表示没有
  */
 public record NewSession(
         String id,
@@ -19,7 +25,10 @@ public record NewSession(
         String environmentId,
         long environmentRevision,
         String endUserId,
-        Interaction interaction) {
+        Interaction interaction,
+        EndUserAttributes endUserAttributes,
+        Map<String, String> metadata,
+        List<CustomToolDeclaration> customTools) {
 
     /**
      * 创建参数。
@@ -35,5 +44,30 @@ public record NewSession(
         if (environmentRevision < 1) {
             throw new IllegalArgumentException("环境修订号必须从 1 开始：" + environmentRevision);
         }
+        endUserAttributes = endUserAttributes == null ? EndUserAttributes.NONE : endUserAttributes;
+        metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        customTools = customTools == null ? List.of() : List.copyOf(customTools);
+    }
+
+    /**
+     * 没有终端用户属性、元数据与自定义工具的会话参数。
+     *
+     * @param id 会话 ID
+     * @param agentVersionId 智能体版本 ID
+     * @param environmentId 环境 ID
+     * @param environmentRevision 环境修订号
+     * @param endUserId 终端用户标识；可为空
+     * @param interaction 值守方式
+     * @return 参数
+     */
+    public static NewSession of(
+            String id,
+            String agentVersionId,
+            String environmentId,
+            long environmentRevision,
+            String endUserId,
+            Interaction interaction) {
+        return new NewSession(
+                id, agentVersionId, environmentId, environmentRevision, endUserId, interaction, null, null, null);
     }
 }

@@ -6,6 +6,7 @@ import cn.refinex.meridian.persistence.tenant.CrossTenant;
 import cn.refinex.meridian.persistence.tenant.SystemRepository;
 import cn.refinex.meridian.runtime.session.domain.SessionStatus;
 import cn.refinex.meridian.runtime.stream.domain.StoredEvent;
+import cn.refinex.meridian.runtime.stream.domain.StreamFilter;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -167,6 +168,75 @@ public class SessionEventRepository extends SystemRepository {
     }
 
     /**
+     * 按 seq 顺序读取 {@code (afterSeq, uptoSeq]} 区间内、在订阅范围内的事件，SSE 补发与对账使用（架构设计「SSE 协议」）。
+     * {@code session.status_terminated} 总在结果中，即使它不在范围内：连接据此在会话终止后关闭。
+     *
+     * @param sessionId 会话 ID
+     * @param afterSeq 起点（不含）
+     * @param uptoSeq 终点（含）
+     * @param filter 订阅范围
+     * @param limit 最多返回的条数
+     * @return 事件，按 seq 升序
+     */
+    public List<StoredEvent> listRange(String sessionId, long afterSeq, long uptoSeq, StreamFilter filter, int limit) {
+        String mode;
+        String threadId;
+        switch (filter) {
+            case StreamFilter.All _ -> {
+                mode = "all";
+                threadId = null;
+            }
+            case StreamFilter.Main main -> {
+                mode = "main";
+                threadId = main.mainThreadId();
+            }
+            case StreamFilter.Thread thread -> {
+                mode = "thread";
+                threadId = thread.threadId();
+            }
+        }
+        return jdbc().sql("""
+                        SELECT session_id, seq, id, tenant_id, project_id, thread_id, turn_id, type, data, created_at
+                          FROM rt.session_events
+                         WHERE session_id = :session_id AND seq > :after_seq AND seq <= :upto_seq
+                           AND (:mode = 'all'
+                                OR type = 'session.status_terminated'
+                                OR (:mode = 'main' AND (thread_id IS NULL OR thread_id = :thread_id
+                                                        OR type = ANY (:thread_status_types)))
+                                OR (:mode = 'thread' AND thread_id = :thread_id))
+                         ORDER BY seq
+                         LIMIT :limit
+                        """)
+                .param("session_id", sessionId)
+                .param("after_seq", afterSeq)
+                .param("upto_seq", uptoSeq)
+                .param("mode", mode)
+                .param("thread_id", threadId)
+                .param(
+                        "thread_status_types",
+                        JdbcValues.textArray(StreamFilter.THREAD_STATUS_EVENTS.stream()
+                                .map(EventType::value)
+                                .toList()))
+                .param("limit", limit)
+                .query(SessionEventRepository::map)
+                .list();
+    }
+
+    /**
+     * 读取会话已分配的最大 seq 与当前状态，SSE 对账使用。
+     *
+     * @param sessionId 会话 ID
+     * @return 最大 seq 与状态；会话不存在时为空
+     */
+    public Optional<SessionProgress> progress(String sessionId) {
+        return jdbc().sql("SELECT last_seq, status FROM rt.sessions WHERE id = :session_id")
+                .param("session_id", sessionId)
+                .query((rs, row) ->
+                        new SessionProgress(rs.getLong("last_seq"), SessionStatus.of(rs.getString("status"))))
+                .optional();
+    }
+
+    /**
      * 读取一轮写入的指定类型的事件，按 seq 升序。
      *
      * @param sessionId 会话 ID
@@ -204,6 +274,14 @@ public class SessionEventRepository extends SystemRepository {
                 rs.getString("data"),
                 JdbcValues.instant(rs, "created_at"));
     }
+
+    /**
+     * 会话的事件进度。
+     *
+     * @param lastSeq 已分配的最大 seq，没有事件时为 0
+     * @param status 会话状态
+     */
+    public record SessionProgress(long lastSeq, SessionStatus status) {}
 
     /**
      * 一次 seq 分配的结果。

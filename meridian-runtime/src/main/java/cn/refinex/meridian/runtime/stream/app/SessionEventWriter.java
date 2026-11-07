@@ -80,10 +80,28 @@ public class SessionEventWriter {
      * @throws NotFoundException 会话不存在时
      */
     public AppendResult append(EventBatch batch) {
-        return transactions.execute(status -> appendInTransaction(batch));
+        return transactions.execute(status -> appendInTransaction(batch, null));
     }
 
-    private AppendResult appendInTransaction(EventBatch batch) {
+    /**
+     * 以调用方先生成的事件 ID 写入一批事件。调用方需要在写入之前引用事件时使用，例如 API 写 {@code user.message} 时，
+     * 轮次输入与收件箱要先记下事件 ID，而锁顺序要求先入队、再写事件（ADR-0027，登记事项 D10）。
+     *
+     * @param batch 事件批次
+     * @param eventIds 与 {@code batch.events()} 一一对应的事件 ID（{@code evt_…}）
+     * @return 写入的事件，或租约丢失
+     * @throws IllegalArgumentException 事件 ID 的个数与事件数不同时
+     * @throws NotFoundException 会话不存在时
+     */
+    public AppendResult append(EventBatch batch, List<String> eventIds) {
+        if (eventIds.size() != batch.events().size()) {
+            throw new IllegalArgumentException(
+                    "事件 ID 的个数 " + eventIds.size() + " 与事件数 " + batch.events().size() + " 不同");
+        }
+        return transactions.execute(status -> appendInTransaction(batch, List.copyOf(eventIds)));
+    }
+
+    private AppendResult appendInTransaction(EventBatch batch, List<String> eventIds) {
         if (batch.fence() instanceof WriteFence.TurnLease lease
                 && !repository.lockLease(lease.turnId(), nodeId.value(), lease.epoch())) {
             return new AppendResult.LeaseLost(lease.turnId(), lease.epoch());
@@ -94,11 +112,12 @@ public class SessionEventWriter {
                 .orElseThrow(() -> new NotFoundException("会话不存在：" + batch.sessionId()));
         List<StoredEvent> stored = new ArrayList<>(batch.events().size());
         long seq = allocation.firstSeq();
-        for (EngineEvent event : batch.events()) {
+        for (int i = 0; i < batch.events().size(); i++) {
+            EngineEvent event = batch.events().get(i);
             StoredEvent row = new StoredEvent(
                     batch.sessionId(),
                     seq++,
-                    Ids.newId(IdPrefix.EVENT),
+                    eventIds == null ? Ids.newId(IdPrefix.EVENT) : eventIds.get(i),
                     allocation.tenantId(),
                     allocation.projectId(),
                     batch.threadId(),

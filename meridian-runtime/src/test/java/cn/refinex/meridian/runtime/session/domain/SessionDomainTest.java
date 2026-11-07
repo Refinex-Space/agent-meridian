@@ -21,12 +21,12 @@ class SessionDomainTest {
 
     @Test
     void newSessionValidatesRequiredFieldsAndRevision() {
-        NewSession session = new NewSession("ses_1", "agv_1", "env_1", 3, null, Interaction.UNATTENDED);
+        NewSession session = NewSession.of("ses_1", "agv_1", "env_1", 3, null, Interaction.UNATTENDED);
 
         assertThat(session.environmentRevision()).isEqualTo(3);
-        assertThatThrownBy(() -> new NewSession("ses_1", "agv_1", "env_1", 0, null, Interaction.ATTENDED))
+        assertThatThrownBy(() -> NewSession.of("ses_1", "agv_1", "env_1", 0, null, Interaction.ATTENDED))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new NewSession("ses_1", null, "env_1", 1, null, Interaction.ATTENDED))
+        assertThatThrownBy(() -> NewSession.of("ses_1", null, "env_1", 1, null, Interaction.ATTENDED))
                 .isInstanceOf(NullPointerException.class);
     }
 

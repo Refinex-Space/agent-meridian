@@ -7,6 +7,7 @@ import cn.refinex.meridian.runtime.dispatch.domain.NodeId;
 import cn.refinex.meridian.runtime.dispatch.domain.RequeueReason;
 import cn.refinex.meridian.runtime.dispatch.domain.TurnOutcome;
 import cn.refinex.meridian.runtime.dispatch.infra.system.TurnLeaseRepository;
+import cn.refinex.meridian.runtime.dispatch.infra.system.TurnLeaseRepository.ActiveTurn;
 import cn.refinex.meridian.runtime.dispatch.infra.system.TurnLeaseRepository.ExpiredLease;
 import cn.refinex.meridian.runtime.dispatch.infra.system.TurnLeaseRepository.ReleasedTurn;
 import cn.refinex.meridian.runtime.stream.app.SessionEventWriter;
@@ -148,6 +149,38 @@ public class TurnTransitions {
                 turn.turnId(),
                 WriteFence.none(),
                 List.of(new SessionEvent.StatusRescheduled(reason.eventReason()))));
+    }
+
+    /**
+     * 锁定会话的全部未结束轮次，返回它们的状态（见 {@link TurnLeaseRepository#lockActive}）。必须在调用方的事务中调用。
+     *
+     * @param sessionId 会话 ID
+     * @return 未结束的轮次
+     */
+    public List<ActiveTurn> lockActive(String sessionId) {
+        return leases.lockActive(sessionId);
+    }
+
+    /**
+     * 取消会话的全部未结束轮次，执行中的轮次释放租户并发名额（会话归档与删除，架构设计「状态机」）。事务传播为 REQUIRED，
+     * 与调用方随后写入的 {@code session.status_terminated} 一起提交。
+     *
+     * @param sessionId 会话 ID
+     * @return 被取消的轮次
+     */
+    public List<ActiveTurn> cancelActive(String sessionId) {
+        return transactions.execute(status -> {
+            Instant now = clock.instant();
+            List<ActiveTurn> cancelled = leases.cancelActive(sessionId, now);
+            for (ActiveTurn turn : cancelled) {
+                if (turn.running() && !leases.releaseTenantSlot(turn.tenantId(), now)) {
+                    log.error("释放租户并发名额时计数已为 0 tenantId={} turnId={}", turn.tenantId(), turn.turnId());
+                }
+                log.info(
+                        "会话终止，轮次已取消 sessionId={} turnId={} previousStatus={}", sessionId, turn.turnId(), turn.status());
+            }
+            return cancelled;
+        });
     }
 
     private void releaseSlot(ReleasedTurn turn, Instant now) {

@@ -4,6 +4,7 @@ import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
+import cn.refinex.meridian.runtime.session.domain.SessionErrorCode;
 import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import java.io.IOException;
 import java.io.Reader;
@@ -11,6 +12,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,8 +29,10 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * <p>目录下每个 {@code *.yaml}、{@code *.yml} 文件是一份配置，{@code kind} 字段区分种类，其余字段与 engine-spi 的类型一致
  * （snake_case，枚举取小写值）：
  * <ul>
- *   <li>{@code kind: agent_version}：一个 {@link ResolvedAgentSpec}，按 {@code agent_version_id} 查找。
- *   <li>{@code kind: environment}：一个 {@link EnvironmentSpec}，按 {@code environment_id} 与 {@code revision} 查找。
+ *   <li>{@code kind: agent_version}：一个 {@link ResolvedAgentSpec}，按 {@code agent_version_id} 查找；按 {@code agent_id}
+ *       取当前版本时，同一智能体有多个版本则取 {@code agent_version_id} 最大的（平台的版本 ID 是 ULID，按发布时间有序）。
+ *   <li>{@code kind: environment}：一个 {@link EnvironmentSpec}，按 {@code environment_id} 与 {@code revision} 查找；取当前修订时
+ *       取 {@code revision} 最大的。
  * </ul>
  * 每次调用都重新读取目录，改了配置不必重启；只解析 YAML 的基本类型（{@link SafeConstructor}）。目录不存在时没有任何配置，
  * 查找以 {@link NotFoundException} 失败。
@@ -58,7 +62,8 @@ public final class FileAgentConfigProvider implements AgentConfigProvider {
     public ResolvedAgentSpec agentVersion(String agentVersionId) {
         Map<String, Object> document = find(
                         KIND_AGENT_VERSION, doc -> agentVersionId.equals(doc.get("agent_version_id")))
-                .orElseThrow(() -> new NotFoundException("开发配置中没有智能体版本：" + agentVersionId));
+                .orElseThrow(
+                        () -> new NotFoundException(SessionErrorCode.AGENT_NOT_FOUND, "智能体版本不存在：" + agentVersionId));
         return EngineJson.convert(document, ResolvedAgentSpec.class);
     }
 
@@ -69,7 +74,30 @@ public final class FileAgentConfigProvider implements AgentConfigProvider {
                         doc -> environmentId.equals(doc.get("environment_id"))
                                 && doc.get("revision") instanceof Number number
                                 && number.longValue() == revision)
-                .orElseThrow(() -> new NotFoundException("开发配置中没有环境：" + environmentId + " 修订号 " + revision));
+                .orElseThrow(() -> new NotFoundException(
+                        SessionErrorCode.ENVIRONMENT_NOT_FOUND, "环境不存在：" + environmentId + " 修订号 " + revision));
+        return EngineJson.convert(document, EnvironmentSpec.class);
+    }
+
+    @Override
+    public ResolvedAgentSpec currentAgentVersion(String agentId) {
+        Map<String, Object> document = documents().stream()
+                .filter(doc -> KIND_AGENT_VERSION.equals(doc.get("kind")))
+                .filter(doc -> agentId.equals(doc.get("agent_id")))
+                .max(Comparator.comparing(doc -> String.valueOf(doc.get("agent_version_id"))))
+                .orElseThrow(() -> new NotFoundException(SessionErrorCode.AGENT_NOT_FOUND, "智能体不存在：" + agentId));
+        return EngineJson.convert(document, ResolvedAgentSpec.class);
+    }
+
+    @Override
+    public EnvironmentSpec currentEnvironment(String environmentId) {
+        Map<String, Object> document = documents().stream()
+                .filter(doc -> KIND_ENVIRONMENT.equals(doc.get("kind")))
+                .filter(doc -> environmentId.equals(doc.get("environment_id")))
+                .filter(doc -> doc.get("revision") instanceof Number)
+                .max(Comparator.comparingLong(doc -> ((Number) doc.get("revision")).longValue()))
+                .orElseThrow(
+                        () -> new NotFoundException(SessionErrorCode.ENVIRONMENT_NOT_FOUND, "环境不存在：" + environmentId));
         return EngineJson.convert(document, EnvironmentSpec.class);
     }
 

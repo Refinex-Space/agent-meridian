@@ -63,7 +63,7 @@ public final class TestSessions {
         PlatformContexts.run(session.context(), () -> {
             new SessionRepository(RuntimeTestDatabase.dataSource())
                     .insert(
-                            new NewSession(
+                            NewSession.of(
                                     session.sessionId(),
                                     agentVersionId,
                                     environmentId,

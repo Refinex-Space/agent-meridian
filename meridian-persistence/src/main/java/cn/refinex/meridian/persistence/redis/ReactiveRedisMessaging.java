@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
 import org.springframework.data.domain.Range;
+import org.springframework.data.redis.connection.Limit;
 import org.springframework.data.redis.connection.ReactiveSubscription;
 import org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -145,6 +146,40 @@ public final class ReactiveRedisMessaging {
                                         consumer,
                                         minIdle,
                                         pending.stream().map(p -> p.getId()).toArray(RecordId[]::new)))
+                .map(RedisMessaging::toMessage);
+    }
+
+    /**
+     * 读取 Stream 最新条目的 ID（XREVRANGE + - COUNT 1），订阅方据此固定"从哪里开始读"：之后写入的条目都在它之后。
+     *
+     * @param stream Stream 的键
+     * @return 最新条目的 ID；Stream 不存在或为空时为空
+     */
+    public Mono<String> lastRecordId(String stream) {
+        return template.opsForStream()
+                .reverseRange(stream, Range.unbounded(), Limit.limit().count(1))
+                .next()
+                .map(record -> record.getId().getValue());
+    }
+
+    /**
+     * 不阻塞地读取多个 Stream 中位置之后的条目（XREAD COUNT n STREAMS ...，不带 BLOCK）。不阻塞的读取走共享连接，
+     * 多个 Stream 合在一条命令里，调用方按固定间隔轮询（runtime 的 SSE 读取 {@code ev:{session_id}}）。
+     *
+     * @param offsets 每个 Stream 的读取位置（不含），键为 Stream 的键，值为条目 ID，{@code 0-0} 表示从头读
+     * @param count 每个 Stream 最多返回的条目数
+     * @return 条目，同一 Stream 内按 ID 升序
+     */
+    public Flux<StreamMessage> read(Map<String, String> offsets, int count) {
+        if (offsets.isEmpty()) {
+            return Flux.empty();
+        }
+        @SuppressWarnings("unchecked")
+        StreamOffset<String>[] streams = offsets.entrySet().stream()
+                .map(entry -> StreamOffset.create(entry.getKey(), ReadOffset.from(entry.getValue())))
+                .toArray(StreamOffset[]::new);
+        return template.opsForStream()
+                .read(StreamReadOptions.empty().count(count), streams)
                 .map(RedisMessaging::toMessage);
     }
 

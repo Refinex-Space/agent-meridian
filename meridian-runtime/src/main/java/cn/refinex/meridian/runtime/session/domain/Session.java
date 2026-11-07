@@ -4,9 +4,10 @@ import cn.refinex.meridian.common.context.Interaction;
 import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /**
- * 读出的会话，只含调度与执行需要的列；其余列由使用它们的任务按需加入。
+ * 读出的会话（{@code rt.sessions} 中调度、执行与公开 API 用到的列）。
  *
  * @param id 会话 ID
  * @param tenantId 租户 ID
@@ -21,6 +22,10 @@ import java.util.List;
  * @param createdAt 创建时间
  * @param updatedAt 最近一次修改时间
  * @param customTools 会话声明的自定义工具，每轮注入（架构设计「待处理动作」中的"自定义工具"）；没有时为空列表
+ * @param endUserAttributes 终端用户属性；没有时为 {@link EndUserAttributes#NONE}
+ * @param metadata 调用方附加的元数据；没有时为空映射
+ * @param terminatedAt 归档或删除的时间；可为空，表示未终止
+ * @param deletedAt 删除的时间；可为空，表示未删除
  */
 public record Session(
         String id,
@@ -35,10 +40,34 @@ public record Session(
         long lastSeq,
         Instant createdAt,
         Instant updatedAt,
-        List<CustomToolDeclaration> customTools) {
+        List<CustomToolDeclaration> customTools,
+        EndUserAttributes endUserAttributes,
+        Map<String, String> metadata,
+        Instant terminatedAt,
+        Instant deletedAt) {
 
-    /** 对自定义工具列表做不可变复制。 */
+    /** 对集合做不可变复制。 */
     public Session {
         customTools = customTools == null ? List.of() : List.copyOf(customTools);
+        endUserAttributes = endUserAttributes == null ? EndUserAttributes.NONE : endUserAttributes;
+        metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+    }
+
+    /**
+     * 是否已终止（归档或删除）：终止的会话只读，不再接受事件（架构设计「状态机」）。
+     *
+     * @return 终止时为 true
+     */
+    public boolean isTerminated() {
+        return status == SessionStatus.TERMINATED;
+    }
+
+    /**
+     * 是否已删除。
+     *
+     * @return 删除时为 true
+     */
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 }

@@ -1,0 +1,113 @@
+package cn.refinex.meridian.runtime.support;
+
+import com.atlassian.oai.validator.OpenApiInteractionValidator;
+import com.atlassian.oai.validator.model.Request;
+import com.atlassian.oai.validator.model.Response;
+import com.atlassian.oai.validator.report.MessageResolver;
+import com.atlassian.oai.validator.report.ValidationReport;
+import com.atlassian.oai.validator.schema.SchemaValidator;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.parser.OpenAPIV3Parser;
+import io.swagger.v3.parser.core.models.ParseOptions;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * 契约测试的校验器：按 {@code meridian-api} 发布的 {@code openapi/meridian-v1.yaml} 校验请求、响应与 SSE 帧（ADR-0029）。
+ * 校验库默认严格：未声明的字段、缺少的必填字段、类型与枚举不符都是错误。
+ *
+ * <p>记录被校验过的操作（{@code METHOD 路径模板}），{@code SessionApiContractIT} 据此断言每个端点都经过了校验。
+ */
+public final class ContractValidator {
+
+    private static final String SPEC = "openapi/meridian-v1.yaml";
+
+    private static final OpenApiInteractionValidator INTERACTIONS =
+            OpenApiInteractionValidator.createForSpecificationUrl(SPEC).build();
+
+    private static final OpenAPI API = parse();
+
+    private static final SchemaValidator SCHEMAS = new SchemaValidator(API, new MessageResolver());
+
+    private static final Set<String> VALIDATED = ConcurrentHashMap.newKeySet();
+
+    private ContractValidator() {}
+
+    /**
+     * 校验一次交互的请求与响应。
+     *
+     * @param operation 操作，形如 {@code POST /v1/sessions/{session_id}:archive}，用于统计覆盖
+     * @param request 请求
+     * @param response 响应
+     * @throws AssertionError 不符合规范时
+     */
+    public static void validate(String operation, Request request, Response response) {
+        report(operation, INTERACTIONS.validate(request, response));
+    }
+
+    /**
+     * 只校验响应：请求本身故意不合法（缺少认证、字段错误）时使用。
+     *
+     * @param operation 操作
+     * @param path 请求路径
+     * @param method HTTP 方法
+     * @param response 响应
+     * @throws AssertionError 不符合规范时
+     */
+    public static void validateResponse(String operation, String path, Request.Method method, Response response) {
+        report(operation, INTERACTIONS.validateResponse(path, method, response));
+    }
+
+    /**
+     * 校验一个 SSE 帧的 {@code data}：持久化事件按 {@code SessionEvent}，只在流上的事件按 {@code StreamOnlyEvent}。
+     *
+     * @param envelope 事件信封 JSON
+     * @param persisted 是否为持久化事件（帧有 {@code id:}）
+     * @throws AssertionError 不符合规范时
+     */
+    public static void validateEvent(String envelope, boolean persisted) {
+        Schema<?> schema = API.getComponents().getSchemas().get(persisted ? "SessionEvent" : "StreamOnlyEvent");
+        ValidationReport report = SCHEMAS.validate(envelope, schema, "sse.data");
+        if (report.hasErrors()) {
+            throw new AssertionError("SSE 帧不符合规范：" + report.getMessages() + "\n" + envelope);
+        }
+    }
+
+    /**
+     * 被校验过的操作。
+     *
+     * @return 操作集合
+     */
+    public static Set<String> validatedOperations() {
+        return Set.copyOf(VALIDATED);
+    }
+
+    /**
+     * 规范中的全部操作。
+     *
+     * @return 操作集合，形如 {@code GET /v1/sessions}
+     */
+    public static Set<String> allOperations() {
+        Set<String> operations = new TreeSet<>();
+        API.getPaths()
+                .forEach((path, item) -> item.readOperationsMap()
+                        .keySet()
+                        .forEach(method -> operations.add(method.name() + " " + path)));
+        return operations;
+    }
+
+    private static void report(String operation, ValidationReport report) {
+        if (report.hasErrors()) {
+            throw new AssertionError(operation + " 不符合规范：" + report.getMessages());
+        }
+        VALIDATED.add(operation);
+    }
+
+    private static OpenAPI parse() {
+        ParseOptions options = new ParseOptions();
+        options.setResolve(true);
+        return new OpenAPIV3Parser().read(SPEC, null, options);
+    }
+}

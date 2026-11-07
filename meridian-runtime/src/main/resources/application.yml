@@ -2,6 +2,10 @@
 spring:
   application:
     name: meridian-runtime
+  jackson:
+    deserialization:
+      # 公开 API 的请求体：未声明的字段返回 400，不静默忽略（编码规范「通用能力复用」中 JsonMappers.strict 的约定）
+      fail-on-unknown-properties: true
   flyway:
     # 迁移以 meridian_migrator 执行（spring.flyway.user/password），脚本位置与 schema 由 meridian-persistence 的迁移约定设置
     enabled: true
@@ -25,6 +29,12 @@ meridian:
       pending-action-timeout: 30m
       # 每批工具执行完成后保存状态（P3，ADR-0028）
       batch-checkpoint: true
+    sse:
+      # 架构设计「SSE 协议」：每 5 秒对账，每 15 秒 ping，单连接最长 60 分钟；Redis Stream 轮询间隔决定实时延迟上限
+      reconcile-interval: 5s
+      ping-interval: 15s
+      max-connection-duration: 60m
+      poll-interval: 100ms
     dev-agent-config:
       # 开发配置目录（FileAgentConfigProvider），相对于工作目录；T15b 起智能体配置改由 control-plane 下发
       directory: dev-config/agents

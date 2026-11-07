@@ -4,6 +4,7 @@ import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,5 +40,21 @@ final class TestAgents implements AgentConfigProvider {
             throw new NotFoundException("没有环境：" + environmentId);
         }
         return environment;
+    }
+
+    @Override
+    public ResolvedAgentSpec currentAgentVersion(String agentId) {
+        return agents.values().stream()
+                .filter(spec -> spec.agentId().equals(agentId))
+                .max(Comparator.comparing(ResolvedAgentSpec::agentVersionId))
+                .orElseThrow(() -> new NotFoundException("没有智能体：" + agentId));
+    }
+
+    @Override
+    public EnvironmentSpec currentEnvironment(String environmentId) {
+        return environments.values().stream()
+                .filter(environment -> environment.environmentId().equals(environmentId))
+                .max(Comparator.comparingLong(EnvironmentSpec::revision))
+                .orElseThrow(() -> new NotFoundException("没有环境：" + environmentId));
     }
 }

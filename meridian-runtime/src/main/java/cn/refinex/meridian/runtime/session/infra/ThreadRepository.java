@@ -1,5 +1,6 @@
 package cn.refinex.meridian.runtime.session.infra;
 
+import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.persistence.jdbc.JdbcValues;
 import cn.refinex.meridian.persistence.tenant.TenantScope;
 import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
@@ -85,6 +86,49 @@ public class ThreadRepository extends TenantScopedRepository {
                          ORDER BY parent_thread_id IS NOT NULL, id
                         """)
                 .param("session_id", sessionId)
+                .query(ThreadRepository::map)
+                .list();
+    }
+
+    /**
+     * 读取会话的主线程。
+     *
+     * @param sessionId 会话 ID
+     * @return 主线程；会话不存在或不属于当前项目时为空
+     */
+    public Optional<SessionThread> findMain(String sessionId) {
+        return sql("""
+                        SELECT id, tenant_id, project_id, session_id, parent_thread_id, parent_tool_use_id,
+                               agent_name, status, created_at
+                          FROM rt.threads
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND session_id = :session_id
+                           AND parent_thread_id IS NULL
+                        """)
+                .param("session_id", sessionId)
+                .query(ThreadRepository::map)
+                .optional();
+    }
+
+    /**
+     * 按创建顺序分页列出会话的线程（ID 为 ULID；主线程随会话一起创建，排在最前）。
+     *
+     * @param sessionId 会话 ID
+     * @param page 分页参数；游标的唯一键是上一页最后一个线程的 ID
+     * @return 最多 {@code page.fetchSize()} 个线程
+     */
+    public List<SessionThread> page(String sessionId, PageRequest page) {
+        return sql("""
+                        SELECT id, tenant_id, project_id, session_id, parent_thread_id, parent_tool_use_id,
+                               agent_name, status, created_at
+                          FROM rt.threads
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND session_id = :session_id
+                           AND (CAST(:after_id AS text) IS NULL OR id > :after_id)
+                         ORDER BY id
+                         LIMIT :limit
+                        """)
+                .param("session_id", sessionId)
+                .param("after_id", page.after() == null ? null : page.after().key(0))
+                .param("limit", page.fetchSize())
                 .query(ThreadRepository::map)
                 .list();
     }
