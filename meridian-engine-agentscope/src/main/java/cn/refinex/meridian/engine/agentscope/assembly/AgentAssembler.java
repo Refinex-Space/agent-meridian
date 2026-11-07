@@ -22,12 +22,15 @@ import org.slf4j.LoggerFactory;
  * {@code FencedAgentStateStore}）、平台中间件（T04 起）、平台工具（T10a 起）、文件系统（T10a、T12a）、技能仓库（T10a）。
  * 装配器自身无状态，可以并发调用；实例的复用与关闭由 {@link AgentInstanceCache} 负责。
  *
- * <p>与架构设计的差异：{@code maxRetries(0)} 在 AgentScope 2.0.4 中会抛异常（参数含义是含首次在内的总尝试次数），
- * 已提 ADR-0023，确认前不设置该项；另外按 ADR-0024 补充了 {@code asyncToolRegistry} 与 {@code enableAgentTracingLog(false)}。
+ * <p>AgentScope 2.0.4 的 {@code maxRetries} 是含首次在内的总尝试次数，不重试写作 {@code maxRetries(1)}（ADR-0023）；
+ * {@code asyncToolRegistry} 与 {@code enableAgentTracingLog(false)} 两项按 ADR-0024 补充。
  */
 public final class AgentAssembler {
 
     private static final Logger log = LoggerFactory.getLogger(AgentAssembler.class);
+
+    /** 模型调用的总尝试次数（含首次）。架构设计「引擎装配」与 ADR-0023 规定为 1：重试只由 RoutedModel 进行。 */
+    static final int MODEL_MAX_ATTEMPTS = 1;
 
     /** 工具结果卸载的阈值，单位字符。架构设计「上下文管理」规定 80000。 */
     static final int TOOL_RESULT_EVICTION_THRESHOLD_CHARS = 80_000;
@@ -109,7 +112,8 @@ public final class AgentAssembler {
             builder.generateOptions(generateOptions);
         }
         // fallbackModel：不设置。AgentScope 对首个信号的任何错误都会切换，降级由 RoutedModel 自己做
-        // maxRetries：架构设计写的 maxRetries(0) 在 2.0.4 中非法，见 ADR-0023（提议），确认前不设置
+        // maxRetries(1)：只尝试一次，AgentScope 侧不重试；它经 GenerateOptions.executionConfig.maxAttempts 传给模型（ADR-0023）
+        builder.maxRetries(MODEL_MAX_ATTEMPTS);
 
         // stateStore：FencedAgentStateStore，所有状态写入受租约约束
         builder.stateStore(stateStore);
