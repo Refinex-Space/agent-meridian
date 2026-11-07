@@ -177,7 +177,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 **T04 单轮执行适配与事件映射**（开工基线 `scripts/dev/verify.sh` 通过，2026-11-07）
 
-- [ ] 1. `FencedAgentStateStore`：全部方法、版本号、租约校验、`content_epoch` 区分权限安装、子线程用父租约（A07）
+- [x] 1. `FencedAgentStateStore`：全部方法、版本号、租约校验、`content_epoch` 区分权限安装、子线程用父租约（A07）
 - [ ] 2. 停止原因映射与事件类型穷举映射（A02）
 - [ ] 3. 事件映射与增量拼装：文本、思考、数据、工具调用、工具结果（16 KB 经 `BlobStorePort`）、`permission` 推导、子线程事件只记日志（A03）
 - [ ] 4. 输入翻译：`NewMessages`、`Confirmations`（`ConfirmResult` 实例）、`CustomToolResults`（`ToolResultBlock`）、`RecoveryOnly`；自定义工具经 `ToolRequestConfig` 注入（`MERGE_EXTERNAL_PRIORITY`）
