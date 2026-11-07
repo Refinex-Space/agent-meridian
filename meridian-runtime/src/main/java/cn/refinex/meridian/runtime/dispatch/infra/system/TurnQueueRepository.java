@@ -26,6 +26,21 @@ public class TurnQueueRepository extends SystemRepository {
     private static final String ACTIVE_STATUSES = "('queued', 'running', 'awaiting_action')";
 
     /**
+     * 认领第 1 步，架构设计「认领」中的 SQL：时间取注入的 {@code Clock}（{@code :now}），并排除本节点仍持有的线程。
+     * 执行计划走部分索引 {@code turns_queued_idx}（{@code ClaimQueryPlanIT} 断言，结果见模块 {@code CLAUDE.md}）。
+     */
+    static final String CLAIM_CANDIDATE_SQL = """
+            SELECT t.id, t.tenant_id, t.thread_id
+              FROM rt.turns t
+              JOIN rt.tenant_concurrency c ON c.tenant_id = t.tenant_id
+             WHERE t.status = 'queued' AND t.not_before <= :now AND c.running < c.max_running
+               AND NOT (t.thread_id = ANY (:excluded))
+             ORDER BY t.priority, t.created_at
+               FOR UPDATE OF t SKIP LOCKED
+             LIMIT 1
+            """;
+
+    /**
      * 创建仓储。
      *
      * @param dataSource 应用数据源
@@ -112,16 +127,7 @@ public class TurnQueueRepository extends SystemRepository {
      * @return 被锁住的候选轮次；没有可执行的轮次时为空
      */
     public Optional<Candidate> lockNextClaimable(Instant now, Collection<String> excludedThreads) {
-        return jdbc().sql("""
-                        SELECT t.id, t.tenant_id, t.thread_id
-                          FROM rt.turns t
-                          JOIN rt.tenant_concurrency c ON c.tenant_id = t.tenant_id
-                         WHERE t.status = 'queued' AND t.not_before <= :now AND c.running < c.max_running
-                           AND NOT (t.thread_id = ANY (:excluded))
-                         ORDER BY t.priority, t.created_at
-                           FOR UPDATE OF t SKIP LOCKED
-                         LIMIT 1
-                        """)
+        return jdbc().sql(CLAIM_CANDIDATE_SQL)
                 .param("now", JdbcValues.timestamptz(now))
                 .param("excluded", JdbcValues.textArray(excludedThreads))
                 .query((rs, row) ->
