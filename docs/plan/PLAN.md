@@ -63,7 +63,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 已完成 | 4812ea7 |
 | T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 已完成 | 6038ef8 |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 已完成 | 0943c89 |
-| T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 进行中 | — |
+| T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 已完成 | c1fd533 |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 未开始 | — |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 未开始 | — |
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 未开始 | — |
@@ -175,16 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-**T05 运行时数据层与调度租约**（开工基线：`scripts/dev/verify.sh` 通过；首次失败是 IDE 写入 `target/` 的旧 class，`./mvnw clean` 后通过）
-
-- [x] 1. runtime 应用骨架：WebFlux 主类、配置、`dev`/`test` profile、健康检查
-- [x] 2. `rt` 迁移：架构设计 runtime 核心表全部建出（部分唯一索引、`session_events` 16 个哈希分区、注释、角色）；迁移测试与 `\d+` 摘要（A01）
-- [x] 3. 仓储：`sessions`、`threads`、`turns`、`turn_inputs`、`tenant_concurrency`、`session_events`、`agent_states`、`outbox`
-- [x] 4. 调度：入队与计数行、认领三步 SQL、唤醒（通知与 1 秒轮询）、续租与回调、回收器、置回队列三种情况、同节点重新认领（A02、A03、A04、A06）
-- [x] 5. 端口实现：`LeaseRegistry`、`AgentStateRepository`、`EventSinkPort` 事件写入；`seq` 分配（A05、A07）
-- [x] 6. 全部 JDBC 经 `Blocking`，测试开启 BlockHound（A08）；认领 SQL 的 `EXPLAIN`
-- [x] 7. P2 报告存储层部分（A09）
-- [ ] 8. 收尾：ADR、模块 `CLAUDE.md`、架构设计同步、`acceptance.json`、`verify.sh`（A10）
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -282,6 +273,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：10 项通过，0 项阻塞
 - 决策：ADR-0026 单轮执行与事件映射的补充约定（可重试错误以 `rescheduled(retryable_error)` 结束、租约丢失不输出事件、工具调用在模型调用结束时输出等）；架构设计升至 v1.3
 - 遗留：登记事项 D07 文件引用（T17b）、D08 响应式链路的 MDC（T27）、D09 Worker 处理 ADR-0026 的约定（T06）
+
+### 2026-11-07 T05 已完成（提交 c1fd533）
+- 交付：runtime 应用骨架（`RuntimeApplication`、`dev`/`test` profile、actuator 健康检查与探针、`scripts/dev/run-runtime.sh`）；`V0001__runtime_core.sql` 建出 runtime 核心表全部（`session_events` 16 个哈希分区、`turns` 部分唯一索引、中文注释）；`dispatch`（入队、三步认领、续租、回收、置回队列三种原因、结束轮次、唤醒、`NodeLeaseRegistry`）；`stream`（`SessionEventWriter` 唯一写入入口、`EngineJson`、`DatabaseEventSink`）；`session`（会话与线程仓储、`JdbcAgentStateRepository`）；runtime 测试经 `blockhound-junit-platform` 自动开启 BlockHound；64 个单元测试、63 个新集成测试；模块 CLAUDE.md；P2 存储层报告
+- 验收：10 项通过，0 项阻塞
+- 决策：ADR-0027 运行时数据层与调度的补充约定（时间取注入的 `Clock`、同节点重新认领的落地方式、`FOR SHARE` 租约条件与锁顺序、事件与输入的 JSON 约定、状态随事件推进、默认并发上限 20 等）；架构设计升至 v1.4
+- 遗留：登记事项 D10 调用方先生成事件 ID（T07）、D11 jsonb 拒绝 `\u0000`（T06）；P2 完整路径待 T06
 
 ## 计划变更记录
 
