@@ -27,8 +27,13 @@ enum MeridianModule {
     PERSISTENCE("meridian-persistence", "cn.refinex.meridian.persistence", COMMON, API),
     ENGINE_SPI("meridian-engine-spi", "cn.refinex.meridian.engine.spi", COMMON),
     ENGINE_AGENTSCOPE("meridian-engine-agentscope", "cn.refinex.meridian.engine.agentscope", COMMON, ENGINE_SPI),
+    /** 测试夹具实现 engine-spi 的端口、使用 common 的 ID 与异常（ADR-0025）。 */
     ENGINE_AGENTSCOPE_TEST(
-            "meridian-engine-agentscope-test", "cn.refinex.meridian.engine.agentscope.testkit", ENGINE_AGENTSCOPE),
+            "meridian-engine-agentscope-test",
+            "cn.refinex.meridian.engine.agentscope.testkit",
+            COMMON,
+            ENGINE_SPI,
+            ENGINE_AGENTSCOPE),
     MODEL_CLIENT("meridian-model-client", "cn.refinex.meridian.modelclient", COMMON, SECURITY),
     CONTROL_PLANE("meridian-control-plane", "cn.refinex.meridian.controlplane", COMMON, API, SECURITY, PERSISTENCE),
     /** runtime 对 engine-agentscope 的引用只允许在 config 包，由规则 2 进一步收紧。 */

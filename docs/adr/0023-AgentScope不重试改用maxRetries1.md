@@ -2,9 +2,9 @@
 
 | 项 | 内容 |
 |---|---|
-| 状态 | 提议 |
+| 状态 | 已采纳 |
 | 日期 | 2026-11-07 |
-| 决策人 | T03 执行会话（待用户确认） |
+| 决策人 | T03 执行会话提议，用户于 2026-11-07 采纳 |
 | 影响的架构设计章节 | 「引擎装配」表中的 `maxRetries(0)` 一行（"必须"条目） |
 
 ## 背景
@@ -26,7 +26,7 @@
 
 ## 决策
 
-提议采用 C。理由：它准确表达了 ADR-0006 的意图（AgentScope 一侧不重试），从装配结果就能读出（`getDelegate().getModelConfig().maxRetries() == 1`，以及 `ScriptedModel` 记录到的 `GenerateOptions.executionConfig.maxAttempts == 1`），并且对所有经 `ReActAgent` 发出的模型调用都生效。
+采用 C。理由：它准确表达了 ADR-0006 的意图（AgentScope 一侧不重试），从装配结果就能读出（`getDelegate().getModelConfig().maxRetries() == 1`，以及 `ScriptedModel` 记录到的 `GenerateOptions.executionConfig.maxAttempts == 1`），并且对所有经 `ReActAgent` 发出的模型调用都生效。
 
 ## 影响
 

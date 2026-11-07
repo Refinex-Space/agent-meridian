@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.1 |
+| 版本 | v1.2 |
 | 日期 | 2026-11-07 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -202,7 +202,7 @@ agent-meridian/
 | `meridian-security`、`meridian-persistence` | common、api |
 | `meridian-engine-spi` | common |
 | `meridian-engine-agentscope` | common、engine-spi、AgentScope |
-| `meridian-engine-agentscope-test` | engine-agentscope、AgentScope（test scope） |
+| `meridian-engine-agentscope-test` | common、engine-spi、engine-agentscope、AgentScope（test scope）（ADR-0025） |
 | `meridian-model-client` | common、security |
 | `meridian-control-plane` | common、api、security、persistence |
 | `meridian-runtime` | common、api、security、persistence、engine-spi；engine-agentscope 只能在 `config` 包中引用其装配入口 |
@@ -455,7 +455,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 |---|---|---|
 | `model(Model)` | 平台构造的 `RoutedModel` 实例，内含主模型与备用模型 | 不经 `ModelRegistry` 全局注册表；凭据和路由在调用时按 `PlatformContext` 解析 |
 | `fallbackModel` | 不设置 | AgentScope 对首个信号的任何错误都会切换，包括预算和限流异常；降级由 `RoutedModel` 自己做 |
-| `maxRetries(0)` | 必须 | 同理，重试由 `RoutedModel` 只针对供应商错误进行 |
+| `maxRetries(1)` | 必须 | 同理，重试由 `RoutedModel` 只针对供应商错误进行。参数是含首次在内的总尝试次数，1 即不重试；2.0.4 中 0 非法（ADR-0023） |
 | `stateStore` | `FencedAgentStateStore` | 所有状态写入都受租约约束，见"租约与 fencing" |
 | `enablePendingToolRecovery` | `true` | 悬空的 tool_use 自动补结果 |
 | `maxIters` | 智能体配置，默认 50，上限 200 | 控制单轮成本 |
@@ -1348,6 +1348,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 |---|---|---|
 | v1.0 | 2026-11-07 | 基线 |
 | v1.1 | 2026-11-07 | 交付计划评审后修订：租户隔离改为三类基类（含 `SystemRepository`）；模块依赖表补充 reactor-core、test-support、sdk-java；端口表新增 `BlobStorePort`、`ThreadRegistryPort` 并明确新增端口属于补充；会话流与线程流的 `seq` 语义；租户并发计数行的创建与配额；`tenant_settings` 与租户级配置；知识库存储计量；本地沙箱改用 kind 加 gVisor；M2 清单措辞调整；控制台 SSE 改用 `fetch`、公开 API 接受控制台 OIDC 令牌 |
+| v1.2 | 2026-11-07 | T03：引擎装配表 `maxRetries(0)` 改为 `maxRetries(1)`（ADR-0023）；模块依赖规则放行 `meridian-engine-agentscope-test` 依赖 common 与 engine-spi（ADR-0025）；补充 `asyncToolRegistry`、`enableAgentTracingLog(false)` 两行、子智能体缓存键与端口 `AgentConfigPort`（ADR-0024） |
 
 ## 待决问题
 
