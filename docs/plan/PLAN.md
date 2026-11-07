@@ -61,7 +61,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 |---|---|---|---|---|---|---|---|---|
 | T01 | [工程脚手架与质量门禁](tasks/T01-scaffold-and-quality-gates.md) | 0 | 无 | high | 中 | P1（依赖解析部分） | 已完成 | b29c1af |
 | T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 已完成 | 4812ea7 |
-| T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 进行中 | — |
+| T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 阻塞（等待用户确认 ADR-0023、ADR-0025） | — |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 未开始 | — |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 未开始 | — |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 未开始 | — |
@@ -181,6 +181,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 2. `meridian-engine-spi` 全部类型（engine、engine.input、event、spec、port、driver），中文 Javadoc 注明章节；架构测试：spi 不依赖 AgentScope 与 Spring（A01）；事件类型清单测试（A02）
 - [ ] 3. `meridian-engine-agentscope-test`：`ScriptedModel` 与构建 DSL、内存端口夹具
 - [ ] 4. `meridian-engine-agentscope` 的 `assembly`：模型工厂接口、`AgentAssembler`（装配表逐行落实，未实现组件经注入的提供者获得）、`AgentAssemblerTest` 逐行断言（A03）
+- [ ] 3、4、6 的代码与测试已写完（testkit、`AgentAssemblerTest` 19 例通过），未提交：等待 ADR-0025（testkit 依赖 common/spi，ArchUnit 规则 3 目前 125 处违规）与 ADR-0023（`maxRetries(1)`，装配中暂不设置）
 - [x] 5. 实例缓存：`acquire`/`release`、容量 500、空闲 30 分钟、引用计数归零才 `close()`；并发测试（A04）
 - [ ] 6. `ScriptedModel` 驱动 `HarnessAgent` 的场景测试：纯文本、单工具、并行工具、首包前错误、首包后错误、请求断言（A05）
 - [ ] 7. P1：runtime `config` 包下的 Spring Boot WebFlux 集成测试（Jackson 3 Web 序列化 + 同 JVM 装配并 `streamEvents`，含工具调用）；报告 `docs/poc/P01-运行基线.md`、`docs/poc/README.md`（A06）

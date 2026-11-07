@@ -230,6 +230,7 @@ agent-meridian/
 | `SecretResolver` | 凭据明文解析 | `config` |
 | `BlobStorePort` | 大对象写入与读取（超过 16 KB 的工具结果等） | `stream` |
 | `ThreadRegistryPort` | 创建子线程、更新线程状态 | `session` |
+| `AgentConfigPort` | 读取已解析的智能体版本与环境配置，智能体实例缓存未命中时使用（ADR-0024） | `config` |
 
 上表是落地时的初始清单。为落实本文档已规定的行为，可以在 `meridian-engine-spi` 中新增端口或给既有端口加方法，签名只出现平台类型，并同步更新本表；删除端口或改变既有端口的语义，才需要走 ADR。
 
@@ -440,7 +441,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 
 ### 引擎装配
 
-`AgentAssembler` 为每个"智能体版本加环境修订"装配一个 `HarnessAgent`，缓存键为 `(agent_version_id, environment_id, environment_revision)`。
+`AgentAssembler` 为每个"智能体版本加环境修订"装配一个 `HarnessAgent`，缓存键为 `(agent_version_id, environment_id, environment_revision)`；子智能体的实例在键中再加上子智能体名（ADR-0024）。
 
 缓存规则：
 
@@ -467,6 +468,8 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `disableDefaultWorkspaceSkills()`、`disableDynamicSkills()` | 必须 | 技能只来自平台技能仓库，智能体不能自建技能 |
 | `disableTranscript()` | 必须 | 转录写入工作区或沙箱，不受 fencing 约束且无限增长；会话记录以 `session_events` 为准 |
 | `messageBus(...)` | 平台的 `NoopMessageBus` | 默认的工作区消息总线会让每次推理都读一次工作区；`wait_async_results` 仍会注册，它不是 `ToolBase`，不进权限引擎，由 `PolicyMiddleware` 直接拦截 |
+| `asyncToolRegistry(...)` | 平台的 `NoopAsyncToolRegistry` | 不设置时 harness 创建基于工作区的异步工具登记，`InboxMiddleware` 每次推理前仍会读工作区（ADR-0024） |
+| `enableAgentTracingLog(false)` | 必须 | 默认的 `AgentTraceMiddleware` 以 INFO 记录模型输出正文，违反日志规范（ADR-0024） |
 | `skillRepository(...)` | 平台的 `MeridianSkillRepository`（实现 `RuntimeContextSkillRepository`） | 按租户、项目、智能体解析技能 |
 | `compaction(...)` | 见"上下文管理"，其中 `flushBeforeCompact(false)`、`offloadBeforeCompact(false)` | 一期没有长期记忆；原文卸载同样不受 fencing 约束 |
 | `toolResultEviction(...)` | 见"上下文管理" | — |
