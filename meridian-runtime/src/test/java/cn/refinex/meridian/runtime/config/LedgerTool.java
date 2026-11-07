@@ -3,6 +3,7 @@ package cn.refinex.meridian.runtime.config;
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.engine.agentscope.testkit.tool.RecordingTool;
+import cn.refinex.meridian.engine.spi.port.BlobStorePort;
 import cn.refinex.meridian.engine.spi.port.ToolLedgerPort;
 import cn.refinex.meridian.engine.spi.port.ToolLedgerPort.InvocationStart;
 import cn.refinex.meridian.engine.spi.port.ToolLedgerPort.Status;
@@ -10,6 +11,7 @@ import cn.refinex.meridian.engine.spi.spec.SideEffect;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.tool.ToolBase;
 import io.agentscope.core.tool.ToolCallParam;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -18,7 +20,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * 记账的测试工具：像平台工具（T10a）一样，发起副作用之前经 {@link ToolLedgerPort} 记录开始，执行完记录结束；可以在执行中途
+ * 记账的测试工具：像平台工具（T10a）一样，发起副作用之前经 {@link ToolLedgerPort} 记录开始，执行完把结果写入对象存储并记录
+ * 结束（结果引用进入账本）；可以在执行中途
  * 卡住，供测试在"工具正在执行"时强杀、接管租约或下线。每个节点一个实例（账本带节点的租约条件），同一工具在各节点的调用记录
  * 共用一个 {@link Calls}，用于断言不重复执行。
  */
@@ -26,9 +29,10 @@ final class LedgerTool extends ToolBase {
 
     private final SideEffect sideEffect;
     private final ToolLedgerPort ledger;
+    private final BlobStorePort blobs;
     private final Calls calls;
 
-    LedgerTool(String name, SideEffect sideEffect, ToolLedgerPort ledger, Calls calls) {
+    LedgerTool(String name, SideEffect sideEffect, ToolLedgerPort ledger, BlobStorePort blobs, Calls calls) {
         super(ToolBase.builder()
                 .name(name)
                 .description("记账的测试工具 " + name)
@@ -37,6 +41,7 @@ final class LedgerTool extends ToolBase {
                 .concurrencySafe(true));
         this.sideEffect = sideEffect;
         this.ledger = ledger;
+        this.blobs = blobs;
         this.calls = calls;
     }
 
@@ -54,7 +59,9 @@ final class LedgerTool extends ToolBase {
         return ledger.recordStart(start)
                 .flatMap(invocationId -> Mono.fromCallable(() -> calls.execute(getName(), toolUseId, param))
                         .subscribeOn(Schedulers.boundedElastic())
-                        .flatMap(text -> ledger.recordFinish(invocationId, Status.SUCCEEDED, null)
+                        // 结果写入对象存储并记进账本：强杀发生在结果事件写库之前时，恢复说明从账本取结果摘要
+                        .flatMap(text -> blobs.put("text/plain", text.getBytes(StandardCharsets.UTF_8))
+                                .flatMap(ref -> ledger.recordFinish(invocationId, Status.SUCCEEDED, ref))
                                 .thenReturn(ToolResultBlock.text(text))))
                 .contextWrite(PlatformContexts.write(platform));
     }

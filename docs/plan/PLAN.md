@@ -183,7 +183,7 @@ T06 轮次 Worker、事件流水线与崩溃恢复（开工 2026-11-07，基线 
 - [x] 4. 优雅下线 `SmartLifecycle`
 - [ ] 5. 指标 6 个
 - [ ] 6. 故障注入测试（P10 四种终止、P2 完整路径）与端到端、queue 合并、`requires_action`、`error` 用尽、下线集成测试（A01–A04、A06–A09）
-- [ ] 7. P3 批次级 checkpoint 验证与结论（A05）
+- [x] 7. P3 批次级 checkpoint 验证与结论（A05）
 - [ ] 8. 报告 P02 定稿、P03、P10；ADR；模块 CLAUDE.md；`docs/poc/README.md`
 - [ ] 9. 收尾：`verify.sh`（A10）、`acceptance.json`、PLAN 看板与会话日志
 

@@ -118,8 +118,8 @@ record WorkerNode(
 
         Map<String, LedgerTool> tools = new LinkedHashMap<>();
         spec.tools()
-                .forEach(
-                        (name, tool) -> tools.put(name, new LedgerTool(name, tool.sideEffect(), ledger, tool.calls())));
+                .forEach((name, tool) ->
+                        tools.put(name, new LedgerTool(name, tool.sideEffect(), ledger, blobs, tool.calls())));
         AgentStateRepository states = spec.states().apply(node.states());
         List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(
                         node.registry(), spec.properties().batchCheckpoint())
