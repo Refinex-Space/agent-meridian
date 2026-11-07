@@ -65,7 +65,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 已完成 | 0943c89 |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 已完成 | c1fd533 |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 已完成 | c6ca61a |
-| T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 未开始 | — |
+| T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 进行中 | — |
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 未开始 | — |
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 未开始 | — |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 未开始 | — |
@@ -175,7 +175,17 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T07 会话 API 与 SSE（开工 2026-11-07，基线 `verify.sh` 通过）：
+
+- [ ] 0. 生成链验证：最小 3.1 规范（判别器 `oneOf`、可空、`additionalProperties`）生成 Jackson 3 DTO、reactive 与 servlet 服务端接口并编译；openapi-diff 比较 3.1；写作约束与补充型 ADR（A11）
+- [ ] 1. 规范 `meridian-v1.yaml`：会话、事件、线程、待处理动作、SSE 流，全部事件类型，problem+json；OpenAPI 3.1 校验与对照清单（A01）
+- [ ] 2. 代码生成接入构建：`meridian-api` 只生成 DTO，runtime 生成 reactive 接口
+- [ ] 3. 开发期认证：`ApiKeyAuthenticator`、`ApiKeyResolver`、`DevApiKeyResolver`（非 dev/test profile 启动失败）、作用域检查（A08）
+- [ ] 4. 会话接口：创建（`AgentConfigProvider` 校验并固化版本与环境修订）、查询、列表、更新、删除、归档；幂等、游标分页、problem+json、`X-Request-Id`、`traceparent`（A05、A06、A07）
+- [ ] 5. 事件接口：发送（类型与状态组合校验、线程咨询锁、入队或写收件箱、写事件，D10、D12）、列出事件；列出线程、待处理动作
+- [ ] 6. SSE：五步算法、`ping`、`event_deltas`、60 分钟上限、线程流与 `?threads=main`、两个指标；困难条件集成测试（A02、A03、A04、A10）
+- [ ] 7. 契约测试覆盖全部端点；`openapi-diff` 接入构建（A09）
+- [ ] 8. 收尾：`verify.sh`（A12）、模块 CLAUDE.md（新建 `meridian-api`）、ADR 与架构设计、`acceptance.json`、PLAN 看板与会话日志
 
 ## 控制台设计轨道
 
