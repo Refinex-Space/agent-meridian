@@ -88,10 +88,14 @@ public class EventsApiController implements EventsApi {
             String sessionId, String lastEventID, Boolean eventDeltas, String threads, ServerWebExchange exchange) {
         ApiKeyAuthorization.require(exchange, ApiKeyScope.SESSIONS_READ);
         long lastSeq = lastEventID == null ? 0 : Long.parseLong(lastEventID);
-        return Blocking.call(() -> MAIN_THREADS.equals(threads)
-                        ? (StreamFilter) new StreamFilter.Main(
-                                sessions.mainThread(sessionId).id())
-                        : new StreamFilter.All())
+        return Blocking.call(() -> {
+                    // 先确认会话属于当前项目：其他项目的会话与不存在相同（架构设计「业务接入示例」）
+                    sessions.get(sessionId);
+                    return MAIN_THREADS.equals(threads)
+                            ? (StreamFilter) new StreamFilter.Main(
+                                    sessions.mainThread(sessionId).id())
+                            : new StreamFilter.All();
+                })
                 .map(filter -> stream(streams.open(sessionId, filter, lastSeq, Boolean.TRUE.equals(eventDeltas))));
     }
 
