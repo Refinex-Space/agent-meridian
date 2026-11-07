@@ -1,0 +1,97 @@
+package cn.refinex.meridian.runtime.support;
+
+import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
+import cn.refinex.meridian.runtime.dispatch.app.LeaseReaper;
+import cn.refinex.meridian.runtime.dispatch.app.LeaseRenewer;
+import cn.refinex.meridian.runtime.dispatch.app.NodeLeaseRegistry;
+import cn.refinex.meridian.runtime.dispatch.app.TurnClaimer;
+import cn.refinex.meridian.runtime.dispatch.app.TurnEnqueuer;
+import cn.refinex.meridian.runtime.dispatch.app.TurnTransitions;
+import cn.refinex.meridian.runtime.dispatch.domain.NodeId;
+import cn.refinex.meridian.runtime.dispatch.infra.system.TurnLeaseRepository;
+import cn.refinex.meridian.runtime.dispatch.infra.system.TurnQueueRepository;
+import cn.refinex.meridian.runtime.session.infra.system.JdbcAgentStateRepository;
+import cn.refinex.meridian.runtime.stream.app.DatabaseEventSink;
+import cn.refinex.meridian.runtime.stream.app.SessionEventWriter;
+import cn.refinex.meridian.runtime.stream.infra.system.SessionEventRepository;
+import java.time.Clock;
+import java.util.concurrent.atomic.AtomicInteger;
+import javax.sql.DataSource;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * 一个 runtime 节点的调度与写入对象，按生产的依赖关系手工装配。测试在同一个 JVM 中创建多个节点（节点 ID 不同、共享数据库
+ * 与时钟）来模拟多节点竞争。唤醒通知用计数器代替 Redis。
+ *
+ * @param nodeId 节点 ID
+ * @param registry 本节点的租约登记
+ * @param enqueuer 入队
+ * @param claimer 认领
+ * @param renewer 续租
+ * @param reaper 回收器
+ * @param transitions 置回队列与结束
+ * @param events 事件写入入口
+ * @param eventSink {@code EventSinkPort} 的实现
+ * @param states {@code AgentStateRepository} 的实现
+ * @param queue 轮次队列仓储（读取轮次输入）
+ * @param wakeups 已发布的唤醒通知次数
+ */
+public record TestNode(
+        NodeId nodeId,
+        NodeLeaseRegistry registry,
+        TurnEnqueuer enqueuer,
+        TurnClaimer claimer,
+        LeaseRenewer renewer,
+        LeaseReaper reaper,
+        TurnTransitions transitions,
+        SessionEventWriter events,
+        DatabaseEventSink eventSink,
+        JdbcAgentStateRepository states,
+        TurnQueueRepository queue,
+        AtomicInteger wakeups) {
+
+    /**
+     * 用默认调度配置创建节点。
+     *
+     * @param nodeId 节点 ID
+     * @param clock 时钟，通常是多个节点共享的可控时钟
+     * @return 节点
+     */
+    public static TestNode create(String nodeId, Clock clock) {
+        return create(nodeId, clock, DispatchProperties.defaults());
+    }
+
+    /**
+     * 创建节点。
+     *
+     * @param nodeId 节点 ID
+     * @param clock 时钟
+     * @param properties 调度配置
+     * @return 节点
+     */
+    public static TestNode create(String nodeId, Clock clock, DispatchProperties properties) {
+        DataSource dataSource = RuntimeTestDatabase.dataSource();
+        TransactionTemplate transactions = RuntimeTestDatabase.transactions();
+        NodeId node = new NodeId(nodeId);
+        NodeLeaseRegistry registry = new NodeLeaseRegistry();
+        TurnQueueRepository queue = new TurnQueueRepository(dataSource);
+        TurnLeaseRepository leases = new TurnLeaseRepository(dataSource);
+        SessionEventWriter events =
+                new SessionEventWriter(new SessionEventRepository(dataSource), transactions, node, clock);
+        TurnTransitions transitions = new TurnTransitions(leases, events, transactions, node, clock);
+        AtomicInteger wakeups = new AtomicInteger();
+        return new TestNode(
+                node,
+                registry,
+                new TurnEnqueuer(queue, transactions, wakeups::incrementAndGet, properties, clock),
+                new TurnClaimer(queue, registry, transactions, node, properties, clock),
+                new LeaseRenewer(leases, registry, node, properties, clock),
+                new LeaseReaper(transitions),
+                transitions,
+                events,
+                new DatabaseEventSink(events),
+                new JdbcAgentStateRepository(dataSource, transactions, node, clock),
+                queue,
+                wakeups);
+    }
+}

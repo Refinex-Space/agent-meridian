@@ -1,0 +1,30 @@
+# runtime 的公共配置。环境相关的连接信息在 profile 中：dev 连接本地 compose，test 由 Testcontainers 注入。
+spring:
+  application:
+    name: meridian-runtime
+  flyway:
+    # 迁移以 meridian_migrator 执行（spring.flyway.user/password），脚本位置与 schema 由 meridian-persistence 的迁移约定设置
+    enabled: true
+
+meridian:
+  persistence:
+    schema: rt
+  runtime:
+    dispatch:
+      # 以下为架构设计「一轮执行的生命周期」规定的默认值，写在这里便于查看；节点 ID 留空时按主机名生成
+      lease-ttl: 30s
+      renew-interval: 10s
+      renew-failure-timeout: 15s
+      reap-interval: 5s
+      poll-interval: 1s
+      default-tenant-max-running: 20
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

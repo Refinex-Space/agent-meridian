@@ -63,7 +63,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 已完成 | 4812ea7 |
 | T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 已完成 | 6038ef8 |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 已完成 | 0943c89 |
-| T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 未开始 | — |
+| T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 进行中 | — |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 未开始 | — |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 未开始 | — |
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 未开始 | — |
@@ -175,7 +175,16 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+**T05 运行时数据层与调度租约**（开工基线：`scripts/dev/verify.sh` 通过；首次失败是 IDE 写入 `target/` 的旧 class，`./mvnw clean` 后通过）
+
+- [x] 1. runtime 应用骨架：WebFlux 主类、配置、`dev`/`test` profile、健康检查
+- [x] 2. `rt` 迁移：架构设计 runtime 核心表全部建出（部分唯一索引、`session_events` 16 个哈希分区、注释、角色）；迁移测试与 `\d+` 摘要（A01）
+- [ ] 3. 仓储：`sessions`、`threads`、`turns`、`turn_inputs`、`tenant_concurrency`、`session_events`、`agent_states`、`outbox`（代码已提交，集成测试待补）
+- [ ] 4. 调度：入队与计数行、认领三步 SQL、唤醒（通知与 1 秒轮询）、续租与回调、回收器、置回队列三种情况、同节点重新认领（A02、A03、A04、A06）
+- [ ] 5. 端口实现：`LeaseRegistry`、`AgentStateRepository`、`EventSinkPort` 事件写入；`seq` 分配（A05、A07）
+- [ ] 6. 全部 JDBC 经 `Blocking`，测试开启 BlockHound（A08）；认领 SQL 的 `EXPLAIN`
+- [ ] 7. P2 报告存储层部分（A09）
+- [ ] 8. 收尾：ADR、模块 `CLAUDE.md`、架构设计同步、`acceptance.json`、`verify.sh`（A10）
 
 ## 控制台设计轨道
 
