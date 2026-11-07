@@ -57,7 +57,7 @@ package cn.refinex.meridian.runtime.dispatch;
 |---|---|---|
 | 带前缀的 ULID（生成、解析、校验） | `common.id` | `Ids.newId(IdPrefix.SESSION)` |
 | 错误码与平台异常 | `common.error` | `MeridianException`、`ErrorCode` |
-| problem+json 映射、请求 ID | `security.web` | MVC 和 WebFlux 各一个适配器，共用同一套映射逻辑 |
+| problem+json 映射、请求 ID、`traceparent` | `security.web` | MVC 和 WebFlux 各一个适配器，共用同一套映射逻辑 |
 | 游标分页 | `common.page` | `Cursor`、`PageResult` |
 | JSON 序列化配置（snake_case、时间格式） | `common.json` | 平台 API 用 Jackson 3 |
 | 时钟 | `common.time` | 注入 `java.time.Clock`，禁止直接 `Instant.now()` |
@@ -68,7 +68,7 @@ package cn.refinex.meridian.runtime.dispatch;
 | 对象存储客户端 | `persistence.objectstore` | S3 兼容 |
 | 阻塞调用的虚拟线程调度 | `common.concurrent` | `Blocking.call(...)`，runtime 中所有 JDBC 都经过它 |
 | HTTP 幂等键（`Idempotency-Key`） | `persistence.idempotency` | 各服务共用，每个服务在自己的 schema 中建幂等表 |
-| API Key 校验、服务 JWT、OIDC | `security` | — |
+| API Key 校验、服务 JWT、OIDC | `security` | `security.apikey`：`ApiKeyResolver` 端口、WebFlux 过滤器、作用域检查 `ApiKeyAuthorization` |
 | 服务间 HTTP 调用约定（超时、重试、服务 JWT 注入） | `security.servicejwt` | 基于 Spring `RestClient` / `WebClient` |
 | 平台工具基类 | `engine.agentscope.tools` | 所有平台工具继承同一个抽象基类 |
 

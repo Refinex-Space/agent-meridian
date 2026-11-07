@@ -6,7 +6,7 @@
 
 - 生成 DTO、编译与单测：`./mvnw -pl meridian-api -am test`
 - 规范校验（3.1 解析、端点与事件类型对照、写作约束）：`./mvnw -pl meridian-api -am test -Dtest=OpenApiSpecTest -Dsurefire.failIfNoSpecifiedTests=false`
-- 兼容性检查（与上一个已提交版本比较）：同上，`-Dtest=OpenApiCompatibilityTest`
+- 兼容性检查（与上一个已提交版本比较）：同上，`-Dtest=OpenApiCompatibilityTest`。基线取自 git：工作区的规范与最近一次改动它的提交不同时与那次提交比较，相同时与它的父提交比较；没有基线（首个版本、浅克隆）时跳过
 - 改了规范后跑 runtime 的契约测试：`./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test='*ContractIT' -Dfailsafe.failIfNoSpecifiedTests=false`
 - 生成器不清理输出目录：删除或改名 schema 后先 `./mvnw -q -pl meridian-api clean`，否则旧类残留，可能编译失败（"无效的 permits 子句"）。
 

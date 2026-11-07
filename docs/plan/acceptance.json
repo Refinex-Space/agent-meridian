@@ -426,85 +426,85 @@
       "id": "T07-A01",
       "task": "T07",
       "description": "`meridian-v1.yaml` 覆盖架构设计中本任务范围内的全部端点与事件类型，通过 OpenAPI 3.1 校验。验证：校验命令输出，加一份端点与事件类型对照清单。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-api -am test -Dtest=OpenApiSpecTest：9 项通过——按 OpenAPI 3.1 解析无任何消息（openapi 3.1.0、SpecVersion.V31）；12 个操作与架构设计「资源」表中会话、事件、线程、待处理动作四行一致；SessionEvent 的判别映射 26 种、StreamOnlyEvent 3 种、UserEventInput 5 种与「事件」清单一致，每个分支平铺并以 const 固定 type；每个响应带 X-Request-Id，错误响应为 application/problem+json 引用 Problem，POST 带 Idempotency-Key，GET 要 sessions:read、其余要 sessions:write，属性名 snake_case 且有说明。openapi-generator-cli 7.26.0 validate 无错误。对照清单见 ADR-0029 附录（端点 × 操作 × 作用域，事件类型 × schema）。"
     },
     {
       "id": "T07-A02",
       "task": "T07",
       "description": "端到端：用 HTTP 创建会话、发送 `user.message`、订阅 SSE，收到 `session.status_running` 到 `session.status_idle` 的完整事件序列（`ScriptedModel`）。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dit.test=SessionApiEndToEndIT：通过——HTTP 创建会话（agt_dev_assistant → agv_dev_assistant_1，环境修订 1），订阅 /v1/sessions/{id}/stream，POST user.message 返回 202（seq 1），ScriptedModel 执行，SSE 依次收到 user.message、session.status_running、agent.message（\"住宿标准为每晚 500 元。\"）、session.status_idle（stop_reason=end_turn），seq 从 1 连续；每个请求、响应与 SSE 帧都按规范校验。"
     },
     {
       "id": "T07-A03",
       "task": "T07",
       "description": "SSE 不丢不重：在 Worker 于 XADD 前被取消、客户端断线重连、Redis 短暂中断三种情况下，客户端最终收到的 `seq` 连续、无重复。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "EventStreamIT 与 EventStreamRedisOutageIT 通过：(1) eventsCommittedWithoutXaddAreStillDeliveredContinuously——事件 2、3、5 只写库不 XADD（模拟 Worker 在 XADD 前被取消），客户端收到 seq 1..5 连续无重复，跳号回补与对账补发计入 meridian.sse.gap.refills；(2) clientDisconnectingDuringABurstResumesWithLastEventIdWithoutLossOrDuplicates——300 个事件的高峰（每 7 个有 1 个不 XADD），收到 60 个后断开，带 Last-Event-ID 重连，第二个连接从 last+1 开始，合并后恰为 1..300、无重复；(3) eventsWrittenWhileRedisIsDownStillArriveContinuouslyWithoutDuplicates——独占 Redis 容器 docker pause 期间写 5 个事件（meridian.event.publish.failures 增加），由数据库对账补发，恢复后再写 5 个，最终 seq 1..15 连续、无重复、连接无错误。"
     },
     {
       "id": "T07-A04",
       "task": "T07",
       "description": "`Last-Event-ID` 重连只补发之后的事件；`event_deltas=true` 时才有增量事件；`ping` 按时到达。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "EventStreamIT 通过：lastEventIdReplaysOnlyLaterEventsAndDeltasArriveOnlyWhenRequested——已有 10 个事件，Last-Event-ID: 6 只补发 7..10；event_deltas=true 的连接收到 event_delta（没有 id:），不带参数的连接没有任何 event_*；pingsArriveOnSchedule——ping 间隔配置为 1 秒，第 3 个 ping 在约 3 秒到达（断言 2.5–6 秒），ping 无 id、信封带 session_id。EventStreamLimitsIT：单连接上限配置为 2 秒时服务端按时关闭，带 Last-Event-ID 重连只收到之后的事件；SsePropertiesTest 核对默认值 5 秒对账、15 秒 ping、60 分钟上限。"
     },
     {
       "id": "T07-A05",
       "task": "T07",
       "description": "幂等：同键同体返回首次结果，同键异体返回 409。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "SessionApiIT.sameIdempotencyKeyReplaysTheFirstResultAndADifferentBodyConflicts 通过：同键同体（空白与字段顺序不同）创建会话返回同一会话、带 Idempotent-Replayed: true，库中只有一个会话；同键异体返回 409 problem+json，code=idempotency.key_reused；发送事件同样重放首次结果，只持久化一次；另一个 API Key 用同名键互不影响。"
     },
     {
       "id": "T07-A06",
       "task": "T07",
       "description": "跨项目隔离：项目 A 的 Key 读不到、写不到项目 B 的会话，即使 `end_user_id` 相同。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "SessionApiIT.anotherProjectCannotReadOrWriteTheSessionEvenWithTheSameEndUser 通过：项目 B 的 Key 对项目 A 的会话（两边 end_user_id 相同）执行 GET、PATCH、发送事件、列出事件、列出线程、列出待处理动作、归档、删除、订阅事件流，全部返回 404 session.not_found；按 end_user_id 列表只看到本项目的会话；项目 A 的会话未被写入任何事件、状态仍为 idle。"
     },
     {
       "id": "T07-A07",
       "task": "T07",
       "description": "错误响应为 problem+json，带 `code` 与 `request_id`；非法的事件与状态组合返回明确的错误码。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "SessionApiIT 通过：errorsAreProblemJsonWithCodeAndRequestId——401 auth.unauthenticated、401 auth.invalid_api_key、403 auth.insufficient_scope、404 session.not_found、400 request.validation_failed（errors[0].field=agent；limit=0 时 field=limit）、400 request.invalid（未声明字段）、400 request.invalid_cursor，均为 application/problem+json，type=urn:meridian:error:<code>，request_id 与 X-Request-Id 相同（传入 req-t07-a07 时沿用）；合法 traceparent 原样返回。illegalEventAndStateCombinationsAreRejectedWithSpecificCodes——无动作 409 event.action_not_found、类型不符 409 event.action_type_mismatch、已回应 409 event.action_not_pending、同批重复回应与图片块 url/file_id 都缺 400；archiveAndDeleteFollowTheStateMachine——执行中归档 409 session.busy、终止后写入 409 session.terminated。"
     },
     {
       "id": "T07-A08",
       "task": "T07",
       "description": "`DevApiKeyResolver` 在非开发 profile 下导致启动失败。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-security -am test：ApiKeyAutoConfigurationTest.enablingDevKeysOutsideDevAndTestFailsTheStartup 通过——meridian.security.dev-api-keys.enabled=true 且 profile 为 prod（以及未指定 profile）时容器启动失败，根因 IllegalStateException「只能在 dev 或 test profile 中启用」；dev、test profile 下 DevApiKeyResolver 生效；没有任何来源时一律拒绝（auth.invalid_api_key）。"
     },
     {
       "id": "T07-A09",
       "task": "T07",
       "description": "契约测试覆盖全部端点；`openapi-diff` 已接入构建。验证：测试报告与构建配置。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "SessionApiContractIT.everyEndpointConformsToTheSpec 通过：12 个操作（含两个事件流与错误响应）的请求与响应都经 openapi-request-validator-core 3.0.0 按 meridian-v1.yaml 严格校验，事件流每一帧的 data 按 SessionEvent/StreamOnlyEvent 校验，最后断言 ContractValidator.validatedOperations() 覆盖规范中的全部 12 个操作；其余 API 集成测试的每次交互同样校验，EventEnvelopeContractTest 校验 29 种事件信封。openapi-diff：meridian-api 的 OpenApiCompatibilityTest（openapi-diff-core 2.1.7 + 3.1 类型变化补充检查）在 test 阶段运行，基线取上一个已提交版本；当前为首个版本（规范只有一次提交），按设计跳过并说明；临时把 Session.last_seq 改为 string 时测试失败并指出「Session.last_seq：[integer] → [string]」。CI 检出改为 fetch-depth: 0。构建配置：根 POM pluginManagement、meridian-api/pom.xml、meridian-runtime/pom.xml。"
     },
     {
       "id": "T07-A10",
       "task": "T07",
       "description": "线程流与 `?threads=main` 订阅在其他线程持续产生事件时，不误判缺失、不重复补发。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "EventStreamIT.threadStreamsAndMainFilterDoNotTreatOtherThreadsSeqsAsMissing 通过：子线程连续产生 80 个事件、主线程产生 8 个，同时订阅子线程流、主线程流、?threads=main 与全量会话流；全量流 seq 1..88 连续，子线程流 80 个、主线程流 8 个，各自无重复且有序，?threads=main 与主线程流相同；等过多次对账后 meridian.sse.gap.refills 不变（没有误判缺失、没有重复补发）。"
     },
     {
       "id": "T07-A11",
       "task": "T07",
       "description": "生成链验证完成：3.1 规范的 DTO、reactive 接口、servlet 接口都能编译，openapi-diff 可用；写作约束已记录。验证：验证工程的构建输出与约束文档。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "生成链验证工程（会话临时目录，Spring Boot 4.1.2 BOM）：openapi-generator 7.26.0 以 useSpringBoot4、useJackson3 从含判别器 oneOf、type 数组可空、additionalProperties、const、PATCH、text/event-stream 的最小 3.1 规范生成 DTO、reactive 接口、servlet 接口，`Compiling 25 source files ... BUILD SUCCESS`；Jackson 3 往返正确；openapi-diff 2.1.7 能比较 3.1 规范（删端点、新增必填请求字段等报告不兼容），检测不到 3.1 类型变化。写作约束记在 meridian-api/CLAUDE.md「写作约束」与 ADR-0029（补充型）；正式规范按约束生成后 meridian-api 编译 138 个 DTO 类、runtime 编译 4 个 reactive 接口。"
     },
     {
       "id": "T07-A12",
       "task": "T07",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw clean 后 scripts/dev/verify.sh：BUILD SUCCESS，exit=0（2026-11-07 12:39，01:48 min）；spotless:check、checkstyle、编译、各模块单元与集成测试全部通过（runtime 单元 122、集成 117；meridian-api 11，其中兼容性检查 1 项按设计跳过；security 30；persistence 单元 16、集成 30；engine-agentscope-test 87 等）、ArchitectureRulesTest 12、enforcer、JaCoCo All coverage checks have been met、check-pom-versions OK。"
     },
     {
       "id": "T08-A01",

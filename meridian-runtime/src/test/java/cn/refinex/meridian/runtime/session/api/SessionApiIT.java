@@ -234,6 +234,14 @@ class SessionApiIT extends ApiTestBase {
                         null,
                         Map.of("X-Request-Id", "req-t07-a07"));
         assertProblem(anonymous, 401, "auth.unauthenticated");
+        String traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        ApiResponse traced = api(ApiTestKeys.KEY_A)
+                .callInvalid(
+                        "GET /v1/sessions", HttpMethod.GET, "/v1/sessions", null, Map.of("traceparent", traceparent));
+        assertThat(traced.status()).isEqualTo(200);
+        assertThat(traced.headers().getFirst("traceparent"))
+                .as("合法的 traceparent 原样返回")
+                .isEqualTo(traceparent);
         assertThat(anonymous.text("request_id")).isEqualTo("req-t07-a07");
         assertThat(anonymous.headers().getFirst("X-Request-Id")).isEqualTo("req-t07-a07");
         assertThat(anonymous.headers().getContentType()).hasToString("application/problem+json");

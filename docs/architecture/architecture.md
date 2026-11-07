@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.5 |
+| 版本 | v1.6 |
 | 日期 | 2026-11-07 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -354,7 +354,7 @@ erDiagram
 
 | 表 | 关键列 | 说明 |
 |---|---|---|
-| `sessions` | `id`、`agent_version_id`、`environment_id`、`environment_revision`、`end_user_id`、`interaction`、`status`、`last_seq`、`sandbox_state jsonb`、`sandbox_pod_ip`、`sandbox_last_used_at`、`budget_limit` | `last_seq` 用于分配事件序号 |
+| `sessions` | `id`、`agent_version_id`、`environment_id`、`environment_revision`、`end_user_id`、`interaction`、`status`、`last_seq`、`sandbox_state jsonb`、`sandbox_pod_ip`、`sandbox_last_used_at`、`budget_limit`、`deleted_at` | `last_seq` 用于分配事件序号；`deleted_at` 不为空表示已删除、等待清理（ADR-0030） |
 | `threads` | `id`、`session_id`、`parent_thread_id`、`parent_tool_use_id`、`agent_name`、`status` | 主线程的 `parent_thread_id` 为空 |
 | `turns` | `id`、`thread_id`、`tenant_id`、`kind`、`status`、`priority`、`not_before`、`lease_owner`、`lease_epoch`、`lease_expires_at`、`claim_count`、`recovery_attempt`、`interrupt_requested_at`、`stop_reason` | 轮次队列与租约 |
 | `turn_inputs` | `turn_id`、`payload jsonb` | 每轮的完整输入，用于恢复时重放 |
@@ -1005,7 +1005,7 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 
 | 资源 | 端点 | 一期 |
 |---|---|---|
-| 会话 | `POST/GET /v1/sessions`、`GET/PATCH/DELETE /v1/sessions/{id}`、`POST /v1/sessions/{id}:archive` | 是 |
+| 会话 | `POST/GET /v1/sessions`、`GET/PATCH/DELETE /v1/sessions/{id}`、`POST /v1/sessions/{id}:archive`。删除返回 202，会话进入 `terminated` 并带 `deleted_at`，数据在 24 小时内清理；只有 `idle`、`requires_action` 的会话可以归档（ADR-0030） | 是 |
 | 事件 | `POST /v1/sessions/{id}/events`、`GET /v1/sessions/{id}/events`、`GET /v1/sessions/{id}/stream` | 是 |
 | 线程 | `GET /v1/sessions/{id}/threads`、`GET /v1/sessions/{id}/threads/{tid}/stream` | 是 |
 | 待处理动作 | `GET /v1/sessions/{id}/pending-actions` | 是 |
@@ -1057,11 +1057,13 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 4. 输出过程中发现 `seq` 跳号，立即从 PostgreSQL 回补缺失的事件。
 5. 每 5 秒用 PostgreSQL 中的 `last_seq` 对账一次。这一步覆盖"事件已提交、Worker 在 XADD 前崩溃"的情况。
 
+第 1 步由每个节点的一个读取循环完成：它每 100 毫秒用一条不阻塞的 `XREAD` 读取本节点全部被订阅的会话，按会话分发给连接；连接先登记、再取 Stream 最新条目的 ID 作为起点，起点之后的条目一定会交付。去重与跳号按会话的全部序号判断：连接记录"seq 不超过它的事件都已处理"的位置，其他线程的条目同样推进这个位置（ADR-0030）。
+
 其他规则：
 
 - 每 15 秒发一次 `ping`。
 - 带 `?event_deltas=true` 时才推送 `event_start` 和 `event_delta`。
-- 单连接最长 60 分钟，到期由服务端关闭，客户端带 `Last-Event-ID` 重连。
+- 单连接最长 60 分钟，到期由服务端关闭，客户端带 `Last-Event-ID` 重连。推送 `session.status_terminated` 后服务端关闭连接。
 
 会话流与线程流的 `seq` 语义不同：
 
@@ -1374,6 +1376,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.3 | 2026-11-07 | T04：可重试错误以 `session.status_rescheduled`（`retryable_error`）结束；租约丢失时内核不输出事件；事件映射中工具调用在模型调用结束时输出、工具结果块的 `event_start`、自定义工具与平台中间件停止原因的处理；包结构增加 `turn/`；`OtelTracingMiddleware` 由 `PlatformTracingMiddleware` 装配（ADR-0026） |
 | v1.4 | 2026-11-07 | T05：认领 SQL 的时间取注入的 `Clock` 并排除本节点仍在执行的线程；租约条件的加锁方式与锁顺序、续租失败阈值的起算点；新租户默认并发上限 20；会话状态随状态事件在同一事务中推进（ADR-0027） |
 | v1.5 | 2026-11-07 | T06：`agent_states` 增加 `content_turn_id`，崩溃恢复按本轮的内容写入判定并写明恢复认领与恢复次数用尽；批次级 checkpoint 通过 P3 并默认开启，平台中间件增加 `BatchCheckpointMiddleware`；结束轮次的事务顺序与线程咨询锁；指标增加 `meridian_event_publish_failures_total`（ADR-0028） |
+| v1.6 | 2026-11-07 | T07：`sessions` 增加 `deleted_at`；会话的删除返回 202、归档只允许 `idle` 与 `requires_action`；SSE 第 1 步由每节点一个不阻塞的 `XREAD` 读取循环完成，去重与跳号按会话的全部序号判断，会话终止后关闭连接；OpenAPI 生成链与 3.1 写作约束（ADR-0029、ADR-0030） |
 
 ## 待决问题
 
