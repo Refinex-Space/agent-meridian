@@ -183,8 +183,8 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 4. 构建插件：编译、Spotless、Checkstyle、enforcer、Surefire、Failsafe、`live` profile、JaCoCo
 - [x] 5. `meridian-arch-tests` 与第一批 ArchUnit 规则；未落地规则登记
 - [x] 6. `scripts/dev/verify.sh`、`scripts/ci/check-pom-versions.sh`
-- [ ] 7. `.editorconfig`、`.gitattributes`、`.github/workflows/ci.yml`、`.claude/settings.json`
-- [ ] 8. 根 `CLAUDE.md` 命令一节
+- [x] 7. `.editorconfig`、`.gitattributes`、`.github/workflows/ci.yml`、`.claude/settings.json`
+- [x] 8. 根 `CLAUDE.md` 命令一节
 - [ ] 9. 验收 T01-A01 至 T01-A11 逐项验证
 - [ ] 10. 收尾：撤销临时违规、acceptance.json、PLAN.md、会话日志、提交
 
@@ -229,7 +229,11 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 
 任务执行中发现、但不属于本任务范围的问题，在这里登记：编号、发现于哪个任务、内容、建议由哪个任务处理。
 
-（暂无）
+| 编号 | 发现于 | 内容 | 建议处理 |
+|---|---|---|---|
+| D01 | T01 | 架构规则未落地：`JdbcClient` 与 `JdbcTemplate` 只能被 `TenantScopedRepository`、`SystemRepository` 的子类依赖；`SystemRepository` 的子类只在 `..infra.system..` 且带 `@CrossTenant`；`..api..` 不依赖 `SystemRepository` 的子类。基类尚不存在，说明写在 `meridian-arch-tests` 的 `ArchitectureRulesTest` 类注释中 | T02 |
+| D02 | T01 | 架构规则未落地：平台工具继承 `ToolBase`（经 `PlatformTool`）；运行时 Toolkit 中的非 `ToolBase` 工具必须在白名单内（启动自检） | T10a |
+| D03 | T01 | Spring Boot 4.1.2 BOM 把 fabric8 `kubernetes-httpclient-vertx`（Vert.x 4.5.28）下的 Netty 从 4.1.135 提升到 4.2.19；Vert.x 4.5 基于 Netty 4.1 构建，需要在真实调用中确认兼容，不兼容时按决策分级处理。详见 `docs/poc/P01-运行基线.md` | T03（运行基线）、T11（沙箱驱动） |
 
 ## 技术债
 

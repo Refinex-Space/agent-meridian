@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-当前处于**架构基线阶段，M0 之前**：仓库里只有文档与环境脚本，还没有构建脚本和代码。T01 落地后，把构建、测试、运行单个测试的命令补进本文件"命令"一节；在此之前不要假设任何构建命令存在。
+当前处于**M0 之前的工程基座阶段**：T01 已建立 Maven 多模块骨架与质量门禁，14 个 Java 模块只有 POM 与包根 `package-info.java`，业务代码从 T02 开始。
 
 ## 交付流程
 
@@ -19,13 +19,27 @@ AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通
 ## 唯一事实来源
 
 - `docs/architecture/architecture.md` 是架构基线。写任何代码前先读对应章节；其中写"必须""禁止"的条目是硬约束。
-- 与基线冲突、或要改动基线（组件选型、模块依赖、端口、API 破坏性变更、任何"必须""禁止"条目）时，先按 `docs/adr/README.md` 提 ADR，评审通过后改基线，再改代码。新 ADR 编号从 0020 开始。
+- 与基线冲突、或要改动基线（组件选型、模块依赖、端口、API 破坏性变更、任何"必须""禁止"条目）时，先按 `docs/adr/README.md` 提 ADR，评审通过后改基线，再改代码。编号跳过 README 中预留的号段。
 - `docs/research/tech-selection.md` 解释选型理由和被否决的方案；`docs/poc/README.md` 跟踪 M0 的 15 个验证项（P1–P15）。验证不通过的项必须走 ADR。
 - 文档用中文；代码、命令、类名保持原文。
 
 ## 命令
 
-构建与测试命令由 T01 写入。目前可用的环境脚本：
+Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模块> -am`。根 POM 从同一 reactor 导入 `meridian-bom`，所以 `-N`、进入子模块目录运行 Maven、或省略 `-am` 都会解析失败。
+
+- 全量检查（格式、编译、单元与集成测试、架构测试、enforcer、覆盖率、POM 版本）：`scripts/dev/verify.sh`
+- 单模块编译与单元测试：`./mvnw -pl <模块> -am test`
+- 单个测试类：`./mvnw -pl <模块> -am test -Dtest=<类名> -Dsurefire.failIfNoSpecifiedTests=false`
+- 只跑集成测试（`*IT`）：`./mvnw -pl <模块> -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`；单个用 `-Dit.test=<类名>`
+- 架构测试：`./mvnw -pl meridian-arch-tests -am verify`
+- 真实模型测试（只跑带 `live` 标签的 `*LiveIT`）：`./mvnw -Plive -pl <模块> -am verify`
+- 格式化修复（Java 与 POM）：`./mvnw spotless:apply`
+- 依赖树：`./mvnw -pl meridian-engine-agentscope -am dependency:tree`
+- 下载 AgentScope 2.0.4 源码包：`./mvnw -pl meridian-engine-agentscope -am compile dependency:sources -DincludeGroupIds=io.agentscope`
+
+`test`、`verify` 不清理 `target/`：删除或改名测试类后，旧的 class 仍会被执行，先跑 `./mvnw clean`。
+
+环境脚本：
 
 - `scripts/dev/kind-gvisor.sh [集群名]`：创建带 Calico（执行 NetworkPolicy）与 gVisor 运行时的本地 kind 集群。
 - `scripts/dev/kind-verify.sh [集群名]`：验证 gVisor 生效、NetworkPolicy 被执行，输出 PASS。
@@ -33,7 +47,7 @@ AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通
 
 ## 本机环境
 
-- JDK 25 在 `~/develop/jdk/temurin25/Contents/Home`，已通过 `.claude/settings.local.json` 设为会话的 `JAVA_HOME`。
+- JDK 25 在 `~/develop/jdk/temurin25/Contents/Home`，已通过 `.claude/settings.local.json` 设为会话的 `JAVA_HOME`。`PATH` 上的 `java` 可能是别的版本，`./mvnw` 只认 `JAVA_HOME`，以 `./mvnw -v` 为准。
 - 真实模型测试用环境变量 `DASHSCOPE_API_KEY`；已实测的端点与模型见 `docs/engineering/testing.md`。
 - 慢速下载（GitHub 发布物等）用 `MERIDIAN_DOWNLOAD_PROXY`；Maven、npm、PyPI 可直连。
 - 工具沙箱注入的代理变量只在宿主回环地址可用：传进容器或 kind 节点的命令必须显式设置代理。**禁止**打印代理变量、`~/.npmrc`、`~/.m2/settings*.xml` 等可能含凭据的内容。
@@ -60,7 +74,8 @@ AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通
 - 每个业务上下文内部分 `api` / `app` / `domain` / `infra` 四层，`domain` 不依赖 Spring 和 `infra`。
 - 仓储继承 `TenantScopedRepository`；豁免只限架构基线"租户隔离"一节列出的端口实现类。
 - 禁止依赖：Spring AI、LangChain4j、AgentScope 的 Spring Boot starter、RAG 扩展、Service 模块。
-- Java 包根与 Maven groupId：`cn.refinex.meridian`。依赖版本只在 `meridian-bom` 声明。
+- Java 包根与 Maven groupId：`cn.refinex.meridian`。依赖版本只在 `meridian-bom` 声明。不直观的模块包根：`engine-spi` → `engine.spi`，`engine-agentscope-test` → `engine.agentscope.testkit`，`model-client` → `modelclient`，`control-plane` → `controlplane`，`test-support` → `testsupport`；不在已登记包根下的类会被 ArchUnit 拒绝。
+- 依赖规则由构建强制：maven-enforcer 默认拒绝平台模块与 AgentScope 构件，每个模块在自己 POM 的 `enforce-rules` 中按「模块依赖规则」放行（ADR-0022）；包层面由 `meridian-arch-tests` 的 ArchUnit 规则检查，模块表在 `MeridianModule`。
 
 ## 集成 AgentScope 时最容易写错的地方
 
@@ -77,5 +92,7 @@ AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通
 - `AgentEventType`（31 个）和 `GenerateReason` 的映射必须穷举，由单元测试保证。
 
 ## 测试
+
+测试类名决定由谁运行：`*Test` 由 Surefire 跑，`*IT` 由 Failsafe 在 `verify` 阶段跑，`*LiveIT` 必须带 JUnit 标签 `live`，只在 `-Plive` 时运行；不符合命名的测试不会被执行。
 
 所有智能体行为必须能用 `ScriptedModel`（在 `meridian-engine-agentscope-test`）这个脚本化假模型跑通，测试不依赖真实模型。集成测试使用 Testcontainers（PostgreSQL、Redis、MinIO）；runtime 测试中开启 BlockHound。

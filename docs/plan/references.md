@@ -51,7 +51,7 @@
 
 本地仓库的工作区是主干，与 2.0.4 有明显差异（例如 `AgentSession`、`SessionLogStore`、`ToolSearchTool` 在 2.0.4 中都不存在）。读错版本会写出无法编译或行为不符的代码。按优先级：
 
-1. **首选 sources jar**：T01 之后，执行 `./mvnw dependency:sources -pl meridian-engine-agentscope`，在 `~/.m2/repository/io/agentscope/` 下找到 `*-2.0.4-sources.jar`，用 `unzip -p <jar> <类路径>.java` 读取。这就是我们实际依赖的代码。
+1. **首选 sources jar**：T01 之后，执行 `./mvnw -pl meridian-engine-agentscope -am compile dependency:sources -DincludeGroupIds=io.agentscope`，在 `~/.m2/repository/io/agentscope/` 下找到 `*-2.0.4-sources.jar`，用 `unzip -p <jar> <类路径>.java` 读取。这就是我们实际依赖的代码。
 2. **其次 git tag**：`git -C /Users/refinex/develop/project/reference/agentscope-java show v2.0.4:<路径>`，搜索用 `git -C ... grep <模式> v2.0.4 -- <目录>`。
 3. **不要**直接读工作区文件，除非已经确认该文件与 2.0.4 相同。
 
