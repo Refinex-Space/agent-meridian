@@ -179,7 +179,7 @@ T07 会话 API 与 SSE（开工 2026-11-07，基线 `verify.sh` 通过）：
 
 - [x] 0. 生成链验证：最小 3.1 规范（判别器 `oneOf`、可空、`additionalProperties`）生成 Jackson 3 DTO、reactive 与 servlet 服务端接口并编译；openapi-diff 比较 3.1；写作约束与补充型 ADR（A11）
 - [x] 1. 规范 `meridian-v1.yaml`：会话、事件、线程、待处理动作、SSE 流，全部事件类型，problem+json；OpenAPI 3.1 校验与对照清单（A01）
-- [ ] 2. 代码生成接入构建：`meridian-api` 只生成 DTO，runtime 生成 reactive 接口
+- [x] 2. 代码生成接入构建：`meridian-api` 只生成 DTO，runtime 生成 reactive 接口
 - [ ] 3. 开发期认证：`ApiKeyAuthenticator`、`ApiKeyResolver`、`DevApiKeyResolver`（非 dev/test profile 启动失败）、作用域检查（A08）
 - [ ] 4. 会话接口：创建（`AgentConfigProvider` 校验并固化版本与环境修订）、查询、列表、更新、删除、归档；幂等、游标分页、problem+json、`X-Request-Id`、`traceparent`（A05、A06、A07）
 - [ ] 5. 事件接口：发送（类型与状态组合校验、线程咨询锁、入队或写收件箱、写事件，D10、D12）、列出事件；列出线程、待处理动作

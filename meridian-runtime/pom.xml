@@ -48,6 +48,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- 生成接口上的 @Valid 与约束注解需要 Bean Validation 实现才生效（ADR-0029） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>cn.refinex.meridian</groupId>
@@ -82,6 +87,36 @@
 
     <build>
         <plugins>
+            <!--
+              从 meridian-api 的规范生成 reactive 服务端接口（cn.refinex.meridian.runtime.openapi），模型引用 meridian-api 的 DTO；
+              SSE 帧映射为 ServerSentEvent，见 ADR-0029。
+            -->
+            <plugin>
+                <groupId>org.openapitools</groupId>
+                <artifactId>openapi-generator-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>generate-server</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/../meridian-api/src/main/resources/openapi/meridian-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <apiPackage>cn.refinex.meridian.runtime.openapi</apiPackage>
+                            <generateApis>true</generateApis>
+                            <generateModels>false</generateModels>
+                            <schemaMappings>SseFrame=org.springframework.http.codec.ServerSentEvent&lt;String&gt;</schemaMappings>
+                            <configOptions>
+                                <reactive>true</reactive>
+                                <interfaceOnly>true</interfaceOnly>
+                                <skipDefaultInterface>true</skipDefaultInterface>
+                                <useTags>true</useTags>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!--
               BlockHound 在运行时重定义 JDK 类：JDK 13 起需要 AllowRedefinitionToAddDeleteMethods；
               它通过 ByteBuddy 动态挂载代理，JDK 21 起需要 EnableDynamicAgentLoading 才不告警。
