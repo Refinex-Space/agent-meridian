@@ -28,6 +28,7 @@ public final class PeriodicJob implements SmartLifecycle {
     private final String name;
     private final Duration interval;
     private final Runnable task;
+    private final int phase;
     private ScheduledExecutorService executor;
 
     /**
@@ -38,9 +39,23 @@ public final class PeriodicJob implements SmartLifecycle {
      * @param task 任务
      */
     public PeriodicJob(String name, Duration interval, Runnable task) {
+        this(name, interval, task, DEFAULT_PHASE);
+    }
+
+    /**
+     * 创建指定生命周期阶段的后台任务。阶段小的先启动、后停止：别的组件停止时仍依赖本任务运行（例如节点下线等待执行结束时
+     * 仍要续租），就给本任务一个更小的阶段。
+     *
+     * @param name 任务名，用于线程名与日志
+     * @param interval 两次执行之间的间隔
+     * @param task 任务
+     * @param phase 生命周期阶段，见 {@link SmartLifecycle#getPhase()}
+     */
+    public PeriodicJob(String name, Duration interval, Runnable task, int phase) {
         this.name = name;
         this.interval = interval;
         this.task = task;
+        this.phase = phase;
     }
 
     @Override
@@ -70,6 +85,11 @@ public final class PeriodicJob implements SmartLifecycle {
             executor.shutdownNow();
         }
         executor = null;
+    }
+
+    @Override
+    public int getPhase() {
+        return phase;
     }
 
     @Override

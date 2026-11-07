@@ -34,6 +34,10 @@ public final class RedisFixtures {
         return reactiveMessaging;
     }
 
+    public static synchronized StringRedisTemplate template() {
+        return new StringRedisTemplate(factory());
+    }
+
     private static LettuceConnectionFactory factory() {
         if (factory == null) {
             factory = new LettuceConnectionFactory(new RedisStandaloneConfiguration(

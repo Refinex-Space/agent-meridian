@@ -7,11 +7,13 @@ import java.util.Collection;
 import java.util.Map;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.ReactiveSubscription;
+import org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
+import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -44,6 +46,24 @@ public final class ReactiveRedisMessaging {
      */
     public Mono<String> publish(String stream, Map<String, String> fields) {
         return template.opsForStream().add(stream, fields).map(RecordId::getValue);
+    }
+
+    /**
+     * 向有长度上限与过期时间的 Stream 追加一条消息：XADD 时按 {@code MAXLEN ~ maxLen} 近似裁剪，再把键的过期时间
+     * 重置为 {@code ttl}。用于只做实时扇出、可以从数据库补齐的 Stream（例如 runtime 的 {@code ev:{session_id}}），
+     * 避免不活跃的键长期占用内存。
+     *
+     * @param stream Stream 的键
+     * @param fields 消息字段
+     * @param maxLen 保留的条目数上限（近似值，Redis 按宏节点整块裁剪，实际可能略多）
+     * @param ttl 最后一次写入后键的存活时间
+     * @return 条目 ID
+     */
+    public Mono<String> publish(String stream, Map<String, String> fields, long maxLen, Duration ttl) {
+        XAddOptions options = XAddOptions.maxlen(maxLen).approximateTrimming(true);
+        return template.opsForStream()
+                .add(StreamRecords.newRecord().in(stream).ofMap(fields), options)
+                .flatMap(id -> template.expire(stream, ttl).thenReturn(id.getValue()));
     }
 
     /**

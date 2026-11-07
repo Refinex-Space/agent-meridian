@@ -26,6 +26,15 @@ import org.postgresql.util.PGobject;
  */
 public final class JdbcValues {
 
+    /** JSON 中 NUL 字符的转义序列，{@code jsonb} 不接受。 */
+    private static final String NUL_ESCAPE = "\\u0000";
+
+    /** 替换 NUL 用的 U+FFFD 的转义序列。 */
+    private static final String REPLACEMENT_ESCAPE = "\\ufffd";
+
+    /** U+FFFD（REPLACEMENT CHARACTER）。 */
+    private static final char REPLACEMENT_CHARACTER = '\uFFFD';
+
     private JdbcValues() {}
 
     /**
@@ -62,7 +71,8 @@ public final class JdbcValues {
     }
 
     /**
-     * 把 JSON 文本包装为 {@code jsonb} 参数。
+     * 把 JSON 文本包装为 {@code jsonb} 参数。PostgreSQL 的 {@code jsonb} 拒绝字符串中的 NUL 字符（转义序列
+     * <code>&#92;u0000</code>），模型输出或工具结果含 NUL 时整个写入会失败，所以先替换为 U+FFFD（登记事项 D11，ADR-0028）。
      *
      * @param json JSON 文本，可为空
      * @return {@code jsonb} 参数
@@ -71,12 +81,47 @@ public final class JdbcValues {
         PGobject object = new PGobject();
         object.setType("jsonb");
         try {
-            object.setValue(json);
+            object.setValue(withoutNul(json));
         } catch (SQLException e) {
             // PGobject.setValue 只是赋值，声明的 SQLException 不会发生
             throw new IllegalStateException(e);
         }
         return object;
+    }
+
+    /**
+     * 把 JSON 文本中的 NUL 字符替换为 U+FFFD：转义序列 <code>&#92;u0000</code> 换成 <code>&#92;ufffd</code>，未转义的 NUL
+     * 换成该字符本身。只识别真正的转义序列，<code>&#92;&#92;u0000</code>（反斜杠本身被转义，后接普通文本）保持不变。
+     *
+     * @param json JSON 文本，可为空
+     * @return 替换后的文本；没有 NUL 时返回原对象
+     */
+    static String withoutNul(String json) {
+        if (json == null || (json.indexOf(NUL_ESCAPE) < 0 && json.indexOf('\0') < 0)) {
+            return json;
+        }
+        StringBuilder out = new StringBuilder(json.length());
+        int i = 0;
+        while (i < json.length()) {
+            char c = json.charAt(i);
+            if (c == '\0') {
+                out.append(REPLACEMENT_CHARACTER);
+                i++;
+            } else if (c == '\\' && i + 1 < json.length()) {
+                if (json.startsWith(NUL_ESCAPE, i)) {
+                    out.append(REPLACEMENT_ESCAPE);
+                    i += NUL_ESCAPE.length();
+                } else {
+                    // 原样保留整个转义序列的前两个字符，转义的反斜杠因此不会被误认为下一个转义的开头
+                    out.append(c).append(json.charAt(i + 1));
+                    i += 2;
+                }
+            } else {
+                out.append(c);
+                i++;
+            }
+        }
+        return out.toString();
     }
 
     /**

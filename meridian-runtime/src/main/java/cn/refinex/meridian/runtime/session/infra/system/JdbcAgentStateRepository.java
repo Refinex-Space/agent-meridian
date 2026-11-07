@@ -24,7 +24,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 以 {@code FOR SHARE} 读取，使回收器与置回队列的更新必须等本事务提交；条件不满足时抛 {@link LeaseLostException}，什么都不写。
  * 租户与项目取自该轮次，所以写入不依赖调用线程上的 {@code PlatformContext}（AgentScope 在自己的线程上调用状态存储）。
  *
- * <p>{@code content_epoch}：内容写入时更新为当前 epoch；权限上下文的安装写入（{@code StateFence.contentWrite} 为 false）保留原值。
+ * <p>{@code content_epoch} 与 {@code content_turn_id}：内容写入时更新为当前 epoch 与持有租约的轮次；权限上下文的安装写入
+ * （{@code StateFence.contentWrite} 为 false）保留原值。崩溃恢复按轮次查询（{@link #contentEpochOfTurn}，ADR-0028）。
  *
  * <p>方法是同步的、会阻塞：AgentScope 的状态存储接口是同步接口，它在 {@code boundedElastic} 或停机监控线程上调用，
  * 平台自己的调用经 {@code Blocking}。线程安全：无状态。
@@ -72,12 +73,14 @@ public class JdbcAgentStateRepository extends SystemRepository implements AgentS
                 fence,
                 scope -> jdbc().sql("""
                         INSERT INTO rt.agent_states AS s (user_id, thread_id, state_key, tenant_id, project_id, state,
-                                                          version, content_epoch, created_at, updated_at)
+                                                          version, content_epoch, content_turn_id, created_at,
+                                                          updated_at)
                         VALUES (:user_id, :thread_id, :state_key, :tenant_id, :project_id, :state,
-                                1, :content_epoch, :now, :now)
+                                1, :content_epoch, :content_turn_id, :now, :now)
                         ON CONFLICT (user_id, thread_id, state_key) DO UPDATE
                            SET state = EXCLUDED.state, version = s.version + 1,
                                content_epoch = COALESCE(EXCLUDED.content_epoch, s.content_epoch),
+                               content_turn_id = COALESCE(EXCLUDED.content_turn_id, s.content_turn_id),
                                updated_at = EXCLUDED.updated_at
                         RETURNING version
                         """)
@@ -88,6 +91,7 @@ public class JdbcAgentStateRepository extends SystemRepository implements AgentS
                         .param("project_id", scope.projectId())
                         .param("state", JdbcValues.jsonb(json))
                         .param("content_epoch", contentEpoch(fence))
+                        .param("content_turn_id", contentTurnId(fence, scope))
                         .param("now", JdbcValues.timestamptz(scope.now()))
                         .query(Long.class)
                         .single());
@@ -146,6 +150,27 @@ public class JdbcAgentStateRepository extends SystemRepository implements AgentS
                 .list());
     }
 
+    /**
+     * 读取指定轮次在线程状态中最近一次内容写入的 epoch。崩溃恢复据此判断本轮是否写过内容、写在哪次执行（ADR-0028）：
+     * {@code lease_epoch} 每轮从 0 开始，只比较 {@code content_epoch} 会把上一轮的写入误认为本轮的。
+     *
+     * @param threadId 线程 ID
+     * @param turnId 轮次 ID
+     * @return 该轮内容写入中最大的 epoch；该轮没有内容写入时为空
+     */
+    public OptionalLong contentEpochOfTurn(String threadId, String turnId) {
+        Long epoch = jdbc().sql("""
+                        SELECT max(content_epoch) FROM rt.agent_states
+                         WHERE thread_id = :thread_id AND content_turn_id = :turn_id
+                        """)
+                .param("thread_id", threadId)
+                .param("turn_id", turnId)
+                .query(Long.class)
+                .optional()
+                .orElse(null);
+        return epoch == null ? OptionalLong.empty() : OptionalLong.of(epoch);
+    }
+
     @Override
     public OptionalLong contentEpoch(String userId, String threadId) {
         Long epoch = jdbc().sql("""
@@ -162,9 +187,9 @@ public class JdbcAgentStateRepository extends SystemRepository implements AgentS
     private Optional<Long> insertIfAbsent(StateKey key, String json, StateFence fence, LeaseScope scope) {
         return jdbc().sql("""
                         INSERT INTO rt.agent_states (user_id, thread_id, state_key, tenant_id, project_id, state,
-                                                     version, content_epoch, created_at, updated_at)
+                                                     version, content_epoch, content_turn_id, created_at, updated_at)
                         VALUES (:user_id, :thread_id, :state_key, :tenant_id, :project_id, :state,
-                                1, :content_epoch, :now, :now)
+                                1, :content_epoch, :content_turn_id, :now, :now)
                         ON CONFLICT (user_id, thread_id, state_key) DO NOTHING
                         RETURNING version
                         """)
@@ -175,6 +200,7 @@ public class JdbcAgentStateRepository extends SystemRepository implements AgentS
                 .param("project_id", scope.projectId())
                 .param("state", JdbcValues.jsonb(json))
                 .param("content_epoch", contentEpoch(fence))
+                .param("content_turn_id", contentTurnId(fence, scope))
                 .param("now", JdbcValues.timestamptz(scope.now()))
                 .query(Long.class)
                 .optional();
@@ -185,13 +211,15 @@ public class JdbcAgentStateRepository extends SystemRepository implements AgentS
         return jdbc().sql("""
                         UPDATE rt.agent_states
                            SET state = :state, version = version + 1,
-                               content_epoch = COALESCE(:content_epoch, content_epoch), updated_at = :now
+                               content_epoch = COALESCE(:content_epoch, content_epoch),
+                               content_turn_id = COALESCE(:content_turn_id, content_turn_id), updated_at = :now
                          WHERE user_id = :user_id AND thread_id = :thread_id AND state_key = :state_key
                            AND version = :expected_version
                         RETURNING version
                         """)
                 .param("state", JdbcValues.jsonb(json))
                 .param("content_epoch", contentEpoch(fence))
+                .param("content_turn_id", contentTurnId(fence, scope))
                 .param("now", JdbcValues.timestamptz(scope.now()))
                 .param("user_id", key.userId())
                 .param("thread_id", key.threadId())
@@ -209,7 +237,7 @@ public class JdbcAgentStateRepository extends SystemRepository implements AgentS
     private LeaseScope lockLease(StateFence fence) {
         Instant now = clock.instant();
         return jdbc().sql("""
-                        SELECT tenant_id, project_id FROM rt.turns
+                        SELECT id, tenant_id, project_id FROM rt.turns
                          WHERE thread_id = :lease_thread_id AND status = 'running'
                            AND lease_owner = :node_id AND lease_epoch = :epoch
                            FOR SHARE
@@ -217,7 +245,8 @@ public class JdbcAgentStateRepository extends SystemRepository implements AgentS
                 .param("lease_thread_id", fence.leaseThreadId())
                 .param("node_id", nodeId.value())
                 .param("epoch", fence.epoch())
-                .query((rs, row) -> new LeaseScope(rs.getString("tenant_id"), rs.getString("project_id"), now))
+                .query((rs, row) ->
+                        new LeaseScope(rs.getString("id"), rs.getString("tenant_id"), rs.getString("project_id"), now))
                 .optional()
                 .orElseThrow(() -> new LeaseLostException("线程 " + fence.leaseThreadId() + " 在本节点 " + nodeId
                         + " 的租约不是 epoch " + fence.epoch() + "，拒绝写入智能体状态"));
@@ -227,6 +256,10 @@ public class JdbcAgentStateRepository extends SystemRepository implements AgentS
         return fence.contentWrite() ? fence.epoch() : null;
     }
 
-    /** 持有租约的轮次所在的租户与项目，以及本次写入的时间。 */
-    private record LeaseScope(String tenantId, String projectId, Instant now) {}
+    private static String contentTurnId(StateFence fence, LeaseScope scope) {
+        return fence.contentWrite() ? scope.turnId() : null;
+    }
+
+    /** 持有租约的轮次、它所在的租户与项目，以及本次写入的时间。 */
+    private record LeaseScope(String turnId, String tenantId, String projectId, Instant now) {}
 }

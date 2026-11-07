@@ -11,12 +11,14 @@ import cn.refinex.meridian.common.id.Ids;
 import cn.refinex.meridian.common.time.MutableClock;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent;
+import cn.refinex.meridian.engine.spi.event.StopReason;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository.StateFence;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository.StateKey;
 import cn.refinex.meridian.runtime.dispatch.app.ClaimResult;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseHandle;
 import cn.refinex.meridian.runtime.dispatch.app.NodeLeaseRegistry;
 import cn.refinex.meridian.runtime.dispatch.domain.RequeueReason;
+import cn.refinex.meridian.runtime.dispatch.domain.TurnOutcome;
 import cn.refinex.meridian.runtime.session.domain.NewThread;
 import cn.refinex.meridian.runtime.session.infra.ThreadRepository;
 import cn.refinex.meridian.runtime.stream.domain.AppendResult;
@@ -194,8 +196,40 @@ class LeaseFencingIT {
         assertThat(storeA.getVersioned(user, thread, KEY, AgentState.class).version())
                 .isEqualTo(2);
 
+        assertThat(nodeA.states().contentEpochOfTurn(thread, second.turn().turnId()))
+                .as("安装写入不改变内容所属的轮次与 epoch")
+                .hasValue(1);
+
         storeA.save(user, thread, KEY, state("epoch 2 的内容"));
         assertThat(nodeA.states().contentEpoch(user, thread)).hasValue(2);
+        assertThat(nodeA.states().contentEpochOfTurn(thread, second.turn().turnId()))
+                .hasValue(2);
+    }
+
+    @Test
+    void contentWritesRecordTheirTurnBecauseEpochsRestartEveryTurn() {
+        String user = session.userId();
+        String thread = session.mainThreadId();
+        storeA.save(user, thread, KEY, state("第一轮 epoch 1 的内容"));
+        nodeA.transitions().finish(leaseA.turn(), TurnOutcome.COMPLETED, StopReason.END_TURN);
+        leaseA.release();
+        nodeA.enqueuer().enqueue(session.turn("第二轮"));
+        LeaseHandle next = ((ClaimResult.Claimed) nodeA.claimer().claim()).lease();
+        String nextTurn = next.turn().turnId();
+        assertThat(next.epoch()).as("新一轮的 epoch 从 1 重新开始").isEqualTo(1);
+
+        assertThat(nodeA.states().contentEpoch(user, thread))
+                .as("只看 content_epoch 会把上一轮的写入当成本轮 epoch 1 的写入")
+                .hasValue(1);
+        assertThat(nodeA.states().contentEpochOfTurn(thread, nextTurn)).isEmpty();
+        assertThat(nodeA.states().contentEpochOfTurn(thread, leaseA.turn().turnId()))
+                .hasValue(1);
+
+        storeA.save(user, thread, KEY, state("第二轮 epoch 1 的内容"));
+        assertThat(nodeA.states().contentEpochOfTurn(thread, nextTurn)).hasValue(1);
+        assertThat(nodeA.states().contentEpochOfTurn(thread, leaseA.turn().turnId()))
+                .as("同一个状态键被新一轮覆盖")
+                .isEmpty();
     }
 
     @Test

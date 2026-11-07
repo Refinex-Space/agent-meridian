@@ -10,6 +10,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
@@ -76,6 +77,21 @@ class RedisMessagingIT {
                 .verifyComplete();
         StepVerifier.create(reactive.claimIdle(stream, group, "c3", Duration.ZERO, 10))
                 .verifyComplete();
+    }
+
+    @Test
+    void boundedPublishTrimsTheStreamAndRefreshesItsExpiry() {
+        String stream = "it:bounded:" + Ids.newUlid();
+
+        Flux.range(0, 300)
+                .concatMap(i -> reactive.publish(stream, Map.of("seq", String.valueOf(i)), 10, Duration.ofMinutes(5)))
+                .blockLast(Duration.ofSeconds(30));
+
+        StringRedisTemplate template = RedisFixtures.template();
+        assertThat(template.opsForStream().size(stream))
+                .as("近似裁剪按宏节点整块删除，长度远小于写入数")
+                .isLessThan(300);
+        assertThat(template.getExpire(stream, TimeUnit.SECONDS)).isBetween(1L, 300L);
     }
 
     @Test
