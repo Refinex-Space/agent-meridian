@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-当前处于**M0 内核与运行时核心阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）；T03 定义了 `meridian-engine-spi` 的全部契约，实现了 `HarnessAgent` 装配与实例缓存、`ScriptedModel` 与内存端口夹具，P1 通过（ADR-0023、0024、0025）；T04 实现了 `AgentScopeEngine`（执行一轮、中断、下线）、事件映射、`FencedAgentStateStore` 与首批平台中间件（ADR-0026）。数据库实现的端口与轮次调度从 T05 开始。
+当前处于**M0 内核与运行时核心阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）；T03 定义了 `meridian-engine-spi` 的全部契约，实现了 `HarnessAgent` 装配与实例缓存、`ScriptedModel` 与内存端口夹具，P1 通过（ADR-0023、0024、0025）；T04 实现了 `AgentScopeEngine`（执行一轮、中断、下线）、事件映射、`FencedAgentStateStore` 与首批平台中间件（ADR-0026）；T05 建立了 runtime 应用骨架、`rt` 全部核心表、轮次调度与租约（认领、续租、回收、置回队列）、事件写入与 `LeaseRegistry`、`AgentStateRepository` 的数据库实现（ADR-0027）。轮次 Worker 与崩溃恢复从 T06 开始。
 
 ## 交付流程
 
@@ -43,6 +43,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 
 - `scripts/dev/up.sh`：启动本地 PostgreSQL（pgvector + zhparser）、Redis、MinIO 并等待健康、创建桶；首次启动构建 PostgreSQL 镜像。端口 15432、16379、19000/19001，连接信息与口令见 `deploy/compose/.env.example`（本地覆盖写 `.env`，不提交）。
 - `scripts/dev/down.sh [--volumes]`：停止；加 `--volumes` 才删除数据。
+- `scripts/dev/run-runtime.sh [Spring 参数]`：以 `dev` profile 在本机启动 runtime（先 `up.sh`），健康检查 `/actuator/health`。
 - `scripts/dev/kind-gvisor.sh [集群名]`：创建带 Calico（执行 NetworkPolicy）与 gVisor 运行时的本地 kind 集群。
 - `scripts/dev/kind-verify.sh [集群名]`：验证 gVisor 生效、NetworkPolicy 被执行，输出 PASS。
 - `kind delete cluster --name <集群名>`：删除集群，释放内存。

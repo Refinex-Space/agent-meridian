@@ -286,71 +286,71 @@
       "id": "T05-A01",
       "task": "T05",
       "description": "Flyway 迁移在空库上执行成功；表、索引、分区、注释与架构设计一致。验证：迁移测试，加一份 `\\d+` 输出摘要。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=RuntimeMigrationIT -Dfailsafe.failIfNoSpecifiedTests=false：Tests run: 10, Failures: 0（Flyway V0001 在新容器的空 rt 上 SUCCESS；13 张核心表与 16 个分区；session_events 为 HASH (session_id)、主键 (session_id, seq)；turns_thread_active_uidx 为 UNIQUE (thread_id) WHERE status = ANY ('queued','running','awaiting_action')；所有表、分区、列都有中文 COMMENT；外键都在 rt 内；meridian_app 只有 SELECT/INSERT/UPDATE/DELETE，无 TRUNCATE、无 CREATE）。\\d+ 摘要（failsafe 报告 TEST-...RuntimeMigrationIT.xml）：rt.turns 索引 turns_pkey、turns_queued_idx (priority, created_at) WHERE status='queued'、turns_lease_expiry_idx、turns_lease_owner_idx、turns_thread_active_uidx UNIQUE 部分索引，CHECK running 必有持有者与 epoch>0；rt.session_events Partition key: HASH (session_id)，Partitions p00–p15 FOR VALUES WITH (modulus 16, remainder 0..15)，session_events_pkey (session_id, seq)、session_events_id_key UNIQUE (session_id, id)；rt.agent_states 主键 (user_id, thread_id, state_key)，含 state jsonb、version、content_epoch、tenant_id、project_id。"
     },
     {
       "id": "T05-A02",
       "task": "T05",
       "description": "同一线程并发插入两条 `queued` 轮次时只保留一条，不产生无法认领的\"毒丸\"。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnEnqueueIT -Dfailsafe.failIfNoSpecifiedTests=false：Tests run: 8, Failures: 0。concurrentInsertsOnOneThreadKeepExactlyOneClaimableTurn 重复 5 次：8 个线程同时为同一线程入队，恰好 1 个 Enqueued、7 个 ThreadBusy，库中该线程 1 条轮次、1 条 turn_inputs、计数行 max_running=20，随后被认领且输入可解码；外层事务回滚时轮次与计数行一起回滚，提交后才发布唤醒。"
     },
     {
       "id": "T05-A03",
       "task": "T05",
       "description": "多个 Worker 并发认领，同一轮次只被一个 Worker 认领；租户名额满额时，该租户的轮次不被认领，其他租户不受影响；新租户不需要手工插入计数行就能被认领。验证：并发集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnClaimIT -Dfailsafe.failIfNoSpecifiedTests=false：Tests run: 9, Failures: 0。eachTurnIsClaimedByExactlyOneWorkerAcrossNodes 重复 3 次：4 个节点 12 个 Worker 并发认领 3 个租户共 30 个轮次，重复认领 0 次，每个轮次 lease_epoch=1、claim_count=1，各租户 running=10；fullTenantIsNotClaimedAndOtherTenantsAreUnaffected：满额租户（max 2）只被认领 2 个，其他租户 3 个全部认领，结束一个后才认领下一个；newTenantIsClaimableWithoutManualCounterRow：无计数行的新租户入队后直接认领，running=1；losingTheQuotaRaceRollsBackTheWholeClaim：第 2 步被抢满时返回 QuotaContended，轮次仍 queued、epoch 0、claim_count 0，预留条目取消。"
     },
     {
       "id": "T05-A04",
       "task": "T05",
       "description": "租约过期后，回收器在一个周期内把轮次置回 `queued`，`recovery_attempt` 加一，租户并发计数减一，产生 `session.status_rescheduled` 事件。验证：集成测试（可控时钟）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=LeaseLifecycleIT -Dfailsafe.failIfNoSpecifiedTests=false：Tests run: 9, Failures: 0。reaperRequeuesAnExpiredLeaseWithinOneCycle（MutableClock）：29 秒时回收 0 个，31 秒时一个周期回收 1 个，轮次 queued、recovery_attempt=1、lease_epoch 保留 1，租户 running 1→0，产生 session.status_rescheduled {\"reason\": \"lease_expired\"}，会话与线程状态为 rescheduled，再次回收为 0；concurrentReapersOnSeveralNodesReapEachTurnOnce：3 个节点并发回收 6 个轮次，合计 6 个、每会话 1 个事件、计数为 0；另含续租推迟到期、中断回调一次、续租发现租约被收回、续租失败超过 15 秒通知取消、置回队列三种原因、结束轮次。"
     },
     {
       "id": "T05-A05",
       "task": "T05",
       "description": "P2 存储层：失去租约的节点调用 `save`、`saveIfVersion`（含无条件写）、`delete`、事件写入，全部被拒绝且数据库无变化。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=LeaseFencingIT -Dfailsafe.failIfNoSpecifiedTests=false：Tests run: 6, Failures: 0。staleNodeWritesAreAllRejectedAndTheDatabaseIsUnchanged：node-a 失去租约（node-b 回收并以 epoch 2 认领，node-a 登记仍为 epoch 1）后，经生产的 FencedAgentStateStore 调用 save、saveIfVersion(1)、saveIfVersion(UNVERSIONED)、saveIfVersion(0)、save(List)、delete(key)、delete(thread) 全部 LeaseLostException，SessionEventWriter 返回 LeaseLost，EventSinkPort 以 LeaseLostException 结束；agent_states 各行（state、version、content_epoch、updated_at）、last_seq、事件数前后一致；node-b 写入成功且 content_epoch=2。报告 docs/poc/P02-租约与fencing.md。"
     },
     {
       "id": "T05-A06",
       "task": "T05",
       "description": "同节点重新认领规则：上一次执行结束前，本节点不会再认领同一线程。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=TurnClaimIT -Dfailsafe.failIfNoSpecifiedTests=false：sameNodeDoesNotReclaimAThreadUntilItsPreviousExecutionEnds 通过：租约过期被回收、轮次回到 queued 后，node-a 在旧执行 release 前认领返回 NoneAvailable，登记中仍为 epoch 1；release 后认领得到同一轮次 epoch 2、isRecovery=true。otherNodesMayClaimTheThreadWhileTheStaleExecutionIsStillRegistered：其他节点照常以 epoch 2 认领。单元测试 NodeLeaseRegistryTest（9 个）覆盖同一线程只有一个条目与释放后才能再预留。"
     },
     {
       "id": "T05-A07",
       "task": "T05",
       "description": "事件 `seq` 在同一会话内严格递增且连续，Worker 与 API 并发写入时也不重复、不跳号。验证：并发集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=SessionEventWriterIT -Dfailsafe.failIfNoSpecifiedTests=false：Tests run: 6, Failures: 0。concurrentWorkerAndApiWritesGetStrictlyIncreasingContiguousSeqs：4 个带租约的 Worker 写入线程各 40 条、4 个不带租约的 API 线程各 40 批（每批 2 条）并发写同一会话，共 480 条，seq 恰为 1..480，事件 ID 无重复，last_seq=480，每个写入方看到的 seq 递增；leaseLostWriteWritesNothingAndConsumesNoSeq：epoch 或节点不符的写入不占用 seq，下一条为 2。"
     },
     {
       "id": "T05-A08",
       "task": "T05",
       "description": "BlockHound 在 runtime 测试中开启，无违规。验证：测试报告。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "blockhound-junit-platform 在 runtime 的 Surefire 与 Failsafe 中自动安装（POM 已配 -XX:+AllowRedefinitionToAddDeleteMethods）。BlockHoundInstalledTest（未自行安装）中 parallel 线程上的 Thread.sleep 抛 BlockingOperationError；scripts/dev/verify.sh 中 runtime 64 个单元测试、69 个集成测试全部通过，报告中除该测试外没有 BlockingOperationError。SessionEventWriterIT.eventSinkWritesOffTheReactorThreadWithTheContextEpoch 与 SessionRepositoryIT.reactiveCallersGoThroughBlockingWithTheReactorContext 从 parallel 线程经 Blocking 写库无违规。放行规则只有 SecureRandom#nextBytes（security.web 请求 ID 过滤器在 Netty 线程上生成 ULID 时读取 /dev/urandom），见 support.RuntimeBlockHoundIntegration。"
     },
     {
       "id": "T05-A09",
       "task": "T05",
       "description": "`docs/poc/P02-租约与fencing.md` 已写（存储层部分）。验证：文件路径。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/poc/P02-租约与fencing.md（存储层部分；中断、出错、停机三条完整路径待 T06 定稿）"
     },
     {
       "id": "T05-A10",
       "task": "T05",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw clean 后 scripts/dev/verify.sh：Reactor 15 个模块全部 SUCCESS，BUILD SUCCESS（01:09 min），All coverage checks have been met（runtime domain 包单元测试行覆盖率 96.6%），check-pom-versions: OK，exit=0。"
     },
     {
       "id": "T06-A01",
