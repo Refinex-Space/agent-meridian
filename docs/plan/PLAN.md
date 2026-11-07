@@ -44,7 +44,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 | 阶段 | 内容 | 任务 | 阶段门 | 状态 |
 |---|---|---|---|---|
-| 0 工程基座 | 脚手架、质量门禁、通用基础库、本地基础设施 | T01–T02 | — | 进行中 |
+| 0 工程基座 | 脚手架、质量门禁、通用基础库、本地基础设施 | T01–T02 | — | 已完成 |
 | 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 未开始 |
 | 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 未开始 |
 | 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 未开始 |
@@ -60,7 +60,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | 编号 | 任务 | 阶段 | 依赖 | effort | 规模 | 验证项 | 状态 | 完成提交 |
 |---|---|---|---|---|---|---|---|---|
 | T01 | [工程脚手架与质量门禁](tasks/T01-scaffold-and-quality-gates.md) | 0 | 无 | high | 中 | P1（依赖解析部分） | 已完成 | b29c1af |
-| T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 进行中 | — |
+| T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 已完成 | 4812ea7 |
 | T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 未开始 | — |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 未开始 | — |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 未开始 | — |
@@ -175,18 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-### T02 通用基础库、持久化与本地基础设施
-
-开工基线：`scripts/dev/verify.sh` 通过（2026-11-07）。
-
-- [x] 1. `meridian-common`：id、error、page、json、time、context、concurrent
-- [x] 2. 本地基础设施：PostgreSQL 镜像（pgvector + zhparser）、compose、up.sh / down.sh、.env.example（T02-A08）
-- [x] 3. `meridian-test-support`：单例容器与属性注册、JDBC 迁移与清理辅助
-- [x] 4. `meridian-persistence`：jdbc、tenant、outbox、redis、objectstore、idempotency、flyway（T02-A04、A05、A06、A07）
-- [x] 5. `meridian-security` 的 `web` 包：请求 ID、problem+json（T02-A02）
-- [x] 6. 架构规则：JdbcClient 访问、SystemRepository 位置与注解、api 不依赖 SystemRepository（T02-A09）
-- [x] 7. ADR-0020（T02-A10）
-- [ ] 8. 收尾：模块 CLAUDE.md、根 CLAUDE.md 命令、文档同步、verify.sh（T02-A11）、acceptance.json、down.sh
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -234,6 +223,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D01 | T01 | 架构规则未落地：`JdbcClient` 与 `JdbcTemplate` 只能被 `TenantScopedRepository`、`SystemRepository` 的子类依赖；`SystemRepository` 的子类只在 `..infra.system..` 且带 `@CrossTenant`；`..api..` 不依赖 `SystemRepository` 的子类。基类尚不存在，说明写在 `meridian-arch-tests` 的 `ArchitectureRulesTest` 类注释中 | T02（已落地：`ArchitectureRulesTest` 规则 8 至 11） |
 | D02 | T01 | 架构规则未落地：平台工具继承 `ToolBase`（经 `PlatformTool`）；运行时 Toolkit 中的非 `ToolBase` 工具必须在白名单内（启动自检） | T10a |
 | D03 | T01 | Spring Boot 4.1.2 BOM 把 fabric8 `kubernetes-httpclient-vertx`（Vert.x 4.5.28）下的 Netty 从 4.1.135 提升到 4.2.19；Vert.x 4.5 基于 Netty 4.1 构建，需要在真实调用中确认兼容，不兼容时按决策分级处理。详见 `docs/poc/P01-运行基线.md` | T03（运行基线）、T11（沙箱驱动） |
+| D04 | T02 | outbox 发布到 Redis Stream（`usage`、`audit`）时不裁剪，条目在确认后仍留在 Stream 中；消费者确认后需按已确认的最小 ID 执行 `XTRIM MINID` 或定期裁剪，避免 Redis 内存增长 | T16 |
 
 ## 技术债
 
@@ -258,6 +248,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：11 项通过，0 项阻塞（T01-A01 初次为阻塞：`~/.zshrc` 中 `JAVA_HOME` 缺少 `/Contents/Home`；经用户授权修正后 `java -version` 与 `./mvnw -v` 均为 25）
 - 决策：ADR-0022 构建门禁与依赖规则的落地方式
 - 遗留：登记事项 D01（T02）、D02（T10a）、D03 Netty 4.2 与 Vert.x 4.5 兼容性（T03、T11）
+
+### 2026-11-07 T02 已完成（提交 4812ea7）
+- 交付：`meridian-common`（id、error、page、json、time、context、concurrent）；`meridian-persistence`（TenantScopedRepository/SystemRepository/@CrossTenant、outbox、Redis 阻塞与响应式封装、ObjectStore、Idempotency、迁移约定与自动配置）；`meridian-security` 的 `web` 包（请求 ID、problem+json，MVC 与 WebFlux 各一个适配器）；`meridian-test-support`（单例容器、TestDatabase、SpringContainerProperties）；PostgreSQL 17 镜像（pgvector 0.8.6 + SCWS 1.2.3 + zhparser 2.3）、compose、up.sh/down.sh；ArchUnit 规则 8–11；四个模块 CLAUDE.md
+- 验收：11 项通过，0 项阻塞
+- 决策：ADR-0020 持久化与上下文传递（含 type URN、游标校验和、幂等作用域、MinIO 改用 Chainguard 镜像、test-support 不依赖 persistence）
+- 遗留：登记事项 D04 Redis Stream 裁剪（T16）
 
 ## 计划变更记录
 

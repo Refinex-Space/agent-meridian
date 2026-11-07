@@ -83,78 +83,78 @@
       "id": "T02-A01",
       "task": "T02",
       "description": "`Ids` 生成的 ID 前缀正确、按时间有序、可解析，非法前缀被拒绝。验证：单元测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-common -am test：IdsTest 35 项通过（20 个前缀逐一生成并解析、前缀集合与「ID 规则」表一致、同毫秒内 10000 个 ID 有序且不重复、解析出的时间在生成前后之间、错误前缀与 9 种畸形 ID 抛 ValidationException(request.invalid_id)）。"
     },
     {
       "id": "T02-A02",
       "task": "T02",
       "description": "problem+json 映射在 MVC 与 WebFlux 中输出相同结构，包含 `type`、`title`、`status`、`detail`、`code`、`request_id`。验证：两个适配器的测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-security -am test：ProblemAdaptersTest 10 项通过，对 not-found、invalid、boom（500）、未知路由 4 个场景，以相同 X-Request-Id 请求 MockMvc 与 WebTestClient，两边响应体 Map 完全相等，均为 application/problem+json 且含 type、title、status、detail、instance、code、request_id；另验证 WebFlux MDC 带 request_id；ProblemMapperTest 5 项、SecurityWebAutoConfigurationTest 2 项通过。"
     },
     {
       "id": "T02-A03",
       "task": "T02",
       "description": "游标分页编码、解码互逆，篡改的游标被拒绝。验证：单元测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-common -am test：CursorTest 11 项、PageResultTest 4 项通过（多键含中文与空串编码解码互逆；逐字符篡改、伪造载荷、非 base64、过短、纯 base64 键均抛 ValidationException(request.invalid_cursor)）。"
     },
     {
       "id": "T02-A04",
       "task": "T02",
       "description": "`TenantScopedRepository`：项目级与租户级两种作用域下，租户 A 的上下文读不到、改不到租户 B 的数据；项目级下同租户的其他项目也不可见；缺少上下文时抛异常。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-persistence -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false：TenantScopedRepositoryIT 3 项通过（项目级：租户 A 读不到、改不到、删不掉租户 B 同项目 ID 的数据，同租户其他项目同样不可见；租户级：跨项目可见、跨租户不可见；无上下文与项目级缺项目均抛 IllegalStateException）；TenantScopedRepositoryTest 6 项覆盖缺占位符、覆盖作用域参数被拒。"
     },
     {
       "id": "T02-A05",
       "task": "T02",
       "description": "outbox：业务事务回滚时消息不发布；两个 relay 实例并发运行时每条消息只发布一次；消费方重复收到时幂等。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "同上命令：OutboxIT 6 项通过（业务事务回滚后 relayOnce=0、发布器为空、表为空；两个 relay 并发投递 300 条，各自都有投递、总数 300、ID 无重复、无未发布；同一 outbox 消息被发布两次并经 XCLAIM 重投，幂等消费表只有 1 行；发布失败的批次停止并在下一轮补发；事务外 append 被拒）；RedisMessagingIT 4 项通过。"
     },
     {
       "id": "T02-A06",
       "task": "T02",
       "description": "`Blocking` 与 BlockHound：Reactor 线程上直接调用阻塞 JDBC 被检测为违规，经 `Blocking` 调用通过。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-persistence -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=BlockingBlockHoundIT -Dfailsafe.failIfNoSpecifiedTests=false：3 项通过；Schedulers.parallel 上直接 JDBC 输出“BlockHound 检测到违规：Blocking call! java.net.Socket$SocketOutputStream#write”；经 Blocking.call 执行 JDBC 与 TenantScopedRepository（PlatformContext 来自 Reactor Context）均成功。"
     },
     {
       "id": "T02-A07",
       "task": "T02",
       "description": "对象存储客户端在 MinIO 上完成上传、下载、按前缀删除、预签名下载。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "同 A04 命令：ObjectStoreIT 4 项在 MinIO（chainguard/minio RELEASE.2026-10-23）上通过：字节与流上传、get/open 下载、缺失键返回空、删除幂等；deleteByPrefix 删除 5 个且保留 ses_10 前缀对象；预签名 URL 无凭据下载返回 200 与原内容，去掉签名返回 403；空白前缀被拒。"
     },
     {
       "id": "T02-A08",
       "task": "T02",
       "description": "`scripts/dev/up.sh` 启动后全部容器健康；`SELECT to_tsvector('chinese', '差旅住宿标准')` 返回非空的分词结果；`vector` 扩展可用；`meridian_app` 角色执行 DDL 被拒绝。验证：命令与输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/up.sh：postgres、redis、minio 均 Up (healthy)，minio-init 输出“Bucket created successfully `meridian/meridian`”并以 0 退出。psql：SELECT to_tsvector('chinese','差旅住宿标准') → '住宿':2 '差旅':1 '标准':3；pg_extension：vector 0.8.6、zhparser 2.3；'[1,2,3]'::vector <-> '[1,2,4]'::vector → 1；cp/rt/kb owner=meridian_migrator；meridian_app 执行 CREATE TABLE rt.ddl_probe → ERROR: permission denied for schema rt，CREATE TABLE public.ddl_probe → permission denied for schema public，DROP → must be owner，TRUNCATE → permission denied，INSERT/SELECT 成功。随后 scripts/dev/down.sh 停止。"
     },
     {
       "id": "T02-A09",
       "task": "T02",
       "description": "新增的架构规则生效：临时写一个不继承两类基类却注入 `JdbcClient` 的类、一个放在 `infra.system` 之外的 `SystemRepository` 子类、一个缺少 `@CrossTenant` 的 `SystemRepository` 子类，架构测试分别失败；撤销后通过。验证：关键输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "在 meridian-control-plane 临时加入三个探针类，分别运行 ./mvnw -pl meridian-arch-tests -am verify -DskipITs -Dtest=ArchitectureRulesTest：BadJdbcUser（注入 JdbcClient）→ 规则 8 was violated (5 times)；infra 包中的 MisplacedSystemRepository → 规则 9 “does not reside in a package '..infra.system..'”；infra.system 中缺注解的 UnannotatedSystemRepository → 规则 10 “is not annotated with @CrossTenant”；删除探针并 clean 后 Tests run: 11, Failures: 0。"
     },
     {
       "id": "T02-A10",
       "task": "T02",
       "description": "ADR-0020 已写入，内容完整。验证：文件路径。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/adr/0020-持久化与上下文传递.md（已采纳（补充）），记录 JdbcClient 选型与被否决的 JPA/MyBatis/jOOQ/Spring Data JDBC、三类仓储基类与 @CrossTenant 规则及 persistence 豁免、ScopedValue/Reactor Context 与 Blocking 桥接、meridian-security 承担 Web 入口能力，以及 type URN、游标、幂等作用域等约定；docs/adr/README.md 索引已更新。"
     },
     {
       "id": "T02-A11",
       "task": "T02",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw clean 后 scripts/dev/verify.sh：BUILD SUCCESS，check-pom-versions: OK，EXIT=0；单元测试 common 72、security 17、persistence 15，集成测试 test-support 3、persistence 29，ArchitectureRulesTest 11，全部 0 失败。"
     },
     {
       "id": "T03-A01",
