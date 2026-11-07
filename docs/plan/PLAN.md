@@ -182,7 +182,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 1. `meridian-common`：id、error、page、json、time、context、concurrent
 - [x] 2. 本地基础设施：PostgreSQL 镜像（pgvector + zhparser）、compose、up.sh / down.sh、.env.example（T02-A08）
 - [x] 3. `meridian-test-support`：单例容器与属性注册、JDBC 迁移与清理辅助
-- [ ] 4. `meridian-persistence`：jdbc、tenant、outbox、redis、objectstore、idempotency、flyway（T02-A04、A05、A06、A07）
+- [x] 4. `meridian-persistence`：jdbc、tenant、outbox、redis、objectstore、idempotency、flyway（T02-A04、A05、A06、A07）
 - [ ] 5. `meridian-security` 的 `web` 包：请求 ID、problem+json（T02-A02）
 - [ ] 6. 架构规则：JdbcClient 访问、SystemRepository 位置与注解、api 不依赖 SystemRepository（T02-A09）
 - [ ] 7. ADR-0020（T02-A10）

@@ -28,6 +28,8 @@
         <archunit.version>1.5.1</archunit.version>
         <blockhound.version>1.0.18.RELEASE</blockhound.version>
         <ulid-creator.version>5.2.4</ulid-creator.version>
+        <!-- S3 兼容对象存储客户端；AWS SDK 几乎每天发布，取发布满两周的版本（2.57.3，2026-10-22） -->
+        <aws-sdk.version>2.57.3</aws-sdk.version>
 
         <!-- 与根 POM 的 spotless-maven-plugin.version 保持一致 -->
         <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
@@ -126,6 +128,14 @@
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
                 <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

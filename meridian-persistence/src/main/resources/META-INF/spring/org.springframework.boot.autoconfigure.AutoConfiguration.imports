@@ -1,0 +1,3 @@
+cn.refinex.meridian.persistence.jdbc.PersistenceAutoConfiguration
+cn.refinex.meridian.persistence.redis.RedisMessagingAutoConfiguration
+cn.refinex.meridian.persistence.objectstore.ObjectStoreAutoConfiguration
