@@ -53,13 +53,22 @@
 
 ## 集成测试夹具
 
-`meridian-test-support` 提供以单例方式复用的容器：
+`meridian-test-support` 提供以单例方式复用的容器（`MeridianContainers`），同一个测试 JVM 内共用，JVM 退出后由 Testcontainers 回收：
 
-- PostgreSQL 17：使用 `deploy/docker/postgres/` 构建的镜像，内含 pgvector 与 zhparser。
-- Redis 7.4 或以上。
-- MinIO。
+- PostgreSQL 17：使用 `deploy/docker/postgres/` 构建的镜像，内含 pgvector 与 zhparser，初始化脚本与本地 compose 相同（`meridian_migrator`、`meridian_app` 两个角色，`cp`、`rt`、`kb` 三个 schema）。镜像标签带构建目录的内容摘要，目录不变时复用本机镜像；首次构建约 2 分钟，需要代理时设置 `MERIDIAN_DOCKER_BUILD_PROXY`。
+- Redis 7.4。
+- MinIO：官方镜像已停止发布，使用按摘要固定的 Chainguard 镜像（ADR-0020），桶 `meridian-test` 已创建。
+
+辅助：
+
+- `TestDatabase`：两个角色的数据源（被测代码用只有 DML 的 `meridian_app`）、`migrate(schema)`（按 `classpath:db/migration/<schema>` 约定）、`runScript(schema, 资源)`、`truncate(schema)`。
+- `SpringContainerProperties`：在 `@DynamicPropertySource` 中注册数据源、Flyway、Redis、对象存储属性。
+
+容器跨测试类共用，数据也会保留：测试用随机 ID 隔离数据，或开始前清空自己用到的 schema。
 
 运行集成测试需要 Docker Desktop 处于运行状态。测试开始前用 `docker info` 检查，未运行时直接报告阻塞，不要尝试绕过。
+
+BlockHound 需要 JVM 参数 `-XX:+AllowRedefinitionToAddDeleteMethods -XX:+EnableDynamicAgentLoading`（`meridian-persistence` 的 Failsafe 已配置）。安装后在 Reactor 线程上写日志也会被拦截，断言与日志放在测试线程上做。
 
 ## 前端测试
 

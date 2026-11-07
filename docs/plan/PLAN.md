@@ -185,7 +185,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 4. `meridian-persistence`：jdbc、tenant、outbox、redis、objectstore、idempotency、flyway（T02-A04、A05、A06、A07）
 - [x] 5. `meridian-security` 的 `web` 包：请求 ID、problem+json（T02-A02）
 - [x] 6. 架构规则：JdbcClient 访问、SystemRepository 位置与注解、api 不依赖 SystemRepository（T02-A09）
-- [ ] 7. ADR-0020（T02-A10）
+- [x] 7. ADR-0020（T02-A10）
 - [ ] 8. 收尾：模块 CLAUDE.md、根 CLAUDE.md 命令、文档同步、verify.sh（T02-A11）、acceptance.json、down.sh
 
 ## 控制台设计轨道

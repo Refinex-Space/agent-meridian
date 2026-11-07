@@ -17,9 +17,9 @@ cn.refinex.meridian.<模块>.<上下文>.<分层>
 
 | 模块 | 短名 | 说明 |
 |---|---|---|
-| `meridian-common` | `common` | 按能力分包：`id`、`error`、`page`、`json`、`time`、`context` |
+| `meridian-common` | `common` | 按能力分包：`id`、`error`、`page`、`json`、`time`、`context`、`concurrent` |
 | `meridian-security` | `security` | `apikey`、`oidc`、`servicejwt`、`web`（请求 ID、错误映射、PlatformContext 填充） |
-| `meridian-persistence` | `persistence` | `jdbc`、`tenant`、`outbox`、`redis`、`flyway` |
+| `meridian-persistence` | `persistence` | `jdbc`、`tenant`、`outbox`、`redis`、`objectstore`、`idempotency`、`flyway` |
 | `meridian-engine-spi` | `engine.spi` | `engine`、`port`、`event`、`spec` |
 | `meridian-engine-agentscope` | `engine.agentscope` | 按架构设计"包结构"一节：`assembly`、`model`、`state`、`fs`、`tools`、`middleware`、`events`、`sandbox` |
 | 三个应用 | `controlplane`、`runtime`、`knowledge` | 按业务上下文分包，每个上下文内部四层 |
@@ -149,7 +149,7 @@ public final class FencedAgentStateStore implements AgentStateStore {
 - SLF4J，结构化键值，例如 `log.info("轮次已认领 turnId={} tenantId={} epoch={}", ...)`。
 - 级别：`ERROR` 需要人处理；`WARN` 可自动恢复但值得关注；`INFO` 关键状态迁移；`DEBUG` 排查细节。
 - 禁止记录凭据、API Key、提示词正文、模型输出正文、终端用户的个人信息。
-- MDC 键固定为 `trace_id`、`span_id`、`tenant_id`、`session_id`、`turn_id`。
+- MDC 键固定为 `trace_id`、`span_id`、`request_id`、`tenant_id`、`session_id`、`turn_id`。`request_id` 由 `security.web` 的请求 ID 过滤器写入（ADR-0020）。
 
 ## 配置
 
