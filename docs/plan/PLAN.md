@@ -181,10 +181,10 @@ T07 会话 API 与 SSE（开工 2026-11-07，基线 `verify.sh` 通过）：
 - [x] 1. 规范 `meridian-v1.yaml`：会话、事件、线程、待处理动作、SSE 流，全部事件类型，problem+json；OpenAPI 3.1 校验与对照清单（A01）
 - [x] 2. 代码生成接入构建：`meridian-api` 只生成 DTO，runtime 生成 reactive 接口
 - [x] 3. 开发期认证：`ApiKeyAuthenticator`、`ApiKeyResolver`、`DevApiKeyResolver`（非 dev/test profile 启动失败）、作用域检查（A08）
-- [ ] 4. 会话接口：创建（`AgentConfigProvider` 校验并固化版本与环境修订）、查询、列表、更新、删除、归档；幂等、游标分页、problem+json、`X-Request-Id`、`traceparent`（A05、A06、A07）
-- [ ] 5. 事件接口：发送（类型与状态组合校验、线程咨询锁、入队或写收件箱、写事件，D10、D12）、列出事件；列出线程、待处理动作
-- [ ] 6. SSE：五步算法、`ping`、`event_deltas`、60 分钟上限、线程流与 `?threads=main`、两个指标；困难条件集成测试（A02、A03、A04、A10）
-- [ ] 7. 契约测试覆盖全部端点；`openapi-diff` 接入构建（A09）
+- [x] 4. 会话接口：创建（`AgentConfigProvider` 校验并固化版本与环境修订）、查询、列表、更新、删除、归档；幂等、游标分页、problem+json、`X-Request-Id`、`traceparent`（A05、A06、A07）
+- [x] 5. 事件接口：发送（类型与状态组合校验、线程咨询锁、入队或写收件箱、写事件，D10、D12）、列出事件；列出线程、待处理动作
+- [x] 6. SSE：五步算法、`ping`、`event_deltas`、60 分钟上限、线程流与 `?threads=main`、两个指标；困难条件集成测试（A02、A03、A04、A10）
+- [x] 7. 契约测试覆盖全部端点；`openapi-diff` 接入构建（A09）
 - [ ] 8. 收尾：`verify.sh`（A12）、模块 CLAUDE.md（新建 `meridian-api`）、ADR 与架构设计、`acceptance.json`、PLAN 看板与会话日志
 
 ## 控制台设计轨道

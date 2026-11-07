@@ -20,6 +20,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # OpenApiCompatibilityTest 从 git 历史取上一个已提交版本的规范作为基线（ADR-0029），浅克隆取不到
+          fetch-depth: 0
 
       - name: Set up JDK 25
         uses: actions/setup-java@v6

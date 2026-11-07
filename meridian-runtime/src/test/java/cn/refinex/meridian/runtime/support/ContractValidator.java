@@ -3,6 +3,7 @@ package cn.refinex.meridian.runtime.support;
 import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.atlassian.oai.validator.model.Request;
 import com.atlassian.oai.validator.model.Response;
+import com.atlassian.oai.validator.report.LevelResolver;
 import com.atlassian.oai.validator.report.MessageResolver;
 import com.atlassian.oai.validator.report.ValidationReport;
 import com.atlassian.oai.validator.schema.SchemaValidator;
@@ -27,6 +28,14 @@ public final class ContractValidator {
     private static final OpenApiInteractionValidator INTERACTIONS =
             OpenApiInteractionValidator.createForSpecificationUrl(SPEC).build();
 
+    /** 事件流的校验器：连接上可能一帧都没有（客户端已收到全部事件、会话已终止），空的响应体是合法的。 */
+    private static final OpenApiInteractionValidator STREAMS = OpenApiInteractionValidator.createForSpecificationUrl(
+                    SPEC)
+            .withLevelResolver(LevelResolver.create()
+                    .withLevel("validation.response.body.missing", ValidationReport.Level.IGNORE)
+                    .build())
+            .build();
+
     private static final OpenAPI API = parse();
 
     private static final SchemaValidator SCHEMAS = new SchemaValidator(API, new MessageResolver());
@@ -45,6 +54,18 @@ public final class ContractValidator {
      */
     public static void validate(String operation, Request request, Response response) {
         report(operation, INTERACTIONS.validate(request, response));
+    }
+
+    /**
+     * 校验一次事件流交互的请求、状态码与响应头；帧的内容用 {@link #validateEvent} 逐帧校验。
+     *
+     * @param operation 操作
+     * @param request 请求
+     * @param response 响应
+     * @throws AssertionError 不符合规范时
+     */
+    public static void validateStream(String operation, Request request, Response response) {
+        report(operation, STREAMS.validate(request, response));
     }
 
     /**

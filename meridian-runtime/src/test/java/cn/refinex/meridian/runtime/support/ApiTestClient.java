@@ -8,7 +8,9 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -187,6 +189,61 @@ public final class ApiTestClient {
                 withQuery("/v1/sessions/" + sessionId + "/pending-actions", query),
                 null,
                 null);
+    }
+
+    /**
+     * 读取一个会自行结束的事件流（例如已终止的会话：补发完历史事件后服务端关闭连接），校验响应与每一帧。
+     *
+     * @param operation 操作名
+     * @param pathAndQuery 路径与查询串
+     * @param lastEventId {@code Last-Event-ID}；可为空
+     * @return 收到的帧，按顺序
+     */
+    public List<SseTestClient.Frame> finiteStream(String operation, String pathAndQuery, String lastEventId) {
+        WebTestClient.RequestHeadersSpec<?> spec = client.get()
+                .uri(pathAndQuery)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
+        if (lastEventId != null) {
+            spec = spec.header("Last-Event-ID", lastEventId);
+        }
+        EntityExchangeResult<byte[]> result =
+                spec.exchange().expectBody(byte[].class).returnResult();
+        String body =
+                result.getResponseBody() == null ? "" : new String(result.getResponseBody(), StandardCharsets.UTF_8);
+        SimpleResponse.Builder response =
+                SimpleResponse.Builder.status(result.getStatus().value()).withBody(body);
+        result.getResponseHeaders().forEach((name, values) -> response.withHeader(name, values));
+        URI uri = URI.create(pathAndQuery);
+        SimpleRequest.Builder request = new SimpleRequest.Builder(Request.Method.GET, uri.getRawPath())
+                .withHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .withHeader(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE);
+        if (lastEventId != null) {
+            request.withHeader("Last-Event-ID", lastEventId);
+        }
+        queryParams(uri).forEach(request::withQueryParam);
+        // 事件流的响应体是 SSE 文本：响应按状态码与响应头校验，每一帧的 data 按事件信封 schema 校验
+        ContractValidator.validateStream(operation, request.build(), response.build());
+        List<SseTestClient.Frame> frames = new ArrayList<>();
+        for (String block : body.split("\n\n")) {
+            String event = null;
+            String id = null;
+            StringBuilder data = new StringBuilder();
+            for (String line : block.split("\n")) {
+                if (line.startsWith("event:")) {
+                    event = line.substring(6).strip();
+                } else if (line.startsWith("id:")) {
+                    id = line.substring(3).strip();
+                } else if (line.startsWith("data:")) {
+                    data.append(line.substring(5).strip());
+                }
+            }
+            if (event != null) {
+                ContractValidator.validateEvent(data.toString(), id != null);
+                frames.add(new SseTestClient.Frame(event, id, data.toString()));
+            }
+        }
+        return frames;
     }
 
     /**
