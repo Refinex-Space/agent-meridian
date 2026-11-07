@@ -64,7 +64,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 已完成 | 6038ef8 |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 已完成 | 0943c89 |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 已完成 | c1fd533 |
-| T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 未开始 | — |
+| T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 进行中 | — |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 未开始 | — |
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 未开始 | — |
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 未开始 | — |
@@ -175,7 +175,17 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T06 轮次 Worker、事件流水线与崩溃恢复（开工 2026-11-07，基线 `verify.sh` 通过）：
+
+- [ ] 1. 端口实现：`InboxPort` 与收件箱仓储（queue 合并、按 `consumed_epoch` 重新投递）、`ToolLedgerPort`、`BlobStorePort`（对象存储加引用）、Redis Stream 写入侧（XADD `ev:{session_id}`，补上 `DatabaseEventSink` 的 `TODO(T06)`）
+- [ ] 2. 恢复判定纯逻辑（状态与账本快照 → 恢复方式与说明）及单测；`RecoveryNoteMiddleware`
+- [ ] 3. `TurnWorker`：认领 → 读输入/恢复判定 → `TurnContext` → `runTurn` → 事件写库与 XADD → 终态事务（结束轮次、计数、状态、outbox、下一轮）→ `finally` 释放；`recovery_confirmation` 与 `recovery_attempt` 用尽；`FileAgentConfigProvider`；D09、D11
+- [ ] 4. 优雅下线 `SmartLifecycle`
+- [ ] 5. 指标 6 个
+- [ ] 6. 故障注入测试（P10 四种终止、P2 完整路径）与端到端、queue 合并、`requires_action`、`error` 用尽、下线集成测试（A01–A04、A06–A09）
+- [ ] 7. P3 批次级 checkpoint 验证与结论（A05）
+- [ ] 8. 报告 P02 定稿、P03、P10；ADR；模块 CLAUDE.md；`docs/poc/README.md`
+- [ ] 9. 收尾：`verify.sh`（A10）、`acceptance.json`、PLAN 看板与会话日志
 
 ## 控制台设计轨道
 
