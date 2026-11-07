@@ -64,7 +64,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 已完成 | 6038ef8 |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 已完成 | 0943c89 |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 已完成 | c1fd533 |
-| T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 进行中 | — |
+| T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 已完成 | c6ca61a |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 未开始 | — |
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 未开始 | — |
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 未开始 | — |
@@ -175,17 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T06 轮次 Worker、事件流水线与崩溃恢复（开工 2026-11-07，基线 `verify.sh` 通过）：
-
-- [x] 1. 端口实现：`InboxPort` 与收件箱仓储（queue 合并、按 `consumed_epoch` 重新投递）、`ToolLedgerPort`、`BlobStorePort`（对象存储加引用）、Redis Stream 写入侧（XADD `ev:{session_id}`，补上 `DatabaseEventSink` 的 `TODO(T06)`）
-- [x] 2. 恢复判定纯逻辑（状态与账本快照 → 恢复方式与说明）及单测；`RecoveryNoteMiddleware`
-- [x] 3. `TurnWorker`：认领 → 读输入/恢复判定 → `TurnContext` → `runTurn` → 事件写库与 XADD → 终态事务（结束轮次、计数、状态、outbox、下一轮）→ `finally` 释放；`recovery_confirmation` 与 `recovery_attempt` 用尽；`FileAgentConfigProvider`；D09、D11
-- [x] 4. 优雅下线 `SmartLifecycle`
-- [x] 5. 指标 6 个
-- [x] 6. 故障注入测试（P10 四种终止、P2 完整路径）与端到端、queue 合并、`requires_action`、`error` 用尽、下线集成测试（A01–A04、A06–A09）
-- [x] 7. P3 批次级 checkpoint 验证与结论（A05）
-- [x] 8. 报告 P02 定稿、P03、P10；ADR；模块 CLAUDE.md；`docs/poc/README.md`
-- [ ] 9. 收尾：`verify.sh`（A10）、`acceptance.json`、PLAN 看板与会话日志
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -293,6 +283,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：10 项通过，0 项阻塞
 - 决策：ADR-0027 运行时数据层与调度的补充约定（时间取注入的 `Clock`、同节点重新认领的落地方式、`FOR SHARE` 租约条件与锁顺序、事件与输入的 JSON 约定、状态随事件推进、默认并发上限 20 等）；架构设计升至 v1.4
 - 遗留：登记事项 D10 调用方先生成事件 ID（T07）、D11 jsonb 拒绝 `\u0000`（T06）；P2 完整路径待 T06
+
+### 2026-11-07 T06 已完成（提交 c6ca61a）
+- 交付：runtime `session.app`（`TurnWorker`/`TurnExecution` 执行一轮、`TurnPreparer` 恢复认领先判定、`TurnFinisher` 结束事务与合并收件箱、`TurnWorkerLifecycle` 后台循环与优雅下线、`TurnMetrics` 六个指标）、`session.domain.RecoveryPlanner`；`delivery`（`InboxPort`）、`tooling`（`ToolLedgerPort`）、`approval`（待处理动作写入，含 `recovery_confirmation`）；`stream`（提交后 XADD `ev:{session_id}`、`ObjectStoreBlobStore`）；`config`（`FileAgentConfigProvider` 读 `dev-config/agents`、`EngineAutoConfiguration`）；迁移 `V0002`（`content_turn_id`）；engine 的 `RecoveryNoteMiddleware` 与 `BatchCheckpointMiddleware`；persistence 的 jsonb 去 NUL、有界 XADD、`PeriodicJob` 阶段；故障注入、P2 完整路径、P3、端口与装配的测试；P02 定稿、P03、P10 报告
+- 验收：10 项通过，0 项阻塞
+- 决策：ADR-0028（崩溃恢复按本轮的内容写入判定、恢复认领按 epoch、批次 checkpoint 默认开启、结束事务与线程咨询锁、事件扇出约定、内核装配为自动配置等）；架构设计升至 v1.5
+- 遗留：登记事项 D12 线程咨询锁（T07）、D13 恢复确认在 replay 模式下重放输入（T08）、D14 平台工具记账写结果引用（T10a）、D15 下线宽限期（T28）；`TurnPreparer` 的权限策略 `TODO(T08)`；steer 的验证待 T08 的 `SteerMiddleware` 重跑
 
 ## 计划变更记录
 
