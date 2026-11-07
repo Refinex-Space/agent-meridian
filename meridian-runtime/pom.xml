@@ -38,10 +38,43 @@
             <groupId>cn.refinex.meridian</groupId>
             <artifactId>meridian-engine-agentscope</artifactId>
         </dependency>
+        <!-- runtime 是 WebFlux 应用（架构设计「部署单元」），平台 API 用 Boot 默认的 Jackson 3 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-engine-agentscope-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- runtime 测试开启 BlockHound，检测 Reactor 线程上的阻塞调用（架构设计「测试策略」） -->
+        <dependency>
+            <groupId>io.projectreactor.tools</groupId>
+            <artifactId>blockhound</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <!--
+              BlockHound 在运行时重定义 JDK 类：JDK 13 起需要 AllowRedefinitionToAddDeleteMethods；
+              它通过 ByteBuddy 动态挂载代理，JDK 21 起需要 EnableDynamicAgentLoading 才不告警。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <argLine>@{argLine} -XX:+AllowRedefinitionToAddDeleteMethods -XX:+EnableDynamicAgentLoading</argLine>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
