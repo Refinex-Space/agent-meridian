@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-当前处于**M0 之前的工程基座阶段**：T01 已建立 Maven 多模块骨架与质量门禁，14 个 Java 模块只有 POM 与包根 `package-info.java`，业务代码从 T02 开始。
+当前处于**M0 之前的工程基座阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）。内核与业务代码从 T03 开始。
 
 ## 交付流程
 
@@ -30,7 +30,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 - 全量检查（格式、编译、单元与集成测试、架构测试、enforcer、覆盖率、POM 版本）：`scripts/dev/verify.sh`
 - 单模块编译与单元测试：`./mvnw -pl <模块> -am test`
 - 单个测试类：`./mvnw -pl <模块> -am test -Dtest=<类名> -Dsurefire.failIfNoSpecifiedTests=false`
-- 只跑集成测试（`*IT`）：`./mvnw -pl <模块> -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`；单个用 `-Dit.test=<类名>`
+- 只跑集成测试（`*IT`）：`./mvnw -pl <模块> -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`；单个再加 `-Dit.test=<类名> -Dfailsafe.failIfNoSpecifiedTests=false`
 - 架构测试：`./mvnw -pl meridian-arch-tests -am verify`
 - 真实模型测试（只跑带 `live` 标签的 `*LiveIT`）：`./mvnw -Plive -pl <模块> -am verify`
 - 格式化修复（Java 与 POM）：`./mvnw spotless:apply`
@@ -41,6 +41,8 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 
 环境脚本：
 
+- `scripts/dev/up.sh`：启动本地 PostgreSQL（pgvector + zhparser）、Redis、MinIO 并等待健康、创建桶；首次启动构建 PostgreSQL 镜像。端口 15432、16379、19000/19001，连接信息与口令见 `deploy/compose/.env.example`（本地覆盖写 `.env`，不提交）。
+- `scripts/dev/down.sh [--volumes]`：停止；加 `--volumes` 才删除数据。
 - `scripts/dev/kind-gvisor.sh [集群名]`：创建带 Calico（执行 NetworkPolicy）与 gVisor 运行时的本地 kind 集群。
 - `scripts/dev/kind-verify.sh [集群名]`：验证 gVisor 生效、NetworkPolicy 被执行，输出 PASS。
 - `kind delete cluster --name <集群名>`：删除集群，释放内存。
@@ -72,7 +74,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 - 引擎需要的 runtime 能力通过 `meridian-engine-spi` 的端口接口获取（`LeaseRegistry`、`InboxPort`、`ModelGateway`、`EventSinkPort` 等），由 runtime 实现。runtime 需要内核做的事，通过 `AgentEngine`、`SandboxDriver`、`ModelInvoker` 获取。端口签名里不能出现 AgentScope 类型。
 - `PlatformContext` 在 `meridian-common`。
 - 每个业务上下文内部分 `api` / `app` / `domain` / `infra` 四层，`domain` 不依赖 Spring 和 `infra`。
-- 仓储继承 `TenantScopedRepository`；豁免只限架构基线"租户隔离"一节列出的端口实现类。
+- 仓储继承 `TenantScopedRepository`；豁免只限架构基线"租户隔离"一节列出的端口实现类。子类只能经 `sql(...)` 写 SQL，语句必须引用 `:tenant_id`（项目级还要 `:project_id`），值由基类从 `PlatformContext` 绑定；跨租户的继承 `SystemRepository`，放在 `infra.system` 并标注 `@CrossTenant`。runtime 中所有 JDBC 经 `common.concurrent.Blocking`。
 - 禁止依赖：Spring AI、LangChain4j、AgentScope 的 Spring Boot starter、RAG 扩展、Service 模块。
 - Java 包根与 Maven groupId：`cn.refinex.meridian`。依赖版本只在 `meridian-bom` 声明。不直观的模块包根：`engine-spi` → `engine.spi`，`engine-agentscope-test` → `engine.agentscope.testkit`，`model-client` → `modelclient`，`control-plane` → `controlplane`，`test-support` → `testsupport`；不在已登记包根下的类会被 ArchUnit 拒绝。
 - 依赖规则由构建强制：maven-enforcer 默认拒绝平台模块与 AgentScope 构件，每个模块在自己 POM 的 `enforce-rules` 中按「模块依赖规则」放行（ADR-0022）；包层面由 `meridian-arch-tests` 的 ArchUnit 规则检查，模块表在 `MeridianModule`。
