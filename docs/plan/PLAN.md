@@ -182,7 +182,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 3. BOM：Spring Boot 4.1.2、AgentScope 2.0.4、Jackson 2 版本、测试与工具依赖；依赖树核对
 - [x] 4. 构建插件：编译、Spotless、Checkstyle、enforcer、Surefire、Failsafe、`live` profile、JaCoCo
 - [x] 5. `meridian-arch-tests` 与第一批 ArchUnit 规则；未落地规则登记
-- [ ] 6. `scripts/dev/verify.sh`、`scripts/ci/check-pom-versions.sh`
+- [x] 6. `scripts/dev/verify.sh`、`scripts/ci/check-pom-versions.sh`
 - [ ] 7. `.editorconfig`、`.gitattributes`、`.github/workflows/ci.yml`、`.claude/settings.json`
 - [ ] 8. 根 `CLAUDE.md` 命令一节
 - [ ] 9. 验收 T01-A01 至 T01-A11 逐项验证
