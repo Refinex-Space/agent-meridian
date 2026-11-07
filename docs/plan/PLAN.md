@@ -65,7 +65,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 已完成 | 0943c89 |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 已完成 | c1fd533 |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 已完成 | c6ca61a |
-| T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 进行中 | — |
+| T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 已完成 | 708f7ca |
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 未开始 | — |
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 未开始 | — |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 未开始 | — |
@@ -175,17 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T07 会话 API 与 SSE（开工 2026-11-07，基线 `verify.sh` 通过）：
-
-- [x] 0. 生成链验证：最小 3.1 规范（判别器 `oneOf`、可空、`additionalProperties`）生成 Jackson 3 DTO、reactive 与 servlet 服务端接口并编译；openapi-diff 比较 3.1；写作约束与补充型 ADR（A11）
-- [x] 1. 规范 `meridian-v1.yaml`：会话、事件、线程、待处理动作、SSE 流，全部事件类型，problem+json；OpenAPI 3.1 校验与对照清单（A01）
-- [x] 2. 代码生成接入构建：`meridian-api` 只生成 DTO，runtime 生成 reactive 接口
-- [x] 3. 开发期认证：`ApiKeyAuthenticator`、`ApiKeyResolver`、`DevApiKeyResolver`（非 dev/test profile 启动失败）、作用域检查（A08）
-- [x] 4. 会话接口：创建（`AgentConfigProvider` 校验并固化版本与环境修订）、查询、列表、更新、删除、归档；幂等、游标分页、problem+json、`X-Request-Id`、`traceparent`（A05、A06、A07）
-- [x] 5. 事件接口：发送（类型与状态组合校验、线程咨询锁、入队或写收件箱、写事件，D10、D12）、列出事件；列出线程、待处理动作
-- [x] 6. SSE：五步算法、`ping`、`event_deltas`、60 分钟上限、线程流与 `?threads=main`、两个指标；困难条件集成测试（A02、A03、A04、A10）
-- [x] 7. 契约测试覆盖全部端点；`openapi-diff` 接入构建（A09）
-- [ ] 8. 收尾：`verify.sh`（A12）、模块 CLAUDE.md（新建 `meridian-api`）、ADR 与架构设计、`acceptance.json`、PLAN 看板与会话日志
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -239,12 +229,17 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D07 | T04 | `user.message` 中的文件引用（`MessageContent.FileRef`、按文件 ID 引用的图片）暂时翻译为文本占位 `[文件 fil_… 名称 (类型)]`，见 `TurnInputTranslator` 中的 `TODO(T17b)`；轮次开始时把文件放进工作区后改为工作区路径 | T17b |
 | D08 | T04 | `PlatformContextMiddleware` 只在组装下游的同步阶段写 MDC（`tenant_id`、`session_id`、`turn_id`），跨线程的响应式链路没有 MDC；日志要求每行带 `trace_id`、`span_id`、`tenant_id`、`session_id`，需要 Reactor 自动上下文传播加 MDC 访问器的整体方案 | T27 |
 | D09 | T04 | Worker 要处理 ADR-0026 的两条约定：`session.status_rescheduled` 的原因 `retryable_error` 让 `recovery_attempt` 加一（`node_shutdown` 不变）；`runTurn` 以 `LeaseLostException` 结束时放弃本轮、不写事件 | T06（已落地：`TurnFinisher.requeue` 按原因置回；`TurnExecution` 遇到租约丢失放弃本轮，`TurnRecoveryIT`、`WorkerLeaseFencingIT`） |
-| D10 | T05 | ADR-0027 的锁顺序要求同一事务里先入队、再写事件；API 发送 `user.message` 时，轮次输入与收件箱需要事件 ID，`SessionEventWriter` 目前自己生成事件 ID，需改为允许调用方先生成、随批次传入 | T07 |
+| D10 | T05 | ADR-0027 的锁顺序要求同一事务里先入队、再写事件；API 发送 `user.message` 时，轮次输入与收件箱需要事件 ID，`SessionEventWriter` 目前自己生成事件 ID，需改为允许调用方先生成、随批次传入 | T07（已落地：`SessionEventWriter.append(batch, eventIds)`，`EventIntake` 先生成事件 ID） |
 | D11 | T05 | PostgreSQL 的 jsonb 拒绝字符串中的 `\u0000`：`agent_states.state`、`session_events.data` 都是 jsonb，模型输出或工具结果含 NUL 字符时写入会失败（状态保存失败、事件写不进）。需要在写入前统一处理（例如替换为 U+FFFD）并加测试 | T06（已落地：`JdbcValues.jsonb` 统一替换，`JdbcValuesTest`、`SessionEventWriterIT`） |
-| D12 | T06 | 消息入箱与轮次结束必须按线程串行，否则消息会留在收件箱没有轮次处理：T07 写 `user.message` 的事务要先取 `ThreadLockRepository.lock(thread_id)`（`pg_advisory_xact_lock`），再入队或写收件箱，再写事件（ADR-0028 第 8 条） | T07 |
+| D12 | T06 | 消息入箱与轮次结束必须按线程串行，否则消息会留在收件箱没有轮次处理：T07 写 `user.message` 的事务要先取 `ThreadLockRepository.lock(thread_id)`（`pg_advisory_xact_lock`），再入队或写收件箱，再写事件（ADR-0028 第 8 条） | T07（已落地：`EventIntake`、归档与删除的事务先取主线程咨询锁，`SessionApiIT`） |
 | D13 | T06 | `recovery_confirmation` 的 `payload.recovery_mode = replay_input` 时状态里没有本轮的输入，回应后只生成 `RecoveryOnly` 轮会丢掉用户消息；需重放原轮的 `turn_inputs`（附恢复说明）。架构设计「待处理动作」写的是"一律生成 `RecoveryOnly` 轮"，T08 落地时按决策分级处理 | T08 |
 | D14 | T06 | 恢复说明的结果摘要先取已持久化的工具结果事件，强杀发生在结果事件写库之前时只能取账本的 `result_ref`；平台工具基类在 `recordFinish` 时应写入结果引用（至少 `non_idempotent` 工具） | T10a |
 | D15 | T06 | 节点下线最长等待 60 秒（`meridian.runtime.worker.shutdown-timeout`，AgentScope 在 45 秒时强制中断），Pod 的 `terminationGracePeriodSeconds` 必须大于它 | T28 |
+| D16 | T07 | 回应事件（`user.tool_confirmation`、`user.custom_tool_result`、`user.recovery_confirmation`）与 `user.interrupt` 只校验并持久化：动作没有标为已回应（T08 之前同一动作可被再次回应，列表仍显示 pending），中断没有写 `interrupt_requested_at`；见 `EventIntake` 的 `TODO(T08)` | T08 |
+| D17 | T07 | `traceparent` 只在响应中回显并写入请求日志的 MDC（`trace_id`），没有传到轮次执行：Worker 的 `turn` span 不是调用方追踪的子 span（ADR-0030 第 7 条） | T27 |
+| D18 | T07 | `FileAgentConfigProvider` 不按项目隔离：任何项目的 API Key 都能用开发配置中的智能体与环境创建会话；`AgentConfigProvider` 新增的 `currentAgentVersion`、`currentEnvironment` 同样需要按项目解析 | T15b |
+| D19 | T07 | SSE 读取 Redis Stream 用每节点一个 100 毫秒间隔的不阻塞 `XREAD` 轮询（ADR-0030 第 4 条），实时延迟上限与单节点 Redis 负载需要在容量验证中核对 | R1（P7） |
+| D20 | T07 | Hibernate Validator 第一次校验失败时在 Netty 事件循环上读取消息资源包（每个进程一次，测试中由 BlockHound 放行）；需要时可在启动时预热 | T27 |
 
 ## 技术债
 
@@ -299,6 +294,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：10 项通过，0 项阻塞
 - 决策：ADR-0028（崩溃恢复按本轮的内容写入判定、恢复认领按 epoch、批次 checkpoint 默认开启、结束事务与线程咨询锁、事件扇出约定、内核装配为自动配置等）；架构设计升至 v1.5
 - 遗留：登记事项 D12 线程咨询锁（T07）、D13 恢复确认在 replay 模式下重放输入（T08）、D14 平台工具记账写结果引用（T10a）、D15 下线宽限期（T28）；`TurnPreparer` 的权限策略 `TODO(T08)`；steer 的验证待 T08 的 `SteerMiddleware` 重跑
+
+### 2026-11-07 T07 已完成（提交 708f7ca）
+- 交付：`meridian-api` 的公开 API 规范 `meridian-v1.yaml`（OpenAPI 3.1：12 个操作、26 种持久化事件与 3 种流上事件、problem+json）与 DTO 生成，`OpenApiSpecTest`、`OpenApiCompatibilityTest`（openapi-diff + 3.1 类型变化检查）；runtime 生成 reactive 接口并实现会话（创建固化版本、查询、列表、更新、归档、删除）、发送与列出事件（`EventIntake`：咨询锁、组合规则、入队或收件箱）、线程、待处理动作、会话流与线程流（`SessionStreamHub` 共用 XREAD 轮询 + `EventStreamService` 五步算法、两个指标）；幂等 `IdempotentRequests`、迁移 `V0003`（`deleted_at`）；`meridian-security` 的 `apikey` 包（`ApiKeyResolver`、`DevApiKeyResolver`、`ApiKeyWebFilter`、作用域检查）与 `traceparent` 过滤器；契约测试支撑与 9 个新集成测试类；`meridian-api` 的 CLAUDE.md
+- 验收：12 项通过，0 项阻塞
+- 决策：ADR-0029 OpenAPI 生成链与 3.1 写作约束（openapi-generator 7.26.0、判别器分支平铺加 const、openapi-diff 的 3.1 缺口与补充检查）；ADR-0030 会话 API 与 SSE 的补充约定（删除返回 202、归档条件、批量事件、SSE 读取方式与线程流的位置判断、幂等指纹、开发期认证）；架构设计升至 v1.6
+- 遗留：登记事项 D16 回应与中断的语义（T08）、D17 `traceparent` 传播（T27）、D18 智能体配置按项目隔离（T15b）、D19 SSE 轮询的容量核对（R1）、D20 校验资源包预热（T27）
 
 ## 计划变更记录
 
