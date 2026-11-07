@@ -62,7 +62,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T01 | [工程脚手架与质量门禁](tasks/T01-scaffold-and-quality-gates.md) | 0 | 无 | high | 中 | P1（依赖解析部分） | 已完成 | b29c1af |
 | T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 已完成 | 4812ea7 |
 | T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 已完成 | 6038ef8 |
-| T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 进行中 | — |
+| T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 已完成 | 0943c89 |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 未开始 | — |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 未开始 | — |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 未开始 | — |
@@ -175,17 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-**T04 单轮执行适配与事件映射**（开工基线 `scripts/dev/verify.sh` 通过，2026-11-07）
-
-- [x] 1. `FencedAgentStateStore`：全部方法、版本号、租约校验、`content_epoch` 区分权限安装、子线程用父租约（A07）
-- [x] 2. 停止原因映射与事件类型穷举映射（A02）
-- [x] 3. 事件映射与增量拼装：文本、思考、数据、工具调用、工具结果（16 KB 经 `BlobStorePort`）、`permission` 推导、子线程事件只记日志（A03）
-- [x] 4. 输入翻译：`NewMessages`、`Confirmations`（`ConfirmResult` 实例）、`CustomToolResults`（`ToolResultBlock`）、`RecoveryOnly`；自定义工具经 `ToolRequestConfig` 注入（`MERGE_EXTERNAL_PRIORITY`）
-- [x] 5. `AgentScopeEngine.runTurn`：身份映射、`clearStateCache`、权限安装（标记）、`contextWrite`、终态保证、取消不写入（A01、A04、A08）
-- [x] 6. 中间件：`PlatformContextMiddleware`、`LeaseGuardMiddleware`、`ToolSpanMiddleware`、`OtelTracingMiddleware` 装配与属性；测出执行顺序（A09）
-- [x] 7. `interrupt`、`shutdown`（45 秒 `GracefulShutdownConfig`、`performGracefulShutdown`、`awaitTermination`）
-- [x] 8. 场景测试：纯文本、工具调用、并行工具、ask 后确认续跑、ask 后拒绝、自定义工具挂起与回传、首包前错误、首包后错误、中断、关机中断、失去租约；待确认调用不与普通消息同批（A03–A06、A08）
-- [ ] 9. 收尾：模块 `CLAUDE.md`、P13 进行中、架构与文档一致性、`acceptance.json`、`verify.sh`（A10）
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -236,6 +226,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D04 | T02 | outbox 发布到 Redis Stream（`usage`、`audit`）时不裁剪，条目在确认后仍留在 Stream 中；消费者确认后需按已确认的最小 ID 执行 `XTRIM MINID` 或定期裁剪，避免 Redis 内存增长 | T16 |
 | D05 | T03 | `HarnessAgent` 不设置 `workspace(...)` 时，本机工作区根取 `${user.dir}/.agentscope/workspace`：harness 会把其中的 `skills/` 作为第 3 层技能读取，`MarketplaceStager` 会在其中暂存技能资源。平台要求技能只来自平台技能仓库、会话数据不落本机磁盘，装配文件系统与技能仓库时需要确定一个平台控制的本机工作区根目录（或证明无写入）。详见 `docs/poc/P01-运行基线.md` | T10a |
 | D06 | T03 | JDK 25 把 `System.loadLibrary` 列为受限方法，reactor-netty 加载 Netty 本地传输库时告警"将来会被阻止"；runtime 的集成测试已加 `--enable-native-access=ALL-UNNAMED`，生产与本地启动的 JVM 参数同样需要。详见 `docs/poc/P01-运行基线.md` | T28 |
+| D07 | T04 | `user.message` 中的文件引用（`MessageContent.FileRef`、按文件 ID 引用的图片）暂时翻译为文本占位 `[文件 fil_… 名称 (类型)]`，见 `TurnInputTranslator` 中的 `TODO(T17b)`；轮次开始时把文件放进工作区后改为工作区路径 | T17b |
+| D08 | T04 | `PlatformContextMiddleware` 只在组装下游的同步阶段写 MDC（`tenant_id`、`session_id`、`turn_id`），跨线程的响应式链路没有 MDC；日志要求每行带 `trace_id`、`span_id`、`tenant_id`、`session_id`，需要 Reactor 自动上下文传播加 MDC 访问器的整体方案 | T27 |
+| D09 | T04 | Worker 要处理 ADR-0026 的两条约定：`session.status_rescheduled` 的原因 `retryable_error` 让 `recovery_attempt` 加一（`node_shutdown` 不变）；`runTurn` 以 `LeaseLostException` 结束时放弃本轮、不写事件 | T06 |
 
 ## 技术债
 
@@ -272,6 +265,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：8 项通过，0 项阻塞
 - 决策：ADR-0023 `maxRetries(1)`（变更型，用户采纳）；ADR-0024 引擎装配与内核契约的补充约定；ADR-0025 testkit 可依赖 common 与 engine-spi（变更型，用户采纳）；架构设计升至 v1.2
 - 遗留：登记事项 D05 本机工作区根目录（T10a）；D03 对 Kubernetes API 的调用待 T11；D06 生产 JVM 需 `--enable-native-access=ALL-UNNAMED`（T28）
+
+### 2026-11-07 T04 已完成（提交 0943c89）
+- 交付：`meridian-engine-agentscope` 的 `turn.AgentScopeEngine`（runTurn、interrupt、shutdown；输入与权限翻译、自定义工具注入、取消安全的资源归还）、`events`（`TurnEventMapper` 增量拼装与终态保证、穷举的 `AgentEventDisposition` 与 `StopReasonMapping`）、`state.FencedAgentStateStore`、`middleware`（`PlatformContextMiddleware`、`PlatformTracingMiddleware`、`LeaseGuardMiddleware`、`ToolSpanMiddleware`、`PlatformStopRequest`、`PlatformMiddlewareProvider`）；`meridian-engine-spi` 新增 `error` 包与 `RescheduleReason.RETRYABLE_ERROR`；engine-agentscope-test 新增 51 个测试（场景、映射、状态存储、中间件链与 span、下线、翻译），engine-spi 新增 2 个与 `opentelemetry-sdk-testing`（test）；P13 进行中
+- 验收：10 项通过，0 项阻塞
+- 决策：ADR-0026 单轮执行与事件映射的补充约定（可重试错误以 `rescheduled(retryable_error)` 结束、租约丢失不输出事件、工具调用在模型调用结束时输出等）；架构设计升至 v1.3
+- 遗留：登记事项 D07 文件引用（T17b）、D08 响应式链路的 MDC（T27）、D09 Worker 处理 ADR-0026 的约定（T06）
 
 ## 计划变更记录
 
