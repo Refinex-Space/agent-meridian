@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.3 |
+| 版本 | v1.4 |
 | 日期 | 2026-11-07 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -560,30 +560,34 @@ sequenceDiagram
 **认领。** 认领与租户并发计数在同一事务中完成：
 
 ```sql
--- 1. 选出一个可执行的轮次
+-- 1. 选出一个可执行的轮次；:excluded 为本节点仍在执行的线程（见"同节点重新认领"）
 SELECT t.* FROM rt.turns t
   JOIN rt.tenant_concurrency c ON c.tenant_id = t.tenant_id
- WHERE t.status = 'queued' AND t.not_before <= now() AND c.running < c.max_running
+ WHERE t.status = 'queued' AND t.not_before <= :now AND c.running < c.max_running
+   AND NOT (t.thread_id = ANY (:excluded))
  ORDER BY t.priority, t.created_at
    FOR UPDATE OF t SKIP LOCKED LIMIT 1;
 -- 2. 占用租户并发名额；更新 0 行则回滚本事务，稍后重试
 UPDATE rt.tenant_concurrency SET running = running + 1
  WHERE tenant_id = :tenant AND running < max_running;
--- 3. 标记轮次
+-- 3. 标记轮次；:lease_expires_at = :now 加 30 秒
 UPDATE rt.turns SET status = 'running', lease_owner = :node, lease_epoch = lease_epoch + 1,
-       lease_expires_at = now() + interval '30 seconds', claim_count = claim_count + 1
+       lease_expires_at = :lease_expires_at, claim_count = claim_count + 1
  WHERE id = :turn;
 ```
 
 满额租户的轮次在第 1 步就被排除。所以一个租户积压再多，也不会让 Worker 反复认领又放回，更不会挤占其他租户。
 
-**租户并发计数行**。为某个租户第一次插入轮次时，同一事务中执行 `INSERT INTO rt.tenant_concurrency ... ON CONFLICT DO NOTHING`，`max_running` 取该租户的并发配额（`cp.tenants.max_concurrent_turns`，经内部接口下发，未配置时取全局默认值）。control-plane 修改配额时经 `config.invalidate` 通知 runtime 更新。
+调度与租约的时间（`:now`、租约到期时间、回收条件）都取应用注入的 `Clock`，不用数据库的 `now()`，各节点需要 NTP 同步（ADR-0027）。
+
+**租户并发计数行**。为某个租户第一次插入轮次时，同一事务中执行 `INSERT INTO rt.tenant_concurrency ... ON CONFLICT DO NOTHING`，`max_running` 取该租户的并发配额（`cp.tenants.max_concurrent_turns`，经内部接口下发，未配置时取全局默认值，默认 20，ADR-0027）。control-plane 修改配额时经 `config.invalidate` 通知 runtime 更新。
 
 **租约。**
 
 - 租约 30 秒，Worker 每 10 秒续租一次。
 - 续租时顺便检查 `interrupt_requested_at`。
-- 续租连续失败超过 15 秒，Worker 自行取消本轮的订阅。
+- 续租连续失败超过 15 秒（从上次成功续租起算），Worker 自行取消本轮的订阅。
+- 带租约条件的写入先以 `FOR SHARE` 锁住持有租约的轮次行再写，回收器与置回队列的更新因此要等写入事务提交。所有事务按"先 `rt.turns`，再 `rt.tenant_concurrency`，再 `rt.sessions`"加锁；同一事务里既入队又写事件时，先入队（ADR-0027）。
 
 **租约回收。** 每个 runtime 节点每 5 秒运行一次回收器，用 `SKIP LOCKED` 避免重复处理。回收器在一个事务里做四件事：
 
@@ -632,6 +636,8 @@ stateDiagram-v2
     requires_action --> terminated: 归档 / 删除
     rescheduled --> terminated: 删除
 ```
+
+会话状态随 `session.status_*` 事件推进，与事件写入在同一事务中完成，所以 `sessions.status` 不会与事件日志分叉（ADR-0027）。
 
 **轮次状态**是内部状态，取值为 `queued`、`running`、`awaiting_action`、`completed`、`interrupted`、`failed`、`cancelled`。轮次类型 `kind` 取 `messages`、`confirmations`、`custom_tool_results`、`recovery`，与 `TurnInput` 的四种输入一一对应。
 
@@ -1352,6 +1358,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.1 | 2026-11-07 | 交付计划评审后修订：租户隔离改为三类基类（含 `SystemRepository`）；模块依赖表补充 reactor-core、test-support、sdk-java；端口表新增 `BlobStorePort`、`ThreadRegistryPort` 并明确新增端口属于补充；会话流与线程流的 `seq` 语义；租户并发计数行的创建与配额；`tenant_settings` 与租户级配置；知识库存储计量；本地沙箱改用 kind 加 gVisor；M2 清单措辞调整；控制台 SSE 改用 `fetch`、公开 API 接受控制台 OIDC 令牌 |
 | v1.2 | 2026-11-07 | T03：引擎装配表 `maxRetries(0)` 改为 `maxRetries(1)`（ADR-0023）；模块依赖规则放行 `meridian-engine-agentscope-test` 依赖 common 与 engine-spi（ADR-0025）；补充 `asyncToolRegistry`、`enableAgentTracingLog(false)` 两行、子智能体缓存键与端口 `AgentConfigPort`（ADR-0024） |
 | v1.3 | 2026-11-07 | T04：可重试错误以 `session.status_rescheduled`（`retryable_error`）结束；租约丢失时内核不输出事件；事件映射中工具调用在模型调用结束时输出、工具结果块的 `event_start`、自定义工具与平台中间件停止原因的处理；包结构增加 `turn/`；`OtelTracingMiddleware` 由 `PlatformTracingMiddleware` 装配（ADR-0026） |
+| v1.4 | 2026-11-07 | T05：认领 SQL 的时间取注入的 `Clock` 并排除本节点仍在执行的线程；租约条件的加锁方式与锁顺序、续租失败阈值的起算点；新租户默认并发上限 20；会话状态随状态事件在同一事务中推进（ADR-0027） |
 
 ## 待决问题
 

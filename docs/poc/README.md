@@ -7,7 +7,7 @@ M0 要用代码验证架构设计中依赖运行时行为、读源码无法确�
 | 编号 | 验证内容 | 状态 | 报告 |
 |---|---|---|---|
 | P1 | AgentScope 2.0.4 在 Boot 4.1.2、JDK 25 下运行，Jackson 2 与 3 共存 | 通过（T01 依赖解析，T03 运行验证） | [P01-运行基线.md](P01-运行基线.md) |
-| P2 | `FencedAgentStateStore` 在各写入路径下的租约校验 | 未开始 | |
+| P2 | `FencedAgentStateStore` 在各写入路径下的租约校验 | 进行中（T05 存储层通过：失去租约的节点调用 `save`、`saveIfVersion`（含无条件写）、`delete`、事件写入全部被拒且数据库无变化；中断、出错、停机三条完整路径待 T06） | [P02-租约与fencing.md](P02-租约与fencing.md) |
 | P3 | 批次级 checkpoint | 未开始 | |
 | P4 | 两个档位的文件系统装配 | 未开始 | |
 | P5 | agent-sandbox + gVisor + 预热池 | 未开始 | |

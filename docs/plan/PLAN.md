@@ -183,7 +183,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 4. 调度：入队与计数行、认领三步 SQL、唤醒（通知与 1 秒轮询）、续租与回调、回收器、置回队列三种情况、同节点重新认领（A02、A03、A04、A06）
 - [x] 5. 端口实现：`LeaseRegistry`、`AgentStateRepository`、`EventSinkPort` 事件写入；`seq` 分配（A05、A07）
 - [x] 6. 全部 JDBC 经 `Blocking`，测试开启 BlockHound（A08）；认领 SQL 的 `EXPLAIN`
-- [ ] 7. P2 报告存储层部分（A09）
+- [x] 7. P2 报告存储层部分（A09）
 - [ ] 8. 收尾：ADR、模块 `CLAUDE.md`、架构设计同步、`acceptance.json`、`verify.sh`（A10）
 
 ## 控制台设计轨道
