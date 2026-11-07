@@ -6,78 +6,78 @@
       "id": "T01-A01",
       "task": "T01",
       "description": "`java -version` 与 `./mvnw -v` 显示 Java 25 与 Maven 3.9.x。验证：两条命令的输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "blocked",
+      "evidence": "`./mvnw -v` → Apache Maven 3.9.16，Java version: 25.0.5（Eclipse Adoptium，runtime 为 JAVA_HOME 的 temurin25）；`\"$JAVA_HOME/bin/java\" -version` → openjdk 25.0.5。但 PATH 上的 `java`（~/develop/jdk/zulu21/bin/java，来自用户 shell 配置）`java -version` → 21.0.10。构建只使用 JAVA_HOME，enforcer requireJavaVersion [25,26) 通过。修改 PATH 属于仓库外的系统配置，需要用户把 $JAVA_HOME/bin 放到 PATH 前面后复核。"
     },
     {
       "id": "T01-A02",
       "task": "T01",
       "description": "干净检出上 `scripts/dev/verify.sh` 通过，全部模块 BUILD SUCCESS。验证：命令输出的模块列表与结果。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "在全新 clone（提交 b29c1af）上运行 `scripts/dev/verify.sh`，EXIT=0：Reactor Summary 中 BOM、AgentMeridian、Common、API、Security、Persistence、Engine SPI、Engine AgentScope、Engine AgentScope Test、Model Client、Control Plane、Runtime、Knowledge、Test Support、Architecture Tests 共 15 项全部 SUCCESS，BUILD SUCCESS；ArchitectureRulesTest Tests run: 7, Failures: 0；check-pom-versions: OK；日志无 WARNING。"
     },
     {
       "id": "T01-A03",
       "task": "T01",
       "description": "Spotless 生效：在任一 `package-info.java` 中故意破坏格式，`verify.sh` 失败并指出文件；恢复后通过。验证：两次运行的关键输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "把 meridian-security 的 package-info.java 改为 `package   cn.refinex.meridian.security ;` 后 `scripts/dev/verify.sh` EXIT=1：spotless-maven-plugin:3.10.4:check on project meridian-security: The following files had format violations: src/main/java/cn/refinex/meridian/security/package-info.java（-package···cn.refinex.meridian.security·; / +package·cn.refinex.meridian.security;）。恢复后 EXIT=0，BUILD SUCCESS。"
     },
     {
       "id": "T01-A04",
       "task": "T01",
       "description": "Checkstyle 生效：临时添加一个没有 Javadoc 的 `public` 类，构建失败并指出规则；删除后通过。验证：关键输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "在 meridian-common 新增无 Javadoc 的 `public class Undocumented {}` 后 `./mvnw verify` EXIT=1：Undocumented.java:[3,1] (javadoc) MissingJavadocType: 缺少 'Undocumented' 的 Javadoc；You have 1 Checkstyle violation。删除后 BUILD SUCCESS。另用临时文件核对其余规则：AvoidStarImport、NoAuthorTag、MissingJavadocMethod（非访问器方法、static 方法、接口方法）、NoSystemOutErr、NoPrintStackTrace、protected 嵌套类型均报错；record 访问器、@Override 方法、注释中的 System.out、包私有类的 public 方法不报。"
     },
     {
       "id": "T01-A05",
       "task": "T01",
       "description": "enforcer 生效：临时让 `meridian-common` 依赖 `org.springframework.ai:spring-ai-commons`、让 `meridian-control-plane` 依赖 `io.agentscope:agentscope-core`，两次构建都失败并指向 `bannedDependencies`；撤销后通过。验证：关键输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "meridian-common 临时依赖 org.springframework.ai:spring-ai-commons:2.0.2：EXIT=1，Rule 2: BannedDependencies failed — org.springframework.ai:spring-ai-commons:jar:2.0.2 <--- banned via the exclude/include list。meridian-control-plane 临时依赖 io.agentscope:agentscope-core：EXIT=1，Rule 0: BannedDependencies failed — io.agentscope:agentscope-core:jar:2.0.4 <--- banned。撤销后 BUILD SUCCESS。附加核对：control-plane 依赖 meridian-engine-spi 被拦截；engine-agentscope 依赖 agentscope-extensions-rag-simple 仍被拦截（放行清单不覆盖全局禁用）。"
     },
     {
       "id": "T01-A06",
       "task": "T01",
       "description": "ArchUnit 生效：临时在 `meridian-common` 中写一个引用 `io.agentscope` 类型的类（同时临时放开 enforcer 以便编译），架构测试失败并指出规则 1；撤销后通过。验证：关键输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "meridian-common 临时依赖 agentscope-core 并新增引用 io.agentscope.core.message.Msg 的 AgentScopeLeak 类，`./mvnw verify -pl meridian-arch-tests -am -Denforcer.skip=true` EXIT=1：Tests run: 7, Failures: 1；Architecture Violation - Rule '规则 1：只有 cn.refinex.meridian.engine.agentscope..（含 engine-agentscope-test 的夹具包）可以依赖 io.agentscope..' was violated (1 times): Method <cn.refinex.meridian.common.AgentScopeLeak.messageType()> references class object <io.agentscope.core.message.Msg>。撤销后 verify.sh 通过。附加核对：规则 2、3（含嵌套包 testkit 与未登记包）、4、5 的临时违规均被对应规则拦截，runtime.config 中的引用被放行。"
     },
     {
       "id": "T01-A07",
       "task": "T01",
       "description": "`check-pom-versions.sh` 能发现子模块依赖中的 `<version>`。验证：临时加入一个版本号后脚本失败，撤销后通过。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "在 meridian-api/pom.xml 的 meridian-common 依赖中临时加入 <version>0.1.0-SNAPSHOT</version>：`scripts/ci/check-pom-versions.sh` EXIT=1，输出 \"meridian-api/pom.xml: cn.refinex.meridian:meridian-common 写了 <version>\"；撤销后 check-pom-versions: OK，EXIT=0。"
     },
     {
       "id": "T01-A08",
       "task": "T01",
       "description": "`dependency:tree` 中 Jackson 2 与 Jackson 3 共存、AgentScope 为 2.0.4、MCP SDK 为 0.17.2、Spring Boot 为 4.1.2。验证：树中对应行。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-engine-agentscope -am dependency:tree -Dverbose`：tools.jackson.core:jackson-databind:jar:3.1.7；io.agentscope:agentscope-core:jar:2.0.4；com.fasterxml.jackson.core:jackson-databind:jar:2.21.7 (version managed from 2.21.1)；io.modelcontextprotocol.sdk:mcp:jar:0.17.2；io.agentscope:agentscope-harness:jar:2.0.4；io.agentscope:agentscope-extensions-sandbox-kubernetes:jar:2.0.4。Spring Boot：有效 POM 中 org.springframework.boot:spring-boot 管理版本 4.1.2；临时给 runtime 加 spring-boot-starter-webflux 后树中出现 org.springframework.boot:spring-boot:jar:4.1.2 与上述各项共存（已撤销）。详见 docs/poc/P01-运行基线.md。"
     },
     {
       "id": "T01-A09",
       "task": "T01",
       "description": "每个 Java 模块都有包根 `package-info.java`，中文 Javadoc 写明职责与允许的依赖。验证：列出文件清单。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "14 个 Java 模块包根各有 package-info.java（中文 Javadoc：职责、边界、允许的依赖）：common、api、security、persistence、engine.spi、engine.agentscope、engine.agentscope.testkit、modelclient、controlplane、runtime、knowledge、testsupport、archtests（均在 cn.refinex.meridian 下）；meridian-bom 为 pom 模块无 Java 代码。"
     },
     {
       "id": "T01-A10",
       "task": "T01",
       "description": "`ci.yml` 语法有效（有 actionlint 就用 actionlint，否则用 YAML 解析器校验）。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`docker run --rm -v \"$PWD:/repo:ro\" --workdir /repo rhysd/actionlint:1.7.12 -verbose` → Linting .github/workflows/ci.yml：Found 0 parse errors，Found total 0 errors，EXIT=0。"
     },
     {
       "id": "T01-A11",
       "task": "T01",
       "description": "根目录 `CLAUDE.md` 的\"命令\"一节已更新，其中每条命令都实际执行成功过。验证：在报告中列出命令与结果。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "CLAUDE.md 命令一节中每条均实际执行且 BUILD SUCCESS / EXIT=0：scripts/dev/verify.sh；./mvnw -pl meridian-common -am test；./mvnw -pl meridian-arch-tests -am test -Dtest=ArchitectureRulesTest -Dsurefire.failIfNoSpecifiedTests=false（Tests run: 7）；./mvnw -pl meridian-arch-tests -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false；-Dit.test=SampleIT（临时测试，已删除）；./mvnw -pl meridian-arch-tests -am verify；./mvnw -Plive -pl meridian-runtime -am verify（临时 SampleLiveIT 只在 -Plive 下运行，默认构建不运行）；./mvnw spotless:apply；./mvnw -pl meridian-engine-agentscope -am dependency:tree；./mvnw -pl meridian-engine-agentscope -am compile dependency:sources -DincludeGroupIds=io.agentscope（下载 3 个 2.0.4 sources jar）；./mvnw clean。"
     },
     {
       "id": "T02-A01",
