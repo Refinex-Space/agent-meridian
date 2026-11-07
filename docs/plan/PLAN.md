@@ -180,7 +180,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 开工基线：`scripts/dev/verify.sh` 通过（2026-11-07）。
 
 - [x] 1. `meridian-common`：id、error、page、json、time、context、concurrent
-- [ ] 2. 本地基础设施：PostgreSQL 镜像（pgvector + zhparser）、compose、up.sh / down.sh、.env.example（T02-A08）
+- [x] 2. 本地基础设施：PostgreSQL 镜像（pgvector + zhparser）、compose、up.sh / down.sh、.env.example（T02-A08）
 - [ ] 3. `meridian-test-support`：单例容器与属性注册、JDBC 迁移与清理辅助
 - [ ] 4. `meridian-persistence`：jdbc、tenant、outbox、redis、objectstore、idempotency、flyway（T02-A04、A05、A06、A07）
 - [ ] 5. `meridian-security` 的 `web` 包：请求 ID、problem+json（T02-A02）

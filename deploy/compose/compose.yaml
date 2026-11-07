@@ -1,0 +1,85 @@
+# 本地开发的数据组件：PostgreSQL（pgvector + zhparser）、Redis、MinIO 与初始化桶的一次性容器。
+# 启停用 scripts/dev/up.sh、scripts/dev/down.sh；连接信息与口令见同目录的 .env.example。
+# 端口只绑定 127.0.0.1，并避开 5432、6379、9000 等常被本机其他服务占用的默认端口。
+# 应用（app）、可观测（observability）、身份（auth）等可选组件由后续任务以 profile 加入（架构设计「本地开发」）。
+name: agent-meridian
+
+services:
+  postgres:
+    build:
+      context: ../docker/postgres
+      args:
+        # 构建时需要代理才设置，例如 http://http.docker.internal:3128（Docker Desktop 内置代理）
+        HTTP_PROXY: ${MERIDIAN_DOCKER_BUILD_PROXY:-}
+        HTTPS_PROXY: ${MERIDIAN_DOCKER_BUILD_PROXY:-}
+    image: agent-meridian/postgres:17-local
+    environment:
+      POSTGRES_DB: meridian
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?在 .env 中设置 POSTGRES_PASSWORD}
+      MERIDIAN_MIGRATOR_PASSWORD: ${MERIDIAN_MIGRATOR_PASSWORD:?在 .env 中设置 MERIDIAN_MIGRATOR_PASSWORD}
+      MERIDIAN_APP_PASSWORD: ${MERIDIAN_APP_PASSWORD:?在 .env 中设置 MERIDIAN_APP_PASSWORD}
+    ports:
+      - "127.0.0.1:${MERIDIAN_POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # 走 TCP：初始化期间临时实例只监听 Unix 套接字，此时不算健康
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d meridian"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  redis:
+    # Redis 7.4（架构设计「技术基线」要求 7.4 或以上）
+    image: redis:7.4.11-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${MERIDIAN_REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    # MinIO 官方已停止发布容器镜像（Docker Hub 与 quay.io 均不可拉取），改用 Chainguard 从 MinIO 源码构建的镜像，
+    # 按摘要固定（RELEASE.2026-10-23T20-06-51Z）。镜像内带 mc，健康检查与初始化都用它。
+    image: chainguard/minio@sha256:869ca3178831d9f521ea02258a0f0d4fbc1e9f84302e707514e1f861b860865d
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?在 .env 中设置 MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?在 .env 中设置 MINIO_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:${MERIDIAN_MINIO_PORT:-19000}:9000"
+      - "127.0.0.1:${MERIDIAN_MINIO_CONSOLE_PORT:-19001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # 一次性容器：创建平台使用的桶，已存在时跳过
+  minio-init:
+    image: chainguard/minio@sha256:869ca3178831d9f521ea02258a0f0d4fbc1e9f84302e707514e1f861b860865d
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MERIDIAN_S3_BUCKET: ${MERIDIAN_S3_BUCKET:-meridian}
+    entrypoint: ["sh", "-c"]
+    command:
+      - mc alias set meridian http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing "meridian/$$MERIDIAN_S3_BUCKET"
+    restart: "no"
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
