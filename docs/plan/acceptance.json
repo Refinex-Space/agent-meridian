@@ -1,0 +1,2925 @@
+{
+  "_说明": "全部验收项。只允许修改本任务验收项的 status 与 evidence；status 取 not_started、passing、failing、blocked。禁止删除或改写验收项描述。规则见 docs/plan/protocol.md「验收记录」。",
+  "version": 2,
+  "items": [
+    {
+      "id": "T01-A01",
+      "task": "T01",
+      "description": "`java -version` 与 `./mvnw -v` 显示 Java 25 与 Maven 3.9.x。验证：两条命令的输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A02",
+      "task": "T01",
+      "description": "干净检出上 `scripts/dev/verify.sh` 通过，全部模块 BUILD SUCCESS。验证：命令输出的模块列表与结果。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A03",
+      "task": "T01",
+      "description": "Spotless 生效：在任一 `package-info.java` 中故意破坏格式，`verify.sh` 失败并指出文件；恢复后通过。验证：两次运行的关键输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A04",
+      "task": "T01",
+      "description": "Checkstyle 生效：临时添加一个没有 Javadoc 的 `public` 类，构建失败并指出规则；删除后通过。验证：关键输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A05",
+      "task": "T01",
+      "description": "enforcer 生效：临时让 `meridian-common` 依赖 `org.springframework.ai:spring-ai-commons`、让 `meridian-control-plane` 依赖 `io.agentscope:agentscope-core`，两次构建都失败并指向 `bannedDependencies`；撤销后通过。验证：关键输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A06",
+      "task": "T01",
+      "description": "ArchUnit 生效：临时在 `meridian-common` 中写一个引用 `io.agentscope` 类型的类（同时临时放开 enforcer 以便编译），架构测试失败并指出规则 1；撤销后通过。验证：关键输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A07",
+      "task": "T01",
+      "description": "`check-pom-versions.sh` 能发现子模块依赖中的 `<version>`。验证：临时加入一个版本号后脚本失败，撤销后通过。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A08",
+      "task": "T01",
+      "description": "`dependency:tree` 中 Jackson 2 与 Jackson 3 共存、AgentScope 为 2.0.4、MCP SDK 为 0.17.2、Spring Boot 为 4.1.2。验证：树中对应行。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A09",
+      "task": "T01",
+      "description": "每个 Java 模块都有包根 `package-info.java`，中文 Javadoc 写明职责与允许的依赖。验证：列出文件清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A10",
+      "task": "T01",
+      "description": "`ci.yml` 语法有效（有 actionlint 就用 actionlint，否则用 YAML 解析器校验）。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T01-A11",
+      "task": "T01",
+      "description": "根目录 `CLAUDE.md` 的\"命令\"一节已更新，其中每条命令都实际执行成功过。验证：在报告中列出命令与结果。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A01",
+      "task": "T02",
+      "description": "`Ids` 生成的 ID 前缀正确、按时间有序、可解析，非法前缀被拒绝。验证：单元测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A02",
+      "task": "T02",
+      "description": "problem+json 映射在 MVC 与 WebFlux 中输出相同结构，包含 `type`、`title`、`status`、`detail`、`code`、`request_id`。验证：两个适配器的测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A03",
+      "task": "T02",
+      "description": "游标分页编码、解码互逆，篡改的游标被拒绝。验证：单元测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A04",
+      "task": "T02",
+      "description": "`TenantScopedRepository`：项目级与租户级两种作用域下，租户 A 的上下文读不到、改不到租户 B 的数据；项目级下同租户的其他项目也不可见；缺少上下文时抛异常。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A05",
+      "task": "T02",
+      "description": "outbox：业务事务回滚时消息不发布；两个 relay 实例并发运行时每条消息只发布一次；消费方重复收到时幂等。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A06",
+      "task": "T02",
+      "description": "`Blocking` 与 BlockHound：Reactor 线程上直接调用阻塞 JDBC 被检测为违规，经 `Blocking` 调用通过。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A07",
+      "task": "T02",
+      "description": "对象存储客户端在 MinIO 上完成上传、下载、按前缀删除、预签名下载。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A08",
+      "task": "T02",
+      "description": "`scripts/dev/up.sh` 启动后全部容器健康；`SELECT to_tsvector('chinese', '差旅住宿标准')` 返回非空的分词结果；`vector` 扩展可用；`meridian_app` 角色执行 DDL 被拒绝。验证：命令与输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A09",
+      "task": "T02",
+      "description": "新增的架构规则生效：临时写一个不继承两类基类却注入 `JdbcClient` 的类、一个放在 `infra.system` 之外的 `SystemRepository` 子类、一个缺少 `@CrossTenant` 的 `SystemRepository` 子类，架构测试分别失败；撤销后通过。验证：关键输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A10",
+      "task": "T02",
+      "description": "ADR-0020 已写入，内容完整。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T02-A11",
+      "task": "T02",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T03-A01",
+      "task": "T03",
+      "description": "`meridian-engine-spi` 不依赖任何 AgentScope 与 Spring 类型。验证：架构测试与依赖树。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T03-A02",
+      "task": "T03",
+      "description": "`EngineEvent` 层级覆盖架构设计「事件」一节的全部事件类型。验证：一个列出全部类型的测试，与文档清单逐一对应。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T03-A03",
+      "task": "T03",
+      "description": "装配表的每一行都有对应断言，`AgentAssemblerTest` 全部通过。验证：测试报告中的用例名与装配表的对照。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T03-A04",
+      "task": "T03",
+      "description": "实例缓存：同键并发 `acquire` 只装配一次；引用计数未归零时淘汰不会关闭实例；归零后关闭。验证：并发测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T03-A05",
+      "task": "T03",
+      "description": "`ScriptedModel` 能驱动 `HarnessAgent` 完成：纯文本回答、单工具调用、并行工具调用、首包前错误、首包后错误，并能断言收到的请求。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T03-A06",
+      "task": "T03",
+      "description": "P1：Spring Boot 4.1.2、JDK 25 下，同一 JVM 中 Jackson 3 的 Web 序列化与 AgentScope 的智能体调用都正常。验证：集成测试通过，报告 `docs/poc/P01-运行基线.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T03-A07",
+      "task": "T03",
+      "description": "所有公开类型有中文 Javadoc 并注明架构设计章节。验证：Checkstyle 通过，抽查说明。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T03-A08",
+      "task": "T03",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A01",
+      "task": "T04",
+      "description": "身份映射符合架构设计：`sessionId` 为线程 ID，`userId` 格式正确，`PlatformContext` 可从 `RuntimeContext` 与 Reactor Context 两处取到。验证：单元测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A02",
+      "task": "T04",
+      "description": "31 个 `AgentEventType` 与全部 `GenerateReason` 都有映射或明确忽略，穷举测试通过。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A03",
+      "task": "T04",
+      "description": "文本与工具入参由增量正确拼装，并行工具调用交错到达时不串。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A04",
+      "task": "T04",
+      "description": "每轮恰好一个终态：正常结束、错误、关机中断、待处理动作四种情况都满足。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A05",
+      "task": "T04",
+      "description": "审批续跑：ask 后以 `Confirmations` 输入续跑，批准的调用执行、拒绝的调用写入拒绝结果。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A06",
+      "task": "T04",
+      "description": "自定义工具：挂起后以 `CustomToolResults` 续跑，智能体收到结果并继续。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A07",
+      "task": "T04",
+      "description": "`FencedAgentStateStore`：租约有效时写入成功；租约失效时 `save`、`saveIfVersion`（含无条件写）、`delete` 都抛 `LeaseLostException` 且不写入；权限安装写入不更新 `content_epoch`，其他写入更新。验证：单元测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A08",
+      "task": "T04",
+      "description": "订阅取消后不再输出事件、不再写状态。验证：场景测试（取消后检查内存端口无新写入）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A09",
+      "task": "T04",
+      "description": "中间件执行顺序已测出并记录，`LeaseGuardMiddleware` 在租约失效时阻止下一次推理与工具执行。验证：测试与模块 `CLAUDE.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T04-A10",
+      "task": "T04",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A01",
+      "task": "T05",
+      "description": "Flyway 迁移在空库上执行成功；表、索引、分区、注释与架构设计一致。验证：迁移测试，加一份 `\\d+` 输出摘要。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A02",
+      "task": "T05",
+      "description": "同一线程并发插入两条 `queued` 轮次时只保留一条，不产生无法认领的\"毒丸\"。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A03",
+      "task": "T05",
+      "description": "多个 Worker 并发认领，同一轮次只被一个 Worker 认领；租户名额满额时，该租户的轮次不被认领，其他租户不受影响；新租户不需要手工插入计数行就能被认领。验证：并发集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A04",
+      "task": "T05",
+      "description": "租约过期后，回收器在一个周期内把轮次置回 `queued`，`recovery_attempt` 加一，租户并发计数减一，产生 `session.status_rescheduled` 事件。验证：集成测试（可控时钟）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A05",
+      "task": "T05",
+      "description": "P2 存储层：失去租约的节点调用 `save`、`saveIfVersion`（含无条件写）、`delete`、事件写入，全部被拒绝且数据库无变化。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A06",
+      "task": "T05",
+      "description": "同节点重新认领规则：上一次执行结束前，本节点不会再认领同一线程。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A07",
+      "task": "T05",
+      "description": "事件 `seq` 在同一会话内严格递增且连续，Worker 与 API 并发写入时也不重复、不跳号。验证：并发集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A08",
+      "task": "T05",
+      "description": "BlockHound 在 runtime 测试中开启，无违规。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A09",
+      "task": "T05",
+      "description": "`docs/poc/P02-租约与fencing.md` 已写（存储层部分）。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T05-A10",
+      "task": "T05",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A01",
+      "task": "T06",
+      "description": "端到端：插入一轮输入后，Worker 认领并用 `ScriptedModel` 执行完成，事件按序写入数据库并出现在 Redis Stream 中，会话回到 `idle`，`stop_reason` 正确。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A02",
+      "task": "T06",
+      "description": "本轮执行中到达的 queue 消息，在本轮结束时合并成下一轮，并被自动执行。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A03",
+      "task": "T06",
+      "description": "P10 四种终止方式全部按上表恢复，且不重复用户消息、不重复执行 `non_idempotent` 工具；steer 的重新投递，通过直接写入 `consumed_epoch` 等于失败 epoch 的收件箱记录来验证（`SteerMiddleware` 在 T08 实现，届时重跑）。验证：故障注入测试；报告 `docs/poc/P10-恢复语义.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A04",
+      "task": "T06",
+      "description": "P2 完整路径：失去租约的旧 Worker 在中断、出错、停机路径上都写不进状态、事件、账本。验证：测试；补全 `docs/poc/P02-租约与fencing.md` 并定稿。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A05",
+      "task": "T06",
+      "description": "P3：批次级 checkpoint 的验证结论与数据已写入 `docs/poc/P03-批次checkpoint.md`，并按结论实现或保持轮次级恢复。验证：报告与测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A06",
+      "task": "T06",
+      "description": "状态未知的 `non_idempotent` 调用产生 `recovery_confirmation` 待处理动作，会话进入 `requires_action`。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A07",
+      "task": "T06",
+      "description": "`recovery_attempt` 达到 2 次后以 `error` 结束。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A08",
+      "task": "T06",
+      "description": "优雅下线：本节点轮次置回队列且 `recovery_attempt` 不变，另一节点续跑成功。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A09",
+      "task": "T06",
+      "description": "本任务列出的指标已注册并在测试中有值。验证：测试断言指标。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T06-A10",
+      "task": "T06",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A01",
+      "task": "T07",
+      "description": "`meridian-v1.yaml` 覆盖架构设计中本任务范围内的全部端点与事件类型，通过 OpenAPI 3.1 校验。验证：校验命令输出，加一份端点与事件类型对照清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A02",
+      "task": "T07",
+      "description": "端到端：用 HTTP 创建会话、发送 `user.message`、订阅 SSE，收到 `session.status_running` 到 `session.status_idle` 的完整事件序列（`ScriptedModel`）。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A03",
+      "task": "T07",
+      "description": "SSE 不丢不重：在 Worker 于 XADD 前被取消、客户端断线重连、Redis 短暂中断三种情况下，客户端最终收到的 `seq` 连续、无重复。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A04",
+      "task": "T07",
+      "description": "`Last-Event-ID` 重连只补发之后的事件；`event_deltas=true` 时才有增量事件；`ping` 按时到达。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A05",
+      "task": "T07",
+      "description": "幂等：同键同体返回首次结果，同键异体返回 409。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A06",
+      "task": "T07",
+      "description": "跨项目隔离：项目 A 的 Key 读不到、写不到项目 B 的会话，即使 `end_user_id` 相同。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A07",
+      "task": "T07",
+      "description": "错误响应为 problem+json，带 `code` 与 `request_id`；非法的事件与状态组合返回明确的错误码。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A08",
+      "task": "T07",
+      "description": "`DevApiKeyResolver` 在非开发 profile 下导致启动失败。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A09",
+      "task": "T07",
+      "description": "契约测试覆盖全部端点；`openapi-diff` 已接入构建。验证：测试报告与构建配置。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A10",
+      "task": "T07",
+      "description": "线程流与 `?threads=main` 订阅在其他线程持续产生事件时，不误判缺失、不重复补发。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A11",
+      "task": "T07",
+      "description": "生成链验证完成：3.1 规范的 DTO、reactive 接口、servlet 接口都能编译，openapi-diff 可用；写作约束已记录。验证：验证工程的构建输出与约束文档。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T07-A12",
+      "task": "T07",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A01",
+      "task": "T08",
+      "description": "投递表的每个格子都有通过的测试。验证：测试名与表格的对照清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A02",
+      "task": "T08",
+      "description": "steer 在当前轮下一次推理前被注入并记录 `consumed_epoch`；注入前本轮结束时降级为 queue。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A03",
+      "task": "T08",
+      "description": "中断在 Pub/Sub 正常时于一个检查点内生效；Pub/Sub 丢失时于 10 秒内生效；`queued` 轮次被中断后为 `cancelled`。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A04",
+      "task": "T08",
+      "description": "审批：ask 产生 `tool_confirmation` 待处理动作；批准后工具执行，拒绝后智能体收到拒绝结果并继续；超时视为拒绝。验证：集成测试（测试工具实现 `matchRule`）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A05",
+      "task": "T08",
+      "description": "同批既有待确认调用又有自定义工具时，两类恢复轮按先确认、后工具结果的顺序生成，没有消息被丢弃。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A06",
+      "task": "T08",
+      "description": "P15：存在显式 ask 规则时，`unattended` 会话与子线程都不会停在等待审批；`unattended` 会话无法进入计划模式。验证：测试；报告 `docs/poc/P15-权限改写.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A07",
+      "task": "T08",
+      "description": "\"记住此决定\"的会话级与项目级规则在后续轮次中生效。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A08",
+      "task": "T08",
+      "description": "自定义工具：非法名称与保留名称在创建会话时被拒绝；合法工具挂起、回传、续跑成功。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A09",
+      "task": "T08",
+      "description": "权限判定与待处理动作回应产生审计 outbox 记录。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A10",
+      "task": "T08",
+      "description": "用 `SteerMiddleware` 重跑 P10 的强杀场景：被失败执行消费的 steer 被重新投递，不丢失；补全 `docs/poc/P10-恢复语义.md`。验证：故障注入测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T08-A11",
+      "task": "T08",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09a-A01",
+      "task": "T09a",
+      "description": "首包前的 5xx 重试后切到备用模型；首包后错误不切换；预算与限流异常不触发重试与切换。验证：用模拟供应商的集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09a-A02",
+      "task": "T09a",
+      "description": "限流：超过 RPM 时请求等待；等待超过 30 秒抛 `RateLimitTimeoutException`，本轮以 `session.error`（`retry_status=retryable`）结束并重新排队。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09a-A03",
+      "task": "T09a",
+      "description": "预算：任一级预算不足时本轮以 `budget_exceeded` 结束；流被取消时预扣被退回；结算后 Redis 计数与用量记录一致。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09a-A04",
+      "task": "T09a",
+      "description": "压缩器的内部模型调用同样经过限流、预扣与计量。验证：集成测试（断言用量记录中包含压缩调用）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09a-A05",
+      "task": "T09a",
+      "description": "P13：两层守护确实夹住压缩中间件；预算耗尽时压缩被阻止；失败摘要被拦截，不替换历史。验证：测试；报告 `docs/poc/P13-中间件顺序.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09a-A06",
+      "task": "T09a",
+      "description": "用量记录包含输入、输出、缓存读、缓存写、推理 token，并进入 outbox `usage` 主题。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09a-A07",
+      "task": "T09a",
+      "description": "本任务列出的指标已注册并有值；`span.model_request_start` 事件带上下文构成摘要，且不含内容正文。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09a-A08",
+      "task": "T09a",
+      "description": "真实模型：工具调用轮次、流式、压缩，全部通过。验证：`./mvnw -Plive ...` 的输出（命令与结果，不含密钥）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09a-A09",
+      "task": "T09a",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09b-A01",
+      "task": "T09b",
+      "description": "`/v1/chat/completions` 的流式与非流式响应符合 OpenAI 格式，带 `usage`，并经过限流、预扣与计量。验证：契约测试与集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09b-A02",
+      "task": "T09b",
+      "description": "`/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank` 可用并被计量；内部接口拒绝没有服务凭据的请求。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09b-A03",
+      "task": "T09b",
+      "description": "经 HTTP 启动的 runtime 以 `scripted` 供应商跑通一轮带工具调用的会话，事件序列与脚本一致；同一脚本重复运行结果相同。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09b-A04",
+      "task": "T09b",
+      "description": "内置脚本覆盖审批、自定义工具、长时间流式、子智能体、首包前 5xx 五种情形，各有一个用例证明可用。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09b-A05",
+      "task": "T09b",
+      "description": "真实模型：Embedding（1024 维）、rerank 顺序、直通流式调用，全部通过。验证：`./mvnw -Plive ...` 的输出（命令与结果，不含密钥）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T09b-A06",
+      "task": "T09b",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10a-A01",
+      "task": "T10a",
+      "description": "所有平台工具继承 `PlatformTool`；启动自检在出现白名单外的非 `ToolBase` 工具时启动失败。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10a-A02",
+      "task": "T10a",
+      "description": "文件类工具的路径规则：`read_file(reports/**)` 放行匹配路径、其他路径按默认处理；`write_file` 写受保护路径被拒绝；`edit_file` 未读先改被拒绝。验证：集成测试；P6 报告的文件工具部分。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10a-A03",
+      "task": "T10a",
+      "description": "P4（`none` 档）：完整跑一轮读写文件的会话后，runtime 节点本地磁盘上没有任何会话文件；大文件进入对象存储，小文件进入 `workspace_entries`。验证：集成测试；报告 `docs/poc/P04-文件系统装配.md`（`none` 档部分）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10a-A04",
+      "task": "T10a",
+      "description": "工具账本：每次调用都有记录，幂等键为 `session_id` 加 `tool_use_id`，`non_idempotent` 工具把幂等键传给下游。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10a-A05",
+      "task": "T10a",
+      "description": "技能清单出现在系统提示词中，`load_skill_through_path` 能加载技能正文。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10a-A06",
+      "task": "T10a",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10b-A01",
+      "task": "T10b",
+      "description": "`web_fetch` 的 SSRF 表驱动测试全部通过；5 MB 上限生效。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10b-A02",
+      "task": "T10b",
+      "description": "`web_search` 两个适配器通过 WireMock 测试，按租户配置切换。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10b-A03",
+      "task": "T10b",
+      "description": "MCP：进程内 MCP 服务的工具被发现并以 `mcp__` 前缀暴露，凭据在请求头中注入且未出现在日志与事件中。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10b-A04",
+      "task": "T10b",
+      "description": "`knowledge_search` 在未配置时返回明确的错误结果给模型，不抛异常中断轮次。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10b-A05",
+      "task": "T10b",
+      "description": "P8 预验证：MCP SDK 0.17.2 的 Servlet 传输在 Spring Boot 4.1 中暴露的 MCP 服务，能被平台的 MCP 客户端发现并调用。验证：集成测试；报告 `docs/poc/P08-MCP-Server.md`（预验证部分）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10b-A06",
+      "task": "T10b",
+      "description": "系统提示词按四层顺序组装；同一智能体的两个会话请求前缀逐字节相同；外部内容的工具结果带来源标签，内容中的伪造标签被转义。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T10b-A07",
+      "task": "T10b",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T11-A01",
+      "task": "T11",
+      "description": "沙箱镜像构建成功，以非 root 运行；执行服务的 pytest 全部通过。验证：构建与测试输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T11-A02",
+      "task": "T11",
+      "description": "执行服务接口与 AgentScope 2.0.4 扩展的约定逐字段一致。验证：对照表（扩展源码位置与服务实现位置）加接口测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T11-A03",
+      "task": "T11",
+      "description": "`kind-verify.sh meridian` 输出 PASS；沙箱 Pod 内 `uname -r` 含 `gvisor`。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T11-A04",
+      "task": "T11",
+      "description": "三个规格的模板与预热池部署成功，Pod 的安全上下文符合要求。验证：`kubectl get` 与 Pod spec 的关键字段。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T11-A05",
+      "task": "T11",
+      "description": "`SandboxDriver` 能完成认领、执行命令、上传下载文件、快照、删除、从快照恢复，恢复后文件一致。验证：`kind` 标签的集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T11-A06",
+      "task": "T11",
+      "description": "`SingleStartSandbox` 在并发调用 `start()` 时只执行一次。验证：并发测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T11-A07",
+      "task": "T11",
+      "description": "P5 数据完整，报告已写。验证：报告路径与关键数值。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T11-A08",
+      "task": "T11",
+      "description": "`scripts/dev/verify.sh` 通过（不含 `kind` 标签）；`-Pkind` 的测试在本机通过。验证：两条命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12a-A01",
+      "task": "T12a",
+      "description": "沙箱档会话：智能体用 `bash` 执行命令、读写文件成功；沙箱跨两轮存活。验证：`kind` 集成测试（`ScriptedModel` 驱动）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12a-A02",
+      "task": "T12a",
+      "description": "空闲回收：超过空闲阈值后沙箱被快照并删除；下一轮从快照恢复，文件一致；回收与新轮次并发时不会删除正在使用的沙箱。验证：集成测试（可控时钟）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12a-A03",
+      "task": "T12a",
+      "description": "P4 沙箱档的四条全部满足。验证：测试；补全 `docs/poc/P04-文件系统装配.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12a-A04",
+      "task": "T12a",
+      "description": "P6：bash 规则的三种情况全部符合预期。验证：测试；补全 `docs/poc/P06-规则与审批.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12a-A05",
+      "task": "T12a",
+      "description": "P9 的三条全部满足。验证：测试；报告 `docs/poc/P09-会话沙箱.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12a-A06",
+      "task": "T12a",
+      "description": "`outputs/` 在轮次结束后出现在对象存储中；docx 技能生成的文件可以下载并被 python-docx 重新打开。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12a-A07",
+      "task": "T12a",
+      "description": "沙箱 vCPU 秒进入用量记录，沙箱命令进入审计。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12a-A08",
+      "task": "T12a",
+      "description": "`scripts/dev/verify.sh` 通过；`-Pkind` 的测试在本机通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12b-A01",
+      "task": "T12b",
+      "description": "P14 的四条全部满足。验证：kind 中的实测输出；报告 `docs/poc/P14-出网控制.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12b-A02",
+      "task": "T12b",
+      "description": "Pod IP 被清空后，30 秒缓存内的授权也立即失效。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12b-A03",
+      "task": "T12b",
+      "description": "Helm chart 中 Envoy 与 NetworkPolicy 可以按 values 在\"runtime 在宿主\"与\"runtime 在集群内\"两种拓扑间切换；`helm lint` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T12b-A04",
+      "task": "T12b",
+      "description": "`scripts/dev/verify.sh` 通过；`-Pkind` 的测试在本机通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T13-A01",
+      "task": "T13",
+      "description": "主智能体调用 `spawn_subagent` 后，子线程被创建、执行、返回结果，父智能体基于结果继续。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T13-A02",
+      "task": "T13",
+      "description": "子上下文不包含父线程的 `AgentState`、`ToolRequestConfig`（自定义工具）与文件系统对象。验证：测试断言。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T13-A03",
+      "task": "T13",
+      "description": "P12：同时拉起两个同名子智能体，两条子线程的事件互不混淆；中断父线程时两条子线程都停止。验证：测试；报告 `docs/poc/P12-子智能体.md`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T13-A04",
+      "task": "T13",
+      "description": "子智能体遇到需要审批的工具时被拒绝（存在显式 ask 规则时同样如此），父智能体收到拒绝结果。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T13-A05",
+      "task": "T13",
+      "description": "超时后子智能体被取消，父智能体收到超时结果。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T13-A06",
+      "task": "T13",
+      "description": "每轮超过拉起上限时，多余的调用被拒绝。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T13-A07",
+      "task": "T13",
+      "description": "子智能体的用量计入父会话，账本带子线程 ID。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T13-A08",
+      "task": "T13",
+      "description": "`GET /v1/sessions/{id}/threads` 与线程流返回正确的数据；`?threads=main` 的会话流只含主线程事件与线程状态事件。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T13-A09",
+      "task": "T13",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R1-A01",
+      "task": "R1",
+      "description": "P7 报告给出并发轮次与 SSE 连接的上限、瓶颈与测试条件。验证：报告路径与数值。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R1-A02",
+      "task": "R1",
+      "description": "P11 报告证明 10 万线程轮转后堆内存稳定，或已实现缓解措施并重新证明。验证：报告路径与数值。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R1-A03",
+      "task": "R1",
+      "description": "四个维度的审查都已完成；每条发现都有处理结论（已修复并有测试、不同意及理由、登记为后续项）。验证：报告中的发现清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R1-A04",
+      "task": "R1",
+      "description": "`docs/poc/M0-总结.md` 覆盖 P1 至 P15，并给出是否进入 M1 的结论。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R1-A05",
+      "task": "R1",
+      "description": "架构设计「非功能需求」已更新为实测值。验证：diff。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R1-A06",
+      "task": "R1",
+      "description": "各模块 `CLAUDE.md` 与代码一致，根 `CLAUDE.md` 在 200 行以内。验证：检查清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R1-A07",
+      "task": "R1",
+      "description": "`scripts/dev/verify.sh` 与 `-Plive`、`-Pkind` 的测试全部通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14a-A01",
+      "task": "T14a",
+      "description": "control-plane 启动，`cp` 迁移成功，健康检查通过。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14a-A02",
+      "task": "T14a",
+      "description": "角色矩阵表驱动测试全部通过。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14a-A03",
+      "task": "T14a",
+      "description": "API Key：创建时返回一次明文；以哈希存储；作用域限制生效；吊销后 1 秒内 control-plane 与 runtime 都拒绝该 Key。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14a-A04",
+      "task": "T14a",
+      "description": "限流：超过速率时返回 429 与 `Retry-After`，正常请求带 `RateLimit-*` 头。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14a-A05",
+      "task": "T14a",
+      "description": "runtime 在非测试 profile 下不再使用 `DevApiKeyResolver`。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14a-A06",
+      "task": "T14a",
+      "description": "管理操作产生审计 outbox 记录，不含 Key 明文。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14a-A07",
+      "task": "T14a",
+      "description": "新建租户后，不手工插入任何数据就能完成一轮会话；修改该租户的并发配额后，runtime 中的 `max_running` 随之更新。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14a-A08",
+      "task": "T14a",
+      "description": "`docker compose --profile app up` 启动 control-plane、runtime 与脚本化模型服务，经 API Key 跑通一轮会话。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14a-A09",
+      "task": "T14a",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14b-A01",
+      "task": "T14b",
+      "description": "OIDC：Keycloak 登录得到的令牌可以访问管理 API；配合 `Meridian-Project` 头可以访问 runtime 公开 API；没有该项目角色时被拒绝。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14b-A02",
+      "task": "T14b",
+      "description": "服务 JWT：runtime 调用 control-plane 内部接口时使用服务 JWT；过期或 audience 不符时被拒绝；JWKS 轮换后校验仍然成功。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14b-A03",
+      "task": "T14b",
+      "description": "开发期静态服务凭据已从非测试代码中移除。验证：代码搜索输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14b-A04",
+      "task": "T14b",
+      "description": "角色矩阵测试由 OIDC 令牌驱动，全部通过。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T14b-A05",
+      "task": "T14b",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15a-A01",
+      "task": "T15a",
+      "description": "凭据：明文无法经任何接口读出；密文存储；不同租户的数据密钥不同；每次解析都有审计记录；日志与事件中无明文。验证：集成测试与日志检查。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15a-A02",
+      "task": "T15a",
+      "description": "Vault Transit 实现通过 Vault 的 Testcontainers 测试。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15a-A03",
+      "task": "T15a",
+      "description": "通过管理 API 创建凭据、供应商账号与模型后，runtime 的模型调用从 control-plane 解析供应商与凭据（`scripted` 供应商与 `-Plive` 的 DashScope 各一次），不读 `dev-config/providers/`。验证：集成测试与 `-Plive` 输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15a-A04",
+      "task": "T15a",
+      "description": "价格表版本化：新版本生效后，新用量按新价格，旧记录不变。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15a-A05",
+      "task": "T15a",
+      "description": "供应商、模型、凭据变更后 runtime 立即使用新配置；删除被引用的资源返回冲突。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15a-A06",
+      "task": "T15a",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15b-A01",
+      "task": "T15b",
+      "description": "通过管理 API 创建供应商账号、模型、凭据、智能体、发布版本、环境后，业务方用 API Key 创建会话并完成一轮真实对话（`-Plive`，`qwen-plus`），全程不读 `dev-config/`。验证：端到端集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15b-A02",
+      "task": "T15b",
+      "description": "JSON Schema 与 `ResolvedAgentSpec` 一致性测试通过；发布时的六项校验都有失败用例。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15b-A03",
+      "task": "T15b",
+      "description": "已发布的版本不可修改；版本对比接口返回差异。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15b-A04",
+      "task": "T15b",
+      "description": "配置失效：发布新版本、修改环境后，runtime 在通知后立即使用新配置创建新会话；运行中的会话继续使用原版本。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15b-A05",
+      "task": "T15b",
+      "description": "项目级权限策略与\"记住此决定\"的项目级规则存于 control-plane，并在 runtime 的权限合成中生效。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15b-A06",
+      "task": "T15b",
+      "description": "MCP 服务注册时探测并保存工具清单；在智能体版本中引用后，会话中出现 `mcp__` 工具，凭据来自凭据库。验证：集成测试（进程内 MCP 服务）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15b-A07",
+      "task": "T15b",
+      "description": "`GET /v1/agents` 用 API Key 只能看到本项目已发布的智能体；租户级系统提示词出现在请求的租户层；联网搜索后端按租户设置切换。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15b-A08",
+      "task": "T15b",
+      "description": "技能包上传、版本化、在会话中被加载（docx 技能）。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T15b-A09",
+      "task": "T15b",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T16-A01",
+      "task": "T16",
+      "description": "一轮真实或模拟的对话后，`usage_records` 中有对应记录，成本按价格表正确计算；重复投递不产生重复记录。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T16-A02",
+      "task": "T16",
+      "description": "调整价格表后，新记录用新价格，历史记录不变。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T16-A03",
+      "task": "T16",
+      "description": "四级预算：任一级达到硬阈值时 runtime 拒绝新的模型调用并以 `budget_exceeded` 结束；达到软阈值时产生告警。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T16-A04",
+      "task": "T16",
+      "description": "对账：人为制造 Redis 与账本不一致后，对账任务按账本修正并记录差异。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T16-A05",
+      "task": "T16",
+      "description": "审计：管理操作、权限判定、待处理动作回应、凭据访问、沙箱命令都能在审计查询中检索到；`meridian_app` 角色无法更新或删除审计记录。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T16-A06",
+      "task": "T16",
+      "description": "`GET /v1/usage` 与管理报表的聚合结果与账本明细一致。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T16-A07",
+      "task": "T16",
+      "description": "分区自动创建：时钟推进到月底时下个月分区已存在。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T16-A08",
+      "task": "T16",
+      "description": "新租户在未设置预算前，模型调用以 `budget_exceeded` 被拒绝；设置后可用。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T16-A09",
+      "task": "T16",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17a-A01",
+      "task": "T17a",
+      "description": "Webhook：四种事件按订阅投递，签名可被验证；接收方返回 500 时按退避重试；接收方按事件 `id` 去重；手动重投可用。验证：集成测试（WireMock 接收方）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17a-A02",
+      "task": "T17a",
+      "description": "删除会话后，数据库、对象存储、kind 集群中都没有该会话的残留；删除有审计记录；中途失败后重试能完成。验证：集成测试（含 `kind` 标签的沙箱部分）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17a-A03",
+      "task": "T17a",
+      "description": "事件归档后，`GET /v1/sessions/{id}/events` 仍返回完整、按序的事件；SSE 补发同样能读到归档事件。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17a-A04",
+      "task": "T17a",
+      "description": "事件保留：租户配置的保留天数生效，到期的事件与归档文件被删除并写审计。验证：集成测试（可控时钟）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17a-A05",
+      "task": "T17a",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17b-A01",
+      "task": "T17b",
+      "description": "文件上传后在 `user.message` 中引用，智能体能在工作区读到该文件。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17b-A02",
+      "task": "T17b",
+      "description": "工作区 API 在两个档位下的行为符合要求；写受保护路径被拒绝；路径穿越被拒绝。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17b-A03",
+      "task": "T17b",
+      "description": "每轮结束产生 `session.usage`，数值与账本一致。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17b-A04",
+      "task": "T17b",
+      "description": "`/v1/responses` 子集的流式与非流式响应符合规范；不支持的参数返回明确错误。验证：契约测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T17b-A05",
+      "task": "T17b",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A01",
+      "task": "T18",
+      "description": "四种测试语料都能完成写入，进度接口反映状态，失败的任务按退避重试。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A02",
+      "task": "T18",
+      "description": "切分保留标题路径与页码；表格作为整体切片；切片长度落在目标范围内。验证：针对制度文件与 PDF 的断言。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A03",
+      "task": "T18",
+      "description": "扫描件经 `doc-parser` 解析出文字（Docling）。验证：集成测试（容器化的 doc-parser）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A04",
+      "task": "T18",
+      "description": "Embedding 经 runtime 内部接口调用，用量记在 runtime 一侧，knowledge 不产生用量记录。验证：集成测试；`-Plive` 下用真实模型写入一份文档。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A05",
+      "task": "T18",
+      "description": "`chunks` 的向量、全文、`acl_tags` 索引存在且被使用（`EXPLAIN` 确认）。验证：测试输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A06",
+      "task": "T18",
+      "description": "删除文档后，切片与对象存储中的原文件都被删除。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A07",
+      "task": "T18",
+      "description": "`doc-parser` 的 Ruff、类型检查、pytest 通过，已接入 `scripts/dev/verify.sh`。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A08",
+      "task": "T18",
+      "description": "knowledge 调用 runtime 时使用服务 JWT；吊销的 API Key 在 1 秒内被 knowledge 拒绝。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A09",
+      "task": "T18",
+      "description": "知识库存储量每日上报为用量；knowledge 的写操作有审计记录；POST 支持幂等。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T18-A10",
+      "task": "T18",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19-A01",
+      "task": "T19",
+      "description": "混合检索的过滤条件全部在 SQL 中，`EXPLAIN` 确认使用了索引。验证：测试输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19-A02",
+      "task": "T19",
+      "description": "权限隔离：没有对应标签的调用方在 REST、`knowledge_search`、MCP、前置检索四种形态下都检索不到受限切片。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19-A03",
+      "task": "T19",
+      "description": "检索评测：四种配置的命中率@5 与 MRR 已记录；回归测试使用录制的 Embedding 与 rerank 结果（离线、确定），以本次实测值为基线。\"混合加 rerank\"不占优时写分析，**不调整语料与问题**。验证：`-Plive` 输出、评测记录与回归测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19-A04",
+      "task": "T19",
+      "description": "端到端问答的 5 个问题引用的来源与检索结果一致；无权限用户的会话中，事件与工具结果里不出现受限切片（回答本身只断言非空）。验证：`-Plive` 测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19-A05",
+      "task": "T19",
+      "description": "P8：MCP Inspector 调通 `knowledge_search`。验证：命令与输出；报告定稿。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19-A06",
+      "task": "T19",
+      "description": "前置检索按配置开关生效，注入内容带来源标签。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19-A07",
+      "task": "T19",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19b-A01",
+      "task": "T19b",
+      "description": "`docs/engineering/console-api-map.md` 覆盖十一个一级导航的每个页面，每行都有对应接口。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19b-A02",
+      "task": "T19b",
+      "description": "对照表中缺失的接口已全部实现，写入规范，契约测试覆盖。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19b-A03",
+      "task": "T19b",
+      "description": "项目级待处理动作的列表与历史、概览聚合的结果与底层数据一致。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19b-A04",
+      "task": "T19b",
+      "description": "OIDC 下添加的成员首次登录后获得授予的角色。验证：集成测试（Keycloak）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19b-A05",
+      "task": "T19b",
+      "description": "新接口的授权规则已加入角色矩阵测试并通过。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T19b-A06",
+      "task": "T19b",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R2-A01",
+      "task": "R2",
+      "description": "资源表与一期能力清单逐项有实现位置，缺失项已补齐或登记。验证：报告中的对照表。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R2-A02",
+      "task": "R2",
+      "description": "三份 OpenAPI 规范与实现一致，契约测试覆盖全部端点。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R2-A03",
+      "task": "R2",
+      "description": "T19b 的页面到接口对照表与实现一致；新发现的缺口已登记。验证：对照表与登记事项。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R2-A04",
+      "task": "R2",
+      "description": "四个维度的审查完成，每条发现都有处理结论。验证：发现清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R2-A05",
+      "task": "R2",
+      "description": "`e2e/backend/` 中 M1 验收场景的后端部分全部跑通。验证：脚本输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R2-A06",
+      "task": "R2",
+      "description": "`scripts/dev/verify.sh`、`-Plive`、`-Pkind` 全部通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20a-A01",
+      "task": "T20a",
+      "description": "\"设计定稿\"一节已写入，自查逐条完成，并写明修改过的默认值。验证：文档 diff。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20a-A02",
+      "task": "T20a",
+      "description": "令牌亮暗两套齐全；正文对比度不低于 4.5:1，大字与图标不低于 3:1（令牌页显示数值）。验证：Storybook 令牌页截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20a-A03",
+      "task": "T20a",
+      "description": "lint 能拦截硬编码颜色、`lucide-react` 导入与能机检的禁用条目。验证：逐条临时写入违规代码时 lint 失败，撤销后通过。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20a-A04",
+      "task": "T20a",
+      "description": "自研图标与 Phosphor 图标并排时线宽与视觉重量一致。验证：截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20a-A05",
+      "task": "T20a",
+      "description": "`SessionTimeline` 实现子午线、子线程分叉、\"此刻\"标记、新事件落位动画；减少动效模式下只有不透明度变化。验证：截图或录屏。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20a-A06",
+      "task": "T20a",
+      "description": "时间轴性能：Playwright 在固定的 1 万条事件数据上连续滚动 5 秒，帧时间 p95 不超过 16.7 ms，没有超过 50 ms 的长任务。验证：Playwright 输出的帧时间统计。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20a-A07",
+      "task": "T20a",
+      "description": "用户已确认视觉方向。验证：确认日期与意见（只有用户在对话中明确确认后才能标 `passing`）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20a-A08",
+      "task": "T20a",
+      "description": "ADR-0021 已写，依赖版本均为最新稳定版且发布至少两周。验证：ADR 与 `package.json`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20a-A09",
+      "task": "T20a",
+      "description": "`pnpm -C console lint`、`typecheck`、`test`、`build-storybook` 全部通过，并已接入 `scripts/dev/verify.sh`。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20b-A01",
+      "task": "T20b",
+      "description": "基元与领域组件齐全，每个组件的 story 覆盖规定的状态；Storybook a11y 检查零违规。验证：Storybook 构建输出与 a11y 报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20b-A02",
+      "task": "T20b",
+      "description": "代码中没有 `lucide-react` 与 `@radix-ui/react-icons` 的导入，lint 通过。验证：lint 输出与代码搜索。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20b-A03",
+      "task": "T20b",
+      "description": "领域组件的 Vitest 测试全部通过。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20b-A04",
+      "task": "T20b",
+      "description": "组件在亮暗两种主题下的截图与 T20a 确认的方向一致（同一套颜色、字体、间距、圆角、阴影）。验证：截图（`tmp/evidence/T20b/`）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20b-A05",
+      "task": "T20b",
+      "description": "`pnpm -C console lint`、`typecheck`、`test`、`build-storybook` 全部通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20c-A01",
+      "task": "T20c",
+      "description": "原型页面齐全（外壳、四种模板、会话列表、智能体编辑、待处理动作、概览），数据真实感强，没有占位文字。验证：截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20c-A02",
+      "task": "T20c",
+      "description": "至少两轮截图评审，问题清单与修正记录完整；禁用清单中需要人工检查的条目逐条无违反。验证：报告与 `tmp/evidence/T20c/` 中的截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20c-A03",
+      "task": "T20c",
+      "description": "最后一轮的减法已完成，每个页面记录了去掉的内容。验证：报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T20c-A04",
+      "task": "T20c",
+      "description": "`pnpm -C console lint`、`typecheck`、`test`、`build-storybook` 全部通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T21-A01",
+      "task": "T21",
+      "description": "用 Keycloak 测试用户登录后进入控制台，令牌只在内存中（刷新页面后静默续期成功）；退出后受保护路由跳转登录。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T21-A02",
+      "task": "T21",
+      "description": "导航结构与架构设计一致，折叠状态被记住；⌘K 能跳转到任一页面。验证：Playwright 用例与截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T21-A03",
+      "task": "T21",
+      "description": "API 类型由规范生成，构建时自动更新；代码中没有手写的接口类型。验证：构建配置与代码搜索。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T21-A04",
+      "task": "T21",
+      "description": "problem+json 错误按通知策略呈现，`request_id` 可复制。验证：组件测试与截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T21-A05",
+      "task": "T21",
+      "description": "SSE 客户端在断线、乱序、重复、跳号四种情况下得到连续不重复的事件序列。验证：单元测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T21-A06",
+      "task": "T21",
+      "description": "权限：观察者角色看不到写操作，或操作被禁用并说明原因。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T21-A07",
+      "task": "T21",
+      "description": "用 `toHaveScreenshot` 为应用外壳与四种页面模板建立亮暗主题、1280 与 1920 宽度的截图基线，并与 T20c 原型逐一对照一致。验证：基线文件与对照截图（`tmp/evidence/T21/`）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T21-A08",
+      "task": "T21",
+      "description": "CI 中控制台的全部检查通过。验证：CI 配置与本地等效命令的输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T21-A09",
+      "task": "T21",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T22-A01",
+      "task": "T22",
+      "description": "从零创建一个智能体（含工具、技能、子智能体、权限规则、知识库）并发布，用它在 Playground 外通过 API 创建会话成功。验证：Playwright 用例加 API 调用。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T22-A02",
+      "task": "T22",
+      "description": "表单校验与 JSON Schema 一致：非法配置（例如子智能体工具超出父智能体）在本地被拦截，服务端校验错误也能定位到字段。验证：组件测试与 Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T22-A03",
+      "task": "T22",
+      "description": "发布前展示版本差异；版本对比页正确显示差异。验证：Playwright 用例与截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T22-A04",
+      "task": "T22",
+      "description": "子智能体拓扑图正确反映配置。验证：截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T22-A05",
+      "task": "T22",
+      "description": "环境的出网白名单校验生效，修改后修订号递增。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T22-A06",
+      "task": "T22",
+      "description": "所有页面的加载骨架、空态、错误态、无权限状态都已实现，与 T20c 原型一致，内容区以外与 T21 的截图基线（`toHaveScreenshot`）一致。验证：亮暗主题与两种宽度的截图（`tmp/evidence/T22/`）与 `toHaveScreenshot` 结果，对照评审表与禁用清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T22-A07",
+      "task": "T22",
+      "description": "用 `ego-browser` 做一次完整走查：以开发者身份完成\"创建、发布、对比、回滚为新草稿\"流程，记录发现的问题并修正。验证：走查记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T22-A08",
+      "task": "T22",
+      "description": "控制台全部检查与 `scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T23-A01",
+      "task": "T23",
+      "description": "上传一个技能包，预览正确，发布后能被智能体引用。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T23-A02",
+      "task": "T23",
+      "description": "注册一个 MCP 服务（测试环境中的进程内服务或本地 MCP 服务），工具清单出现，副作用等级可标注并保存。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T23-A03",
+      "task": "T23",
+      "description": "新建供应商账号与模型后，连通性测试成功（`DASHSCOPE_API_KEY`，作为凭据录入），显示延迟与用量。验证：Playwright 用例（`live` 标签）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T23-A04",
+      "task": "T23",
+      "description": "凭据明文在提交后不出现在页面、网络响应、浏览器存储与查询缓存中。验证：Playwright 用例检查 DOM、网络响应与存储。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T23-A05",
+      "task": "T23",
+      "description": "价格表新版本生效后，历史用量的成本不变。验证：Playwright 用例加 API 断言。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T23-A06",
+      "task": "T23",
+      "description": "所有页面的状态完整，与设计规范一致，内容区以外与 T21 的截图基线（`toHaveScreenshot`）一致。验证：截图（`tmp/evidence/T23/`）与 `toHaveScreenshot` 结果，对照评审表与禁用清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T23-A07",
+      "task": "T23",
+      "description": "用 `ego-browser` 以管理员身份走查\"接入一个新模型供应商并给智能体使用\"的全过程，记录并修正问题。验证：走查记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T23-A08",
+      "task": "T23",
+      "description": "控制台全部检查与 `scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T24-A01",
+      "task": "T24",
+      "description": "Playground 中与一个真实模型（`qwen-plus`）的智能体对话，时间轴实时显示消息、工具调用与结果、状态变化，结束后显示用量与成本。验证：Playwright 用例（`live` 标签）与录屏或截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T24-A02",
+      "task": "T24",
+      "description": "待处理动作：触发一个需要审批的工具调用，在控制台批准后智能体继续；拒绝后智能体收到拒绝结果。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T24-A03",
+      "task": "T24",
+      "description": "运行中插入一条补充指令（steer），它在当前轮被智能体使用；中断后本轮在检查点停止。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T24-A04",
+      "task": "T24",
+      "description": "子智能体的线程在时间轴中分叉展示，线程树可切换到子线程查看其事件。验证：截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T24-A05",
+      "task": "T24",
+      "description": "断开网络后重连，事件完整且不重复，`StreamIndicator` 正确反映状态。验证：Playwright 用例（模拟断网）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T24-A06",
+      "task": "T24",
+      "description": "1 万条事件的会话：Playwright 在固定数据上连续滚动 5 秒，帧时间 p95 不超过 16.7 ms，没有超过 50 ms 的长任务；选中事件时检查器在 200ms 内显示内容。验证：Playwright 输出的帧时间统计与计时。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T24-A07",
+      "task": "T24",
+      "description": "页面与 T20a、T20c 的原型一致，内容区以外与 T21 的截图基线（`toHaveScreenshot`）一致；禁用清单逐条无违反；亮暗主题、两种宽度截图完整。验证：截图（`tmp/evidence/T24/`）、`toHaveScreenshot` 结果与评审记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T24-A08",
+      "task": "T24",
+      "description": "用 `ego-browser` 以开发者身份完成一次\"调试一个工具调用失败的会话\"的走查，记录并修正问题。验证：走查记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T24-A09",
+      "task": "T24",
+      "description": "控制台全部检查与 `scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25a-A01",
+      "task": "T25a",
+      "description": "上传文档后写入进度实时更新；检索测试按 `acl_tags` 返回不同结果。验证：Playwright 用例（`live` 标签用真实 Embedding）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25a-A02",
+      "task": "T25a",
+      "description": "待处理：脚本触发的审批出现在列表中，在列表中批准后会话继续，记录移入历史；能跳转到会话中的对应位置。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25a-A03",
+      "task": "T25a",
+      "description": "概览页回答\"需要我处理什么、什么在出错、花了多少\"，没有模板化的统计卡片墙。验证：截图与评审说明。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25a-A04",
+      "task": "T25a",
+      "description": "全部页面状态完整、与 T20c 原型一致，内容区以外与 T21 的截图基线一致；禁用清单逐条无违反。验证：截图（`tmp/evidence/T25a/`）、`toHaveScreenshot` 结果与评审记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25a-A05",
+      "task": "T25a",
+      "description": "用 `ego-browser` 走查\"上传文档、做一次检索测试、处理一个待处理动作、从概览进入一个出错的会话\"，记录并修正问题。验证：走查记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25a-A06",
+      "task": "T25a",
+      "description": "控制台全部检查与 `scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25b-A01",
+      "task": "T25b",
+      "description": "用量图表与明细的数字与 `GET /v1/usage` 一致；CSV 导出正确。验证：Playwright 用例加 API 断言。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25b-A02",
+      "task": "T25b",
+      "description": "设置预算后，超过硬阈值的会话以 `budget_exceeded` 停止，告警出现在概览与横幅中。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25b-A03",
+      "task": "T25b",
+      "description": "API Key：明文只显示一次；吊销需要输入名称确认；吊销后该 Key 调用 API 被拒绝。验证：Playwright 用例。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25b-A04",
+      "task": "T25b",
+      "description": "Webhook：配置后能看到投递记录，失败的投递可以重投。验证：Playwright 用例（本地接收端）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25b-A05",
+      "task": "T25b",
+      "description": "全部页面状态完整、与设计规范一致，内容区以外与 T21 的截图基线一致；禁用清单逐条无违反。验证：截图（`tmp/evidence/T25b/`）、`toHaveScreenshot` 结果与评审记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25b-A06",
+      "task": "T25b",
+      "description": "用 `ego-browser` 以管理员身份走查\"添加成员、创建 API Key、设置预算、配置 Webhook 并查看投递\"，记录并修正问题。验证：走查记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T25b-A07",
+      "task": "T25b",
+      "description": "控制台全部检查与 `scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R3-A01",
+      "task": "R3",
+      "description": "四类用户的主要任务都能顺畅完成，走查记录中的问题全部修正或登记。验证：走查记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R3-A02",
+      "task": "R3",
+      "description": "一致性审查的差异全部消除。验证：审查清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R3-A03",
+      "task": "R3",
+      "description": "禁用清单在全部页面上逐条无违反。验证：截图与清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R3-A04",
+      "task": "R3",
+      "description": "键盘可完成全部主要任务；Storybook 与页面级 a11y 检查零违规。验证：检查报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R3-A05",
+      "task": "R3",
+      "description": "性能预算全部满足：首屏 JavaScript（gzip）不超过 300 KB；时间轴在真实页面中，Playwright 在固定的 1 万条事件数据上连续滚动 5 秒，帧时间 p95 不超过 16.7 ms，没有超过 50 ms 的长任务。验证：构建分析与 Playwright 输出的帧时间统计。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R3-A06",
+      "task": "R3",
+      "description": "全部页面亮暗主题、1280 与 1920 宽度的最终截图归档在 `tmp/evidence/R3/`，并在报告中给出总体评价。验证：截图与报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R3-A07",
+      "task": "R3",
+      "description": "控制台全部检查与 `scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T26-A01",
+      "task": "T26",
+      "description": "SDK 由规范生成并通过编译；封装层的单元测试覆盖 SSE 续传与去重（会话流与线程流两种 `seq` 语义）、Webhook 签名校验、幂等键。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T26-A02",
+      "task": "T26",
+      "description": "三个示例对本地运行的平台执行成功（知识库问答用 `-Plive` 的真实模型）。验证：运行输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T26-A03",
+      "task": "T26",
+      "description": "一个只读过快速开始文档的子代理（不给它其他上下文），能按文档完成第一次对话。验证：子代理的执行记录与结果。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T26-A04",
+      "task": "T26",
+      "description": "事件参考覆盖规范中的全部事件类型；错误码参考覆盖全部错误码。验证：生成脚本的对照检查。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T26-A05",
+      "task": "T26",
+      "description": "文档通过 `doc-craft` 的体检脚本，无明显问题。验证：脚本输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T26-A06",
+      "task": "T26",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T27-A01",
+      "task": "T27",
+      "description": "一次包含工具调用、子智能体、沙箱命令、知识检索的会话，在追踪中呈现完整的跨服务调用树，公共属性齐全。验证：Tempo 或 Jaeger 中的追踪截图，或导出的追踪 JSON。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T27-A02",
+      "task": "T27",
+      "description": "该会话的 LLM 调用在 Langfuse 中可见（提示词、输出、token、成本）；普通追踪中不含提示词正文。验证：截图与追踪 JSON 检查。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T27-A03",
+      "task": "T27",
+      "description": "指标表中的每个指标都已注册且命名与标签一致。验证：一个测试或脚本对照架构设计的指标表。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T27-A04",
+      "task": "T27",
+      "description": "五个看板导入后都有数据。验证：截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T27-A05",
+      "task": "T27",
+      "description": "告警规则通过 `promtool` 校验；人为制造调度积压时触发告警。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T27-A06",
+      "task": "T27",
+      "description": "脱敏：日志中出现 API Key、凭据、个人信息时被遮盖。验证：单元测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T27-A07",
+      "task": "T27",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T28-A01",
+      "task": "T28",
+      "description": "全部镜像在本机构建成功，以非 root 运行；Java 服务在只读根文件系统下正常启动。验证：构建输出与运行检查。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T28-A02",
+      "task": "T28",
+      "description": "`helm install` 在 kind 集群中一次部署整个平台，迁移 Job 先于服务执行，全部 Pod 就绪。验证：命令输出与 `kubectl get pods`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T28-A03",
+      "task": "T28",
+      "description": "部署后通过 Ingress 完成一次端到端对话（API Key），控制台可登录。验证：命令与截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T28-A04",
+      "task": "T28",
+      "description": "滚动更新 runtime 时，进行中的会话只出现一次 `session.status_rescheduled` 并最终完成。验证：测试记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T28-A05",
+      "task": "T28",
+      "description": "HPA（KEDA 队列深度与 CPU）、PDB、NetworkPolicy、沙箱节点污点生效（沙箱 Pod 只调度到沙箱节点、只能访问出网代理；平台服务之间按需互通）。验证：三节点 kind 集群中的 `kubectl` 输出与连通性测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T28-A06",
+      "task": "T28",
+      "description": "`helm lint` 与 `helm template` 通过；发布工作流语法有效。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T28-A07",
+      "task": "T28",
+      "description": "部署手册经一个只读手册的子代理按步骤在新建的 kind 集群上完成安装。验证：子代理的执行记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T28-A08",
+      "task": "T28",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T29-A01",
+      "task": "T29",
+      "description": "八个验收场景的自动化测试全部通过。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T29-A02",
+      "task": "T29",
+      "description": "压测结果达到或接近非功能需求；未达到的项给出差距与原因。验证：Gatling 报告与验收报告中的表格。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T29-A03",
+      "task": "T29",
+      "description": "三类故障注入后会话最终完成，客户端收到的事件连续、不重复。验证：测试记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T29-A04",
+      "task": "T29",
+      "description": "gitleaks 零发现；跨租户访问测试全部被拒；SSRF 测试全部被拦截；沙箱检查全部通过。验证：命令与测试输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T29-A05",
+      "task": "T29",
+      "description": "`docs/acceptance/M1-验收报告.md` 完整，结论明确（可交付、有条件交付、不可交付）。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T29-A06",
+      "task": "T29",
+      "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R4-A01",
+      "task": "R4",
+      "description": "M1 范围的验收项全部为 `passing` 或有登记的 `blocked` 原因；抽查的 20 项重新验证通过。验证：抽查记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R4-A02",
+      "task": "R4",
+      "description": "架构设计中的\"必须\"与\"禁止\"逐条有对应的代码或检查。验证：对照表。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R4-A03",
+      "task": "R4",
+      "description": "README、接入文档、部署手册、工程规范与实现一致。验证：核对清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R4-A04",
+      "task": "R4",
+      "description": "`CLAUDE.md` 体系检查完成，问题已修正。验证：检查清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R4-A05",
+      "task": "R4",
+      "description": "技术债清单与 M2 校准建议已写入。验证：`PLAN.md` diff。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R4-A06",
+      "task": "R4",
+      "description": "`scripts/dev/verify.sh`、`-Plive`、`-Pkind`、控制台全部检查、`e2e/m1/` 全部通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T30-A01",
+      "task": "T30",
+      "description": "差异清单覆盖平台用到的全部 AgentScope API。验证：清单与代码中的引用对照。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T30-A02",
+      "task": "T30",
+      "description": "验证分支编译通过，测试结果（通过、失败及原因）完整记录。验证：分支名与测试输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T30-A03",
+      "task": "T30",
+      "description": "机会评估与依赖影响分析完整。验证：报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T30-A04",
+      "task": "T30",
+      "description": "ADR 提议已写，主分支代码没有任何升级改动。验证：ADR 路径与 `git diff main`。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T31-A01",
+      "task": "T31",
+      "description": "设计增补已写，且未改动基线条款（或已写 ADR 提议并停止）；用户已确认设计增补。验证：文件路径与确认日期。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T31-A02",
+      "task": "T31",
+      "description": "第一次会话中声明的偏好在第二次会话中被使用（`-Plive`）。验证：测试输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T31-A03",
+      "task": "T31",
+      "description": "不同终端用户、不同项目、不同租户的记忆互相不可见。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T31-A04",
+      "task": "T31",
+      "description": "准入：一次性信息与敏感字段（例如手机号、身份证号）不被写成长期记忆。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T31-A05",
+      "task": "T31",
+      "description": "每条记忆可追溯到产生它的会话与轮次；用户可查看、编辑、删除，按终端用户批量删除生效。验证：API 与控制台测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T31-A06",
+      "task": "T31",
+      "description": "平台版 `session_search` 系列工具基于平台存储工作，runtime 节点本地磁盘无会话数据。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T31-A07",
+      "task": "T31",
+      "description": "控制台记忆管理页面通过截图评审与禁用清单检查。验证：截图与评审记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T31-A08",
+      "task": "T31",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T32-A01",
+      "task": "T32",
+      "description": "设计增补已写，未改动基线条款（或已写 ADR 提议并停止）；用户已确认设计增补。验证：文件路径与确认日期。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T32-A02",
+      "task": "T32",
+      "description": "后台子智能体：主智能体拉起后继续工作，子智能体完成后通知在下一次推理前到达主智能体。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T32-A03",
+      "task": "T32",
+      "description": "执行后台子智能体的节点被强杀后，子线程轮次由其他节点续跑，通知不丢失、不重复。验证：故障注入测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T32-A04",
+      "task": "T32",
+      "description": "配额与预算继承生效；主线程取消子线程成功。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T32-A05",
+      "task": "T32",
+      "description": "团队模式：两个成员协作完成一个共享任务列表中的任务，无重复认领。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T32-A06",
+      "task": "T32",
+      "description": "控制台正确呈现后台子线程与团队成员的活动，通过截图评审。验证：截图与评审记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T32-A07",
+      "task": "T32",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T33-A01",
+      "task": "T33",
+      "description": "设计增补已写。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T33-A02",
+      "task": "T33",
+      "description": "分叉：新会话从指定事件处继续对话，原会话不受影响；两种档位的工作区都正确复制。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T33-A03",
+      "task": "T33",
+      "description": "回退：回到指定事件之前后继续对话，智能体看不到被回退的内容；工作区恢复到对应时刻。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T33-A04",
+      "task": "T33",
+      "description": "有副作用的工具调用在回退时被明确告知不会撤销。验证：API 响应与控制台截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T33-A05",
+      "task": "T33",
+      "description": "控制台操作通过截图评审。验证：截图与评审记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T33-A06",
+      "task": "T33",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T34-A01",
+      "task": "T34",
+      "description": "设计增补已写，用户已确认。验证：文件路径与确认日期。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T34-A02",
+      "task": "T34",
+      "description": "安全：`INSERT`、`UPDATE`、`DELETE`、DDL、多语句、`pg_sleep` 等危险函数、超出授权范围的表，全部被拦截；即使绕过解析层，只读账号也无法写入。验证：表驱动测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T34-A03",
+      "task": "T34",
+      "description": "语句超时、行数上限、并发上限生效。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T34-A04",
+      "task": "T34",
+      "description": "行级过滤按终端用户属性生效。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T34-A05",
+      "task": "T34",
+      "description": "10 个问题中至少 8 个生成正确结果（`-Plive`），失败的记录原因。验证：测试输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T34-A06",
+      "task": "T34",
+      "description": "大结果写入工作区后，智能体在沙箱中完成分析并生成图表产物。验证：场景测试（`-Pkind`）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T34-A07",
+      "task": "T34",
+      "description": "每条执行的 SQL 都有审计记录。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T34-A08",
+      "task": "T34",
+      "description": "数据源管理页面通过截图评审。验证：截图与评审记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T34-A09",
+      "task": "T34",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T35-A01",
+      "task": "T35",
+      "description": "设计增补已写，用户已确认。验证：文件路径与确认日期。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T35-A02",
+      "task": "T35",
+      "description": "有权限的开发者在控制台打开终端，执行命令并看到输出；窗口大小同步。验证：Playwright 用例（`kind`）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T35-A03",
+      "task": "T35",
+      "description": "没有权限的角色无法建立连接；令牌过期后连接被断开。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T35-A04",
+      "task": "T35",
+      "description": "连接与命令都有审计记录。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T35-A05",
+      "task": "T35",
+      "description": "空闲超时断开；有终端连接时沙箱不被回收。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T35-A06",
+      "task": "T35",
+      "description": "终端面板通过截图评审。验证：截图与评审记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T35-A07",
+      "task": "T35",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T36-A01",
+      "task": "T36",
+      "description": "设计增补与依赖 ADR 已写。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T36-A02",
+      "task": "T36",
+      "description": "外部 A2A 客户端（用 a2a-java SDK 编写的测试客户端）能发现并调用平台上暴露的智能体，流式获取结果。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T36-A03",
+      "task": "T36",
+      "description": "平台上的智能体能调用一个外部 A2A 智能体（测试中起一个），结果回到父线程。验证：场景测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T36-A04",
+      "task": "T36",
+      "description": "AG-UI 端点按映射表输出事件，一个最小的 AG-UI 前端示例能渲染对话。验证：集成测试与截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T36-A05",
+      "task": "T36",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T37-A01",
+      "task": "T37",
+      "description": "设计增补已写，用户已确认；出网凭据注入的 ADR 提议已写。验证：文件路径与确认日期。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T37-A02",
+      "task": "T37",
+      "description": "RLS：即使绕过 `TenantScopedRepository` 直接执行 SQL（测试中故意构造），也读不到其他租户的数据；调度 SQL 正常工作。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T37-A03",
+      "task": "T37",
+      "description": "RLS 的性能影响已测量并记录（关键查询的延迟对比）。验证：测试数据。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T37-A04",
+      "task": "T37",
+      "description": "外部 MCP 客户端通过 OAuth 访问 `/mcp/knowledge` 成功，未授权时被拒。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T37-A05",
+      "task": "T37",
+      "description": "智能体访问一个需要 OAuth 的 MCP 服务（测试中起一个），令牌被获取、存储、刷新。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T37-A06",
+      "task": "T37",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R5-A01",
+      "task": "R5",
+      "description": "设计增补并入正文的 ADR 提议已写，内容完整。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R5-A02",
+      "task": "R5",
+      "description": "`e2e/m1/` 全部通过。验证：测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R5-A03",
+      "task": "R5",
+      "description": "审查发现全部有处理结论。验证：发现清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R5-A04",
+      "task": "R5",
+      "description": "M2 新增页面通过一致性审查与禁用清单检查。验证：截图与清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R5-A05",
+      "task": "R5",
+      "description": "文档、`CLAUDE.md`、`acceptance.json` 一致且最新。验证：核对清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R5-A06",
+      "task": "R5",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T38-A01",
+      "task": "T38",
+      "description": "前提确认已写，结论明确（满足、不满足及原因）。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T38-A02",
+      "task": "T38",
+      "description": "前提满足时：每个接入点有开关与失败策略，JEV 不可用时按策略处理；执行防护不能放行权限引擎拒绝的调用。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T38-A03",
+      "task": "T38",
+      "description": "前提满足时：工具筛选在大工具集（50 个以上）下减少发给模型的工具数量，并记录对成本与准确率的影响。验证：测试数据。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T38-A04",
+      "task": "T38",
+      "description": "JEV 调用被计量并出现在用量中。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T38-A05",
+      "task": "T38",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T39-A01",
+      "task": "T39",
+      "description": "设计增补已写，风险明确列出。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T39-A02",
+      "task": "T39",
+      "description": "一个使用外部 Worker 的智能体完成一次真实任务（例如在沙箱中修改代码并运行测试），平台事件流完整。验证：场景测试（`-Plive`、`-Pkind`）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T39-A03",
+      "task": "T39",
+      "description": "外部 Worker 的模型调用经平台端点，受限流与预算约束并被计量。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T39-A04",
+      "task": "T39",
+      "description": "中断与取消对外部 Worker 生效。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T39-A05",
+      "task": "T39",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T40-A01",
+      "task": "T40",
+      "description": "选型结论与设计增补已写。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T40-A02",
+      "task": "T40",
+      "description": "智能体用浏览器工具完成一个任务：打开一个测试页面、填写表单、提交、截图确认结果。验证：场景测试（`-Pkind`，测试页面在集群内）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T40-A03",
+      "task": "T40",
+      "description": "浏览器访问白名单外的域名被拒绝。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T40-A04",
+      "task": "T40",
+      "description": "截图作为产物保存，在控制台时间轴中可查看。验证：截图。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T40-A05",
+      "task": "T40",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T41-A01",
+      "task": "T41",
+      "description": "设计增补已写。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T41-A02",
+      "task": "T41",
+      "description": "在所选 IM 中向机器人发消息，智能体回复；需要审批时以卡片呈现，在 IM 中批准后继续。验证：用 IM 平台提供的测试方式或模拟回调的集成测试，并说明真实环境的验证方式。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T41-A03",
+      "task": "T41",
+      "description": "定时任务按 cron 触发，以 `unattended` 会话运行，多实例下只执行一次，预算上限生效，结果被通知。验证：集成测试（可控时钟）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T41-A04",
+      "task": "T41",
+      "description": "控制台页面通过截图评审。验证：截图与评审记录。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T41-A05",
+      "task": "T41",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T42-A01",
+      "task": "T42",
+      "description": "设计增补已写。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T42-A02",
+      "task": "T42",
+      "description": "从控制台把 5 个会话加入数据集，对两个智能体版本运行评估，得到可对比的指标。验证：Playwright 用例与截图（`-Plive`）。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T42-A03",
+      "task": "T42",
+      "description": "规则评估器能检测出\"该调用的工具没有调用\"与\"超出成本上限\"。验证：测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T42-A04",
+      "task": "T42",
+      "description": "评估运行受预算上限约束，被计量。验证：集成测试。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "T42-A05",
+      "task": "T42",
+      "description": "全部质量门禁通过。验证：命令输出。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R6-A01",
+      "task": "R6",
+      "description": "M3 设计增补并入正文的 ADR 提议已写。验证：文件路径。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R6-A02",
+      "task": "R6",
+      "description": "全量回归全部通过。验证：命令输出与测试报告。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R6-A03",
+      "task": "R6",
+      "description": "能力清单逐行有状态与实现位置。验证：清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R6-A04",
+      "task": "R6",
+      "description": "审查发现全部有处理结论。验证：发现清单。",
+      "status": "not_started",
+      "evidence": ""
+    },
+    {
+      "id": "R6-A05",
+      "task": "R6",
+      "description": "交接文档、README、技术债清单已更新。验证：diff。",
+      "status": "not_started",
+      "evidence": ""
+    }
+  ]
+}

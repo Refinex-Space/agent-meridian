@@ -8,6 +8,8 @@ AgentMeridian 的所有设计与决策文档都在这里。动手写代码前，
 | [research/](research/tech-selection.md) | 技术选型调研：候选框架、评估依据、被否决的方案 | 想知道"为什么选它"时 |
 | [adr/](adr/README.md) | 架构决策记录：流程、模板、ADR-0020 起的新决策 | 要改动架构基线时 |
 | [poc/](poc/README.md) | M0 技术验证的跟踪表与验证报告 | M0 期间；评审验证结论时 |
+| [engineering/](engineering/coding-standards.md) | 工程规范：编码、测试、控制台设计系统、CLAUDE.md 维护 | 写任何代码前读对应规范 |
+| [plan/](plan/PLAN.md) | 交付计划：任务看板、执行协议、58 个任务提示词、验收记录、参考源码 | 每个任务开工与收尾时 |
 
 ## 文档约定
 

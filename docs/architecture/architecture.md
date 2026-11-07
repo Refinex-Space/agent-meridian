@@ -2,10 +2,10 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.0 |
+| 版本 | v1.1 |
 | 日期 | 2026-11-07 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
-| 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮对抗性评审 |
+| 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
 
 AgentMeridian（简称 Meridian）是部署在企业内的通用智能体平台。业务系统拿到 BaseUrl 和 API Key，通过一套标准的 Sessions/Events API，就能使用具备完整 Harness 能力的智能体：会话、子智能体、工具、沙箱、审批、记忆、技能、知识库。管理员在控制台配置智能体、模型、凭据、预算，并审计所有执行过程。
 
@@ -197,7 +197,7 @@ agent-meridian/
 
 | 模块 | 可以依赖 |
 |---|---|
-| `meridian-common` | 无（只依赖 JDK 和 Jackson） |
+| `meridian-common` | 无（只依赖 JDK、Jackson、reactor-core；reactor-core 只允许出现在 `context` 与 `concurrent` 包） |
 | `meridian-api` | common |
 | `meridian-security`、`meridian-persistence` | common、api |
 | `meridian-engine-spi` | common |
@@ -207,6 +207,8 @@ agent-meridian/
 | `meridian-control-plane` | common、api、security、persistence |
 | `meridian-runtime` | common、api、security、persistence、engine-spi；engine-agentscope 只能在 `config` 包中引用其装配入口 |
 | `meridian-knowledge` | common、api、security、persistence、model-client |
+| `meridian-test-support` | common、persistence；只作为其他模块的 test 作用域依赖 |
+| `meridian-sdk-java` | 无（只依赖 JDK 与 Jackson） |
 | 三个应用之间 | 禁止互相依赖，只走 HTTP |
 
 ### 端口
@@ -226,6 +228,10 @@ agent-meridian/
 | `KnowledgeSearchPort` | 知识库检索 | `tooling` |
 | `WebSearchPort`、`WebFetchPort` | 联网搜索与抓取（含 SSRF 防护） | `tooling` |
 | `SecretResolver` | 凭据明文解析 | `config` |
+| `BlobStorePort` | 大对象写入与读取（超过 16 KB 的工具结果等） | `stream` |
+| `ThreadRegistryPort` | 创建子线程、更新线程状态 | `session` |
+
+上表是落地时的初始清单。为落实本文档已规定的行为，可以在 `meridian-engine-spi` 中新增端口或给既有端口加方法，签名只出现平台类型，并同步更新本表；删除端口或改变既有端口的语义，才需要走 ADR。
 
 反方向，runtime 需要内核完成的事，也由 `meridian-engine-spi` 定义接口、`meridian-engine-agentscope` 实现，签名里只出现平台类型：
 
@@ -361,7 +367,7 @@ erDiagram
 
 `turns` 上有一个部分唯一索引：`UNIQUE (thread_id) WHERE status IN ('queued','running','awaiting_action')`。所以每个线程同时最多一个未结束的轮次，插入用 `ON CONFLICT DO NOTHING`。
 
-**control-plane（schema `cp`）**：`tenants`、`projects`、`members`、`role_bindings`、`api_keys`（只存 SHA-256 哈希和前 8 位）、`provider_accounts`、`models`、`price_books`、`secrets`（信封加密的密文）、`agents`、`agent_versions`（`spec jsonb`，发布后只读）、`environments`（带 `revision`）、`skills`、`skill_versions`、`mcp_servers`、`budgets`、`webhooks`。另有两张按月分区的表，主键都是 `(id, occurred_at)`，`occurred_at` 取自消息载荷，重投时落在同一分区，保证幂等：
+**control-plane（schema `cp`）**：`tenants`（含并发配额 `max_concurrent_turns`、事件保留天数 `event_retention_days`）、`tenant_settings`（租户级系统提示词、联网搜索后端等）、`projects`、`members`、`role_bindings`、`api_keys`（只存 SHA-256 哈希和前 8 位）、`provider_accounts`、`models`、`price_books`、`secrets`（信封加密的密文）、`agents`、`agent_versions`（`spec jsonb`，发布后只读）、`environments`（带 `revision`）、`skills`、`skill_versions`、`mcp_servers`、`budgets`、`webhooks`。另有两张按月分区的表，主键都是 `(id, occurred_at)`，`occurred_at` 取自消息载荷，重投时落在同一分区，保证幂等：
 
 - `usage_records`。
 - `audit_logs`，只追加。
@@ -375,13 +381,14 @@ flowchart LR
     RT[runtime] -->|outbox → Redis Stream usage| CPB[control-plane 计费消费者] --> UR[(cp.usage_records)]
     RT -->|outbox → Redis Stream audit| CPA[control-plane 审计消费者] --> AL[(cp.audit_logs)]
     KB[knowledge] -->|outbox → Redis Stream audit| CPA
+    KB -->|outbox → Redis Stream usage：存储 GB 天| CPB
     CP[control-plane] -->|Pub/Sub config.invalidate| RT
     CP -->|Pub/Sub key.revoked| RT & KB
 ```
 
 用量和审计采用 outbox 模式：业务事务里写 `outbox`，Relay 发布到 Redis Stream，control-plane 的消费者按 `(id, occurred_at)` 幂等入库。Redis 短暂不可用时，记录不会丢。
 
-模型用量只由 runtime 记账，包括 knowledge 发起的 Embedding 和 rerank。knowledge 调用内部模型接口时，在请求头里带上租户、项目、知识库，用于记账归属。
+模型用量只由 runtime 记账，包括 knowledge 发起的 Embedding 和 rerank。knowledge 只上报知识库存储量（每日统计，计量单位 GB 天）。knowledge 调用内部模型接口时，在请求头里带上租户、项目、知识库，用于记账归属。
 
 ### 数据保留
 
@@ -565,6 +572,8 @@ UPDATE rt.turns SET status = 'running', lease_owner = :node, lease_epoch = lease
 ```
 
 满额租户的轮次在第 1 步就被排除。所以一个租户积压再多，也不会让 Worker 反复认领又放回，更不会挤占其他租户。
+
+**租户并发计数行**。为某个租户第一次插入轮次时，同一事务中执行 `INSERT INTO rt.tenant_concurrency ... ON CONFLICT DO NOTHING`，`max_running` 取该租户的并发配额（`cp.tenants.max_concurrent_turns`，经内部接口下发，未配置时取全局默认值）。control-plane 修改配额时经 `config.invalidate` 通知 runtime 更新。
 
 **租约。**
 
@@ -904,7 +913,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 | 调用方 | 方式 |
 |---|---|
 | 业务系统 | `Authorization: Bearer mk_live_…`。只存 SHA-256 哈希；校验结果在各服务缓存 60 秒，吊销经 Pub/Sub 立即失效 |
-| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存 |
+| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目；服务端按该用户在项目中的角色授权 |
 | 服务之间 | control-plane 签发的服务 JWT（RS256，5 分钟有效，带 audience） |
 | 外部 MCP 客户端 | API Key；MCP 规范的 OAuth 在二期支持 |
 
@@ -922,13 +931,20 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 
 ### 租户隔离
 
-业务仓储**必须**继承 `TenantScopedRepository`，它从 `PlatformContext` 取 `tenant_id` 和 `project_id`，自动加到每条查询上；ArchUnit 禁止绕过它直接使用 `JdbcTemplate`。
+数据访问按作用域分为三类，每类有自己的基类，ArchUnit 检查 `JdbcClient` 只被这三类基类的子类依赖：
 
-以下三类存储豁免，隔离由各自的键承担。豁免清单写在 ArchUnit 规则里，列的是真正执行 SQL 的 runtime 端口实现类：
+| 基类 | 作用域 | 用于 | 位置约束 |
+|---|---|---|---|
+| `TenantScopedRepository`（项目级，默认） | 从 `PlatformContext` 取 `tenant_id` 与 `project_id`，自动加到每条查询上 | 绝大多数业务数据 | 各上下文的 `infra` 包 |
+| `TenantScopedRepository`（租户级） | 只取 `tenant_id` | 租户级数据：成员、角色绑定、供应商账号、租户设置 | 子类在构造时声明作用域 |
+| `SystemRepository` | 不带租户条件，跨租户运行 | 认证查找（按 API Key 哈希）、调度（认领、回收、租户并发计数）、超时扫描、沙箱空闲回收、outbox 投递、用量与审计消费者、对账、事件归档与保留、写入队列 | 只能放在各上下文的 `infra.system` 包，类上标注 `@CrossTenant(reason = "...")` 写明理由 |
 
-- `AgentStateRepository` 的实现（`session.infra`），服务于 `FencedAgentStateStore`：键为线程 ID。线程 ID 只能经租约获得，租约又只对本租户的轮次发放。
-- `WorkspaceStorePort` 的实现（`workspace.infra`），服务于 `MeridianBaseStore`：命名空间以租户和项目开头。
-- 调度相关的 SQL（认领、回收、租户并发计数），在 `dispatch.infra`：跨租户运行。
+三类之外，还有两个按自身键隔离的端口实现，也继承 `SystemRepository`：
+
+- `AgentStateRepository` 的实现，服务于 `FencedAgentStateStore`：键为线程 ID。线程 ID 只能经租约获得，租约又只对本租户的轮次发放。
+- `WorkspaceStorePort` 的实现，服务于 `MeridianBaseStore`：命名空间以租户和项目开头。
+
+`SystemRepository` 的子类不能被 `api` 层直接调用，只能被本上下文的后台作业与端口实现使用。
 
 二期在 PostgreSQL 启用行级安全（RLS）作为第二道防线。
 
@@ -1022,6 +1038,11 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 - 每 15 秒发一次 `ping`。
 - 带 `?event_deltas=true` 时才推送 `event_start` 和 `event_delta`。
 - 单连接最长 60 分钟，到期由服务端关闭，客户端带 `Last-Event-ID` 重连。
+
+会话流与线程流的 `seq` 语义不同：
+
+- **会话流**（`/v1/sessions/{id}/stream`）包含全部线程的事件，`seq` 连续。可以用 `?threads=main` 只订阅主线程与线程状态事件，此时 `seq` 不连续，对账方式同线程流。
+- **线程流**（`/v1/sessions/{id}/threads/{tid}/stream`）只包含本线程的事件，`seq` 不连续。服务端对账时查询 `(上次 seq, last_seq]` 区间内本线程的事件，其他线程占用的序号不算缺失；客户端只按 `seq` 去重，不做跳号判断。
 
 ### Webhook
 
@@ -1125,7 +1146,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 
 ### 本地开发
 
-`deploy/compose` 启动 PostgreSQL、Redis、MinIO、Langfuse 和三个 Java 服务。本地的沙箱档用 AgentScope 的 Docker 沙箱代替，只允许在本地开发中这样做。
+`deploy/compose` 启动 PostgreSQL、Redis、MinIO 等数据组件；`app` profile 启动三个 Java 服务与 doc-parser，`observability` profile 启动可观测组件，`auth` profile 启动 Keycloak。本地的沙箱档使用 `scripts/dev/kind-gvisor.sh` 创建的 kind 集群（Calico 加 gVisor），与生产的隔离方式一致。
 
 ## 控制台
 
@@ -1157,7 +1178,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 ### 技术约定
 
 - 服务端状态统一用 TanStack Query 管理。
-- SSE 事件用 `EventSource` 封装成可订阅的 Hook，复用"SSE 协议"一节的去重和续传逻辑。
+- SSE 客户端基于 `fetch` 流式读取实现，封装成可订阅的 Hook，复用"SSE 协议"一节的去重和续传逻辑。浏览器的 `EventSource` 不能携带 `Authorization` 头，不使用。
 - API 类型从 OpenAPI 生成，禁止手写。
 - 路由和权限守卫用 TanStack Router。
 
@@ -1185,7 +1206,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 | 禁止依赖 Spring AI、LangChain4j、AgentScope starter、AgentScope RAG 扩展、AgentScope Service | maven-enforcer `bannedDependencies` |
 | 模块依赖方向符合"模块依赖规则" | ArchUnit + maven-enforcer |
 | `domain` 包不依赖 Spring 和 `infra` | ArchUnit |
-| 仓储继承 `TenantScopedRepository`，豁免清单之外不允许直接用 `JdbcTemplate` | ArchUnit |
+| `JdbcClient` 只被 `TenantScopedRepository` 与 `SystemRepository` 的子类依赖；`SystemRepository` 的子类只在 `infra.system` 包且带 `@CrossTenant` | ArchUnit |
 | 平台工具继承 `ToolBase`；运行时 Toolkit 中的非 `ToolBase` 工具必须在白名单内 | ArchUnit + runtime 启动自检 |
 | `HarnessAgent` 装配满足"引擎装配"表 | `AgentAssembler` 单元测试逐项断言 |
 | 事件与停止原因映射穷举 | 单元测试 |
@@ -1250,7 +1271,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 
 ### M2 与 M3
 
-- **M2**：长期记忆、后台子智能体、A2A、Web 终端、会话 fork 与 rewind、预算报表、待处理动作收件箱、智能问数、PostgreSQL RLS、MCP OAuth、出网代理注入凭据（TLS 终止方案）。AgentScope 2.1 正式版发布后，在这一期评估升级。
+- **M2**：长期记忆、后台子智能体、A2A、Web 终端、会话 fork 与 rewind、预算报表的高级分析、跨项目的待处理收件箱、智能问数、PostgreSQL RLS、MCP OAuth、出网代理注入凭据（TLS 终止方案）。AgentScope 2.1 正式版发布后，在这一期评估升级。
 - **M3**：JEV 判断层、外部 Agent Worker（Claude Agent SDK、LangGraph）、浏览器沙箱、IM 渠道、定时任务、轨迹评估。
 
 ## 能力清单
@@ -1317,6 +1338,13 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | 子智能体用 harness 的 `agent_spawn` | 平台工具 `spawn_subagent` | ADR-0012 |
 | 出网代理注入凭据 | 一期只做白名单 | ADR-0017 |
 | 模型路由挂在 `onModelCall` 中间件 | 在 `RoutedModel` 内 | ADR-0006 |
+
+## 变更记录
+
+| 版本 | 日期 | 变更 |
+|---|---|---|
+| v1.0 | 2026-11-07 | 基线 |
+| v1.1 | 2026-11-07 | 交付计划评审后修订：租户隔离改为三类基类（含 `SystemRepository`）；模块依赖表补充 reactor-core、test-support、sdk-java；端口表新增 `BlobStorePort`、`ThreadRegistryPort` 并明确新增端口属于补充；会话流与线程流的 `seq` 语义；租户并发计数行的创建与配额；`tenant_settings` 与租户级配置；知识库存储计量；本地沙箱改用 kind 加 gVisor；M2 清单措辞调整；控制台 SSE 改用 `fetch`、公开 API 接受控制台 OIDC 令牌 |
 
 ## 待决问题
 

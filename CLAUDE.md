@@ -6,7 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-当前处于**架构基线阶段，M0 之前**：仓库里只有文档，还没有构建脚本和代码。第一个 Maven 模块落地时，把构建、测试、运行单个测试的命令补进本文件"命令"一节；在此之前不要假设任何命令存在。
+当前处于**架构基线阶段，M0 之前**：仓库里只有文档与环境脚本，还没有构建脚本和代码。T01 落地后，把构建、测试、运行单个测试的命令补进本文件"命令"一节；在此之前不要假设任何构建命令存在。
+
+## 交付流程
+
+- 项目按 `docs/plan/PLAN.md` 推进：58 个任务（T01–T42 及其拆分子任务如 T09a、新增的 T19b，评审 R1–R6），每个任务一个会话，用 `/task <编号>` 启动，任务提示词在 `docs/plan/tasks/`。
+- 每个任务都遵守 `docs/plan/protocol.md`：开工检查与续做、范围与决策分级（补充型写 ADR 后继续，变更型写 ADR 后停止受影响部分）、质量门禁、验收记录、收尾与报告格式。
+- 验收项的唯一记录是 `docs/plan/acceptance.json`：只改本任务验收项的 `status` 与 `evidence`，只有亲自验证过才能标 `passing`。
+- 工程规范：`docs/engineering/` 下的 `coding-standards.md`、`testing.md`、`frontend-design.md`、`claude-md.md`；`.claude/rules/` 中按路径生效的精要版。
+- 参考源码在 `/Users/refinex/develop/project/reference/`，用法与注意事项见 `docs/plan/references.md`：带着问题查、分析评估后再采纳，不照搬；claude-code-analysis 只学机制、不复制。
 
 ## 唯一事实来源
 
@@ -17,7 +25,19 @@ AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通
 
 ## 命令
 
-暂无。
+构建与测试命令由 T01 写入。目前可用的环境脚本：
+
+- `scripts/dev/kind-gvisor.sh [集群名]`：创建带 Calico（执行 NetworkPolicy）与 gVisor 运行时的本地 kind 集群。
+- `scripts/dev/kind-verify.sh [集群名]`：验证 gVisor 生效、NetworkPolicy 被执行，输出 PASS。
+- `kind delete cluster --name <集群名>`：删除集群，释放内存。
+
+## 本机环境
+
+- JDK 25 在 `~/develop/jdk/temurin25/Contents/Home`，已通过 `.claude/settings.local.json` 设为会话的 `JAVA_HOME`。
+- 真实模型测试用环境变量 `DASHSCOPE_API_KEY`；已实测的端点与模型见 `docs/engineering/testing.md`。
+- 慢速下载（GitHub 发布物等）用 `MERIDIAN_DOWNLOAD_PROXY`；Maven、npm、PyPI 可直连。
+- 工具沙箱注入的代理变量只在宿主回环地址可用：传进容器或 kind 节点的命令必须显式设置代理。**禁止**打印代理变量、`~/.npmrc`、`~/.m2/settings*.xml` 等可能含凭据的内容。
+- Docker Desktop 内存 8 GB；需要多个容器或 kind 集群时，先检查可用内存，不足时提醒用户关闭应用或调大内存。
 
 ## 整体架构
 
