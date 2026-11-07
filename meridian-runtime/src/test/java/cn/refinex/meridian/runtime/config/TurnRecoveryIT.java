@@ -82,7 +82,7 @@ class TurnRecoveryIT {
 
             killed.cancel("模拟进程被强杀");
             fixture.clock.advance(LEASE_EXPIRY);
-            assertThat(nodeB.node().reaper().reapExpired()).isEqualTo(1);
+            WorkerFixture.reap(nodeB);
             TurnResult resultB = nodeB.claimAndRun();
 
             String turnId = killed.turn().turnId();
@@ -267,7 +267,7 @@ class TurnRecoveryIT {
             fixture.writeCalls.awaitEntered();
             killed.cancel("模拟进程被强杀");
             fixture.clock.advance(LEASE_EXPIRY);
-            nodeB.node().reaper().reapExpired();
+            WorkerFixture.reap(nodeB);
             Instant reclaimedAt = fixture.clock.instant();
 
             TurnResult result = nodeB.claimAndRun();
@@ -316,12 +316,12 @@ class TurnRecoveryIT {
             fixture.lookupCalls.awaitEntered();
             first.cancel("模拟进程被强杀");
             fixture.clock.advance(LEASE_EXPIRY);
-            nodeB.node().reaper().reapExpired();
+            WorkerFixture.reap(nodeB);
             // node-b 认领后还没执行就崩溃
             TurnExecution second = nodeB.claim();
             second.cancel("模拟进程被强杀");
             fixture.clock.advance(LEASE_EXPIRY);
-            nodeA.node().reaper().reapExpired();
+            WorkerFixture.reap(nodeA);
 
             TurnResult result = nodeA.claimAndRun();
 

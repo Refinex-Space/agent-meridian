@@ -33,6 +33,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import org.springframework.data.redis.connection.stream.MapRecord;
@@ -140,7 +141,15 @@ final class WorkerFixture {
                         >= persistedCount);
     }
 
-    static <T> T await(Supplier<T> supplier, java.util.function.Predicate<T> done) {
+    /**
+     * 让节点的回收器回收过期的租约，直到回收到一个轮次。正在被写入的轮次行被 {@code FOR SHARE} 锁住时回收器会跳过它
+     * （ADR-0027 第 3 条），生产中下个周期再处理，测试里立即重试。
+     */
+    static void reap(WorkerNode node) {
+        await(() -> node.node().reaper().reapExpired(), reaped -> reaped == 1);
+    }
+
+    static <T> T await(Supplier<T> supplier, Predicate<T> done) {
         long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
         T value = supplier.get();
         while (!done.test(value)) {
