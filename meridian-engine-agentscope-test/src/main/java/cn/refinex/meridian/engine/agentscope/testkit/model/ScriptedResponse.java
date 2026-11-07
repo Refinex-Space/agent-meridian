@@ -21,12 +21,16 @@ import reactor.core.publisher.Flux;
  * <ul>
  *   <li>文本、思考按指定大小切成多个分块，每块一个 {@code TEXT_BLOCK_DELTA} 或 {@code THINKING_BLOCK_DELTA}。
  *   <li>工具调用的入参 JSON 切成两个分块，都带调用 ID 与工具名，各产生一个 {@code TOOL_CALL_DELTA}。
- *   <li>结构化输出是对 {@code generate_response} 的工具调用（模型不支持原生结构化输出时 AgentScope 的做法）。
+ *   <li>结构化输出是对 {@code generate_response} 的工具调用（模型不支持原生结构化输出时 AgentScope 的做法），
+ *       入参形如 {@code {"response": {...}}}，与 2.0.4 中该工具的 schema 一致。
  * </ul>
  *
  * <p>线程安全：构建完成后只读。
  */
 public final class ScriptedResponse {
+
+    /** AgentScope 2.0.4 的 {@code generate_response} 工具把结构化数据放在这个字段下。 */
+    private static final String STRUCTURED_OUTPUT_FIELD = "response";
 
     private final List<List<ContentBlock>> chunks = new ArrayList<>();
     private ChatUsage usage;
@@ -113,7 +117,10 @@ public final class ScriptedResponse {
      */
     public ScriptedResponse structuredOutput(Map<String, Object> data) {
         structuredOutputs++;
-        return toolCall("call_structured_" + structuredOutputs, ReActAgent.STRUCTURED_OUTPUT_TOOL_NAME, data);
+        return toolCall(
+                "call_structured_" + structuredOutputs,
+                ReActAgent.STRUCTURED_OUTPUT_TOOL_NAME,
+                Map.of(STRUCTURED_OUTPUT_FIELD, data));
     }
 
     /**

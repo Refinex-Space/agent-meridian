@@ -183,7 +183,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 4. `meridian-engine-agentscope` 的 `assembly`：模型工厂接口、`AgentAssembler`（装配表逐行落实，未实现组件经注入的提供者获得）、`AgentAssemblerTest` 逐行断言（A03）
 - 2026-11-07 用户采纳 ADR-0023（`maxRetries(1)`）与 ADR-0025（testkit 可依赖 common 与 engine-spi），阻塞解除
 - [x] 5. 实例缓存：`acquire`/`release`、容量 500、空闲 30 分钟、引用计数归零才 `close()`；并发测试（A04）
-- [ ] 6. `ScriptedModel` 驱动 `HarnessAgent` 的场景测试：纯文本、单工具、并行工具、首包前错误、首包后错误、请求断言（A05）
+- [x] 6. `ScriptedModel` 驱动 `HarnessAgent` 的场景测试：纯文本、单工具、并行工具、首包前错误、首包后错误、请求断言（A05）
 - [ ] 7. P1：runtime `config` 包下的 Spring Boot WebFlux 集成测试（Jackson 3 Web 序列化 + 同 JVM 装配并 `streamEvents`，含工具调用）；报告 `docs/poc/P01-运行基线.md`、`docs/poc/README.md`（A06）
 - [ ] 8. 收尾：Checkstyle/Javadoc 抽查（A07）、`scripts/dev/verify.sh`（A08）、三个模块 `CLAUDE.md`、根 `CLAUDE.md`、架构设计「端口」表同步、`acceptance.json`、`PLAN.md`、提交
 
