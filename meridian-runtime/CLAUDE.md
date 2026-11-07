@@ -1,55 +1,61 @@
 # meridian-runtime
 
-运行时应用（Spring WebFlux，schema `rt`）：会话与线程、事件与 seq、轮次调度与租约、智能体状态的带租约存储；T06 起执行智能体，T07 起 HTTP API 与 SSE。不管理租户、凭据、模型目录（control-plane），不做知识库（knowledge）。
+运行时应用（Spring WebFlux，schema `rt`）：会话与线程、事件与 seq、轮次调度与租约、带租约的智能体状态存储、Worker 执行智能体与崩溃恢复、收件箱、工具账本；T07 起 HTTP API 与 SSE。不管理租户、凭据、模型目录（control-plane），不做知识库（knowledge）。
 
 ## 命令
 
 - 编译与单测：`./mvnw -pl meridian-runtime -am test`
-- 集成测试（Testcontainers：PostgreSQL、Redis）：`./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`；单个再加 `-Dit.test=<类名> -Dfailsafe.failIfNoSpecifiedTests=false`
-- 本地启动：`scripts/dev/up.sh` 后运行 `scripts/dev/run-runtime.sh [--server.port=18080]`（`dev` profile，口令从 compose 的 env 文件传入，Ctrl+C 停止）；启动时 Flyway 以 `meridian_migrator` 迁移 `rt`。健康检查 `GET /actuator/health`，探针 `/actuator/health/liveness`、`/readiness`。
-- profile：`dev` 连本地 compose（`application-dev.yml`，口令只读环境变量）；`test` 由测试的 `@DynamicPropertySource` 注入连接，节点 ID 固定为 `test-node`。
-- 迁移：`src/main/resources/db/migration/rt/`，`V0001__runtime_core.sql` 建出架构设计 runtime 核心表全部（含后续任务的表）；已合入的迁移不改，修正写新迁移。
+- 集成测试（Testcontainers：PostgreSQL、Redis、MinIO）：`./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`；单个再加 `-Dit.test=<类名> -Dfailsafe.failIfNoSpecifiedTests=false`
+- IDE 后台编译会把坏的 class 写进本模块的 `target/`（报 `Unresolved compilation problems` 或"无法访问 Interaction"），跑测试前先 `./mvnw -q clean -pl meridian-runtime`。
+- 本地启动：`scripts/dev/up.sh` 后运行 `scripts/dev/run-runtime.sh [--server.port=18080]`（`dev` profile，连 compose 的 PostgreSQL、Redis、MinIO，口令从 env 文件传入）。健康检查 `GET /actuator/health`，探针 `/actuator/health/liveness`、`/readiness`。
+- profile：`dev` 连本地 compose；`test` 由测试的 `@DynamicPropertySource` 注入连接（含 `SpringContainerProperties.minio`，对象存储是必需配置），节点 ID 固定为 `test-node`。
+- 迁移：`src/main/resources/db/migration/rt/`（`V0001` 核心表、`V0002` 状态的 `content_turn_id`）；已合入的迁移不改，修正写新迁移。
+- 开发配置：`dev-config/agents/*.yaml`（仓库根目录，`kind: agent_version | environment`），`meridian.runtime.dev-agent-config.directory` 可改；T15b 起智能体配置由 control-plane 下发。
 
 ## 包地图
 
-- `dispatch.app`：`TurnEnqueuer`（计数行、轮次、输入同事务，提交后唤醒）、`TurnClaimer`（三步认领，独立事务）、`LeaseRenewer`（10 秒）、`LeaseReaper`（5 秒）、`TurnTransitions`（置回队列三种原因、结束轮次）、`DispatchWakeups`（`dispatch.wakeup` 通知与 1 秒轮询）、`NodeLeaseRegistry`（`LeaseRegistry` 端口）与 `LeaseHandle`。后台任务在 `config.DispatchConfiguration` 中以 `PeriodicJob` 装配。
-- `stream.app.SessionEventWriter`：事件写入的唯一入口（Worker、API、回收器共用）；`DatabaseEventSink` 是 `EventSinkPort`（XADD 由 T06 加入）。`stream.infra.EngineJson`：事件 `data` 与 `turn_inputs.payload` 的编解码。
-- `session.infra`：会话、线程的项目级仓储；`session.infra.system.JdbcAgentStateRepository`：`AgentStateRepository` 端口。
-- 结果类型都是 sealed：`EnqueueResult`、`ClaimResult`、`TransitionResult`、`AppendResult`；租约条件不满足是结果，不是异常（状态端口按契约抛 `LeaseLostException`）。
+- `session.app.TurnWorker` 认领轮次，`TurnExecution.run()` 是执行一轮的唯一入口：`TurnPreparer`（读输入、恢复判定、写 `status_running`）→ `AgentEngine.runTurn` → 每个事件带租约写库 → 终态交给 `TurnFinisher`（结束轮次、计数、合并收件箱成下一轮、待处理动作、outbox、置回队列）→ `finally` 释放租约条目。`TurnWorkerLifecycle` 是后台循环与优雅下线（`SmartLifecycle`）。
+- 恢复判定是纯逻辑：`session.domain.RecoveryPlanner.decide(RecoverySnapshot)`，单测 `RecoveryPlannerTest`；停止原因到轮次状态的映射在 `TurnEnding`。
+- `dispatch.app`：`TurnEnqueuer`、`TurnClaimer`（`input(turn)` 读轮次输入）、`LeaseRenewer`、`LeaseReaper`、`TurnTransitions`、`DispatchWakeups`、`NodeLeaseRegistry`、`QueueDepthGauge`。后台任务在 `config.DispatchConfiguration` 中以 `PeriodicJob` 装配。
+- `stream.app.SessionEventWriter`：事件写入的唯一入口，提交后 XADD 到 `ev:{session_id}`（`EventStreamPublisher`）；`DatabaseEventSink` 是 `EventSinkPort`；`ObjectStoreBlobStore` 是 `BlobStorePort`（键 `rt/{tenant}/{session}/blobs/…`）。`stream.infra.EngineJson`：事件、轮次输入、自定义工具与开发配置的 JSON 编解码。
+- `delivery.app.DatabaseInbox`：`InboxPort`（steer 带租约消费）、`takePending`（合并成下一轮）、`redeliverSteer`。`tooling.app.DatabaseToolLedger`：`ToolLedgerPort`。`approval.infra.PendingActionRepository`：待处理动作写入。
+- `session.infra.system`：`JdbcAgentStateRepository`（`AgentStateRepository`，另有 `contentEpochOfTurn`）、`ThreadLockRepository`（线程咨询锁）。
+- `config`：`WorkerConfiguration`（执行配置、`AgentConfigProvider` 的文件实现 `FileAgentConfigProvider`、`AgentConfigPort`、`BlobStorePort`）；`EngineAutoConfiguration` 是自动配置，模型工厂、工具、文件系统、技能仓库四个提供者都存在时才装配 `AgentScopeEngine` 与 Worker（T09a、T10a 之前生产环境不认领轮次）。
+- 结果类型都是 sealed：`EnqueueResult`、`ClaimResult`、`TransitionResult`、`AppendResult`、`TurnResult`、`RecoveryDecision`；租约条件不满足是结果，不是异常（端口按契约抛 `LeaseLostException`）。
 
 ## 不变量
 
-- 时间一律取注入的 `Clock`，SQL 绑定 `:now`，不用 `now()`（ADR-0027）；数值来自 `DispatchProperties`，默认值见架构设计「租约」「租约回收」。
-- 带租约条件的写入先 `SELECT ... FROM rt.turns ... FOR SHARE` 锁住持有租约的轮次，再写；条件是 `status='running' AND lease_owner = 本节点 AND lease_epoch = epoch`（架构设计「租约与 fencing」，ADR-0027 第 3 条）。
-- 锁顺序：先 `rt.turns`，再 `rt.tenant_concurrency`，再 `rt.sessions`。同一事务里既入队又写事件时先入队。
-- 同节点重新认领：`LeaseHandle.release()` 之前本节点不再认领该线程（认领 SQL 排除 `heldThreadIds()`，`reserve` 用 `putIfAbsent`）。执行方必须在 `finally` 中 release。
-- seq 只由 `SessionEventWriter` 在会话行锁内分配；租约丢失不占用 seq。状态事件在同一事务中推进 `sessions.status`、`threads.status`。
-- 置回队列与结束保留 `lease_owner`、`lease_epoch`，恢复认领时失败那次的 epoch 是 `epoch - 1`；释放租户名额不减到负数。
-- 本模块的用例与仓储方法都是阻塞的：响应式代码一律经 `Blocking` 调用（`DatabaseEventSink` 是范例），后台任务在 `PeriodicJob` 的虚拟线程上运行；`JdbcAgentStateRepository` 由 AgentScope 在 `boundedElastic` 上同步调用。调度与端口仓储继承 `SystemRepository` 并带 `@CrossTenant`。
+- 时间一律取注入的 `Clock`，SQL 绑定 `:now`（ADR-0027）；数值来自 `DispatchProperties`、`WorkerProperties`。
+- 带租约条件的写入先 `SELECT ... FROM rt.turns ... FOR SHARE` 锁住持有租约的轮次再写（「租约与 fencing」）。锁顺序：先 `rt.turns`，再 `rt.tenant_concurrency`，再 `rt.sessions`；同一事务里既入队又写事件时先入队。
+- 结束轮次的事务先取线程咨询锁（`ThreadLockRepository`），T07 写 `user.message` 的事务也必须先取，否则消息会留在收件箱没有轮次处理（ADR-0028 第 8 条）。
+- 失去租约（续租 `REVOKED`、写入被拒、内核抛 `LeaseLostException`）只取消订阅，禁止 `interrupt`；放弃的执行不写任何数据。
+- 恢复认领按 `epoch > 1` 判断（下线续跑不加 `recovery_attempt`）；恢复方式按"本轮的内容写入"（`content_turn_id`）判定，不只比 `content_epoch`；`recovery_attempt` 达 2 时不再执行（ADR-0028 第 1、2 条）。
+- 同节点重新认领：`LeaseHandle.release()` 之前本节点不再认领该线程；`TurnExecution` 在 `doFinally` 中释放。
+- seq 只由 `SessionEventWriter` 在会话行锁内分配；状态事件在同一事务中推进会话与线程状态。XADD 失败不回滚，只记 `meridian.event.publish.failures`。
+- Redis 命令在调用线程上按顺序发出，不在前一条命令完成的回调（Netty 事件循环）上发下一条（`Mono.zip`、`flatMapSequential`）。
+- 本模块的用例与仓储都是阻塞的：响应式代码一律经 `Blocking`；调度与端口实现的跨租户仓储继承 `SystemRepository` 并带 `@CrossTenant`，项目级仓储从 `PlatformContext` 取租户与项目。
+- 指标（`session.app.TurnMetrics`）用 Micrometer 点分隔名，导出到 Prometheus 时变成「可观测性」表中的名字。
 
-## 认领 SQL 的执行计划
+## 故障注入测试的写法
 
-`ClaimQueryPlanIT`（2 万个已结束轮次、50 个待认领、20 个执行中，`ANALYZE` 后）：认领为 `Limit → LockRows → Nested Loop`，轮次侧 `Index Scan using turns_queued_idx`，计数行侧对 `tenant_concurrency` 顺序扫描（行数等于租户数）；回收走 `turns_lease_expiry_idx`；状态写入的租约条件走 `turns_lease_owner_idx`。改认领 SQL（`TurnQueueRepository.CLAIM_CANDIDATE_SQL`）后重跑该测试。
-
-## 并发测试的写法
-
-- 节点：`support.TestNode.create(节点 ID, 时钟)` 按生产依赖手工装配一个节点，多个节点共享数据库与同一个 `MutableClock`，模拟多节点；唤醒用计数器代替 Redis。
-- 数据：`support.TestSessions` 经仓储建会话与主线程；认领与回收跨租户运行，相关测试在 `@BeforeEach` 调 `RuntimeTestDatabase.truncate()`。
-- 时间：推进 `MutableClock` 让租约过期，直接调用 `reaper().reapExpired()`、`renewer().renewAll()`，不 sleep。
-- 竞争：线程池加 `CountDownLatch` 同时起跑；确定性的竞争用另一个连接持有行锁，以 `pg_locks` 中未授予的锁为同步点（迁移角色看不到其他角色在 `pg_stat_activity` 中的等待事件）。
-- 读库断言用 `support.DbAssertions`（迁移角色）；行映射中的 `timestamptz` 是 `java.sql.Timestamp`，用 `DbAssertions.instant` 转换。
-- BlockHound 由 `blockhound-junit-platform` 自动安装到全部测试；放行规则只有 `SecureRandom#nextBytes`（`support.RuntimeBlockHoundIntegration`）。
-- 带完整 Spring 上下文的测试加 `@DirtiesContext`：上下文里的回收器用系统时钟，缓存下来会回收其他测试的轮次。
+- 多节点：`config.WorkerFixture` 共享时钟、`ScriptedModel` 脚本（按调用顺序跨节点消费）、智能体配置（`TestAgents`）与记账工具；`fixture.node("node-a")` 组装完整节点（`WorkerNode`：`TestNode` + 收件箱、账本、对象存储、真实装配的内核、Worker）。引用 `meridian-engine-agentscope` 的测试放在 `config` 包。
+- 卡住执行：`LedgerTool` 记账并在执行中途等闸门（`fixture.lookupCalls.close()`/`open()`、`awaitEntered()`）；放行要在 `finally` 中。
+- 强杀：`execution.cancel(...)`（不收尾），时钟推进 31 秒，`WorkerFixture.reap(另一节点)` 重试回收直到成功（正在被写入的轮次行会被 `SKIP LOCKED` 跳过）。工具在接管之后再放行，它的结束记录写不进账本。
+- 中断：写 `turns.interrupt_requested_at` 后调 `renewer().renewAll()`。下线：`node.lifecycle().start()`/`stop()`。动用下线的类在 `@AfterEach` 调 `GracefulShutdownManager.getInstance().resetForTesting()`（JVM 单例）。
+- 旧执行的写入被拒：在内核层直接 `engine().runTurn(...)`（还没察觉租约丢失），比较前后的 `ThreadSnapshot`，见 `WorkerLeaseFencingIT`。
+- 单节点的调度测试用 `support.TestNode`；读库断言用 `support.DbAssertions`（迁移角色，`row`、`rows`、`list`）；`timestamptz` 用 `DbAssertions.instant` 转换。Redis 断言用 `RuntimeTestRedis.readAll`（XADD 是提交后异步发出的，用 `WorkerFixture.awaitStream` 等待）。
+- BlockHound 由 `blockhound-junit-platform` 自动安装；放行规则见 `support.RuntimeBlockHoundIntegration`（`SecureRandom#nextBytes`、Lettuce `SharedLock`）。带完整 Spring 上下文的测试加 `@DirtiesContext`。
 
 ## 易错点
 
 - `ON CONFLICT (thread_id) WHERE status IN (...)` 的条件必须与部分唯一索引一字不差，否则推断不到冲突目标。
-- `text[]` 参数传 `String[]`（`JdbcValues.textArray`）；`Instant` 参数在 `SystemRepository` 中用 `JdbcValues.timestamptz`。
-- jsonb 会规整键顺序与空白：断言 `data` 原文时按 jsonb 的输出写（键按长度再按字节排序），或解码后比较。
-- 认领在 `REQUIRES_NEW` 事务中执行，不要在外层事务里调用；入队、置回、结束、事件写入是 `REQUIRED`，可以组合进一个事务。
-- `security.web` 的请求 ID 过滤器在 Netty 事件循环上生成 ULID，会读 `/dev/urandom`；新的 BlockHound 违规先看是不是这条，再决定是否放行。
+- `text[]` 参数传 `String[]`（`JdbcValues.textArray`）；`Instant` 参数在 `SystemRepository` 中用 `JdbcValues.timestamptz`。jsonb 写入经 `JdbcValues.jsonb`，NUL 会被替换为 U+FFFD。
+- jsonb 会规整键顺序与空白：断言 `data` 原文时按 jsonb 的输出写（`": "` 带空格），或解码后比较。
+- 认领在 `REQUIRES_NEW` 事务中执行；入队、置回、结束、事件写入、收件箱、账本是 `REQUIRED`，可以组合进一个事务。
+- 内核事件的写入与 AgentScope 的执行是并行的：工具开始执行时 Worker 可能还在写上一个事件，测试要等事件写完再接管。
+- 批次级 checkpoint 开启时，强杀发生在第一批工具之后会走 `RecoveryOnly`；要测"重放完整输入"，在第一批工具执行中途强杀，或关闭 checkpoint（`WorkerFixture.withoutCheckpoint()`）。
 
 ## 对外接口
 
-- 实现 engine-spi 端口：`LeaseRegistry`（`NodeLeaseRegistry`）、`AgentStateRepository`（`JdbcAgentStateRepository`）、`EventSinkPort`（`DatabaseEventSink`，事件写入部分）。其余端口由 T06 起的任务实现。
-- 给 T06：`TurnClaimer.claim()` 得到 `LeaseHandle`（`listen` 接收中断与租约丢失），`TurnTransitions.requeue/finish`，`SessionEventWriter.append`，`TurnQueueRepository.findInput` 加 `EngineJson.readInput`，`DispatchWakeups.signals()`。
+- 实现 engine-spi 端口：`LeaseRegistry`、`AgentStateRepository`、`EventSinkPort`、`InboxPort`、`ToolLedgerPort`、`BlobStorePort`、`AgentConfigPort`；经 `AgentEngine` 使用内核。
+- 给 T07：发送消息的事务先取线程咨询锁，再入队（线程空闲）或写收件箱（`DatabaseInbox.add`），再写 `user.message`；SSE 读 `ev:{session_id}` 的 `type`、`seq`、`envelope` 字段（ADR-0028 第 6 条）。给 T08：`SteerMiddleware` 排在 `BatchCheckpointMiddleware`（80）之外，用 `InboxPort.consumeSteer`；`recovery_confirmation` 的 `payload` 带 `recovery_mode`。给 T10a：平台工具经 `ToolLedgerPort` 记账，结束时写入结果引用。

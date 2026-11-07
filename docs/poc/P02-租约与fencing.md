@@ -2,17 +2,17 @@
 
 | 项 | 内容 |
 |---|---|
-| 状态 | 进行中：存储层通过（T05）；中断、出错、停机三条完整路径由 T06 补充后定稿 |
+| 状态 | 通过：存储层（T05）与中断、出错、停机三条完整路径（T06） |
 | 通过标准 | 两个 Worker 争抢同一线程，失去租约的一方在中断、出错、停机各路径下都写不进任何状态（架构设计「M0 技术验证」） |
 | 环境 | macOS arm64，Temurin 25.0.5+8，Testcontainers 中的 PostgreSQL 17（`deploy/docker/postgres` 构建，pgvector + zhparser） |
-| 版本 | AgentScope 2.0.4、Spring Boot 4.1.2；T05 验证于 2026-11-07 |
+| 版本 | AgentScope 2.0.4、Spring Boot 4.1.2；T05、T06 验证于 2026-11-07 |
 
 ## 范围
 
 P2 分两部分验证：
 
 - **存储层（T05，本报告）**：失去租约的节点直接调用每一个写入方法，确认数据库拒绝且没有任何变化。这一层与 AgentScope 何时写状态无关，只要它的写入都经过 `FencedAgentStateStore`，就逃不出校验。
-- **完整路径（T06）**：用 `ScriptedModel` 驱动真实的一轮，在中断、出错、优雅停机三条路径上让旧 Worker 失去租约，确认 AgentScope 在这些路径上触发的状态保存、事件与账本写入全部被拒绝。
+- **完整路径（T06，见下文"完整路径"）**：用 `ScriptedModel` 驱动真实的一轮，在中断、出错、优雅停机三条路径上让旧 Worker 失去租约，确认 AgentScope 在这些路径上触发的状态保存、事件与账本写入全部被拒绝。
 
 ## 机制
 
@@ -72,6 +72,30 @@ P2 分两部分验证：
 - `LeaseLifecycleIT.staleExecutionCannotRequeueOrFinishAndNothingChanges`：失去租约的执行置回队列、结束轮次都返回 `LeaseLost`，轮次、计数与事件不变。
 - `SessionEventWriterIT.leaseLostWriteWritesNothingAndConsumesNoSeq`：epoch 不符或节点不符的事件写入不占用 seq，后续写入不跳号。
 
+## 完整路径（T06）
+
+集成测试 `meridian-runtime` 的 `config.WorkerLeaseFencingIT`。两个节点各有完整的 Worker 与真实装配的 `AgentScopeEngine`，状态写入经 `FencedAgentStateStore` 加 `JdbcAgentStateRepository`，`node-a` 的状态端口外包一层记录被拒绝的写入：
+
+1. `node-a` 认领（epoch 1），在内核层开始执行一轮：模型发起一次工具调用，记账的测试工具在账本中记下开始后卡住。
+2. 时钟推进 31 秒，`node-b` 回收并认领（epoch 2）。`node-a` 还没察觉：它的 `LeaseRegistry` 仍是 epoch 1，租约守卫放行，AgentScope 照常走到保存状态的路径，拒绝只能来自数据库。
+3. 记录快照：该线程的智能体状态行（含版本、`content_epoch`、`content_turn_id`、`updated_at`）、会话状态与 `last_seq`、事件数、轮次行、工具账本、收件箱、待处理动作。
+4. 放行工具，让旧执行走到要测的路径；再用旧执行的 epoch 写它产生的每个持久化事件、写一条账本记录，并按它的终态结束或置回轮次。
+
+| 路径 | 触发 | AgentScope 的状态保存 | 旧执行的事件 | 旧执行的账本 | 结束或置回轮次 |
+|---|---|---|---|---|---|
+| 中断 | `AgentEngine.interrupt`（USER） | `handleInterrupt` 的保存被拒绝（AgentScope 记录告警后照常以 `INTERRUPTED` 结束） | 每个都返回 `LeaseLost`，不占用 seq | 工具的结束记录与新的开始记录都抛 `LeaseLostException` | `TurnFinisher.finish` 返回 `Abandoned` |
+| 出错 | 工具执行后模型抛出错误（关闭批次 checkpoint） | `saveStateAfterCallFailure` 的保存被拒绝（作为被抑制的异常附在原错误上），本轮以 `session.error` 加 `status_idle(error)` 结束 | 同上 | 同上 | — |
+| 停机 | `AgentEngine.shutdown(60s)`（SYSTEM） | `ShutdownStateSaver` 的保存被拒绝（AgentScope 记录告警），本轮以 `status_rescheduled(node_shutdown)` 结束 | 同上 | 同上 | `TurnFinisher.requeue` 返回 `Abandoned` |
+
+三条路径上，记录到的被拒绝写入都大于 0；快照前后完全相同，账本中的调用仍是开始时的 `running`。另一个用例让旧 Worker 完整运行：`node-b` 接管后 `node-a` 续租发现租约丢失（`REVOKED`），Worker 只取消订阅、不调用 `interrupt`，以 `Abandoned` 结束并释放本节点的条目，指标 `meridian_lease_lost_total` 加一，数据库快照不变。
+
+命令：
+
+```bash
+./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false \
+  -Dit.test=WorkerLeaseFencingIT -Dfailsafe.failIfNoSpecifiedTests=false
+```
+
 ## 结论
 
-存储层通过：失去租约的节点无法经任何写入方法改变智能体状态与事件，数据库保持不变。中断、出错、停机三条完整路径（AgentScope 在这些路径上触发的状态保存）由 T06 的故障注入测试补充，补充后本报告定稿、状态改为通过或不通过。
+通过。存储层：失去租约的节点无法经任何写入方法改变智能体状态与事件，数据库保持不变（T05）。完整路径：AgentScope 在中断、出错、停机三条路径上触发的状态保存，旧执行的事件与工具账本写入，以及结束、置回轮次，全部被数据库拒绝（T06）。

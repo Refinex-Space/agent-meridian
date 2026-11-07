@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-当前处于**M0 内核与运行时核心阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）；T03 定义了 `meridian-engine-spi` 的全部契约，实现了 `HarnessAgent` 装配与实例缓存、`ScriptedModel` 与内存端口夹具，P1 通过（ADR-0023、0024、0025）；T04 实现了 `AgentScopeEngine`（执行一轮、中断、下线）、事件映射、`FencedAgentStateStore` 与首批平台中间件（ADR-0026）；T05 建立了 runtime 应用骨架、`rt` 全部核心表、轮次调度与租约（认领、续租、回收、置回队列）、事件写入与 `LeaseRegistry`、`AgentStateRepository` 的数据库实现（ADR-0027）。轮次 Worker 与崩溃恢复从 T06 开始。
+当前处于**M0 内核与运行时核心阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）；T03 定义了 `meridian-engine-spi` 的全部契约，实现了 `HarnessAgent` 装配与实例缓存、`ScriptedModel` 与内存端口夹具，P1 通过（ADR-0023、0024、0025）；T04 实现了 `AgentScopeEngine`（执行一轮、中断、下线）、事件映射、`FencedAgentStateStore` 与首批平台中间件（ADR-0026）；T05 建立了 runtime 应用骨架、`rt` 全部核心表、轮次调度与租约（认领、续租、回收、置回队列）、事件写入与 `LeaseRegistry`、`AgentStateRepository` 的数据库实现（ADR-0027）；T06 实现了轮次 Worker、事件扇出到 Redis Stream、收件箱与工具账本、崩溃恢复与优雅下线、批次级 checkpoint，P2、P3、P10 通过（ADR-0028）。内核要等模型工厂（T09a）与工具、文件系统、技能仓库（T10a）的提供者到位，才在生产环境装配；会话 API 与 SSE 从 T07 开始。
 
 ## 交付流程
 
@@ -85,6 +85,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 这些都已在 AgentScope `v2.0.4` 源码核实，细节见架构基线"运行时架构"一节：
 
 - 状态存储用平台自研的 `FencedAgentStateStore`，每次写入在同一事务里校验租约。失去租约时只能取消订阅，禁止调用 `interrupt`，因为中断会触发 AgentScope 写状态。
+- 崩溃恢复按"本轮是否写过状态内容"判定（`agent_states.content_turn_id`），不能只比较 `content_epoch`：`lease_epoch` 每轮从 1 开始（ADR-0028）。
 - 每轮开始前、结束后（在 `finally` 中）都要 `clearStateCache(userId, threadId)`，再用 `getDelegate().replacePermissionContext(...)` 安装合成后的权限。
 - `RuntimeContext.sessionId` 是线程 ID（`thr_…`），不是会话 ID。命名空间等会话级的值从 `PlatformContext` 取。
 - 子线程上下文必须用 `RuntimeContext.builder()` 从空白构建，禁止 `builder(parent)`。

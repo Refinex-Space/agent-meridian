@@ -13,16 +13,16 @@
 - `turn.AgentScopeEngine`：`AgentEngine` 的实现，执行一轮的唯一入口。`runTurn` 取配置、租用实例、`begin`（身份映射、`clearStateCache`、带标记的权限安装）、`streamEvents`、`TurnEventMapper`，终态前归还资源；`TurnInputTranslator`、`PermissionTranslator` 做输入与权限翻译。
 - `events.TurnEventMapper`：事件映射与增量拼装，`complete()` 给出唯一终态，静态的 `fail(Throwable)` 把错误翻译为 `session.error` 加终态；`AgentEventDisposition`（31 个事件类型）与 `StopReasonMapping`（`GenerateReason`）是穷举的 switch。
 - `state.FencedAgentStateStore`：`AgentStateStore` 的实现，写入经 `LeaseRegistry` 取租约、经 `AgentStateRepository` 端口在同一事务中校验。
-- `middleware`：`PlatformMiddlewareProvider` 交给装配器的平台中间件；`PlatformStopRequest` 是平台中间件请求停止并记录原因的入口。
+- `middleware`：`PlatformMiddlewareProvider` 交给装配器的平台中间件（第二个参数关闭批次 checkpoint）；`PlatformStopRequest` 是平台中间件请求停止并记录原因的入口；`RecoveryNoteMiddleware` 与 `BatchCheckpointMiddleware` 从 `RuntimeContext` 读取引擎放入的 `RecoveryNoteSlot`、`BatchCheckpoint`（T06，ADR-0028）。
 - `assembly.AgentAssembler`：`HarnessAgent.Builder` 的全部配置都在 `configure`，按「引擎装配」表逐段对应；`AgentInstanceCache` 对外 `acquire`/`acquireSubagent`/`release`；`AssembledAgent.reservedToolNames()` 供自定义工具校验。
 
 ## 中间件顺序（P13，T04 测得）
 
 `order()` 数值大的在外层；`MiddlewareChainTest` 断言链路与 span 父子关系。装配后的实际链路（外层在前）：
 
-`GracefulShutdownMiddleware`（AgentScope 构造时固定放在最外层）→ `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200，委托 `OtelTracingMiddleware`) → `LeaseGuardMiddleware`(100) → `ToolSpanMiddleware`(50) → harness 自带：`WorkspaceContextMiddleware`、`AtPathExpansionMiddleware`、`CompactionMiddleware`、`ToolResultEvictionMiddleware`、`InboxMiddleware`、`HarnessSkillMiddleware`（都是 1，按注册顺序）。
+`GracefulShutdownMiddleware`（AgentScope 构造时固定放在最外层）→ `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200，委托 `OtelTracingMiddleware`) → `LeaseGuardMiddleware`(100) → `RecoveryNoteMiddleware`(90) → `BatchCheckpointMiddleware`(80) → `ToolSpanMiddleware`(50) → harness 自带：`WorkspaceContextMiddleware`、`AtPathExpansionMiddleware`、`CompactionMiddleware`、`ToolResultEvictionMiddleware`、`InboxMiddleware`、`HarnessSkillMiddleware`（都是 1，按注册顺序）。
 
-span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（批次）→ `execute_tool {name}`（每个调用）。后续中间件选 `order()` 时以此为准：要在压缩之前生效的（T09a 外层守卫）大于 1，要夹在压缩之内的小于 1。
+span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（批次）→ `execute_tool {name}`（每个调用）。后续中间件选 `order()` 时以此为准：要在压缩之前生效的（T09a 外层守卫）大于 1，要夹在压缩之内的小于 1；在推理前往上下文注入消息的（T08 的 `SteerMiddleware`）必须大于 80，注入的内容才进入该次 checkpoint。
 
 ## 不变量
 
@@ -34,6 +34,10 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 - 阻塞步骤（装配、权限安装时的状态读写）经 `Blocking` 在虚拟线程上执行，AgentScope 的调用也在该线程上订阅，`activateSlotForContext` 的状态读取因此不在 Reactor 线程上。
 
 ## 易错点
+
+- 2.0.4 在 `onActing` 的事件流结束之后才把工具结果写进 `AgentState`（`notifyPostActingHook`）：批次 checkpoint 放在下一次推理之前保存，在 `onActing` 结束时保存会得到没有 tool_result 的状态（P3）。
+- 推理输入是 `PreReasoningEvent` 复制出来的列表：往上下文注入消息要同时加进 `ReasoningInput.messages()` 与 `ctx.getAgentState().contextMutable()`，否则本次模型调用看不到或状态里存不下。
+- 工具的 `Mono` 出错（例如账本写入被拒）时，2.0.4 的 `ToolExecutor` 把它转成错误结果，调用继续；不会让整轮失败。
 
 - `maxRetries` 是含首次在内的总尝试次数，0 会抛异常（ADR-0023）。`RoutedModel` 调用底层模型时不能放大它。
 - 只设 `messageBus` 不够：不显式设置 `asyncToolRegistry` 时，harness 用工作区实现，`InboxMiddleware` 每次推理前都会读工作区。

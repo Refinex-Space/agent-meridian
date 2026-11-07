@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.4 |
+| 版本 | v1.5 |
 | 日期 | 2026-11-07 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -361,7 +361,7 @@ erDiagram
 | `tenant_concurrency` | `tenant_id`、`running`、`max_running` | 租户并发计数，与认领同事务更新（无 `project_id`） |
 | `session_events` | `session_id`、`seq`、`id`、`thread_id`、`turn_id`、`type`、`data jsonb`、`created_at` | 主键 `(session_id, seq)`；`PARTITION BY HASH (session_id)`，16 个分区 |
 | `inbox_messages` | `id`、`session_id`、`thread_id`、`event_id`、`delivery`、`status`、`consumed_turn_id`、`consumed_epoch` | 待投递的用户消息；`consumed_epoch` 记录消费它的那次执行的 `lease_epoch` |
-| `agent_states` | `user_id`、`thread_id`、`state_key`、`state jsonb`、`version`、`content_epoch` | 由平台的 `FencedAgentStateStore` 读写；`content_epoch` 见"崩溃恢复" |
+| `agent_states` | `user_id`、`thread_id`、`state_key`、`state jsonb`、`version`、`content_epoch`、`content_turn_id` | 由平台的 `FencedAgentStateStore` 读写；`content_epoch` 与 `content_turn_id` 一起标识最近一次内容写入来自哪次执行，见"崩溃恢复"（ADR-0028） |
 | `tool_invocations` | `id`、`turn_id`、`thread_id`、`tool_use_id`、`tool_name`、`side_effect`、`idempotency_key`、`status`、`input jsonb`、`result_ref` | 工具账本 |
 | `pending_actions` | `id`、`turn_id`、`thread_id`、`type`、`payload jsonb`、`status`、`decided_by`、`remember_scope`、`expires_at` | 待处理动作 |
 | `workspace_entries` | `namespace text[]`、`key`、`version`、`size`、`inline_content`、`object_key` | `MeridianBaseStore` 的存储 |
@@ -487,6 +487,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `LeaseGuardMiddleware` | `onReasoning`、`onActing` | 每次推理和工具执行前，向 `LeaseRegistry` 确认租约仍然有效；已失效则抛 `LeaseLostException` |
 | `PolicyMiddleware` | `onActing` | 纵深防御：工具必须在智能体允许的工具集内；非 `ToolBase` 工具只放行 `load_skill_through_path`，`wait_async_results` 直接返回合成的 DENIED 结果；子智能体拉起数量上限 |
 | `RecoveryNoteMiddleware` | `onReasoning` | 恢复轮的第一次推理前，把恢复说明追加到输入和 `AgentState` 上下文。恢复说明不走调用入参，因为 AgentScope 在停机中断后的下一次调用会丢弃全部入参 |
+| `BatchCheckpointMiddleware` | `onActing`、`onReasoning` | 每批工具执行完成后、下一次推理之前保存一次状态（批次级 checkpoint，P3），强杀后从最近的批次续跑；可配置关闭。`SteerMiddleware` 必须排在它之外（ADR-0028） |
 | `SteerMiddleware` | `onReasoning` | 读取本线程 `delivery=steer` 的待投递消息，追加到本次推理输入和 `AgentState` 上下文，记录 `consumed_turn_id` 和 `consumed_epoch` |
 | `CompactionGuardMiddleware` | `onReasoning`，分内外两层，夹住 harness 的 `CompactionMiddleware` | 外层在压缩前预检预算、限流、租约，不满足就抛出平台异常；内层检查压缩结果，摘要以 `(Summarization failed` 开头时抛 `CompactionFailedException`，防止失败文本替换历史；新出现 `__compaction_summary__` 消息时发出压缩事件 |
 | `KnowledgePrefetchMiddleware` | `onAgent` | 智能体配置为"前置检索"时，用最后一条用户消息检索并注入 |
@@ -603,6 +604,8 @@ UPDATE rt.turns SET status = 'running', lease_owner = :node, lease_epoch = lease
 | 租约过期，由回收器处理 | 加一 | `session.status_rescheduled` |
 | 可重试的错误，如供应商 5xx、限流等待超时 | 加一 | `session.error`（`retry_status=retryable`），然后 `session.status_rescheduled`（`retryable_error`，ADR-0026） |
 | 节点优雅下线 | 不变 | `session.status_rescheduled` |
+
+**结束轮次。** 终态事件到达后的事务按以下顺序：取线程的事务级咨询锁（与 API 写 `user.message` 的事务串行，否则两边都看不到对方未提交的数据，消息会留在收件箱里没有轮次处理）→ 结束轮次与租户并发计数减一 → 收件箱中待投递的消息合并成下一轮并入队 → 写终态事件 → 写 outbox。事件在写入入口提交后 XADD，XADD 失败不回滚，由 SSE 从数据库补发（ADR-0028）。
 
 **同节点重新认领。** `FencedAgentStateStore` 的接口拿不到调用上下文，只能按线程 ID 查 `LeaseRegistry`。所以同一节点上，一个线程的上一次执行在 `doFinally` 完成之前，本节点**禁止**再次认领这个线程，`LeaseRegistry` 也在执行结束时才移除条目。这样，旧执行的残余写入不会借用新 epoch 通过校验。事件、账本等经端口的写入，则直接使用 `PlatformContext` 中本次执行自己的 epoch。
 
@@ -776,11 +779,21 @@ AgentScope 保存状态的时机决定了恢复策略。只有进程被强杀时
 2. 轮次被置回 `queued` 后，新 Worker 认领时，**先**读取线程状态的 `content_epoch`，与失败那次执行的 `lease_epoch` 比较，**再**清理缓存、安装权限：
    - **不相等**（进程被强杀，本轮内容没有写入）：重放 `turn_inputs` 中的完整输入。被失败那次执行消费掉的 steer 消息（`consumed_epoch` 等于失败的 epoch）重新投递。
    - **相等**（出错、中断、停机时已保存中途状态）：不重放输入，输入类型为 `RecoveryOnly`。
+
+   `lease_epoch` 每轮从 1 开始，一轮也可能执行不止两次，所以"相等"按本轮的内容写入判断：状态写入同时记录所属轮次 `content_turn_id`，Worker 查询本轮最近一次内容写入的 epoch（ADR-0028）。只执行过一次的轮次与上面两条完全相同：
+
+   | 本轮的内容写入 | 恢复方式 | 重新投递失败那次执行消费的 steer |
+   |---|---|---|
+   | 没有 | 重放完整输入 | 是 |
+   | 有，来自失败那次执行 | `RecoveryOnly` | 否 |
+   | 有，来自更早的一次执行 | `RecoveryOnly` | 是 |
+
+   恢复认领指本轮此前执行过（`epoch` 大于 1），包括优雅下线后的续跑（它不增加 `recovery_attempt`）。
 3. 两种情况都附恢复说明。它由平台根据 `tool_invocations` 生成：哪些工具调用已经成功（附结果摘要），哪些状态未知。恢复说明由 `RecoveryNoteMiddleware` 在第一次推理前注入，不走调用入参。
 4. 状态未知的 `non_idempotent` 调用，产生 `recovery_confirmation` 待处理动作，由人决定是否用原幂等键重试。
-5. `recovery_attempt` 达到 2 次后，轮次以 `stop_reason=error` 结束。`claim_count` 只用于观测，不参与这个判断。
+5. `recovery_attempt` 达到 2 次后，轮次以 `stop_reason=error` 结束：认领时恢复次数已达 2 的轮次不再执行，写 `session.error`（`retry_status=exhausted`）与 `session.status_idle`（ADR-0028）。`claim_count` 只用于观测，不参与这个判断。
 
-M0 要验证一个优化：在每批工具执行完成后调用 `saveAgentState`，能否得到一致的批次级 checkpoint（P3）。验证通过后，强杀场景也能从批次继续，不必重放整轮。
+批次级 checkpoint 已通过 M0 验证（P3，[报告](../poc/P03-批次checkpoint.md)），默认开启：`BatchCheckpointMiddleware` 在每批工具执行完成后、下一次推理之前调用 `saveAgentState`，强杀后从最近的批次续跑，tool_use 与 tool_result 配对，不重复执行已完成的工具。保存不能放在 `onActing` 结束时，因为 2.0.4 在那之后才把工具结果写进状态。
 
 **节点优雅下线。** runtime 启动时，用 `GracefulShutdownManager.getInstance().setConfig(...)` 把停机超时设为 45 秒。默认超时为空，AgentScope 永远不会强制中断，一个运行 600 秒的子智能体会一直跑下去。
 
@@ -1112,6 +1125,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 | `meridian_dispatch_queue_depth` | gauge | — |
 | `meridian_turn_recoveries_total` | counter | `mode`（`replay` 或 `recovery_only`） |
 | `meridian_lease_lost_total` | counter | — |
+| `meridian_event_publish_failures_total` | counter | — |
 | `meridian_model_tokens_total` | counter | `model`、`type` |
 | `meridian_model_first_token_seconds` | histogram | `model` |
 | `meridian_tool_calls_total` | counter | `tool`、`state` |
@@ -1359,6 +1373,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.2 | 2026-11-07 | T03：引擎装配表 `maxRetries(0)` 改为 `maxRetries(1)`（ADR-0023）；模块依赖规则放行 `meridian-engine-agentscope-test` 依赖 common 与 engine-spi（ADR-0025）；补充 `asyncToolRegistry`、`enableAgentTracingLog(false)` 两行、子智能体缓存键与端口 `AgentConfigPort`（ADR-0024） |
 | v1.3 | 2026-11-07 | T04：可重试错误以 `session.status_rescheduled`（`retryable_error`）结束；租约丢失时内核不输出事件；事件映射中工具调用在模型调用结束时输出、工具结果块的 `event_start`、自定义工具与平台中间件停止原因的处理；包结构增加 `turn/`；`OtelTracingMiddleware` 由 `PlatformTracingMiddleware` 装配（ADR-0026） |
 | v1.4 | 2026-11-07 | T05：认领 SQL 的时间取注入的 `Clock` 并排除本节点仍在执行的线程；租约条件的加锁方式与锁顺序、续租失败阈值的起算点；新租户默认并发上限 20；会话状态随状态事件在同一事务中推进（ADR-0027） |
+| v1.5 | 2026-11-07 | T06：`agent_states` 增加 `content_turn_id`，崩溃恢复按本轮的内容写入判定并写明恢复认领与恢复次数用尽；批次级 checkpoint 通过 P3 并默认开启，平台中间件增加 `BatchCheckpointMiddleware`；结束轮次的事务顺序与线程咨询锁；指标增加 `meridian_event_publish_failures_total`（ADR-0028） |
 
 ## 待决问题
 

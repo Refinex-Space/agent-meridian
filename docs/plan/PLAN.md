@@ -184,7 +184,7 @@ T06 轮次 Worker、事件流水线与崩溃恢复（开工 2026-11-07，基线 
 - [x] 5. 指标 6 个
 - [x] 6. 故障注入测试（P10 四种终止、P2 完整路径）与端到端、queue 合并、`requires_action`、`error` 用尽、下线集成测试（A01–A04、A06–A09）
 - [x] 7. P3 批次级 checkpoint 验证与结论（A05）
-- [ ] 8. 报告 P02 定稿、P03、P10；ADR；模块 CLAUDE.md；`docs/poc/README.md`
+- [x] 8. 报告 P02 定稿、P03、P10；ADR；模块 CLAUDE.md；`docs/poc/README.md`
 - [ ] 9. 收尾：`verify.sh`（A10）、`acceptance.json`、PLAN 看板与会话日志
 
 ## 控制台设计轨道
@@ -238,9 +238,13 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D06 | T03 | JDK 25 把 `System.loadLibrary` 列为受限方法，reactor-netty 加载 Netty 本地传输库时告警"将来会被阻止"；runtime 的集成测试已加 `--enable-native-access=ALL-UNNAMED`，生产与本地启动的 JVM 参数同样需要。详见 `docs/poc/P01-运行基线.md` | T28 |
 | D07 | T04 | `user.message` 中的文件引用（`MessageContent.FileRef`、按文件 ID 引用的图片）暂时翻译为文本占位 `[文件 fil_… 名称 (类型)]`，见 `TurnInputTranslator` 中的 `TODO(T17b)`；轮次开始时把文件放进工作区后改为工作区路径 | T17b |
 | D08 | T04 | `PlatformContextMiddleware` 只在组装下游的同步阶段写 MDC（`tenant_id`、`session_id`、`turn_id`），跨线程的响应式链路没有 MDC；日志要求每行带 `trace_id`、`span_id`、`tenant_id`、`session_id`，需要 Reactor 自动上下文传播加 MDC 访问器的整体方案 | T27 |
-| D09 | T04 | Worker 要处理 ADR-0026 的两条约定：`session.status_rescheduled` 的原因 `retryable_error` 让 `recovery_attempt` 加一（`node_shutdown` 不变）；`runTurn` 以 `LeaseLostException` 结束时放弃本轮、不写事件 | T06 |
+| D09 | T04 | Worker 要处理 ADR-0026 的两条约定：`session.status_rescheduled` 的原因 `retryable_error` 让 `recovery_attempt` 加一（`node_shutdown` 不变）；`runTurn` 以 `LeaseLostException` 结束时放弃本轮、不写事件 | T06（已落地：`TurnFinisher.requeue` 按原因置回；`TurnExecution` 遇到租约丢失放弃本轮，`TurnRecoveryIT`、`WorkerLeaseFencingIT`） |
 | D10 | T05 | ADR-0027 的锁顺序要求同一事务里先入队、再写事件；API 发送 `user.message` 时，轮次输入与收件箱需要事件 ID，`SessionEventWriter` 目前自己生成事件 ID，需改为允许调用方先生成、随批次传入 | T07 |
-| D11 | T05 | PostgreSQL 的 jsonb 拒绝字符串中的 `\u0000`：`agent_states.state`、`session_events.data` 都是 jsonb，模型输出或工具结果含 NUL 字符时写入会失败（状态保存失败、事件写不进）。需要在写入前统一处理（例如替换为 U+FFFD）并加测试 | T06 |
+| D11 | T05 | PostgreSQL 的 jsonb 拒绝字符串中的 `\u0000`：`agent_states.state`、`session_events.data` 都是 jsonb，模型输出或工具结果含 NUL 字符时写入会失败（状态保存失败、事件写不进）。需要在写入前统一处理（例如替换为 U+FFFD）并加测试 | T06（已落地：`JdbcValues.jsonb` 统一替换，`JdbcValuesTest`、`SessionEventWriterIT`） |
+| D12 | T06 | 消息入箱与轮次结束必须按线程串行，否则消息会留在收件箱没有轮次处理：T07 写 `user.message` 的事务要先取 `ThreadLockRepository.lock(thread_id)`（`pg_advisory_xact_lock`），再入队或写收件箱，再写事件（ADR-0028 第 8 条） | T07 |
+| D13 | T06 | `recovery_confirmation` 的 `payload.recovery_mode = replay_input` 时状态里没有本轮的输入，回应后只生成 `RecoveryOnly` 轮会丢掉用户消息；需重放原轮的 `turn_inputs`（附恢复说明）。架构设计「待处理动作」写的是"一律生成 `RecoveryOnly` 轮"，T08 落地时按决策分级处理 | T08 |
+| D14 | T06 | 恢复说明的结果摘要先取已持久化的工具结果事件，强杀发生在结果事件写库之前时只能取账本的 `result_ref`；平台工具基类在 `recordFinish` 时应写入结果引用（至少 `non_idempotent` 工具） | T10a |
+| D15 | T06 | 节点下线最长等待 60 秒（`meridian.runtime.worker.shutdown-timeout`，AgentScope 在 45 秒时强制中断），Pod 的 `terminationGracePeriodSeconds` 必须大于它 | T28 |
 
 ## 技术债
 
