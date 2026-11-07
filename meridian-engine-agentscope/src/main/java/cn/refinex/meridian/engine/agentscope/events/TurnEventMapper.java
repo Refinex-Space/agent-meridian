@@ -297,7 +297,7 @@ public final class TurnEventMapper {
      * @param error 事件流的错误
      * @return 要输出的事件；租约丢失时为原错误
      */
-    public Flux<EngineEvent> fail(Throwable error) {
+    public static Flux<EngineEvent> fail(Throwable error) {
         if (causeOf(error, LeaseLostException.class) != null) {
             return Flux.error(error);
         }

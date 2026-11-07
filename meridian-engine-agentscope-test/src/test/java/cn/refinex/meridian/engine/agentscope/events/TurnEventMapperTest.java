@@ -330,21 +330,19 @@ class TurnEventMapperTest {
 
     @Test
     void errorsAreMappedToSessionErrorThenOneTerminal() {
-        TurnEventMapper mapper = mapper(Set.of(), Set.of());
-
-        assertThat(mapper.fail(new RuntimeException("包装", new BudgetExceededException("会话预算不足")))
+        assertThat(TurnEventMapper.fail(new RuntimeException("包装", new BudgetExceededException("会话预算不足")))
                         .collectList()
                         .block())
                 .containsExactly(
                         new SessionEvent.Error("model.budget_exceeded", "会话预算不足", RetryStatus.TERMINAL),
                         new SessionEvent.StatusIdle(StopReason.BUDGET_EXCEEDED));
-        assertThat(mapper.fail(new RateLimitTimeoutException("等待超时"))
+        assertThat(TurnEventMapper.fail(new RateLimitTimeoutException("等待超时"))
                         .collectList()
                         .block())
                 .containsExactly(
                         new SessionEvent.Error("model.rate_limit_timeout", "等待超时", RetryStatus.RETRYABLE),
                         new SessionEvent.StatusRescheduled(RescheduleReason.RETRYABLE_ERROR));
-        assertThat(mapper.fail(new IllegalStateException("供应商不可用：内部主机 10.0.0.1"))
+        assertThat(TurnEventMapper.fail(new IllegalStateException("供应商不可用：内部主机 10.0.0.1"))
                         .collectList()
                         .block())
                 .as("未预期的错误不暴露内部信息")
@@ -354,17 +352,19 @@ class TurnEventMapperTest {
                                 TurnEventMapper.INTERNAL_ERROR_MESSAGE,
                                 RetryStatus.TERMINAL),
                         new SessionEvent.StatusIdle(StopReason.ERROR));
-        assertThat(mapper.fail(new AgentShuttingDownException()).collectList().block())
+        assertThat(TurnEventMapper.fail(new AgentShuttingDownException())
+                        .collectList()
+                        .block())
                 .as("节点下线不输出 session.error")
                 .containsExactly(new SessionEvent.StatusRescheduled(RescheduleReason.NODE_SHUTDOWN));
     }
 
     @Test
     void lostLeaseProducesNoEventsAndKeepsTheError() {
-        TurnEventMapper mapper = mapper(Set.of(), Set.of());
         LeaseLostException lost = new LeaseLostException("epoch 3 已失效");
 
-        assertThatThrownBy(() -> mapper.fail(lost).collectList().block()).isSameAs(lost);
+        assertThatThrownBy(() -> TurnEventMapper.fail(lost).collectList().block())
+                .isSameAs(lost);
     }
 
     private TurnEventMapper mapper(Set<String> customTools, Set<String> approved) {

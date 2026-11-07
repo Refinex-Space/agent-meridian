@@ -180,8 +180,8 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 1. `FencedAgentStateStore`：全部方法、版本号、租约校验、`content_epoch` 区分权限安装、子线程用父租约（A07）
 - [x] 2. 停止原因映射与事件类型穷举映射（A02）
 - [x] 3. 事件映射与增量拼装：文本、思考、数据、工具调用、工具结果（16 KB 经 `BlobStorePort`）、`permission` 推导、子线程事件只记日志（A03）
-- [ ] 4. 输入翻译：`NewMessages`、`Confirmations`（`ConfirmResult` 实例）、`CustomToolResults`（`ToolResultBlock`）、`RecoveryOnly`；自定义工具经 `ToolRequestConfig` 注入（`MERGE_EXTERNAL_PRIORITY`）
-- [ ] 5. `AgentScopeEngine.runTurn`：身份映射、`clearStateCache`、权限安装（标记）、`contextWrite`、终态保证、取消不写入（A01、A04、A08）
+- [x] 4. 输入翻译：`NewMessages`、`Confirmations`（`ConfirmResult` 实例）、`CustomToolResults`（`ToolResultBlock`）、`RecoveryOnly`；自定义工具经 `ToolRequestConfig` 注入（`MERGE_EXTERNAL_PRIORITY`）
+- [x] 5. `AgentScopeEngine.runTurn`：身份映射、`clearStateCache`、权限安装（标记）、`contextWrite`、终态保证、取消不写入（A01、A04、A08）
 - [ ] 6. 中间件：`PlatformContextMiddleware`、`LeaseGuardMiddleware`、`ToolSpanMiddleware`、`OtelTracingMiddleware` 装配与属性；测出执行顺序（A09）
 - [ ] 7. `interrupt`、`shutdown`（45 秒 `GracefulShutdownConfig`、`performGracefulShutdown`、`awaitTermination`）
 - [ ] 8. 场景测试：纯文本、工具调用、并行工具、ask 后确认续跑、ask 后拒绝、自定义工具挂起与回传、首包前错误、首包后错误、中断、关机中断、失去租约；待确认调用不与普通消息同批（A03–A06、A08）
