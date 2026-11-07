@@ -13,6 +13,8 @@ import reactor.core.publisher.Mono;
  * {@link AgentConfigPort} 的内存实现：测试先登记配置，内核按 ID 读取；记录读取次数，用于断言缓存命中时不再读取。
  *
  * <p>线程安全：用并发映射保存。
+ *
+ * <p>见架构设计「端口」与 ADR-0024。
  */
 public final class InMemoryAgentConfig implements AgentConfigPort {
 

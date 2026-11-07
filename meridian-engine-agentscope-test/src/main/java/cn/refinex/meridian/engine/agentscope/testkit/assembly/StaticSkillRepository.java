@@ -13,6 +13,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 返回固定技能的只读技能仓库替身，同时作为提供者（每次装配返回自身）；记录被查询时的上下文与装配对象。
  *
  * <p>线程安全：技能列表不可变，记录用写时复制列表保存。
+ *
+ * <p>见架构设计「测试策略」「引擎装配」中的 {@code skillRepository}。
  */
 public final class StaticSkillRepository implements RuntimeContextSkillRepository, SkillRepositoryProvider {
 

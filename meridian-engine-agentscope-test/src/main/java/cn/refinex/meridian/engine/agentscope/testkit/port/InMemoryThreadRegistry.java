@@ -13,6 +13,8 @@ import reactor.core.publisher.Mono;
  * {@link ThreadRegistryPort} 的内存实现：记录创建的子线程与每次状态更新。
  *
  * <p>线程安全：用并发集合保存，线程 ID 由 {@code Ids} 生成。
+ *
+ * <p>见架构设计「端口」「子智能体」。
  */
 public final class InMemoryThreadRegistry implements ThreadRegistryPort {
 

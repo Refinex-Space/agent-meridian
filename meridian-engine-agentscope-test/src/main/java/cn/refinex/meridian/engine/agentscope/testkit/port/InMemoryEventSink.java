@@ -10,6 +10,8 @@ import reactor.core.publisher.Mono;
  * {@link EventSinkPort} 的内存实现：按到达顺序记录事件。
  *
  * <p>线程安全：用写时复制列表保存。
+ *
+ * <p>见架构设计「端口」「子智能体」。
  */
 public final class InMemoryEventSink implements EventSinkPort {
 

@@ -12,6 +12,8 @@ import reactor.core.publisher.Mono;
  * {@link BlobStorePort} 的内存实现：对象键按写入顺序编号。
  *
  * <p>线程安全：用并发映射保存。
+ *
+ * <p>见架构设计「端口」「事件映射」。
  */
 public final class InMemoryBlobStore implements BlobStorePort {
 

@@ -12,6 +12,8 @@ import java.util.stream.Collectors;
 /**
  * {@link ScriptedModel} 收到的一次请求，供测试断言。
  *
+ * <p>见架构设计「测试策略」。
+ *
  * @param index 第几次调用，从 0 开始
  * @param messages 发给模型的消息（含系统提示词），按 AgentScope 组装的顺序
  * @param tools 发给模型的工具 schema；没有工具时为空列表

@@ -16,6 +16,8 @@ import java.util.Objects;
  * AssembledAgent agent = assembly.assembler().assemble(AgentProfile.main(spec, environment));
  * }</pre>
  *
+ * <p>见架构设计「测试策略」「引擎装配」。
+ *
  * @param assembler 装配器
  * @param modelFactory 模型工厂替身
  * @param stateStore 状态存储，默认 AgentScope 的 {@link InMemoryAgentStateStore}

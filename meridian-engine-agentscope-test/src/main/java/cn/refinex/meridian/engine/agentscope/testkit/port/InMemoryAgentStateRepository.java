@@ -15,6 +15,8 @@ import java.util.stream.Collectors;
  * 用 {@link #activate} 登记的活动 epoch 模拟；{@link #deactivate} 模拟租约被回收或被其他节点认领。
  *
  * <p>线程安全：所有方法都在本对象的监视器内执行，与数据库中的单条事务对应。
+ *
+ * <p>见架构设计「端口」「租约与 fencing」。
  */
 public final class InMemoryAgentStateRepository implements AgentStateRepository {
 

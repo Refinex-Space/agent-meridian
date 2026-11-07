@@ -13,6 +13,8 @@ import reactor.core.publisher.Mono;
  * 记录调用的测试工具，继承 {@link ToolBase}（与平台工具相同的基类）。默认返回入参中 {@code text} 字段的文本。
  *
  * <p>线程安全：并行工具调用会并发调用它，调用记录用写时复制列表保存。
+ *
+ * <p>见架构设计「测试策略」「平台工具」。
  */
 public final class RecordingTool extends ToolBase {
 

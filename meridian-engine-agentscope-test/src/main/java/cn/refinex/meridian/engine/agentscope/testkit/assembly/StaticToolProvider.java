@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 另外总是提供 {@code alwaysOn} 中的工具；每次装配附带一个记录关闭次数的资源。
  *
  * <p>线程安全：可以被并发装配调用。
+ *
+ * <p>见架构设计「测试策略」「平台工具」。
  */
 public final class StaticToolProvider implements ToolProvider {
 

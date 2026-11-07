@@ -14,6 +14,8 @@ import reactor.core.publisher.Mono;
  * {@link ToolLedgerPort} 的内存实现：记录每次工具执行的开始信息与最终状态。
  *
  * <p>线程安全：用并发映射保存，记录 ID 由 {@code Ids} 生成。
+ *
+ * <p>见架构设计「端口」「崩溃恢复」。
  */
 public final class InMemoryToolLedger implements ToolLedgerPort {
 

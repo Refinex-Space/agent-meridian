@@ -14,6 +14,8 @@ import reactor.core.publisher.Mono;
  * {@link InboxPort} 的内存实现：测试用 {@link #steer} 投递 steer 消息，内核取出时记录消费的轮次与 epoch。
  *
  * <p>线程安全：同一线程的取出在本对象的监视器内完成，消息只会被消费一次。
+ *
+ * <p>见架构设计「端口」「消息投递」。
  */
 public final class InMemoryInbox implements InboxPort {
 

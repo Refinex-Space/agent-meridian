@@ -12,6 +12,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 记录请求的模型工厂替身：按主模型 ID 返回登记的模型，没有登记时返回默认模型。
  *
  * <p>线程安全：可以被并发装配调用。
+ *
+ * <p>见架构设计「测试策略」「模型调用」。
  */
 public final class RecordingModelFactory implements ModelFactory {
 

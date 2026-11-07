@@ -12,6 +12,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * "某段时间内没有访问工作区"等行为。
  *
  * <p>线程安全：委托对象线程安全，访问记录用写时复制列表保存。
+ *
+ * <p>见架构设计「测试策略」「文件系统装配」。
  */
 public final class RecordingBaseStore implements BaseStore {
 

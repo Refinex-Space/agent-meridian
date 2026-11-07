@@ -67,12 +67,13 @@
             <!--
               BlockHound 在运行时重定义 JDK 类：JDK 13 起需要 AllowRedefinitionToAddDeleteMethods；
               它通过 ByteBuddy 动态挂载代理，JDK 21 起需要 EnableDynamicAgentLoading 才不告警。
+              Netty 加载本地传输库调用 System.loadLibrary，JDK 25 把它列为受限方法，需要 enable-native-access（P1 报告）。
             -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
-                    <argLine>@{argLine} -XX:+AllowRedefinitionToAddDeleteMethods -XX:+EnableDynamicAgentLoading</argLine>
+                    <argLine>@{argLine} -XX:+AllowRedefinitionToAddDeleteMethods -XX:+EnableDynamicAgentLoading --enable-native-access=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
             <plugin>

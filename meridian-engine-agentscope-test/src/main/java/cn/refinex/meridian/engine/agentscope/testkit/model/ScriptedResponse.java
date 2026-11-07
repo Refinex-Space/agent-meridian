@@ -26,6 +26,8 @@ import reactor.core.publisher.Flux;
  * </ul>
  *
  * <p>线程安全：构建完成后只读。
+ *
+ * <p>见架构设计「测试策略」。
  */
 public final class ScriptedResponse {
 

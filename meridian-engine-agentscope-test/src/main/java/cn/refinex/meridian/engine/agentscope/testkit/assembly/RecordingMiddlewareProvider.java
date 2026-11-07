@@ -10,6 +10,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 记录装配对象的中间件提供者替身：主智能体与子智能体各返回一组固定的中间件。
  *
  * <p>线程安全：可以被并发装配调用。
+ *
+ * <p>见架构设计「测试策略」「平台中间件」。
  */
 public final class RecordingMiddlewareProvider implements MiddlewareProvider {
 

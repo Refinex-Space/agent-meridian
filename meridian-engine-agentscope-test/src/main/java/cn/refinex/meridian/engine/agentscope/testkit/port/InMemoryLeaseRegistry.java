@@ -9,6 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@link LeaseRegistry} 的内存实现。测试用 {@link #grant} 与 {@link #revoke} 模拟 Worker 登记与移除租约。
  *
  * <p>线程安全：用并发映射保存条目。
+ *
+ * <p>见架构设计「端口」「租约与 fencing」。
  */
 public final class InMemoryLeaseRegistry implements LeaseRegistry {
 

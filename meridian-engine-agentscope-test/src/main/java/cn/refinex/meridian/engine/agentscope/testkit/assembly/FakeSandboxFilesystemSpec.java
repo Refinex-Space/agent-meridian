@@ -12,6 +12,8 @@ import io.agentscope.harness.agent.sandbox.snapshot.SandboxSnapshotSpec;
 /**
  * 只用于装配的沙箱文件系统规范替身：能让 {@code HarnessAgent} 以 {@code sandbox} 档装配成功，但不能真正创建沙箱。
  * 生产的 {@code KubernetesFilesystemSpec} 与会话沙箱由 T11、T12a 提供并验证。
+ *
+ * <p>见架构设计「测试策略」「文件系统装配」。
  */
 public final class FakeSandboxFilesystemSpec extends SandboxFilesystemSpec {
 

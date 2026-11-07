@@ -5,6 +5,8 @@ import io.agentscope.harness.agent.HarnessAgent;
 /**
  * 从 {@link AgentInstanceCache} 租用的一个智能体实例。每轮开始时 {@code acquire}，结束时（包括异常结束）在
  * {@code finally} 中交给 {@link AgentInstanceCache#release} 归还，只能归还一次。
+ *
+ * <p>见架构设计「引擎装配」中的缓存规则。
  */
 public final class AgentHandle {
 
