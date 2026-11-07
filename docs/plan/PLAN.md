@@ -180,7 +180,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 1. runtime 应用骨架：WebFlux 主类、配置、`dev`/`test` profile、健康检查
 - [x] 2. `rt` 迁移：架构设计 runtime 核心表全部建出（部分唯一索引、`session_events` 16 个哈希分区、注释、角色）；迁移测试与 `\d+` 摘要（A01）
 - [ ] 3. 仓储：`sessions`、`threads`、`turns`、`turn_inputs`、`tenant_concurrency`、`session_events`、`agent_states`、`outbox`（代码已提交，集成测试待补）
-- [ ] 4. 调度：入队与计数行、认领三步 SQL、唤醒（通知与 1 秒轮询）、续租与回调、回收器、置回队列三种情况、同节点重新认领（A02、A03、A04、A06）
+- [x] 4. 调度：入队与计数行、认领三步 SQL、唤醒（通知与 1 秒轮询）、续租与回调、回收器、置回队列三种情况、同节点重新认领（A02、A03、A04、A06）
 - [ ] 5. 端口实现：`LeaseRegistry`、`AgentStateRepository`、`EventSinkPort` 事件写入；`seq` 分配（A05、A07）
 - [ ] 6. 全部 JDBC 经 `Blocking`，测试开启 BlockHound（A08）；认领 SQL 的 `EXPLAIN`
 - [ ] 7. P2 报告存储层部分（A09）

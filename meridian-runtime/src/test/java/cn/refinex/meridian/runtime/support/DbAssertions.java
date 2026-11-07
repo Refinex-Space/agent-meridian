@@ -1,6 +1,8 @@
 package cn.refinex.meridian.runtime.support;
 
 import cn.refinex.meridian.testsupport.TestDatabase;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -23,6 +25,16 @@ public final class DbAssertions {
                 .param("id", turnId)
                 .query()
                 .singleRow();
+    }
+
+    /**
+     * 把行映射中的 {@code timestamptz} 值转换为时间点。
+     *
+     * @param value {@link #turn} 返回的列值
+     * @return 时间点；列为 NULL 时为空
+     */
+    public static Instant instant(Object value) {
+        return value == null ? null : ((Timestamp) value).toInstant();
     }
 
     /**

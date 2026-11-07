@@ -17,6 +17,7 @@ import cn.refinex.meridian.runtime.stream.infra.system.SessionEventRepository;
 import java.time.Clock;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -70,8 +71,20 @@ public record TestNode(
      * @return 节点
      */
     public static TestNode create(String nodeId, Clock clock, DispatchProperties properties) {
-        DataSource dataSource = RuntimeTestDatabase.dataSource();
-        TransactionTemplate transactions = RuntimeTestDatabase.transactions();
+        return create(nodeId, clock, properties, RuntimeTestDatabase.dataSource());
+    }
+
+    /**
+     * 创建使用指定数据源的节点，例如可以模拟数据库不可用的 {@link FailingDataSource}。
+     *
+     * @param nodeId 节点 ID
+     * @param clock 时钟
+     * @param properties 调度配置
+     * @param dataSource 数据源
+     * @return 节点
+     */
+    public static TestNode create(String nodeId, Clock clock, DispatchProperties properties, DataSource dataSource) {
+        TransactionTemplate transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         NodeId node = new NodeId(nodeId);
         NodeLeaseRegistry registry = new NodeLeaseRegistry();
         TurnQueueRepository queue = new TurnQueueRepository(dataSource);
