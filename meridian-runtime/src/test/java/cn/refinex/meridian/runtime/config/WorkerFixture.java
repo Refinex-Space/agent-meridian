@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+import javax.sql.DataSource;
 import org.springframework.data.redis.connection.stream.MapRecord;
 
 /**
@@ -68,10 +69,19 @@ final class WorkerFixture {
     }
 
     WorkerNode node(String nodeId, WorkerProperties properties, UnaryOperator<AgentStateRepository> states) {
+        return node(nodeId, properties, states, RuntimeTestDatabase.dataSource());
+    }
+
+    WorkerNode node(
+            String nodeId,
+            WorkerProperties properties,
+            UnaryOperator<AgentStateRepository> states,
+            DataSource dataSource) {
         Map<String, WorkerNode.ToolSpec> tools = new LinkedHashMap<>();
         tools.put(LOOKUP, new WorkerNode.ToolSpec(SideEffect.IDEMPOTENT, lookupCalls));
         tools.put(WRITE, new WorkerNode.ToolSpec(SideEffect.NON_IDEMPOTENT, writeCalls));
-        return WorkerNode.create(new WorkerNode.Spec(nodeId, clock, model, agents, tools, properties, states));
+        return WorkerNode.create(
+                new WorkerNode.Spec(nodeId, clock, model, agents, tools, properties, states, dataSource));
     }
 
     static WorkerProperties withoutCheckpoint() {

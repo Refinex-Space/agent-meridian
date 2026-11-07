@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.SmartLifecycle;
 import reactor.core.Disposable;
+import reactor.core.publisher.Mono;
 
 /**
  * Worker 的后台循环与节点优雅下线（架构设计「一轮执行的生命周期」「崩溃恢复」中的"节点优雅下线"）。
@@ -69,7 +70,11 @@ public final class TurnWorkerLifecycle implements SmartLifecycle {
         }
         accepting = true;
         signals = wakeups.signals()
-                .concatMap(signal -> Blocking.run(this::drain))
+                .concatMap(signal -> Blocking.run(this::drain).onErrorResume(error -> {
+                    // 认领失败（例如数据库暂时不可用）不能让循环结束，下一个信号再试
+                    log.warn("认领轮次失败，等待下一个唤醒信号再试", error);
+                    return Mono.empty();
+                }))
                 .subscribe(null, error -> log.error("Worker 的认领循环意外结束", error));
         log.info("Worker 已启动 maxConcurrentTurns={}", properties.maxConcurrentTurns());
     }

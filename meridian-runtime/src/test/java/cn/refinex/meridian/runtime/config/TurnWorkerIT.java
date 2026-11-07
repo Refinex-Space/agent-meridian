@@ -13,10 +13,14 @@ import cn.refinex.meridian.runtime.dispatch.domain.TurnOutcome;
 import cn.refinex.meridian.runtime.session.app.TurnExecution;
 import cn.refinex.meridian.runtime.session.app.TurnResult;
 import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
+import cn.refinex.meridian.runtime.session.app.WorkerProperties;
 import cn.refinex.meridian.runtime.stream.domain.StoredEvent;
 import cn.refinex.meridian.runtime.support.DbAssertions;
+import cn.refinex.meridian.runtime.support.FailingDataSource;
+import cn.refinex.meridian.runtime.support.RuntimeTestDatabase;
 import cn.refinex.meridian.runtime.support.TestSessions.TestSession;
 import io.agentscope.core.shutdown.GracefulShutdownManager;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.LongStream;
@@ -35,6 +39,15 @@ class TurnWorkerIT {
     @AfterEach
     void resetGracefulShutdown() {
         GracefulShutdownManager.getInstance().resetForTesting();
+    }
+
+    private static void sleepQuietly(Duration duration) {
+        try {
+            Thread.sleep(duration);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
     }
 
     @Test
@@ -105,6 +118,33 @@ class TurnWorkerIT {
                 .as("finally 中释放了本节点的条目")
                 .isEmpty();
         assertThat(fixture.lookupCalls.toolUseIds()).containsExactly("call_1");
+    }
+
+    @Test
+    void theWorkerLoopSurvivesClaimFailuresAndClaimsOnceTheDatabaseIsBack() {
+        WorkerFixture fixture = new WorkerFixture(
+                ScriptedModel.builder().respond(r -> r.text("数据库恢复后完成")).build());
+        FailingDataSource database = new FailingDataSource(RuntimeTestDatabase.dataSource());
+        WorkerNode node = fixture.node("node-a", WorkerProperties.defaults(), s -> s, database);
+        TestSession session = fixture.session();
+        fixture.send(node, session, "你好", Delivery.QUEUE);
+        TurnWorkerLifecycle lifecycle = node.lifecycle();
+        database.failing(true);
+        lifecycle.start();
+        try {
+            // 轮询每 100 毫秒一次，这段时间里的认领都失败
+            sleepQuietly(Duration.ofMillis(500));
+            assertThat(lifecycle.isRunning()).isTrue();
+            database.failing(false);
+
+            List<StoredEvent> events = WorkerFixture.await(
+                    () -> fixture.events(node, session),
+                    all -> !ofType(all, EventType.SESSION_STATUS_IDLE).isEmpty());
+            assertThat(events.getLast().data()).contains("end_turn");
+        } finally {
+            database.failing(false);
+            Mono.fromRunnable(lifecycle::stop).block(WorkerNode.RUN_TIMEOUT);
+        }
     }
 
     @Test

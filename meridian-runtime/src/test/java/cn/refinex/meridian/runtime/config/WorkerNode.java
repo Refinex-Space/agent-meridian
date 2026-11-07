@@ -28,7 +28,6 @@ import cn.refinex.meridian.runtime.session.app.WorkerProperties;
 import cn.refinex.meridian.runtime.session.infra.SessionRepository;
 import cn.refinex.meridian.runtime.session.infra.system.ThreadLockRepository;
 import cn.refinex.meridian.runtime.stream.app.ObjectStoreBlobStore;
-import cn.refinex.meridian.runtime.support.RuntimeTestDatabase;
 import cn.refinex.meridian.runtime.support.RuntimeTestObjectStore;
 import cn.refinex.meridian.runtime.support.RuntimeTestRedis;
 import cn.refinex.meridian.runtime.support.TestNode;
@@ -87,6 +86,7 @@ record WorkerNode(
      * @param tools 记账工具：工具名 → (副作用等级, 跨节点共用的调用记录)
      * @param properties 执行配置
      * @param states 包装状态端口（例如记录被拒绝的写入）；不包装时为恒等函数
+     * @param dataSource 本节点的数据源（例如可以模拟数据库不可用的 {@code FailingDataSource}）
      */
     record Spec(
             String nodeId,
@@ -95,7 +95,8 @@ record WorkerNode(
             TestAgents agents,
             Map<String, ToolSpec> tools,
             WorkerProperties properties,
-            UnaryOperator<AgentStateRepository> states) {}
+            UnaryOperator<AgentStateRepository> states,
+            DataSource dataSource) {}
 
     /**
      * 一个记账工具的定义。
@@ -106,9 +107,9 @@ record WorkerNode(
     record ToolSpec(SideEffect sideEffect, LedgerTool.Calls calls) {}
 
     static WorkerNode create(Spec spec) {
-        DataSource dataSource = RuntimeTestDatabase.dataSource();
+        DataSource dataSource = spec.dataSource();
         TransactionTemplate transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
-        TestNode node = TestNode.create(spec.nodeId(), spec.clock());
+        TestNode node = TestNode.create(spec.nodeId(), spec.clock(), DispatchProperties.defaults(), dataSource);
         TurnMetrics metrics = new TurnMetrics(node.meters());
         DatabaseInbox inbox =
                 new DatabaseInbox(new InboxRepository(dataSource), transactions, node.nodeId(), spec.clock());
