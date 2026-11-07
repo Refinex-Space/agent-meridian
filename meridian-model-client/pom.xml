@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>cn.refinex.meridian</groupId>
+        <artifactId>meridian-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>meridian-model-client</artifactId>
+
+    <name>AgentMeridian Model Client</name>
+    <description>knowledge 调用 runtime 内部模型接口的客户端。</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-security</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-rules</id>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <!-- 按架构设计「模块依赖规则」放行（含传递依赖） -->
+                                    <includes combine.children="append">
+                                        <include>cn.refinex.meridian:meridian-common</include>
+                                        <include>cn.refinex.meridian:meridian-api</include>
+                                        <include>cn.refinex.meridian:meridian-security</include>
+                                    </includes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

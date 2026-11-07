@@ -63,6 +63,8 @@ venv/
 *.egg-info/
 .eggs/
 build/
+# 仓库根目录的 build/ 存放构建配置（Checkstyle 规则），需要提交
+!/build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

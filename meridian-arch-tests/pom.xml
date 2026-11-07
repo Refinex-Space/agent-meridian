@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>cn.refinex.meridian</groupId>
+        <artifactId>meridian-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>meridian-arch-tests</artifactId>
+
+    <name>AgentMeridian Architecture Tests</name>
+    <description>ArchUnit 架构规则：以 test 作用域依赖全部业务模块并检查包依赖。</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-common</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-security</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-persistence</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-engine-spi</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-engine-agentscope</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-engine-agentscope-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-model-client</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-control-plane</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-runtime</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-knowledge</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-rules</id>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <!-- 以 test 作用域依赖全部平台模块（含其传递的 AgentScope 构件），用于架构检查 -->
+                                    <includes combine.children="append">
+                                        <include>cn.refinex.meridian:*:*:*:test</include>
+                                        <include>io.agentscope:agentscope-core</include>
+                                        <include>io.agentscope:agentscope-harness</include>
+                                        <include>io.agentscope:agentscope-extensions-sandbox-kubernetes</include>
+                                    </includes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

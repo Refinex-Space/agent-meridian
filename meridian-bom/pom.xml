@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      依赖版本的唯一来源（编码规范「依赖管理」）。
+      本 POM 不继承 meridian-parent：根 POM 导入本 BOM，继承会形成导入循环。
+      版本升级规则见架构设计「技术基线」：基线中的组件升级要先提 ADR。
+    -->
+    <groupId>cn.refinex.meridian</groupId>
+    <artifactId>meridian-bom</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>AgentMeridian BOM</name>
+    <description>AgentMeridian 的依赖版本清单：平台模块、Spring Boot、AgentScope 与测试工具。</description>
+
+    <properties>
+        <!-- 技术基线 -->
+        <spring-boot.version>4.1.2</spring-boot.version>
+        <agentscope.version>2.0.4</agentscope.version>
+
+        <!-- 测试与工具依赖：取发布满两周的最新稳定版（2026-11-07 核对） -->
+        <junit.version>6.1.3</junit.version>
+        <assertj.version>3.27.7</assertj.version>
+        <mockito.version>5.24.0</mockito.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
+        <archunit.version>1.5.1</archunit.version>
+        <blockhound.version>1.0.18.RELEASE</blockhound.version>
+        <ulid-creator.version>5.2.4</ulid-creator.version>
+
+        <!-- 与根 POM 的 spotless-maven-plugin.version 保持一致 -->
+        <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- 平台模块 -->
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-security</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-persistence</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-engine-spi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-engine-agentscope</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-engine-agentscope-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-model-client</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-control-plane</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-runtime</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-knowledge</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.refinex.meridian</groupId>
+                <artifactId>meridian-test-support</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!--
+              测试库的 BOM 放在 Spring Boot 之前：导入顺序决定优先级，这里取比 Boot 4.1.2 更新的版本。
+              Reactor（含 reactor-test）不覆盖，沿用 Boot 管理的版本：reactor-core 与 Spring Framework 绑定。
+            -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-bom</artifactId>
+                <version>${assertj.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-bom</artifactId>
+                <version>${mockito.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!--
+              Spring Boot 的依赖管理。Jackson 3（tools.jackson）由它管理；它同时管理 Jackson 2
+              （jackson-2-bom 2.21.x），满足 AgentScope 2.0.4 对 2.21.x 的要求。
+            -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!--
+              AgentScope 只声明用到的构件，不导入 agentscope-dependencies-bom：它锁定的是 Spring Boot 4.0.4。
+              MCP Java SDK（0.17.2）随 agentscope-core 传递引入，Boot 不管理它。
+            -->
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-core</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-harness</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-sandbox-kubernetes</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+
+            <!-- 不在 Boot 管理范围内的测试与工具依赖 -->
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit-junit5</artifactId>
+                <version>${archunit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.projectreactor.tools</groupId>
+                <artifactId>blockhound</artifactId>
+                <version>${blockhound.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.projectreactor.tools</groupId>
+                <artifactId>blockhound-junit-platform</artifactId>
+                <version>${blockhound.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.f4b6a3</groupId>
+                <artifactId>ulid-creator</artifactId>
+                <version>${ulid-creator.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!--
+              只为让命令行的 spotless: 前缀在本模块可解析；本 POM 的格式由根模块的 Spotless 配置代为检查，
+              这里跳过，避免两份配置。
+            -->
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless-maven-plugin.version}</version>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
