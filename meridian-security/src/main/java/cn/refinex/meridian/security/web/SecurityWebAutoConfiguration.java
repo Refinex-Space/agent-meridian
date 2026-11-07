@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Web 入口公共能力的自动配置：请求 ID 与 problem+json，按应用的 Web 栈装配对应的适配器。
+ * Web 入口公共能力的自动配置：请求 ID、{@code traceparent}（WebFlux）与 problem+json，按应用的 Web 栈装配对应的适配器。
  */
 @AutoConfiguration
 public class SecurityWebAutoConfiguration {
@@ -51,6 +51,11 @@ public class SecurityWebAutoConfiguration {
         }
 
         @Bean
+        TraceParentWebFilter traceParentWebFilter() {
+            return new TraceParentWebFilter();
+        }
+
+        @Bean
         WebFluxProblemHandler webFluxProblemHandler(ProblemMapper mapper) {
             return new WebFluxProblemHandler(mapper);
         }
@@ -64,6 +69,7 @@ public class SecurityWebAutoConfiguration {
 
         ReactiveMdc() {
             RequestIdMdcAccessor.register();
+            TraceIdMdcAccessor.register();
         }
     }
 }

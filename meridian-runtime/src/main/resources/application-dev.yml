@@ -14,6 +14,16 @@ spring:
       port: ${MERIDIAN_REDIS_PORT:16379}
 
 meridian:
+  security:
+    dev-api-keys:
+      # 开发期 API Key（T07）：只在 dev、test profile 允许启用；明文从环境变量读取（compose 的 env 文件）
+      enabled: true
+      keys:
+        - key: ${MERIDIAN_DEV_API_KEY}
+          api-key-id: key_dev_local
+          tenant-id: ten_dev
+          project-id: prj_dev
+          scopes: [sessions:read, sessions:write]
   persistence:
     objectstore:
       # scripts/dev/up.sh 启动的 MinIO 与创建的桶；凭据只从环境变量读取（compose 的 env 文件）

@@ -11,9 +11,14 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.ErrorResponse;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 /**
  * 把异常映射为 problem+json（RFC 9457），带扩展字段 {@code code} 与 {@code request_id}
@@ -23,6 +28,8 @@ import org.springframework.web.ErrorResponse;
  * <ul>
  *   <li>{@link MeridianException}：取它的错误码与 detail；{@link ValidationException} 另输出 {@code errors}。
  *   <li>参数绑定校验失败（{@link BindingResult}）：{@code request.validation_failed}，字段名转为 snake_case。
+ *   <li>请求参数、请求头的约束校验失败（{@link HandlerMethodValidationException}）：{@code request.validation_failed}，
+ *       字段名取参数在 HTTP 中的名字（例如 {@code limit}、{@code Idempotency-Key}）。
  *   <li>请求体无法解析、参数类型不对：{@code request.invalid}。
  *   <li>Spring 的其他 Web 异常（{@link ErrorResponse}）：保留其状态码，按状态码选通用错误码，detail 取错误码标题。
  *   <li>其他异常：500 {@code internal.error}，detail 不暴露内部信息。
@@ -89,6 +96,14 @@ public final class ProblemMapper {
                     .toList();
             return new Mapped(CommonErrorCode.VALIDATION_FAILED, 400, "请求参数校验失败", violations);
         }
+        if (error instanceof HandlerMethodValidationException e) {
+            List<FieldViolation> violations = e.getParameterValidationResults().stream()
+                    .flatMap(result -> result.getResolvableErrors().stream()
+                            .map(err ->
+                                    new FieldViolation(httpName(result.getMethodParameter()), err.getDefaultMessage())))
+                    .toList();
+            return new Mapped(CommonErrorCode.VALIDATION_FAILED, 400, "请求参数校验失败", violations);
+        }
         if (error instanceof HttpMessageNotReadableException) {
             return new Mapped(CommonErrorCode.REQUEST_INVALID, 400, "请求体无法解析", List.of());
         }
@@ -119,6 +134,24 @@ public final class ProblemMapper {
             case 503 -> CommonErrorCode.SERVICE_UNAVAILABLE;
             default -> status >= 500 ? CommonErrorCode.INTERNAL : CommonErrorCode.REQUEST_REJECTED;
         };
+    }
+
+    /** 参数在 HTTP 中的名字：查询参数、请求头、路径变量取注解中的名字，其余取 Java 参数名的 snake_case 形式。 */
+    private static String httpName(MethodParameter parameter) {
+        RequestParam param = parameter.getParameterAnnotation(RequestParam.class);
+        if (param != null && !param.value().isEmpty()) {
+            return param.value();
+        }
+        RequestHeader header = parameter.getParameterAnnotation(RequestHeader.class);
+        if (header != null && !header.value().isEmpty()) {
+            return header.value();
+        }
+        PathVariable path = parameter.getParameterAnnotation(PathVariable.class);
+        if (path != null && !path.value().isEmpty()) {
+            return path.value();
+        }
+        String name = parameter.getParameterName();
+        return name == null ? "参数" : toSnakeCase(name);
     }
 
     /** Java 属性名转为 API 的 snake_case 字段名，例如 {@code metadata.inputTokens} → {@code metadata.input_tokens}。 */
