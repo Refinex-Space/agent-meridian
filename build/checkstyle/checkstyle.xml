@@ -17,10 +17,15 @@
     </module>
 
     <module name="TreeWalker">
-        <!-- record 的访问器方法（无参、与组件同名）不要求 Javadoc：组件的含义写在 record 的 Javadoc 中 -->
+        <!--
+          record 的访问器不要求 Javadoc：组件的含义写在 record 的 Javadoc 中。
+          Checkstyle 的 XPath 无法比较两个属性值（属性节点不支持取值，只支持 [@text='字面量'] 形式），
+          所以无法精确判断"方法名等于某个组件名"。这里按结构近似：record 中非 static、无参数、方法体只有一条
+          return 的方法视为访问器。同形态的派生方法也会被放过，由代码评审兜底。
+        -->
         <module name="SuppressionXpathSingleFilter">
             <property name="checks" value="MissingJavadocMethod"/>
-            <property name="query" value="//RECORD_DEF/OBJBLOCK/METHOD_DEF[not(./PARAMETERS/PARAMETER_DEF) and ./IDENT/@text = ancestor::RECORD_DEF[1]/RECORD_COMPONENTS/RECORD_COMPONENT_DEF/IDENT/@text]"/>
+            <property name="query" value="//RECORD_DEF/OBJBLOCK/METHOD_DEF[not(PARAMETERS/PARAMETER_DEF) and not(MODIFIERS/LITERAL_STATIC) and count(SLIST/*) = 2 and SLIST/LITERAL_RETURN]"/>
         </module>
 
         <!-- 禁止通配符导入 -->
