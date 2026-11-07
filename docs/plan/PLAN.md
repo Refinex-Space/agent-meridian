@@ -45,7 +45,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | 阶段 | 内容 | 任务 | 阶段门 | 状态 |
 |---|---|---|---|---|
 | 0 工程基座 | 脚手架、质量门禁、通用基础库、本地基础设施 | T01–T02 | — | 已完成 |
-| 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 未开始 |
+| 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 进行中 |
 | 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 未开始 |
 | 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 未开始 |
 | 4 M1 控制台 | 设计方向与组件、原型（并行轨道）、工程基座、五组页面 | T20a–T25b | R3 | 未开始 |
@@ -61,7 +61,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 |---|---|---|---|---|---|---|---|---|
 | T01 | [工程脚手架与质量门禁](tasks/T01-scaffold-and-quality-gates.md) | 0 | 无 | high | 中 | P1（依赖解析部分） | 已完成 | b29c1af |
 | T02 | [通用基础库、持久化与本地基础设施](tasks/T02-common-persistence-infra.md) | 0 | T01 | high | 大 | 无 | 已完成 | 4812ea7 |
-| T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 未开始 | — |
+| T03 | [内核契约、ScriptedModel 与 HarnessAgent 装配](tasks/T03-engine-contracts-and-assembly.md) | 1 | T02 | xhigh | 大 | P1 | 进行中 | — |
 | T04 | [单轮执行适配与事件映射](tasks/T04-engine-turn-execution.md) | 1 | T03 | xhigh | 大 | P13（部分） | 未开始 | — |
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 未开始 | — |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 未开始 | — |
@@ -175,7 +175,16 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+**T03 内核契约、ScriptedModel 与 HarnessAgent 装配**（开工基线：`scripts/dev/verify.sh` 通过，提交 693adcb）
+
+- [x] 1. 核对 AgentScope 2.0.4 源码：装配表中每个 Builder 方法、`Model`/`ChatModelBase`/`ChatResponse`/`ChatUsage`、`RuntimeContext`、`AgentStateStore`、`MiddlewareBase`、`AgentEventType`、`GenerateReason`、`PermissionContextState`
+- [x] 2. `meridian-engine-spi` 全部类型（engine、engine.input、event、spec、port、driver），中文 Javadoc 注明章节；架构测试：spi 不依赖 AgentScope 与 Spring（A01）；事件类型清单测试（A02）
+- [ ] 3. `meridian-engine-agentscope-test`：`ScriptedModel` 与构建 DSL、内存端口夹具
+- [ ] 4. `meridian-engine-agentscope` 的 `assembly`：模型工厂接口、`AgentAssembler`（装配表逐行落实，未实现组件经注入的提供者获得）、`AgentAssemblerTest` 逐行断言（A03）
+- [ ] 5. 实例缓存：`acquire`/`release`、容量 500、空闲 30 分钟、引用计数归零才 `close()`；并发测试（A04）
+- [ ] 6. `ScriptedModel` 驱动 `HarnessAgent` 的场景测试：纯文本、单工具、并行工具、首包前错误、首包后错误、请求断言（A05）
+- [ ] 7. P1：runtime `config` 包下的 Spring Boot WebFlux 集成测试（Jackson 3 Web 序列化 + 同 JVM 装配并 `streamEvents`，含工具调用）；报告 `docs/poc/P01-运行基线.md`、`docs/poc/README.md`（A06）
+- [ ] 8. 收尾：Checkstyle/Javadoc 抽查（A07）、`scripts/dev/verify.sh`（A08）、三个模块 `CLAUDE.md`、根 `CLAUDE.md`、架构设计「端口」表同步、`acceptance.json`、`PLAN.md`、提交
 
 ## 控制台设计轨道
 

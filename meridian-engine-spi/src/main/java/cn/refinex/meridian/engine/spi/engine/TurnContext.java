@@ -1,0 +1,93 @@
+package cn.refinex.meridian.engine.spi.engine;
+
+import cn.refinex.meridian.common.context.PlatformContext;
+import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
+import cn.refinex.meridian.engine.spi.spec.PermissionPolicy;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * 执行一轮所需的上下文，由 Worker 在认领轮次后构造，见架构设计「内核适配层」「身份映射」「权限判定」。
+ *
+ * <p>内核据 {@code agentVersionId}、{@code environmentId}、{@code environmentRevision} 取得缓存的智能体实例
+ * （未命中时经 {@code AgentConfigPort} 读取配置并装配），把 {@code platform} 以类型键写入
+ * {@code RuntimeContext} 与 Reactor Context。AgentScope 的 {@code userId} 由内核按
+ * {@code {project_id}:{end_user_id}} 生成，没有终端用户时为 {@code {project_id}:_}。
+ *
+ * @param platform 平台上下文：租户、项目、会话、线程、轮次、API Key、租约 epoch、预算句柄、值守方式；
+ *     其中项目、会话、线程、轮次、租约 epoch、值守方式在本类型中必填
+ * @param endUserId 终端用户 ID；可为空，表示会话没有终端用户
+ * @param agentVersionId 会话绑定的智能体版本 ID（{@code agv_…}）；必填
+ * @param environmentId 会话绑定的环境 ID（{@code env_…}）；必填
+ * @param environmentRevision 会话创建时的环境修订号，从 1 开始
+ * @param permissions 五层规则合成后的主线程权限策略，每轮开始前安装；必填
+ * @param subagentPolicies 每个子智能体预先合成的权限策略：子智能体名 → 策略。按「权限判定」一律为
+ *     {@code DONT_ASK} 模式、ask 改写为 deny、allow 是父智能体 allow 的子集；可为空映射
+ * @param customTools 本会话声明的自定义工具，每轮注入；可为空列表
+ * @param recovery 恢复说明的来源；可为空，表示不是恢复轮
+ */
+public record TurnContext(
+        PlatformContext platform,
+        String endUserId,
+        String agentVersionId,
+        String environmentId,
+        long environmentRevision,
+        PermissionPolicy permissions,
+        Map<String, PermissionPolicy> subagentPolicies,
+        List<CustomToolDeclaration> customTools,
+        RecoveryOrigin recovery) {
+
+    /**
+     * 创建一轮的上下文。
+     *
+     * @throws NullPointerException 缺少必填字段时
+     * @throws IllegalArgumentException 平台上下文缺少一轮执行必需的字段，或修订号小于 1 时
+     */
+    public TurnContext {
+        Objects.requireNonNull(platform, "platform");
+        Objects.requireNonNull(agentVersionId, "agentVersionId");
+        Objects.requireNonNull(environmentId, "environmentId");
+        Objects.requireNonNull(permissions, "permissions");
+        if (platform.projectId() == null
+                || platform.sessionId() == null
+                || platform.threadId() == null
+                || platform.turnId() == null
+                || platform.leaseEpoch() == null
+                || platform.interaction() == null) {
+            throw new IllegalArgumentException("一轮的 PlatformContext 必须包含项目、会话、线程、轮次、租约 epoch 与值守方式");
+        }
+        if (environmentRevision < 1) {
+            throw new IllegalArgumentException("环境修订号必须从 1 开始：" + environmentRevision);
+        }
+        subagentPolicies = subagentPolicies == null ? Map.of() : Map.copyOf(subagentPolicies);
+        customTools = customTools == null ? List.of() : List.copyOf(customTools);
+    }
+
+    /**
+     * 本轮执行的主线程。
+     *
+     * @return 线程引用
+     */
+    public ThreadRef thread() {
+        return new ThreadRef(platform.sessionId(), platform.threadId());
+    }
+
+    /**
+     * 本轮的轮次 ID。
+     *
+     * @return 轮次 ID（{@code trn_…}）
+     */
+    public String turnId() {
+        return platform.turnId();
+    }
+
+    /**
+     * 本次执行持有的租约 epoch。
+     *
+     * @return 租约 epoch
+     */
+    public long leaseEpoch() {
+        return platform.leaseEpoch();
+    }
+}

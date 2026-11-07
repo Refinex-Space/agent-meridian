@@ -174,6 +174,17 @@ class ArchitectureRulesTest {
             .allowEmptyShould(true);
 
     @ArchTest
+    static final ArchRule rule12_engine_spi_is_free_of_agentscope_and_spring = noClasses()
+            .that()
+            .resideInAPackage("cn.refinex.meridian.engine.spi..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("io.agentscope..", "org.springframework..")
+            .as("规则 12：cn.refinex.meridian.engine.spi.. 不依赖 io.agentscope.. 与 org.springframework..")
+            .because("端口与内核契约的签名只出现平台类型，见架构设计「端口」「架构原则」第 2 条")
+            .allowEmptyShould(true);
+
+    @ArchTest
     static final ArchRule rule11_api_does_not_use_system_repositories = noClasses()
             .that()
             .resideInAPackage("cn.refinex.meridian..api..")

@@ -18,6 +18,17 @@
             <groupId>cn.refinex.meridian</groupId>
             <artifactId>meridian-common</artifactId>
         </dependency>
+        <!-- AgentEngine 与端口的签名使用 Flux/Mono（架构设计「内核适配层」），版本由 Spring Boot 管理 -->
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
