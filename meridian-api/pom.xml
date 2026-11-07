@@ -18,10 +18,58 @@
             <groupId>cn.refinex.meridian</groupId>
             <artifactId>meridian-common</artifactId>
         </dependency>
+
+        <!-- 生成的 DTO 用到的注解：Bean Validation、@Generated、Spring 的 @Nullable 与 @DateTimeFormat（ADR-0029） -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- 规范校验与兼容性检查（OpenApiSpecTest、OpenApiCompatibilityTest） -->
+        <dependency>
+            <groupId>org.openapitools.openapidiff</groupId>
+            <artifactId>openapi-diff-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <!-- 只生成 DTO（cn.refinex.meridian.api.model），服务端接口由各应用自己生成（架构设计「仓库布局」） -->
+            <plugin>
+                <groupId>org.openapitools</groupId>
+                <artifactId>openapi-generator-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>generate-dto</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/src/main/resources/openapi/meridian-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <generateApis>false</generateApis>
+                            <generateModels>true</generateModels>
+                            <configOptions>
+                                <useSealed>true</useSealed>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

@@ -30,6 +30,9 @@
         <ulid-creator.version>5.2.4</ulid-creator.version>
         <!-- S3 兼容对象存储客户端；AWS SDK 几乎每天发布，取发布满两周的版本（2.57.3，2026-10-22） -->
         <aws-sdk.version>2.57.3</aws-sdk.version>
+        <!-- OpenAPI 兼容性检查（openapi-diff-core 2.1.7，2026-01-26）与契约测试的请求响应校验（2026-05-13），ADR-0029 -->
+        <openapi-diff.version>2.1.7</openapi-diff.version>
+        <openapi-request-validator.version>3.0.0</openapi-request-validator.version>
 
         <!-- 与根 POM 的 spotless-maven-plugin.version 保持一致 -->
         <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
@@ -192,6 +195,16 @@
                 <groupId>com.github.f4b6a3</groupId>
                 <artifactId>ulid-creator</artifactId>
                 <version>${ulid-creator.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openapitools.openapidiff</groupId>
+                <artifactId>openapi-diff-core</artifactId>
+                <version>${openapi-diff.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.atlassian.oai</groupId>
+                <artifactId>openapi-request-validator-core</artifactId>
+                <version>${openapi-request-validator.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

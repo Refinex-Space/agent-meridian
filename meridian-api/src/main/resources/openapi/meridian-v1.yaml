@@ -1,0 +1,2483 @@
+openapi: 3.1.0
+info:
+  title: AgentMeridian API
+  version: 1.0.0
+  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作与 SSE 事件流。
+  description: |
+    业务系统通过本 API 使用平台上的智能体：创建会话、发送事件、订阅事件流、回应待处理动作。
+
+    **认证。** 每个请求带 `Authorization: Bearer <API Key>`。API Key 属于一个项目，数据按"项目 + `end_user_id`"隔离：
+    同一项目内按 `end_user_id` 区分终端用户，跨项目不可见，即使 `end_user_id` 相同。API Key 的作用域决定能调用哪些接口：
+    读接口需要 `sessions:read`，写接口需要 `sessions:write`，每个操作的 `security` 列出所需作用域。
+
+    **约定。**
+    - 字段名 snake_case；时间为 RFC 3339 UTC，例如 `2026-11-07T08:30:12.345Z`。
+    - 列表接口用游标分页：`?limit=&after=`，返回 `{data, has_more, next_cursor}`；`next_cursor` 原样传给下一次请求的 `after`。
+    - 所有 POST 支持 `Idempotency-Key` 请求头：24 小时内同键同请求体返回首次的结果（响应带 `Idempotent-Replayed: true`），
+      同键不同请求体返回 409 `idempotency.key_reused`，首次请求仍在处理时返回 409 `idempotency.in_progress`。
+    - 错误一律为 RFC 9457 `application/problem+json`，扩展字段 `code`（`<领域>.<原因>`）与 `request_id`。
+    - 每个响应带 `X-Request-Id`；请求可传入 `X-Request-Id`（不超过 128 个字符的字母、数字与 `._:-`）与 W3C `traceparent`，
+      合法的 `traceparent` 在响应中原样返回，用于把平台日志关联到调用方的追踪。
+
+    **事件流。** `GET /v1/sessions/{session_id}/stream` 与线程流按 SSE 推送事件：`event:` 为事件类型，`id:` 为 `seq`，
+    `data:` 为事件信封 JSON。断线后带 `Last-Event-ID` 重连，服务端只补发其后的事件；会话流的 `seq` 连续，客户端可据此去重。
+servers:
+  - url: http://localhost:8080
+    description: 本地开发（scripts/dev/run-runtime.sh）
+security:
+  - ApiKeyAuth: []
+tags:
+  - name: Sessions
+    description: 会话：绑定一个智能体版本与一个环境修订的有状态实例。
+  - name: Events
+    description: 事件：发送用户事件、列出事件、订阅会话与线程的事件流。
+  - name: Threads
+    description: 线程：会话中的执行线，主智能体是主线程，每次拉起子智能体产生一条子线程。
+  - name: PendingActions
+    description: 待处理动作：需要调用方回应的事项。
+
+paths:
+  /v1/sessions:
+    post:
+      operationId: createSession
+      tags: [Sessions]
+      summary: 创建会话
+      description: |
+        创建一个空闲会话及其主线程。平台按 `agent` 与 `environment` 解析并固化智能体版本与环境修订号，之后修改智能体或环境
+        不影响这个会话。
+      security:
+        - ApiKeyAuth: [sessions:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+            example:
+              agent: agt_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
+              environment: env_01JC8Z2B5D3F7H9K1M4P6R8T0V
+              end_user_id: u_1024
+              end_user_attributes:
+                acl_tags: ['dept:finance']
+              metadata:
+                ticket: 'INC-2041'
+      responses:
+        '201':
+          description: 已创建。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`agent.not_found`：智能体或智能体版本不存在；`environment.not_found`：环境不存在。'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listSessions
+      tags: [Sessions]
+      summary: 列出会话
+      description: 列出当前项目的会话，新创建的在前；已删除的会话不出现在列表中。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+        - name: end_user_id
+          in: query
+          description: 只列出该终端用户的会话。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+      responses:
+        '200':
+          description: 会话列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/sessions/{session_id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: getSession
+      tags: [Sessions]
+      summary: 查询会话
+      description: 已删除的会话在数据清理完成之前仍可查询，`deleted_at` 不为空。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      responses:
+        '200':
+          description: 会话。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateSession
+      tags: [Sessions]
+      summary: 更新会话
+      description: 更新会话的元数据。未给出的字段保持不变；`metadata` 整体替换。已终止的会话只读。
+      security:
+        - ApiKeyAuth: [sessions:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionRequest'
+      responses:
+        '200':
+          description: 更新后的会话。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '409':
+          $ref: '#/components/responses/SessionConflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteSession
+      tags: [Sessions]
+      summary: 删除会话
+      description: |
+        删除会话：取消正在执行或排队的轮次，未回应的待处理动作作废，写入 `session.status_terminated`（`reason=deleted`）。
+        **删除不可撤销**：会话的事件、线程、状态、工作区与产物在 24 小时内被清理，清理完成前查询返回 `deleted_at` 不为空的会话，
+        之后返回 404。重复删除返回同样的结果。
+      security:
+        - ApiKeyAuth: [sessions:write]
+      responses:
+        '202':
+          description: 已删除，数据清理在后台进行。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/sessions/{session_id}:archive:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      operationId: archiveSession
+      tags: [Sessions]
+      summary: 归档会话
+      description: |
+        归档会话：会话进入 `terminated`（`reason=archived`），之后只读，事件仍可查询与订阅。只有 `idle` 或 `requires_action`
+        的会话可以归档，未回应的待处理动作随之作废；正在执行的会话返回 409 `session.busy`。归档已归档的会话返回当前会话。
+      security:
+        - ApiKeyAuth: [sessions:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 已归档的会话。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '409':
+          description: |
+            `session.busy`：会话正在执行（`running` 或 `rescheduled`），不能归档；`session.terminated`：会话已删除；
+            `idempotency.key_reused`、`idempotency.in_progress`：见"约定"。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/sessions/{session_id}/events:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      operationId: sendEvents
+      tags: [Events]
+      summary: 发送事件
+      description: |
+        发送一批用户事件，按顺序在一个事务里校验并持久化，任一事件不合法时整批拒绝。
+
+        | 事件 | 何时可以发送 | 效果 |
+        |---|---|---|
+        | `user.message` | 会话未终止 | 主线程空闲时立即开始一轮；正在执行或等待回应时进入收件箱，按 `delivery` 投递 |
+        | `user.interrupt` | 会话未终止 | 请求中断当前轮；没有执行中的轮次时无效果 |
+        | `user.tool_confirmation` | 存在类型为 `tool_confirmation` 或 `plan_exit` 的未回应动作 | 回应该动作 |
+        | `user.custom_tool_result` | 存在类型为 `custom_tool_result` 的未回应动作 | 回传自定义工具结果 |
+        | `user.recovery_confirmation` | 存在类型为 `recovery_confirmation` 的未回应动作 | 决定重试或跳过 |
+      security:
+        - ApiKeyAuth: [sessions:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendEventsRequest'
+            example:
+              events:
+                - type: user.message
+                  content:
+                    - type: text
+                      text: 差旅住宿标准是多少？
+      responses:
+        '202':
+          description: 已接收，返回持久化后的事件（带 `id` 与 `seq`）。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEventsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '409':
+          description: |
+            事件与会话当前状态的组合不合法：
+            - `session.terminated`：会话已归档或删除，不再接受事件。
+            - `event.action_not_found`：会话中没有 `action_id` 指定的待处理动作。
+            - `event.action_type_mismatch`：事件类型与动作类型不对应，例如用 `user.custom_tool_result` 回应 `tool_confirmation`。
+            - `event.action_not_pending`：动作已被回应或已超时。
+
+            另有 `idempotency.key_reused`、`idempotency.in_progress`，见"约定"。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listEvents
+      tags: [Events]
+      summary: 列出事件
+      description: 按 `seq` 升序列出会话的持久化事件；只在流上出现的事件（`event_start`、`event_delta`、`ping`）不在其中。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 事件列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/sessions/{session_id}/stream:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: streamSessionEvents
+      tags: [Events]
+      summary: 订阅会话事件流
+      description: |
+        以 SSE 推送会话的事件，包含全部线程，`seq` 连续。服务端先补发 `Last-Event-ID` 之后的历史事件，再转为实时推送；
+        每 15 秒发送一次 `ping`。单个连接最长 60 分钟，到期由服务端关闭，客户端带 `Last-Event-ID` 重连。
+        推送 `session.status_terminated` 之后服务端关闭连接。
+
+        `?threads=main` 只推送主线程、会话级事件与子线程的状态事件（`session.thread_created`、`session.thread_status_*`），
+        此时 `seq` 不连续，客户端只按 `seq` 去重。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/LastEventId'
+        - $ref: '#/components/parameters/EventDeltas'
+        - name: threads
+          in: query
+          description: 线程过滤；`main` 表示只订阅主线程与线程状态事件。不传时订阅全部线程。
+          schema:
+            type: string
+            enum: [main]
+      responses:
+        '200':
+          $ref: '#/components/responses/EventStream'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/sessions/{session_id}/threads:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: listThreads
+      tags: [Threads]
+      summary: 列出线程
+      description: 按创建顺序列出会话的线程，主线程在最前。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 线程列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/sessions/{session_id}/threads/{thread_id}/stream:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - name: thread_id
+        in: path
+        required: true
+        description: 线程 ID（thr_…）。
+        schema:
+          type: string
+    get:
+      operationId: streamThreadEvents
+      tags: [Events]
+      summary: 订阅线程事件流
+      description: |
+        以 SSE 推送一条线程的事件，规则同会话事件流。线程流只包含本线程的事件，`seq` 不连续：其他线程占用的序号不算缺失，
+        客户端只按 `seq` 去重，不做跳号判断。会话终止后服务端关闭连接。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/LastEventId'
+        - $ref: '#/components/parameters/EventDeltas'
+      responses:
+        '200':
+          $ref: '#/components/responses/EventStream'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`session.not_found`：会话不存在；`thread.not_found`：会话中没有该线程。'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/sessions/{session_id}/pending-actions:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: listPendingActions
+      tags: [PendingActions]
+      summary: 列出待处理动作
+      description: 按创建顺序列出会话的待处理动作，默认只列出等待回应的。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+        - name: status
+          in: query
+          description: 按状态过滤，默认 `pending`。
+          schema:
+            $ref: '#/components/schemas/PendingActionStatus'
+      responses:
+        '200':
+          description: 待处理动作列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingActionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+      description: 项目下的 API Key，带作用域（`sessions:read`、`sessions:write` 等）。
+
+  headers:
+    XRequestId:
+      description: 本次请求的 ID：沿用合法的传入值，否则由服务端生成；排查问题时提供它。
+      required: true
+      schema:
+        type: string
+    IdempotentReplayed:
+      description: 值为 `true` 表示这是同一 `Idempotency-Key` 首次请求结果的重放。
+      schema:
+        type: string
+        enum: ['true']
+
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      description: 会话 ID（ses_…）。
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: 幂等键，24 小时内同键同请求体返回首次结果。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    Limit:
+      name: limit
+      in: query
+      description: 每页条数。
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    After:
+      name: after
+      in: query
+      description: 游标：上一页响应的 `next_cursor`。不传时从第一页开始。
+      schema:
+        type: string
+        minLength: 1
+    LastEventId:
+      name: Last-Event-ID
+      in: header
+      description: 上次收到的最后一个事件的 `seq`；服务端只推送其后的事件。不传时从会话的第一个事件开始。
+      schema:
+        type: string
+        pattern: '^[0-9]{1,18}$'
+    EventDeltas:
+      name: event_deltas
+      in: query
+      description: 为 `true` 时同时推送内容块的增量（`event_start`、`event_delta`）。
+      schema:
+        type: boolean
+        default: false
+
+  responses:
+    EventStream:
+      description: |
+        SSE 事件流（`text/event-stream`）。每条消息的 `event:` 为事件类型，`id:` 为 `seq`（只在流上的事件没有 `id:`），
+        `data:` 为一行事件信封 JSON（持久化事件为 `SessionEvent`，只在流上的事件为 `StreamOnlyEvent`）。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        text/event-stream:
+          schema:
+            type: array
+            format: event-stream
+            items:
+              $ref: '#/components/schemas/SseFrame'
+    BadRequest:
+      description: |
+        请求不合法：`request.invalid`（格式错误）、`request.validation_failed`（字段校验失败，见 `errors`）、
+        `request.invalid_cursor`（游标无效）。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: '`auth.unauthenticated`：缺少 `Authorization: Bearer`；`auth.invalid_api_key`：API Key 无效或已吊销。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: '`auth.insufficient_scope`：API Key 缺少该操作所需的作用域。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    SessionNotFound:
+      description: '`session.not_found`：会话不存在，或不属于 API Key 所在的项目。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    SessionConflict:
+      description: '`session.terminated`：会话已归档或删除，只读。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    IdempotencyConflict:
+      description: '`idempotency.key_reused`：同一幂等键已用于不同的请求；`idempotency.in_progress`：相同幂等键的请求正在处理。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: '`internal.error`：服务内部错误，`detail` 不含内部信息，排查以 `request_id` 关联日志；`service.unavailable`（503）：依赖暂时不可用。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Problem:
+      description: RFC 9457 错误响应，扩展字段 `code` 与 `request_id`。
+      type: object
+      required: [type, title, status, detail, instance, code, request_id]
+      properties:
+        type:
+          description: 错误类型 URI，`urn:meridian:error:<code>`。
+          type: string
+          examples: ['urn:meridian:error:session.not_found']
+        title:
+          description: 错误码的简短标题。
+          type: string
+        status:
+          description: HTTP 状态码。
+          type: integer
+        detail:
+          description: 本次错误的说明，不含凭据与内部信息。
+          type: [string, 'null']
+        instance:
+          description: 请求路径。
+          type: string
+        code:
+          description: 错误码，格式 `<领域>.<原因>`，只增不改。
+          type: string
+          examples: ['session.not_found']
+        request_id:
+          description: 本次请求的 ID，与响应头 `X-Request-Id` 相同。
+          type: string
+        errors:
+          description: 字段校验失败的明细，只在 `request.validation_failed` 时出现。
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldViolation'
+    FieldViolation:
+      description: 一个字段的校验失败。
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          description: 字段名（snake_case），嵌套字段用点号连接。
+          type: string
+        message:
+          description: 失败原因。
+          type: string
+
+    SessionStatus:
+      description: |
+        会话状态（架构设计「状态机」）：`idle` 空闲，`running` 执行中，`requires_action` 等待调用方回应待处理动作，
+        `rescheduled` 轮次被置回队列、等待重新执行，`terminated` 已归档或删除。
+      type: string
+      enum: [idle, running, requires_action, rescheduled, terminated]
+    Interaction:
+      description: 值守方式：`attended` 有人值守（默认），`unattended` 无人值守，需要人工确认的工具调用一律拒绝。
+      type: string
+      enum: [attended, unattended]
+    Metadata:
+      description: 调用方附加的元数据，平台不解释。最多 16 个键；键不超过 64 个字符，值不超过 512 个字符。
+      type: object
+      maxProperties: 16
+      propertyNames:
+        minLength: 1
+        maxLength: 64
+      additionalProperties:
+        type: string
+        maxLength: 512
+    EndUserAttributes:
+      description: 终端用户属性，由业务系统提供，平台据此做数据权限过滤。
+      type: object
+      properties:
+        acl_tags:
+          description: 知识库检索的访问标签，例如 `dept:finance`；检索只返回带有其中任一标签或不限标签的切片。最多 64 个。
+          type: array
+          maxItems: 64
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+    SideEffect:
+      description: 副作用等级：`none`、`idempotent` 可以重放，`non_idempotent` 不能重放。
+      type: string
+      enum: [none, idempotent, non_idempotent]
+    CustomToolDeclaration:
+      description: |
+        会话声明的自定义工具：智能体调用它时本轮暂停，产生 `custom_tool_result` 待处理动作，由业务系统执行并回传结果。
+      type: object
+      required: [name, description, input_schema]
+      properties:
+        name:
+          description: 工具名，小写字母开头，只含小写字母、数字与下划线，不超过 64 个字符；不能与平台工具重名。
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,63}$'
+        description:
+          description: 给模型看的工具说明。
+          type: string
+          minLength: 1
+          maxLength: 2048
+        input_schema:
+          description: 入参的 JSON Schema（对象）。
+          type: object
+          additionalProperties: true
+        side_effect:
+          $ref: '#/components/schemas/SideEffect'
+
+    CreateSessionRequest:
+      description: 创建会话的请求。
+      type: object
+      required: [agent, environment]
+      properties:
+        agent:
+          description: 智能体 ID（agt_…，使用该智能体当前发布的版本）或智能体版本 ID（agv_…，固定版本）。
+          type: string
+          pattern: '^(agt|agv)_[A-Za-z0-9_]{1,64}$'
+        environment:
+          description: 环境 ID（env_…），使用该环境当前的修订号。
+          type: string
+          pattern: '^env_[A-Za-z0-9_]{1,64}$'
+        end_user_id:
+          description: 终端用户标识，由业务系统定义；与项目一起构成数据隔离的边界。不传表示没有终端用户。
+          type: string
+          minLength: 1
+          maxLength: 128
+        end_user_attributes:
+          $ref: '#/components/schemas/EndUserAttributes'
+        interaction:
+          $ref: '#/components/schemas/Interaction'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        custom_tools:
+          description: 自定义工具声明，最多 64 个，名称不能重复。
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/CustomToolDeclaration'
+    UpdateSessionRequest:
+      description: 更新会话的请求，未给出的字段保持不变。
+      type: object
+      properties:
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+    Session:
+      description: 会话。
+      type: object
+      required: [id, agent_version_id, environment_id, environment_revision, end_user_id, end_user_attributes,
+                 interaction, status, metadata, custom_tools, last_seq, created_at, updated_at, terminated_at,
+                 deleted_at]
+      properties:
+        id:
+          description: 会话 ID（ses_…）。
+          type: string
+          examples: ['ses_01JC8Z4V7Q9X3M2N6P0R5T8W1Y']
+        agent_version_id:
+          description: 绑定的智能体版本 ID（agv_…），创建后不变。
+          type: string
+        environment_id:
+          description: 绑定的环境 ID（env_…）。
+          type: string
+        environment_revision:
+          description: 创建会话时固化的环境修订号，从 1 开始。
+          type: integer
+          format: int64
+          minimum: 1
+        end_user_id:
+          description: 终端用户标识；为 null 表示没有终端用户。
+          type: [string, 'null']
+        end_user_attributes:
+          $ref: '#/components/schemas/EndUserAttributes'
+        interaction:
+          $ref: '#/components/schemas/Interaction'
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        custom_tools:
+          description: 创建会话时声明的自定义工具。
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomToolDeclaration'
+        last_seq:
+          description: 最新事件的 `seq`；没有事件时为 0。
+          type: integer
+          format: int64
+          minimum: 0
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+        terminated_at:
+          description: 归档或删除的时间；为 null 表示未终止。
+          type: [string, 'null']
+          format: date-time
+        deleted_at:
+          description: 删除的时间；为 null 表示未删除。终止但未删除即已归档。
+          type: [string, 'null']
+          format: date-time
+    SessionPage:
+      description: 会话列表的一页。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+
+    SessionThread:
+      description: 线程（命名避开 Java 的 Thread）。
+      type: object
+      required: [id, session_id, parent_thread_id, parent_tool_use_id, agent_name, status, created_at]
+      properties:
+        id:
+          description: 线程 ID（thr_…）。
+          type: string
+        session_id:
+          description: 所属会话。
+          type: string
+        parent_thread_id:
+          description: 父线程 ID；主线程为 null。
+          type: [string, 'null']
+        parent_tool_use_id:
+          description: 拉起本子线程的 spawn_subagent 工具调用 ID；主线程为 null。
+          type: [string, 'null']
+        agent_name:
+          description: 执行本线程的智能体名：主线程为智能体名，子线程为子智能体名。
+          type: string
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+    ThreadPage:
+      description: 线程列表的一页。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionThread'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+
+    PendingActionType:
+      description: |
+        待处理动作的类型：`tool_confirmation` 工具确认、`plan_exit` 退出计划模式确认（都用 `user.tool_confirmation` 回应），
+        `custom_tool_result` 自定义工具结果（`user.custom_tool_result`），`recovery_confirmation` 崩溃恢复时是否重试状态未知的
+        调用（`user.recovery_confirmation`）。
+      type: string
+      enum: [tool_confirmation, plan_exit, custom_tool_result, recovery_confirmation]
+    PendingActionStatus:
+      description: 待处理动作的状态：`pending` 等待回应，`resolved` 已回应，`expired` 已超时或随会话终止作废。
+      type: string
+      enum: [pending, resolved, expired]
+    PendingAction:
+      description: 一个待处理动作。
+      type: object
+      required: [id, session_id, thread_id, turn_id, type, status, tool_use_id, tool_name, input, expires_at,
+                 created_at, resolved_at]
+      properties:
+        id:
+          description: 动作 ID（act_…），回应事件的 `action_id`。
+          type: string
+        session_id:
+          description: 所属会话。
+          type: string
+        thread_id:
+          description: 产生动作的线程。
+          type: string
+        turn_id:
+          description: 产生动作的轮次。
+          type: string
+        type:
+          $ref: '#/components/schemas/PendingActionType'
+        status:
+          $ref: '#/components/schemas/PendingActionStatus'
+        tool_use_id:
+          description: 相关的工具调用 ID。
+          type: string
+        tool_name:
+          description: 相关的工具名。
+          type: string
+        input:
+          description: 相关工具调用的入参。
+          type: object
+          additionalProperties: true
+        expires_at:
+          description: 截止时间，超时按动作类型处理（工具确认视为拒绝、自定义工具以 timeout 错误回传、恢复确认视为 skip）。
+          type: string
+          format: date-time
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        resolved_at:
+          description: 回应或超时的时间；为 null 表示仍在等待。
+          type: [string, 'null']
+          format: date-time
+    PendingActionPage:
+      description: 待处理动作列表的一页。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAction'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+
+    ContentBlock:
+      description: 消息中的一个内容块。二进制内容不内联：图片与文件以 URL 或平台文件 ID（fil_…）引用。
+      oneOf:
+        - $ref: '#/components/schemas/TextBlock'
+        - $ref: '#/components/schemas/ImageBlock'
+        - $ref: '#/components/schemas/FileBlock'
+      discriminator:
+        propertyName: type
+        mapping:
+          text: '#/components/schemas/TextBlock'
+          image: '#/components/schemas/ImageBlock'
+          file: '#/components/schemas/FileBlock'
+    TextBlock:
+      description: 文本块。
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          const: text
+        text:
+          description: 文本内容。
+          type: string
+          maxLength: 100000
+    ImageBlock:
+      description: 图片块，`url` 与 `file_id` 恰好给出一个。
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          const: image
+        url:
+          description: 图片的 http 或 https 地址；为 null 表示用 `file_id`。
+          type: [string, 'null']
+          maxLength: 2048
+        file_id:
+          description: 平台文件 ID（fil_…）；为 null 表示用 `url`。
+          type: [string, 'null']
+        media_type:
+          description: 媒体类型，例如 `image/png`；为 null 表示由来源推断。
+          type: [string, 'null']
+    FileBlock:
+      description: 文件引用块。
+      type: object
+      required: [type, file_id]
+      properties:
+        type:
+          type: string
+          const: file
+        file_id:
+          description: 平台文件 ID（fil_…）。
+          type: string
+        filename:
+          description: 给模型看的文件名；为 null 表示用文件元数据中的名字。
+          type: [string, 'null']
+        media_type:
+          description: 媒体类型，例如 `application/pdf`；为 null 表示用文件元数据中的类型。
+          type: [string, 'null']
+
+    SendEventsRequest:
+      description: 发送事件的请求。
+      type: object
+      required: [events]
+      properties:
+        events:
+          description: 要发送的事件，按顺序处理，最多 20 个。
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/UserEventInput'
+    UserEventInput:
+      description: 调用方发送的一个用户事件，字段与事件信封中 `data` 的字段相同。
+      oneOf:
+        - $ref: '#/components/schemas/UserMessageInput'
+        - $ref: '#/components/schemas/UserInterruptInput'
+        - $ref: '#/components/schemas/UserToolConfirmationInput'
+        - $ref: '#/components/schemas/UserCustomToolResultInput'
+        - $ref: '#/components/schemas/UserRecoveryConfirmationInput'
+      discriminator:
+        propertyName: type
+        mapping:
+          user.message: '#/components/schemas/UserMessageInput'
+          user.interrupt: '#/components/schemas/UserInterruptInput'
+          user.tool_confirmation: '#/components/schemas/UserToolConfirmationInput'
+          user.custom_tool_result: '#/components/schemas/UserCustomToolResultInput'
+          user.recovery_confirmation: '#/components/schemas/UserRecoveryConfirmationInput'
+    Delivery:
+      description: |
+        投递方式（架构设计「消息投递」）：`queue`（默认）在线程运行中时排队，本轮结束后与其他排队消息合并成下一轮；
+        `steer` 在线程运行中时注入当前轮的下一次推理，来不及注入时降级为 `queue`。
+      type: string
+      enum: [queue, steer]
+    RememberScope:
+      description: '"记住此决定"的作用域：`none` 不记住（默认），`session` 记为会话级规则，`project` 记为项目级规则。'
+      type: string
+      enum: [none, session, project]
+    RecoveryDecision:
+      description: 恢复确认的决定：`retry` 用原幂等键重新执行该调用，`skip` 跳过。
+      type: string
+      enum: [retry, skip]
+    UserMessageInput:
+      description: 一条用户消息。
+      type: object
+      required: [type, content]
+      properties:
+        type:
+          type: string
+          const: user.message
+        content:
+          description: 内容块，1 至 32 个。
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+        delivery:
+          $ref: '#/components/schemas/Delivery'
+    UserInterruptInput:
+      description: 请求中断当前轮。随中断一起发送的消息按 `queue` 处理。
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          const: user.interrupt
+    UserToolConfirmationInput:
+      description: 回应 `tool_confirmation` 或 `plan_exit` 动作。
+      type: object
+      required: [type, action_id, approved]
+      properties:
+        type:
+          type: string
+          const: user.tool_confirmation
+        action_id:
+          description: 被回应的动作 ID（act_…）。
+          type: string
+        approved:
+          description: 是否批准。
+          type: boolean
+        updated_input:
+          description: 审批人修改后的入参；不传表示按原入参执行。
+          type: object
+          additionalProperties: true
+        deny_reason:
+          description: 拒绝理由，会告诉模型。
+          type: string
+          maxLength: 2000
+        remember_scope:
+          $ref: '#/components/schemas/RememberScope'
+    UserCustomToolResultInput:
+      description: 回传自定义工具的执行结果。
+      type: object
+      required: [type, action_id]
+      properties:
+        type:
+          type: string
+          const: user.custom_tool_result
+        action_id:
+          description: 被回应的动作 ID（act_…）。
+          type: string
+        content:
+          description: 结果内容块，最多 32 个。
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+        error:
+          description: 是否为错误结果。
+          type: boolean
+          default: false
+    UserRecoveryConfirmationInput:
+      description: 决定是否重试一个状态未知的 non_idempotent 调用。
+      type: object
+      required: [type, action_id, decision]
+      properties:
+        type:
+          type: string
+          const: user.recovery_confirmation
+        action_id:
+          description: 被回应的动作 ID（act_…）。
+          type: string
+        decision:
+          $ref: '#/components/schemas/RecoveryDecision'
+    SendEventsResponse:
+      description: 发送事件的结果。
+      type: object
+      required: [data]
+      properties:
+        data:
+          description: 持久化后的事件，顺序与请求相同。
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionEvent'
+    EventPage:
+      description: 事件列表的一页。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionEvent'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    SseFrame:
+      description: |
+        SSE 事件流中的一条消息。它不是 JSON 对象，而是三行文本：`event:` 为 `event`，`id:` 为 `id`（只在流上的事件没有这一行），
+        `data:` 为事件信封 JSON。
+      type: object
+      required: [event, data]
+      properties:
+        event:
+          description: 事件类型，与信封的 `type` 相同。
+          type: string
+        id:
+          description: 事件的 `seq`（十进制字符串）；只在流上的事件为 null。
+          type: [string, 'null']
+        data:
+          description: |
+            事件信封 JSON：持久化事件的结构见 `SessionEvent`，只在流上的事件见 `StreamOnlyEvent`。这里不写成二者的 `oneOf`：
+            嵌套的判别器联合会让生成的 DTO 无法编译（见 meridian-api 的 CLAUDE.md「写作约束」）。
+          type: object
+          additionalProperties: true
+
+    EnvelopeSessionId:
+      description: 所属会话 ID（ses_…）。
+      type: string
+    EnvelopeThreadId:
+      description: 事件所属线程（子线程的事件为子线程）；为 null 表示会话级事件。
+      type: [string, 'null']
+    EnvelopeTurnId:
+      description: 产生事件的轮次；为 null 表示不属于某一轮，例如调用方发送的 `user.*` 事件。
+      type: [string, 'null']
+    EnvelopeCreatedAt:
+      description: 写入时间。
+      type: string
+      format: date-time
+
+    EmptyData:
+      description: 没有字段。
+      type: object
+    UserMessageData:
+      type: object
+      required: [content, delivery]
+      properties:
+        content:
+          description: 内容块。
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+        delivery:
+          $ref: '#/components/schemas/Delivery'
+    UserToolConfirmationData:
+      type: object
+      required: [action_id, approved, updated_input, deny_reason, remember_scope]
+      properties:
+        action_id:
+          description: 被回应的动作 ID。
+          type: string
+        approved:
+          description: 是否批准。
+          type: boolean
+        updated_input:
+          description: 修改后的入参；为 null 表示按原入参执行。
+          type: [object, 'null']
+          additionalProperties: true
+        deny_reason:
+          description: 拒绝理由；可为 null。
+          type: [string, 'null']
+        remember_scope:
+          $ref: '#/components/schemas/RememberScope'
+    UserCustomToolResultData:
+      type: object
+      required: [action_id, content, error]
+      properties:
+        action_id:
+          description: 被回应的动作 ID。
+          type: string
+        content:
+          description: 结果内容块。
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+        error:
+          description: 是否为错误结果。
+          type: boolean
+    UserRecoveryConfirmationData:
+      type: object
+      required: [action_id, decision]
+      properties:
+        action_id:
+          description: 被回应的动作 ID。
+          type: string
+        decision:
+          $ref: '#/components/schemas/RecoveryDecision'
+    AgentMessageData:
+      type: object
+      required: [block_id, content]
+      properties:
+        block_id:
+          description: 块 ID，与流上的 `event_start`、`event_delta` 对应。
+          type: string
+        content:
+          description: 拼装后的完整内容块。
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+    AgentThinkingData:
+      type: object
+      required: [block_id, text]
+      properties:
+        block_id:
+          description: 块 ID。
+          type: string
+        text:
+          description: 思考内容；为 null 表示智能体配置不暴露思考内容。
+          type: [string, 'null']
+    ToolInput:
+      description: 工具调用的入参（JSON 对象）。
+      type: object
+      additionalProperties: true
+    ToolResultState:
+      description: 工具结果状态：`success` 成功，`error` 执行出错，`interrupted` 被中断，`denied` 被权限或审批拒绝，`running` 已转入后台执行。
+      type: string
+      enum: [success, error, interrupted, denied, running]
+    PermissionOutcome:
+      description: 权限结果：`allowed` 规则放行，`approved` 经人工批准，`denied` 被拒绝。
+      type: string
+      enum: [allowed, approved, denied]
+    BlobRef:
+      description: 存在对象存储中的大对象引用，例如超过 16 KB 的工具结果。
+      type: object
+      required: [key, content_type, size]
+      properties:
+        key:
+          description: 对象键，调用方不解析其结构。
+          type: string
+        content_type:
+          description: 媒体类型。
+          type: string
+        size:
+          description: 内容长度，单位字节。
+          type: integer
+          format: int64
+          minimum: 0
+    AgentToolUseData:
+      type: object
+      required: [tool_use_id, name, input]
+      properties:
+        tool_use_id:
+          description: 工具调用 ID。
+          type: string
+        name:
+          description: 工具名。
+          type: string
+        input:
+          $ref: '#/components/schemas/ToolInput'
+    AgentToolResultData:
+      type: object
+      required: [tool_use_id, name, state, permission, content, content_ref]
+      properties:
+        tool_use_id:
+          description: 工具调用 ID。
+          type: string
+        name:
+          description: 工具名。
+          type: string
+        state:
+          $ref: '#/components/schemas/ToolResultState'
+        permission:
+          $ref: '#/components/schemas/PermissionOutcome'
+        content:
+          description: 结果内容；超过 16 KB 时为空数组，内容见 `content_ref`。
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+        content_ref:
+          description: 存入对象存储的结果引用；为 null 表示内容在 `content` 中。
+          oneOf:
+            - $ref: '#/components/schemas/BlobRef'
+            - type: 'null'
+    AgentMcpToolUseData:
+      type: object
+      required: [tool_use_id, name, server_name, input]
+      properties:
+        tool_use_id:
+          description: 工具调用 ID。
+          type: string
+        name:
+          description: 工具全名 `mcp__{server}__{tool}`。
+          type: string
+        server_name:
+          description: MCP 服务名。
+          type: string
+        input:
+          $ref: '#/components/schemas/ToolInput'
+    AgentMcpToolResultData:
+      type: object
+      required: [tool_use_id, name, server_name, state, permission, content, content_ref]
+      properties:
+        tool_use_id:
+          description: 工具调用 ID。
+          type: string
+        name:
+          description: 工具全名。
+          type: string
+        server_name:
+          description: MCP 服务名。
+          type: string
+        state:
+          $ref: '#/components/schemas/ToolResultState'
+        permission:
+          $ref: '#/components/schemas/PermissionOutcome'
+        content:
+          description: 结果内容；超过 16 KB 时为空数组。
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentBlock'
+        content_ref:
+          description: 存入对象存储的结果引用；为 null 表示内容在 `content` 中。
+          oneOf:
+            - $ref: '#/components/schemas/BlobRef'
+            - type: 'null'
+    AgentCustomToolUseData:
+      type: object
+      required: [tool_use_id, name, input]
+      properties:
+        tool_use_id:
+          description: 工具调用 ID。
+          type: string
+        name:
+          description: 自定义工具名。
+          type: string
+        input:
+          $ref: '#/components/schemas/ToolInput'
+    AgentContextCompactedData:
+      type: object
+      required: [messages_before, messages_after]
+      properties:
+        messages_before:
+          description: 压缩前上下文中的消息数。
+          type: integer
+          minimum: 0
+        messages_after:
+          description: 压缩后上下文中的消息数（含摘要消息）。
+          type: integer
+          minimum: 0
+    StopReason:
+      description: |
+        停止原因：`end_turn` 正常结束，`interrupted` 被中断，`max_turns` 达到单轮最大推理次数，`budget_exceeded` 预算耗尽，
+        `tools_denied` 本次推理的工具调用全部被拒绝，`error` 出错。
+      type: string
+      enum: [end_turn, interrupted, max_turns, budget_exceeded, tools_denied, error]
+    SessionStatusIdleData:
+      type: object
+      required: [stop_reason]
+      properties:
+        stop_reason:
+          $ref: '#/components/schemas/StopReason'
+    PendingActionSummary:
+      description: '`session.status_requires_action` 中的一个待处理动作。'
+      type: object
+      required: [id, type, tool_use_id, tool_name, input, expires_at]
+      properties:
+        id:
+          description: 动作 ID（act_…）。
+          type: string
+        type:
+          $ref: '#/components/schemas/PendingActionType'
+        tool_use_id:
+          description: 相关的工具调用 ID。
+          type: string
+        tool_name:
+          description: 相关的工具名。
+          type: string
+        input:
+          $ref: '#/components/schemas/ToolInput'
+        expires_at:
+          description: 截止时间。
+          type: [string, 'null']
+          format: date-time
+    SessionStatusRequiresActionData:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          description: 本轮的全部待处理动作。
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PendingActionSummary'
+    SessionStatusRescheduledData:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          description: 置回原因：`lease_expired` 租约过期，`node_shutdown` 节点下线，`retryable_error` 可重试的错误。
+          type: string
+          enum: [lease_expired, node_shutdown, retryable_error]
+    SessionStatusTerminatedData:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          description: 终止原因：`archived` 归档，`deleted` 删除。
+          type: string
+          enum: [archived, deleted]
+    SessionErrorData:
+      type: object
+      required: [code, message, retry_status]
+      properties:
+        code:
+          description: 错误码，格式 `<领域>.<原因>`，例如 `model.rate_limit_timeout`。
+          type: string
+        message:
+          description: 错误说明，不含凭据与内部信息。
+          type: string
+        retry_status:
+          description: 重试状态：`retryable` 平台会重新执行本轮，`exhausted` 可重试但恢复次数已用尽，`terminal` 不可重试。
+          type: string
+          enum: [retryable, exhausted, terminal]
+    TokenUsage:
+      description: 一次模型调用的 token 用量；后三项是前两项的子集。
+      type: object
+      required: [input_tokens, output_tokens, cached_tokens, cache_creation_tokens, reasoning_tokens]
+      properties:
+        input_tokens:
+          description: 输入 token 数。
+          type: integer
+          minimum: 0
+        output_tokens:
+          description: 输出 token 数。
+          type: integer
+          minimum: 0
+        cached_tokens:
+          description: 命中提示词缓存的输入 token 数。
+          type: integer
+          minimum: 0
+        cache_creation_tokens:
+          description: 写入提示词缓存的输入 token 数。
+          type: integer
+          minimum: 0
+        reasoning_tokens:
+          description: 用于推理的输出 token 数。
+          type: integer
+          minimum: 0
+    SessionUsageData:
+      type: object
+      required: [model_id, usage]
+      properties:
+        model_id:
+          description: 模型 ID（mdl_…）。
+          type: string
+        usage:
+          $ref: '#/components/schemas/TokenUsage'
+    SessionMessageConsumedData:
+      type: object
+      required: [event_ids]
+      properties:
+        event_ids:
+          description: 被消费的 `user.message` 事件 ID。
+          type: array
+          minItems: 1
+          items:
+            type: string
+    SessionThreadCreatedData:
+      type: object
+      required: [thread_id, parent_thread_id, parent_tool_use_id, agent_name]
+      properties:
+        thread_id:
+          description: 新线程 ID（thr_…）。
+          type: string
+        parent_thread_id:
+          description: 父线程 ID。
+          type: string
+        parent_tool_use_id:
+          description: 拉起它的 spawn_subagent 调用 ID。
+          type: string
+        agent_name:
+          description: 子智能体名。
+          type: string
+    SessionThreadStatusRunningData:
+      type: object
+      required: [thread_id]
+      properties:
+        thread_id:
+          description: 线程 ID。
+          type: string
+    SessionThreadStatusIdleData:
+      type: object
+      required: [thread_id, stop_reason]
+      properties:
+        thread_id:
+          description: 线程 ID。
+          type: string
+        stop_reason:
+          $ref: '#/components/schemas/StopReason'
+    SpanModelRequestStartData:
+      type: object
+      required: [request_id, model_id]
+      properties:
+        request_id:
+          description: 本次模型请求的 ID，起止事件相同。
+          type: string
+        model_id:
+          description: 模型 ID（mdl_…）。
+          type: string
+    SpanModelRequestEndData:
+      type: object
+      required: [request_id, model_id, usage]
+      properties:
+        request_id:
+          description: 本次模型请求的 ID。
+          type: string
+        model_id:
+          description: 模型 ID。
+          type: string
+        usage:
+          description: token 用量；为 null 表示请求失败或供应商没有报告用量。
+          oneOf:
+            - $ref: '#/components/schemas/TokenUsage'
+            - type: 'null'
+    BlockKind:
+      description: 内容块的种类。
+      type: string
+      enum: [text, thinking, data, tool_use, tool_result]
+    EventStartData:
+      type: object
+      required: [block_id, kind, name]
+      properties:
+        block_id:
+          description: 块 ID；工具调用块与工具结果块取工具调用 ID。
+          type: string
+        kind:
+          $ref: '#/components/schemas/BlockKind'
+        name:
+          description: 工具名，工具调用块与工具结果块时给出；其余为 null。
+          type: [string, 'null']
+    EventDeltaData:
+      type: object
+      required: [block_id, kind, delta]
+      properties:
+        block_id:
+          description: 块 ID。
+          type: string
+        kind:
+          $ref: '#/components/schemas/BlockKind'
+        delta:
+          description: 增量：文本与思考为追加的文本，工具调用为入参 JSON 片段，工具结果为结果片段。
+          type: string
+
+    # ------------------------------------------------------------------------------------------
+    # 事件信封：每种事件一个 schema，字段平铺（不用 allOf，见 meridian-api 的 CLAUDE.md「写作约束」）
+    # ------------------------------------------------------------------------------------------
+    UserMessageEvent:
+      description: 'user.message：调用方发送的一条用户消息'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: user.message
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/UserMessageData'
+    UserInterruptEvent:
+      description: 'user.interrupt：调用方请求中断当前轮'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: user.interrupt
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/EmptyData'
+    UserToolConfirmationEvent:
+      description: 'user.tool_confirmation：调用方对工具确认或计划退出确认的回应'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: user.tool_confirmation
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/UserToolConfirmationData'
+    UserCustomToolResultEvent:
+      description: 'user.custom_tool_result：调用方回传的自定义工具结果'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: user.custom_tool_result
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/UserCustomToolResultData'
+    UserRecoveryConfirmationEvent:
+      description: 'user.recovery_confirmation：调用方对恢复确认的回应'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: user.recovery_confirmation
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/UserRecoveryConfirmationData'
+    AgentMessageEvent:
+      description: 'agent.message：智能体输出的一个完整文本块或数据块'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: agent.message
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/AgentMessageData'
+    AgentThinkingEvent:
+      description: 'agent.thinking：智能体的一个完整思考块'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: agent.thinking
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/AgentThinkingData'
+    AgentToolUseEvent:
+      description: 'agent.tool_use：智能体调用一个平台工具'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: agent.tool_use
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/AgentToolUseData'
+    AgentToolResultEvent:
+      description: 'agent.tool_result：一个平台工具的结果'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: agent.tool_result
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/AgentToolResultData'
+    AgentMcpToolUseEvent:
+      description: 'agent.mcp_tool_use：智能体调用一个 MCP 工具'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: agent.mcp_tool_use
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/AgentMcpToolUseData'
+    AgentMcpToolResultEvent:
+      description: 'agent.mcp_tool_result：一个 MCP 工具的结果'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: agent.mcp_tool_result
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/AgentMcpToolResultData'
+    AgentCustomToolUseEvent:
+      description: 'agent.custom_tool_use：智能体调用一个由业务系统执行的自定义工具，随后本轮产生 custom_tool_result 待处理动作'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: agent.custom_tool_use
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/AgentCustomToolUseData'
+    AgentContextCompactedEvent:
+      description: 'agent.context_compacted：上下文压缩完成'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: agent.context_compacted
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/AgentContextCompactedData'
+    SessionStatusRunningEvent:
+      description: 'session.status_running：轮次开始，会话进入 running'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.status_running
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/EmptyData'
+    SessionStatusIdleEvent:
+      description: 'session.status_idle：轮次结束，会话回到 idle'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.status_idle
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionStatusIdleData'
+    SessionStatusRequiresActionEvent:
+      description: 'session.status_requires_action：产生了待处理动作，会话进入 requires_action，等待调用方回应'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.status_requires_action
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionStatusRequiresActionData'
+    SessionStatusRescheduledEvent:
+      description: 'session.status_rescheduled：轮次被置回队列，会话进入 rescheduled，等待其他节点认领'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.status_rescheduled
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionStatusRescheduledData'
+    SessionStatusTerminatedEvent:
+      description: 'session.status_terminated：会话被归档或删除，进入 terminated，不再接受写入'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.status_terminated
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionStatusTerminatedData'
+    SessionErrorEvent:
+      description: 'session.error：本轮出错；之后一定有一个终态事件'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.error
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionErrorData'
+    SessionUsageEvent:
+      description: 'session.usage：一次模型调用的用量，子智能体的用量计入父会话'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.usage
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionUsageData'
+    SessionMessageConsumedEvent:
+      description: 'session.message_consumed：用户消息被某一轮消费（合并进 queue 轮或经 steer 注入）'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.message_consumed
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionMessageConsumedData'
+    SessionThreadCreatedEvent:
+      description: 'session.thread_created：spawn_subagent 创建了一条子线程'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.thread_created
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionThreadCreatedData'
+    SessionThreadStatusRunningEvent:
+      description: 'session.thread_status_running：子线程开始执行'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.thread_status_running
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionThreadStatusRunningData'
+    SessionThreadStatusIdleEvent:
+      description: 'session.thread_status_idle：子线程执行结束'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: session.thread_status_idle
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SessionThreadStatusIdleData'
+    SpanModelRequestStartEvent:
+      description: 'span.model_request_start：一次模型请求开始'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: span.model_request_start
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SpanModelRequestStartData'
+    SpanModelRequestEndEvent:
+      description: 'span.model_request_end：一次模型请求结束'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 事件 ID（evt_…）
+          type: string
+        seq:
+          description: 会话内序号，从 1 开始，会话内严格递增且连续
+          type: integer
+          format: int64
+          minimum: 1
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: span.model_request_end
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/SpanModelRequestEndData'
+    EventStartEvent:
+      description: 'event_start：一个内容块开始，只在流上出现（?event_deltas=true）'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 只在流上的事件没有 ID，恒为 null
+          type: [string, 'null']
+        seq:
+          description: 只在流上的事件不占序号，恒为 null
+          type: [integer, 'null']
+          format: int64
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: event_start
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/EventStartData'
+    EventDeltaEvent:
+      description: 'event_delta：一个内容块的增量，只在流上出现（?event_deltas=true）'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 只在流上的事件没有 ID，恒为 null
+          type: [string, 'null']
+        seq:
+          description: 只在流上的事件不占序号，恒为 null
+          type: [integer, 'null']
+          format: int64
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: event_delta
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/EventDeltaData'
+    PingEvent:
+      description: 'ping：心跳，每 15 秒一次，只在流上出现'
+      type: object
+      required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
+      properties:
+        id:
+          description: 只在流上的事件没有 ID，恒为 null
+          type: [string, 'null']
+        seq:
+          description: 只在流上的事件不占序号，恒为 null
+          type: [integer, 'null']
+          format: int64
+        session_id:
+          $ref: '#/components/schemas/EnvelopeSessionId'
+        thread_id:
+          $ref: '#/components/schemas/EnvelopeThreadId'
+        turn_id:
+          $ref: '#/components/schemas/EnvelopeTurnId'
+        type:
+          type: string
+          const: ping
+        created_at:
+          $ref: '#/components/schemas/EnvelopeCreatedAt'
+        data:
+          $ref: '#/components/schemas/EmptyData'
+    SessionEvent:
+      description: 持久化的会话事件：信封字段相同，data 的结构由 type 决定（架构设计「事件」）。type 的取值会随版本增加，调用方遇到未知类型应忽略。
+      oneOf:
+        - $ref: '#/components/schemas/UserMessageEvent'
+        - $ref: '#/components/schemas/UserInterruptEvent'
+        - $ref: '#/components/schemas/UserToolConfirmationEvent'
+        - $ref: '#/components/schemas/UserCustomToolResultEvent'
+        - $ref: '#/components/schemas/UserRecoveryConfirmationEvent'
+        - $ref: '#/components/schemas/AgentMessageEvent'
+        - $ref: '#/components/schemas/AgentThinkingEvent'
+        - $ref: '#/components/schemas/AgentToolUseEvent'
+        - $ref: '#/components/schemas/AgentToolResultEvent'
+        - $ref: '#/components/schemas/AgentMcpToolUseEvent'
+        - $ref: '#/components/schemas/AgentMcpToolResultEvent'
+        - $ref: '#/components/schemas/AgentCustomToolUseEvent'
+        - $ref: '#/components/schemas/AgentContextCompactedEvent'
+        - $ref: '#/components/schemas/SessionStatusRunningEvent'
+        - $ref: '#/components/schemas/SessionStatusIdleEvent'
+        - $ref: '#/components/schemas/SessionStatusRequiresActionEvent'
+        - $ref: '#/components/schemas/SessionStatusRescheduledEvent'
+        - $ref: '#/components/schemas/SessionStatusTerminatedEvent'
+        - $ref: '#/components/schemas/SessionErrorEvent'
+        - $ref: '#/components/schemas/SessionUsageEvent'
+        - $ref: '#/components/schemas/SessionMessageConsumedEvent'
+        - $ref: '#/components/schemas/SessionThreadCreatedEvent'
+        - $ref: '#/components/schemas/SessionThreadStatusRunningEvent'
+        - $ref: '#/components/schemas/SessionThreadStatusIdleEvent'
+        - $ref: '#/components/schemas/SpanModelRequestStartEvent'
+        - $ref: '#/components/schemas/SpanModelRequestEndEvent'
+      discriminator:
+        propertyName: type
+        mapping:
+          user.message: '#/components/schemas/UserMessageEvent'
+          user.interrupt: '#/components/schemas/UserInterruptEvent'
+          user.tool_confirmation: '#/components/schemas/UserToolConfirmationEvent'
+          user.custom_tool_result: '#/components/schemas/UserCustomToolResultEvent'
+          user.recovery_confirmation: '#/components/schemas/UserRecoveryConfirmationEvent'
+          agent.message: '#/components/schemas/AgentMessageEvent'
+          agent.thinking: '#/components/schemas/AgentThinkingEvent'
+          agent.tool_use: '#/components/schemas/AgentToolUseEvent'
+          agent.tool_result: '#/components/schemas/AgentToolResultEvent'
+          agent.mcp_tool_use: '#/components/schemas/AgentMcpToolUseEvent'
+          agent.mcp_tool_result: '#/components/schemas/AgentMcpToolResultEvent'
+          agent.custom_tool_use: '#/components/schemas/AgentCustomToolUseEvent'
+          agent.context_compacted: '#/components/schemas/AgentContextCompactedEvent'
+          session.status_running: '#/components/schemas/SessionStatusRunningEvent'
+          session.status_idle: '#/components/schemas/SessionStatusIdleEvent'
+          session.status_requires_action: '#/components/schemas/SessionStatusRequiresActionEvent'
+          session.status_rescheduled: '#/components/schemas/SessionStatusRescheduledEvent'
+          session.status_terminated: '#/components/schemas/SessionStatusTerminatedEvent'
+          session.error: '#/components/schemas/SessionErrorEvent'
+          session.usage: '#/components/schemas/SessionUsageEvent'
+          session.message_consumed: '#/components/schemas/SessionMessageConsumedEvent'
+          session.thread_created: '#/components/schemas/SessionThreadCreatedEvent'
+          session.thread_status_running: '#/components/schemas/SessionThreadStatusRunningEvent'
+          session.thread_status_idle: '#/components/schemas/SessionThreadStatusIdleEvent'
+          span.model_request_start: '#/components/schemas/SpanModelRequestStartEvent'
+          span.model_request_end: '#/components/schemas/SpanModelRequestEndEvent'
+    StreamOnlyEvent:
+      description: 只在 SSE 流上出现、不持久化的事件：没有 id 与 seq。
+      oneOf:
+        - $ref: '#/components/schemas/EventStartEvent'
+        - $ref: '#/components/schemas/EventDeltaEvent'
+        - $ref: '#/components/schemas/PingEvent'
+      discriminator:
+        propertyName: type
+        mapping:
+          event_start: '#/components/schemas/EventStartEvent'
+          event_delta: '#/components/schemas/EventDeltaEvent'
+          ping: '#/components/schemas/PingEvent'
