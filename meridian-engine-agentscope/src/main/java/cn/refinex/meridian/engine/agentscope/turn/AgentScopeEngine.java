@@ -6,7 +6,9 @@ import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentHandle;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
 import cn.refinex.meridian.engine.agentscope.events.TurnEventMapper;
+import cn.refinex.meridian.engine.agentscope.middleware.BatchCheckpoint;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformStopRequest;
+import cn.refinex.meridian.engine.agentscope.middleware.RecoveryNoteSlot;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.engine.ThreadRef;
 import cn.refinex.meridian.engine.spi.engine.TurnContext;
@@ -50,6 +52,7 @@ import reactor.core.publisher.Mono;
  *       {@link LeaseRegistry} 条目标记"权限安装写入"期间经 {@code getDelegate().replacePermissionContext(...)} 安装，
  *       状态存储据此不更新 {@code content_epoch}。
  *   <li>按输入类型翻译入参，调用 {@code streamEvents}；整条流在顶层 {@code contextWrite} 写入 {@code PlatformContext}。
+ *       恢复说明与批次 checkpoint 的标记以类型键放进 {@code RuntimeContext}，由对应的中间件读取（ADR-0028）。
  *   <li>经 {@link TurnEventMapper} 映射事件；结束（含异常、取消）时再次 {@code clearStateCache} 并归还实例。
  * </ol>
  *
@@ -266,7 +269,12 @@ public final class AgentScopeEngine implements AgentEngine {
                     .sessionId(ctx.platform().threadId())
                     .userId(userId)
                     .put(PlatformContext.class, ctx.platform())
-                    .put(PlatformStopRequest.class, platformStop);
+                    .put(PlatformStopRequest.class, platformStop)
+                    .put(BatchCheckpoint.class, new BatchCheckpoint());
+            if (input.recovery() != null) {
+                // 恢复说明由 RecoveryNoteMiddleware 在第一次推理前注入，不走调用入参（架构设计「崩溃恢复」）
+                builder.put(RecoveryNoteSlot.class, new RecoveryNoteSlot(input.recovery()));
+            }
             ToolRequestConfig customTools = TurnInputTranslator.toolRequestConfig(ctx.customTools());
             if (customTools != null) {
                 builder.toolRequestConfig(customTools);
