@@ -181,7 +181,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 2. 投递：中断（`interrupt_requested_at`、`node:{lease_owner}` 频道、续租兜底、`queued` → `cancelled`）、`awaiting_action` 下 steer 降级与中断拒绝全部动作、`SteerMiddleware`（A01、A02、A03）
 - [x] 3. 待处理动作：回应标记、恢复轮生成（先确认后工具结果、`recovery_confirmation` 的 retry/skip 与 D13）、超时调度（`SKIP LOCKED`）、unattended 兜底自动拒绝（A04、A05）
 - [x] 4. "记住此决定"会话级与项目级（A07）
-- [ ] 5. 自定义工具：名称与保留名校验、挂起回传续跑（A08）
+- [x] 5. 自定义工具：名称与保留名校验、挂起回传续跑（A08）
 - [x] 6. 审计 outbox：权限判定与动作回应（A09）
 - [ ] 7. P15 报告、P10 steer 重跑与报告补全（A06、A10）
 - [ ] 8. 收尾：`verify.sh`（A11）、模块 CLAUDE.md、P6/P15 状态、验收记录、看板与会话日志

@@ -195,6 +195,26 @@ class PermissionSynthesizerTest {
     }
 
     @Test
+    void customToolsDeclaredByTheSessionAreAllowedAtTheSessionLayerButHigherAsksStillWin() {
+        PermissionLayers layers = new PermissionLayers(
+                List.of(),
+                List.of(rule("notify_customer", null, ASK)),
+                new PermissionPolicy(PermissionMode.DEFAULT, List.of()),
+                PermissionSynthesizer.customToolRules(List.of("notify_customer", "lookup_order")),
+                Interaction.ATTENDED);
+
+        List<PermissionRule> rules = PermissionSynthesizer.mainThread(layers).rules();
+
+        assertThat(rules)
+                .contains(
+                        new PermissionRule("notify_customer", null, ASK, PolicyLayer.PROJECT),
+                        new PermissionRule("notify_customer", null, ALLOW, PolicyLayer.SESSION),
+                        new PermissionRule("lookup_order", null, ALLOW, PolicyLayer.SESSION));
+        assertThat(rules.indexOf(new PermissionRule("notify_customer", null, ASK, PolicyLayer.PROJECT)))
+                .isLessThan(rules.indexOf(new PermissionRule("notify_customer", null, ALLOW, PolicyLayer.SESSION)));
+    }
+
+    @Test
     void agentWithoutSubagentsHasNoSubagentPolicies() {
         PermissionLayers layers = attended(PermissionMode.DEFAULT, List.of(), List.of(), List.of());
 
