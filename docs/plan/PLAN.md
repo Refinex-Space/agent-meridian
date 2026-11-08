@@ -71,7 +71,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 已完成 | 003dbfc |
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 已完成 | b724148 |
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 已完成 | 7e490f5 |
-| T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 未开始 | — |
+| T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 进行中 | — |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 未开始 | — |
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 未开始 | — |
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 未开始 | — |
@@ -175,7 +175,15 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+### T11 沙箱运行时镜像、集群与驱动（开工 2026-11-08，基线 `verify.sh` 通过）
+
+- [x] 1. `sandbox-runtime/`：镜像（Debian slim、非 root、`/workspace`、uv 管理的 Python 3、Node.js、文档库）与 FastAPI 执行服务（8888，`/execute`、`/upload`、`/download`、`/list`、`/exists`），pytest 覆盖每个接口；对照表（T11-A01、A02）
+- [ ] 2. 集群：`kind-gvisor.sh meridian` 与 `kind-verify.sh meridian` PASS（T11-A03）；`install-agent-sandbox.sh`（v1.0.10 控制器与 sandbox-router）
+- [ ] 3. `deploy/helm/meridian-sandbox/`：三个规格的 `SandboxTemplate`、`SandboxWarmPool`，NetworkPolicy 默认拒绝出网，`values-kind.yaml`；部署与 Pod 安全上下文核对（T11-A04）
+- [ ] 4. `engine.agentscope.sandbox`：`KubernetesSandboxDriver`、`SingleStartSandbox`、对象存储快照客户端；单测与并发测试（T11-A06）
+- [ ] 5. `kind` 标签的集成测试与 `-Pkind`：认领、执行、上传下载、快照、删除、恢复（T11-A05）
+- [ ] 6. P5 测量与报告 `docs/poc/P05-沙箱与预热池.md`（T11-A07）
+- [ ] 7. 收尾：`verify.sh`、`-Pkind`（T11-A08），模块与根 `CLAUDE.md`、文档、验收记录、看板
 
 ## 控制台设计轨道
 

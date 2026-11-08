@@ -1,0 +1,48 @@
+[project]
+name = "meridian-sandbox-runtime"
+version = "0.1.0"
+description = "AgentMeridian 沙箱镜像中的执行服务，实现 AgentScope Kubernetes 沙箱扩展约定的接口"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi>=0.121",
+    "python-multipart>=0.0.20",
+    "uvicorn>=0.38",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16",
+    "mypy>=1.18",
+    "pytest>=8.4",
+    "ruff>=0.14",
+]
+# 沙箱内智能体可用的 Python 库（README「预装清单」，待决问题 Q4），只装进镜像，不参与服务测试
+toolchain = [
+    "matplotlib>=3.10",
+    "openpyxl>=3.1",
+    "pandas>=2.3",
+    "pypdf>=6.1",
+    "python-docx>=1.2",
+    "python-pptx>=1.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# 中文注释与文档字符串使用全角标点
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+strict = true
+mypy_path = "src"
+packages = ["sandbox_runtime"]
