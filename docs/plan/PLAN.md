@@ -71,7 +71,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 已完成 | 003dbfc |
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 已完成 | b724148 |
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 已完成 | 7e490f5 |
-| T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 进行中 | — |
+| T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 已完成 | bcd2246 |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 未开始 | — |
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 未开始 | — |
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 未开始 | — |
@@ -175,15 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-### T11 沙箱运行时镜像、集群与驱动（开工 2026-11-08，基线 `verify.sh` 通过）
-
-- [x] 1. `sandbox-runtime/`：镜像（Debian slim、非 root、`/workspace`、uv 管理的 Python 3、Node.js、文档库）与 FastAPI 执行服务（8888，`/execute`、`/upload`、`/download`、`/list`、`/exists`），pytest 覆盖每个接口；对照表（T11-A01、A02）
-- [x] 2. 集群：`kind-gvisor.sh meridian` 与 `kind-verify.sh meridian` PASS（T11-A03）；`install-agent-sandbox.sh`（v1.0.10 控制器与 sandbox-router）
-- [x] 3. `deploy/helm/meridian-sandbox/`：三个规格的 `SandboxTemplate`、`SandboxWarmPool`，NetworkPolicy 默认拒绝出网，`values-kind.yaml`；部署与 Pod 安全上下文核对（T11-A04）
-- [x] 4. `engine.agentscope.sandbox`：`KubernetesSandboxDriver`、`SingleStartSandbox`、对象存储快照客户端；单测与并发测试（T11-A06）
-- [x] 5. `kind` 标签的集成测试与 `-Pkind`：认领、执行、上传下载、快照、删除、恢复（T11-A05）
-- [x] 6. P5 测量与报告 `docs/poc/P05-沙箱与预热池.md`（T11-A07）
-- [ ] 7. 收尾：`verify.sh`、`-Pkind`（T11-A08），模块与根 `CLAUDE.md`、文档、验收记录、看板
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -230,7 +222,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 |---|---|---|---|
 | D01 | T01 | 架构规则未落地：`JdbcClient` 与 `JdbcTemplate` 只能被 `TenantScopedRepository`、`SystemRepository` 的子类依赖；`SystemRepository` 的子类只在 `..infra.system..` 且带 `@CrossTenant`；`..api..` 不依赖 `SystemRepository` 的子类。基类尚不存在，说明写在 `meridian-arch-tests` 的 `ArchitectureRulesTest` 类注释中 | T02（已落地：`ArchitectureRulesTest` 规则 8 至 11） |
 | D02 | T01 | 架构规则未落地：平台工具继承 `ToolBase`（经 `PlatformTool`）；运行时 Toolkit 中的非 `ToolBase` 工具必须在白名单内（启动自检） | T10a（已落地：ArchUnit 规则 13；`ToolPolicy.verify` 每次装配检查，`EngineAutoConfiguration` 启动时探测装配一次，`ToolkitSelfCheckStartupIT`） |
-| D03 | T01 | Spring Boot 4.1.2 BOM 把 fabric8 `kubernetes-httpclient-vertx`（Vert.x 4.5.28）下的 Netty 从 4.1.135 提升到 4.2.19；Vert.x 4.5 基于 Netty 4.1 构建，需要在真实调用中确认兼容，不兼容时按决策分级处理。详见 `docs/poc/P01-运行基线.md` | T03（已验证：fabric8 Vert.x 客户端在 Netty 4.2.19 上对本地 WebFlux 服务的真实 HTTP 请求正常）、T11（对 Kubernetes API 的调用） |
+| D03 | T01 | Spring Boot 4.1.2 BOM 把 fabric8 `kubernetes-httpclient-vertx`（Vert.x 4.5.28）下的 Netty 从 4.1.135 提升到 4.2.19；Vert.x 4.5 基于 Netty 4.1 构建，需要在真实调用中确认兼容，不兼容时按决策分级处理。详见 `docs/poc/P01-运行基线.md` | T03（已验证：fabric8 Vert.x 客户端在 Netty 4.2.19 上对本地 WebFlux 服务的真实 HTTP 请求正常）、T11（已验证：对 kind 集群 Kubernetes API 的创建、watch、合并补丁、删除与端口转发正常，P5） |
 | D04 | T02 | outbox 发布到 Redis Stream（`usage`、`audit`）时不裁剪，条目在确认后仍留在 Stream 中；消费者确认后需按已确认的最小 ID 执行 `XTRIM MINID` 或定期裁剪，避免 Redis 内存增长 | T16 |
 | D05 | T03 | `HarnessAgent` 不设置 `workspace(...)` 时，本机工作区根取 `${user.dir}/.agentscope/workspace`：harness 会把其中的 `skills/` 作为第 3 层技能读取，`MarketplaceStager` 会在其中暂存技能资源。平台要求技能只来自平台技能仓库、会话数据不落本机磁盘，装配文件系统与技能仓库时需要确定一个平台控制的本机工作区根目录（或证明无写入）。详见 `docs/poc/P01-运行基线.md` | T10a（已落地：`workspace(...)` 设为平台控制、不写入的本机目录；技能仓库继承 `WorkspaceSkillRepository` 不被暂存；P4 测试断言本机无写入，ADR-0034） |
 | D06 | T03 | JDK 25 把 `System.loadLibrary` 列为受限方法，reactor-netty 加载 Netty 本地传输库时告警"将来会被阻止"；runtime 的集成测试已加 `--enable-native-access=ALL-UNNAMED`，生产与本地启动的 JVM 参数同样需要。详见 `docs/poc/P01-运行基线.md` | T28 |
@@ -260,6 +252,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D30 | T10a | 工作区（`rt.workspace_entries` 与对象存储 `rt/{tenant}/{session}/workspace/`）要在删除会话时按命名空间前缀与对象前缀清除；目前没有会话数据的清除作业 | T17a |
 | D31 | T10a | `RemoteFilesystem` 的 `ls`、`glob`、`grep` 每次逐页读出整个会话命名空间（大文件也从对象存储读出），会话文件多时延迟与对象存储读取量上升；可在 `WorkspaceStorePort` 增加按前缀只读元数据的查询，或启用 `WorkspaceIndex` | R1（P7 容量验证时评估） |
 | D32 | T10b | 租户提示词在装配时读取并随智能体实例缓存（键不含租户设置），租户设置变更后实例淘汰前不生效；MCP 端点允许内网地址，登记时应校验端点（拒绝链路本地与元数据地址）| T15b（配置失效时淘汰该租户的实例；控制面登记 MCP 服务时校验端点） |
+| D34 | T11 | sandbox-router 以 `--authz-mode=allow-all` 运行：能访问 router 的调用方可以操作沙箱命名空间中的任意沙箱，目前只靠 NetworkPolicy 把 router 的入网限制在 runtime 的命名空间；生产部署时评估 `scoped-token` 或 `tokenreview` | T28 |
+| D35 | T11 | 快照对象（`rt/snapshots/{tenant}/{project}/{session}/`）没有清除：从快照恢复后旧快照仍留在对象存储，删除会话时也要按前缀清除；`SnapshotStorePort` 目前没有删除方法 | T12a（恢复后清理旧快照）、T17a（删除会话时按前缀清除） |
+| D36 | T11 | 2.0.4 的扩展把快照归档整个读进内存（`byte[]`），100 MB 工作区的快照或恢复在 runtime 侧占用约同等大小的堆；runtime 的堆与并发回收数要按工作区上限估算 | R1（P7 容量） |
 | D33 | T10b | `KnowledgePrefetchMiddleware` 前置检索注入的切片同样是外部内容，要用 `SourceTags`（`knowledge_search` 来源）包标签，并带 `ContextCompositionMiddleware` 的注入标记 | T19 |
 
 ## 技术债
@@ -351,6 +346,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：7 项通过，0 项阻塞
 - 决策：ADR-0035（提示词分层的落点与时间以消息注入；租户层经 `AgentConfigPort` 在装配时读取；来源标签格式与转义；`web_fetch` 用 Reactor Netty 加校验解析器、不复用连接、平台解析 IP 字面量；商业搜索选博查；`knowledge_search` 按实例创建；MCP 用异步客户端、凭据经单次调用的 Reactor Context 注入、工具包成 `PlatformTool`、连不上服务为可重试错误、MCP 端点允许内网但拒绝元数据地址）；架构设计升至 v1.11；登记事项 D29 已落地
 - 遗留：登记事项 D32 租户设置变更与 MCP 端点登记校验（T15b）、D33 前置检索的切片包来源标签（T19）
+
+### 2026-11-08 T11 已完成（提交 bcd2246）
+- 交付：`sandbox-runtime/`（Debian trixie slim、uid 1000、uv 管理的 Python 3.13 与文档处理库、Node.js 24、tini；FastAPI 执行服务 `/execute`、`/upload`、`/download`、`/list`、`/exists`，超时、输出上限、进程组整体终止，接口对照表与预装清单在 README，pytest 接入 `verify.sh`）；`scripts/dev/install-agent-sandbox.sh`（agent-sandbox v1.0.10，校验清单摘要与镜像版本）、`scripts/dev/deploy-sandbox.sh`；chart `deploy/helm/meridian-sandbox`（三个规格的 `SandboxTemplate` 与 `SandboxWarmPool`、sandbox-router、默认拒绝出网的 NetworkPolicy、runtime 的 Role，`values-kind.yaml`）；engine-spi 的 `SnapshotStorePort`、`SandboxErrorCode`、`SandboxUnavailableException`；engine-agentscope 的 `sandbox` 包（`KubernetesSandboxDriver`、`SingleStartSandbox`、`PlatformSnapshotClient`、`SandboxDriverSettings`）；runtime 的 `sandbox.app.ObjectStoreSnapshotStore` 与 `SnapshotStorePort` Bean；persistence 的 `ObjectStore.exists`；根 POM 的 `kind` profile；测试 `SingleStartSandboxTest`、`PlatformSnapshotClientTest`、`ObjectStoreSnapshotStoreIT`、`KubernetesSandboxDriverKindIT`、`SandboxPoolMeasurementKindIT`；P5 报告
+- 验收：8 项通过，0 项阻塞
+- 决策：ADR-0036（sandbox-router 部署在沙箱命名空间；模板 `Unmanaged`、chart 自带默认拒绝出网的策略；`/workspace` 为指向 emptyDir 中 uid 1000 目录的符号链接，emptyDir 挂载点上恢复快照的 `tar` 会失败；进程数用 `ulimit -u`，gVisor 中按沙箱计数；新增 `SnapshotStorePort`；驱动的完整单次选项、`resume` 先查 claim；本机端口转发、生产直连 router；`kind` 测试的命名与 profile）；架构设计升至 v1.12；登记事项 D03 关闭
+- 遗留：登记事项 D34 router 的鉴权（T28）、D35 快照对象的清除（T12a、T17a）、D36 快照在 runtime 侧的内存占用（R1）；kind 集群 `meridian` 保留给 T12a、T12b（`kind delete cluster --name meridian` 释放内存）
 
 ## 计划变更记录
 
