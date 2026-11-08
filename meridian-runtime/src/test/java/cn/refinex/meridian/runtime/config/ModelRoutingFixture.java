@@ -16,8 +16,10 @@ import cn.refinex.meridian.runtime.modelrouting.app.ModelMetrics;
 import cn.refinex.meridian.runtime.modelrouting.app.ModelRoutingProperties;
 import cn.refinex.meridian.runtime.modelrouting.app.RoutingModelGateway;
 import cn.refinex.meridian.runtime.modelrouting.app.UsageRecorder;
+import cn.refinex.meridian.runtime.modelrouting.app.VectorModelService;
 import cn.refinex.meridian.runtime.modelrouting.infra.FileBudgetLimits;
 import cn.refinex.meridian.runtime.modelrouting.infra.FileModelCatalog;
+import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient;
 import cn.refinex.meridian.runtime.modelrouting.infra.RedisBudgetLedger;
 import cn.refinex.meridian.runtime.modelrouting.infra.RedisRateLimiter;
 import cn.refinex.meridian.runtime.support.DbAssertions;
@@ -55,6 +57,8 @@ final class ModelRoutingFixture implements AutoCloseable {
     final RedisBudgetLedger ledger = new RedisBudgetLedger(RuntimeTestRedis.template());
     final RoutingModelGateway gateway;
     final ProviderHttpTransport transport = new ProviderHttpTransport(Clock.systemUTC());
+    final ProviderVectorClient vectorClient = new ProviderVectorClient(Clock.systemUTC());
+    final FileModelCatalog catalog;
 
     private final String secretRef;
     private final Path providers;
@@ -82,8 +86,9 @@ final class ModelRoutingFixture implements AutoCloseable {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        this.catalog = new FileModelCatalog(providers);
         this.gateway = new RoutingModelGateway(
-                new FileModelCatalog(providers),
+                catalog,
                 new FileBudgetLimits(budgets),
                 secrets,
                 new RedisRateLimiter(RuntimeTestRedis.template()),
@@ -135,6 +140,46 @@ final class ModelRoutingFixture implements AutoCloseable {
                 .append('\n');
         writeProviders();
         return this;
+    }
+
+    /**
+     * 登记一个 Embedding 或 rerank 模型。
+     *
+     * @param modelId 模型 ID
+     * @param kind 种类取值：{@code embedding} 或 {@code rerank}
+     * @param upstream 供应商侧模型名
+     * @param baseUrl 模型自己的端点；可为空，表示用账号的端点
+     * @param maxBatchSize 单次请求的输入条数上限
+     * @return 本夹具
+     */
+    ModelRoutingFixture vectorModel(String modelId, String kind, String upstream, String baseUrl, int maxBatchSize) {
+        models.append("  - model_id: ")
+                .append(modelId)
+                .append('\n')
+                .append("    kind: ")
+                .append(kind)
+                .append('\n')
+                .append("    upstream_model: ")
+                .append(upstream)
+                .append('\n')
+                .append("    context_window: 8192\n    max_output_tokens: 1\n")
+                .append("    max_batch_size: ")
+                .append(maxBatchSize)
+                .append('\n');
+        if (baseUrl != null) {
+            models.append("    base_url: ").append(baseUrl).append('\n');
+        }
+        writeProviders();
+        return this;
+    }
+
+    /**
+     * Embedding 与 rerank 的用例，用本夹具的网关、目录与平台 HTTP 客户端。
+     *
+     * @return 用例
+     */
+    VectorModelService vectors() {
+        return new VectorModelService(gateway, catalog, vectorClient);
     }
 
     /**
@@ -249,6 +294,7 @@ final class ModelRoutingFixture implements AutoCloseable {
     @Override
     public void close() {
         transport.close();
+        vectorClient.close();
     }
 
     private void writeProviders() {
