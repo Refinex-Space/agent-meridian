@@ -1,0 +1,358 @@
+openapi: 3.1.0
+info:
+  title: AgentMeridian Internal API
+  version: 1.0.0
+  summary: 平台服务之间调用 runtime 的内部接口：知识库写入与检索用的 Embedding 与 rerank。
+  description: |
+    只供平台内部服务调用（knowledge 经 `meridian-model-client`），不对业务系统开放，不随公开 API 发布。
+
+    **认证。** 请求带 `Authorization: Bearer <服务凭据>`。正式实现是 control-plane 签发的服务 JWT（T14b）；在那之前
+    只有 `dev`、`test` profile 接受开发期的静态服务凭据，其他 profile 一律拒绝。
+
+    **租户。** 内部调用代表某个租户与项目发起，请求体带 `tenant_id` 与 `project_id`，用量与预算按它们计入
+    （架构设计「计量与预算」）。
+
+    **约定。** 字段名 snake_case；错误为 RFC 9457 `application/problem+json`，扩展字段 `code` 与 `request_id`，与公开 API 相同。
+servers:
+  - url: http://localhost:8080
+    description: 本地开发（scripts/dev/run-runtime.sh）
+security:
+  - ServiceAuth: []
+tags:
+  - name: InternalModels
+    description: 知识库使用的 Embedding 与 rerank，与智能体共用平台的限流、预算与计量。
+
+paths:
+  /internal/v1/embeddings:
+    post:
+      operationId: createInternalEmbeddings
+      tags: [InternalModels]
+      summary: 文本向量
+      description: |
+        知识库写入切片与检索查询时计算向量（架构设计「写入流程」「检索流程」），一次最多 64 条。超过供应商单次上限时拆成
+        多次供应商请求，每次各自限流、预扣与计量（计量项为 Embedding token）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalEmbeddingRequest'
+            example:
+              tenant_id: ten_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
+              project_id: prj_01JC8Z2B5D3F7H9K1M4P6R8T0V
+              model: mdl_01JC8Z4D7F5H9K1M3P6R8T0V2X
+              input: [差旅住宿标准为每晚 500 元。]
+      responses:
+        '200':
+          description: 向量，`data` 与输入一一对应。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalEmbeddingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ModelNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/ProviderError'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/rerank:
+    post:
+      operationId: createInternalRerank
+      tags: [InternalModels]
+      summary: 重排
+      description: |
+        按与查询的相关度给候选文本打分并排序（架构设计「检索流程」第 4 步）。DashScope 走兼容格式的
+        `compatible-api/v1/reranks` 端点；计量项为 rerank token。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalRerankRequest'
+            example:
+              tenant_id: ten_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
+              project_id: prj_01JC8Z2B5D3F7H9K1M4P6R8T0V
+              model: mdl_01JC8Z5E8G6J0L2N4Q7S9U1W3Y
+              query: 住宿标准
+              documents: [差旅住宿标准为每晚 500 元。, 报销需要提供发票。]
+              top_n: 8
+      responses:
+        '200':
+          description: 按相关度从高到低排列的结果。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalRerankResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ModelNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/ProviderError'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    ServiceAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: 服务凭据
+      description: 平台服务的凭据：服务 JWT（T14b），之前为开发期的静态服务凭据（只在 `dev`、`test`）。
+
+  headers:
+    XRequestId:
+      description: 本次请求的 ID：沿用合法的传入值，否则由服务端生成。
+      required: true
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: |
+        请求不合法：`request.invalid`、`request.validation_failed`（见 `errors`）；`model.unsupported_operation`：模型的种类
+        与接口不符。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: '`auth.unauthenticated`：缺少服务凭据；`auth.invalid_service_credential`：服务凭据无效。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ModelNotFound:
+      description: '`model.not_found`：模型不存在。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: '`model.budget_exceeded`：租户或项目的预算不足；`model.rate_limit_timeout`：供应商账号的限流等待超过 30 秒。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ProviderError:
+      description: '`model.provider_error`：供应商拒绝了请求。供应商暂时不可用为 503 `model.provider_unavailable`。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: '`internal.error`：服务内部错误；`service.unavailable`、`model.provider_unavailable`（503）：依赖暂时不可用。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Problem:
+      description: RFC 9457 错误响应，扩展字段 `code` 与 `request_id`，与公开 API 相同。
+      type: object
+      required: [type, title, status, detail, instance, code, request_id]
+      properties:
+        type:
+          description: 错误类型 URI，`urn:meridian:error:<code>`。
+          type: string
+        title:
+          description: 错误码的简短标题。
+          type: string
+        status:
+          description: HTTP 状态码。
+          type: integer
+        detail:
+          description: 本次错误的说明，不含凭据与内部信息。
+          type: [string, 'null']
+        instance:
+          description: 请求路径。
+          type: string
+        code:
+          description: 错误码，格式 `<领域>.<原因>`。
+          type: string
+        request_id:
+          description: 请求 ID，与响应头 `X-Request-Id` 相同。
+          type: string
+        errors:
+          description: 字段校验失败的明细，只在 `request.validation_failed` 时出现。
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldViolation'
+    FieldViolation:
+      description: 一个字段的校验失败。
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          description: 字段路径。
+          type: string
+        message:
+          description: 失败原因。
+          type: string
+    InternalEmbeddingRequest:
+      description: 文本向量请求。
+      type: object
+      additionalProperties: false
+      required: [tenant_id, model, input]
+      properties:
+        tenant_id:
+          description: 调用代表的租户 ID（ten_…），用量与预算计入它。
+          type: string
+          minLength: 1
+        project_id:
+          description: 调用代表的项目 ID（prj_…）；租户级的调用不传。
+          type: string
+          minLength: 1
+        model:
+          description: 平台模型目录中的 Embedding 模型 ID（mdl_…）。
+          type: string
+          minLength: 1
+        input:
+          description: 文本，1 至 64 条，每条不能为空。
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            type: string
+            minLength: 1
+        dimensions:
+          description: 输出维度，模型支持时生效；不传时为模型的默认维度。
+          type: integer
+          minimum: 1
+    InternalEmbeddingResponse:
+      description: 文本向量结果。
+      type: object
+      required: [data, model, usage]
+      properties:
+        data:
+          description: 向量，与输入一一对应，按 `index` 升序。
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalEmbedding'
+        model:
+          description: 请求中的模型 ID。
+          type: string
+        usage:
+          $ref: '#/components/schemas/InternalUsage'
+    InternalEmbedding:
+      description: 一条输入的向量。
+      type: object
+      required: [index, embedding]
+      properties:
+        index:
+          description: 对应输入的序号，从 0 开始。
+          type: integer
+        embedding:
+          description: 向量。
+          type: array
+          items:
+            type: number
+            format: float
+    InternalRerankRequest:
+      description: 重排请求。
+      type: object
+      additionalProperties: false
+      required: [tenant_id, model, query, documents]
+      properties:
+        tenant_id:
+          description: 调用代表的租户 ID（ten_…），用量与预算计入它。
+          type: string
+          minLength: 1
+        project_id:
+          description: 调用代表的项目 ID（prj_…）；租户级的调用不传。
+          type: string
+          minLength: 1
+        model:
+          description: 平台模型目录中的 rerank 模型 ID（mdl_…）。
+          type: string
+          minLength: 1
+        query:
+          description: 查询文本。
+          type: string
+          minLength: 1
+        documents:
+          description: 候选文本，1 至 100 条。
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+            minLength: 1
+        top_n:
+          description: 只返回得分最高的前 n 条；不传时返回全部。
+          type: integer
+          minimum: 1
+    InternalRerankResponse:
+      description: 重排结果。
+      type: object
+      required: [results, model, usage]
+      properties:
+        results:
+          description: 结果，按 `relevance_score` 从高到低。
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalRerankResult'
+        model:
+          description: 请求中的模型 ID。
+          type: string
+        usage:
+          $ref: '#/components/schemas/InternalUsage'
+    InternalRerankResult:
+      description: 一条候选文本的得分。
+      type: object
+      required: [index, relevance_score]
+      properties:
+        index:
+          description: 候选文本在请求 `documents` 中的序号，从 0 开始。
+          type: integer
+        relevance_score:
+          description: 相关度，越大越相关，取供应商的值。
+          type: number
+          format: double
+    InternalUsage:
+      description: 用量，所有供应商请求之和。
+      type: object
+      required: [prompt_tokens, total_tokens]
+      properties:
+        prompt_tokens:
+          description: 输入 token。
+          type: integer
+        total_tokens:
+          description: 与 `prompt_tokens` 相同（Embedding 与 rerank 没有输出 token）。
+          type: integer

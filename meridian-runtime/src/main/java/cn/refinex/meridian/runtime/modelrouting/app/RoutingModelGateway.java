@@ -5,6 +5,7 @@ import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.MeridianException;
 import cn.refinex.meridian.common.error.NotFoundException;
+import cn.refinex.meridian.common.error.ValidationException;
 import cn.refinex.meridian.common.id.Ids;
 import cn.refinex.meridian.engine.spi.error.BudgetExceededException;
 import cn.refinex.meridian.engine.spi.error.RateLimitTimeoutException;
@@ -13,6 +14,7 @@ import cn.refinex.meridian.engine.spi.port.SecretResolver;
 import cn.refinex.meridian.engine.spi.port.SecretValue;
 import cn.refinex.meridian.runtime.modelrouting.domain.BudgetScope;
 import cn.refinex.meridian.runtime.modelrouting.domain.CatalogModel;
+import cn.refinex.meridian.runtime.modelrouting.domain.ModelKind;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelRoutingErrorCode;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelUsageMessage;
 import cn.refinex.meridian.runtime.modelrouting.domain.ProviderAccount;
@@ -100,8 +102,25 @@ public class RoutingModelGateway implements ModelGateway {
 
     @Override
     public Mono<ModelRoute> resolve(String modelId) {
+        return resolve(modelId, ModelKind.CHAT);
+    }
+
+    /**
+     * 解析指定种类的模型：对话模型经 {@link #resolve(String)}，Embedding 与 rerank 由 {@link EmbeddingService}、
+     * {@link RerankService} 调用。模型自己的端点覆盖账号的端点。
+     *
+     * @param modelId 模型 ID
+     * @param kind 调用方要求的种类
+     * @return 路由信息；模型不存在以 {@code NotFoundException} 失败，种类不符以 {@code ValidationException} 失败
+     */
+    public Mono<ModelRoute> resolve(String modelId, ModelKind kind) {
         return Blocking.call(() -> {
                     CatalogModel model = model(modelId);
+                    if (model.kind() != kind) {
+                        throw new ValidationException(
+                                ModelRoutingErrorCode.UNSUPPORTED_OPERATION,
+                                "模型 " + modelId + " 是 " + model.kind().value() + " 模型，不能用于 " + kind.value() + " 调用");
+                    }
                     return new Resolved(model, account(model));
                 })
                 .flatMap(resolved -> {
@@ -109,11 +128,14 @@ public class RoutingModelGateway implements ModelGateway {
                     Mono<Optional<SecretValue>> credential = account.secretRef() == null
                             ? Mono.just(Optional.empty())
                             : secrets.resolve(account.secretRef()).map(Optional::of);
+                    String baseUrl = resolved.model().baseUrl() != null
+                            ? resolved.model().baseUrl()
+                            : account.baseUrl();
                     return credential.map(apiKey -> new ModelRoute(
                             modelId,
                             account.providerAccountId(),
                             account.provider(),
-                            account.baseUrl(),
+                            baseUrl,
                             resolved.model().upstreamModel(),
                             apiKey.orElse(null),
                             resolved.model().contextWindow(),

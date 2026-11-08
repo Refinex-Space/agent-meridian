@@ -11,7 +11,8 @@ import java.util.Objects;
  *
  * <p>消费方按 outbox 消息 ID 幂等（{@code meridian-persistence} 的约定），{@code request_id} 用于与事件、日志关联。
  *
- * @param kind 用量种类，模型 token 固定为 {@value #KIND_MODEL_TOKENS}
+ * @param kind 用量种类：对话与压缩为 {@value #KIND_MODEL_TOKENS}，Embedding 为 {@value #KIND_EMBEDDING_TOKENS}，rerank 为
+ *     {@value #KIND_RERANK_TOKENS}（架构设计「计量与预算」的计量项）
  * @param requestId 模型调用 ID
  * @param occurredAt 结算时间
  * @param tenantId 租户 ID
@@ -24,7 +25,7 @@ import java.util.Objects;
  * @param modelId 实际调用的模型 ID
  * @param providerAccountId 供应商账号 ID
  * @param upstreamModel 供应商侧的模型名
- * @param purpose 调用用途：{@code reasoning} 或 {@code compaction}
+ * @param purpose 调用用途：{@code reasoning}、{@code compaction}、{@code embedding} 或 {@code rerank}
  * @param fallback 是否为降级到备用模型的调用
  * @param usageSource 用量来源：{@code provider} 或 {@code estimated}
  * @param inputTokens 输入 token
@@ -59,6 +60,12 @@ public record ModelUsageMessage(
     /** 模型 token 用量的种类。 */
     public static final String KIND_MODEL_TOKENS = "model_tokens";
 
+    /** Embedding token 用量的种类。 */
+    public static final String KIND_EMBEDDING_TOKENS = "embedding_tokens";
+
+    /** rerank token 用量的种类。 */
+    public static final String KIND_RERANK_TOKENS = "rerank_tokens";
+
     /**
      * 创建用量记录。
      *
@@ -83,8 +90,13 @@ public record ModelUsageMessage(
      * @return 用量记录
      */
     public static ModelUsageMessage of(PlatformContext context, ModelCallRecord record, Instant occurredAt) {
+        String kind = switch (record.purpose()) {
+            case REASONING, COMPACTION -> KIND_MODEL_TOKENS;
+            case EMBEDDING -> KIND_EMBEDDING_TOKENS;
+            case RERANK -> KIND_RERANK_TOKENS;
+        };
         return new ModelUsageMessage(
-                KIND_MODEL_TOKENS,
+                kind,
                 record.requestId(),
                 occurredAt,
                 context.tenantId(),

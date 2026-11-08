@@ -6,10 +6,12 @@ import cn.refinex.meridian.runtime.modelrouting.app.ModelCatalogPort;
 import cn.refinex.meridian.runtime.modelrouting.app.ModelRoutingProperties;
 import cn.refinex.meridian.runtime.modelrouting.infra.FileBudgetLimits;
 import cn.refinex.meridian.runtime.modelrouting.infra.FileModelCatalog;
+import java.util.Set;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 /**
  * 模型路由的装配（架构设计「模型调用」）：开发期的供应商目录、预算限额与凭据解析。{@code ModelGateway} 的实现
@@ -22,15 +24,17 @@ import org.springframework.context.annotation.Configuration;
 public class ModelRoutingConfiguration {
 
     /**
-     * 供应商与模型目录：读 {@code meridian.runtime.model-routing.providers-directory}（默认 {@code dev-config/providers}）。
+     * 供应商与模型目录：读 {@code meridian.runtime.model-routing.providers-directory}（默认 {@code dev-config/providers}），
+     * 带 {@code profiles} 的文档按当前 profile 加载（脚本化模型服务只在 {@code dev}、{@code test}）。
      *
      * @param properties 配置
+     * @param environment 环境，取激活的 profile
      * @return 目录
      */
     @Bean
     @ConditionalOnMissingBean
-    public ModelCatalogPort modelCatalogPort(ModelRoutingProperties properties) {
-        return new FileModelCatalog(properties.providersDirectory());
+    public ModelCatalogPort modelCatalogPort(ModelRoutingProperties properties, Environment environment) {
+        return new FileModelCatalog(properties.providersDirectory(), Set.of(environment.getActiveProfiles()));
     }
 
     /**

@@ -63,9 +63,25 @@
                             <output>${project.build.directory}/generated-sources/openapi</output>
                             <generateApis>false</generateApis>
                             <generateModels>true</generateModels>
+                            <!-- 3.1 的"二者之一"的原始类型（文本或数组）生成器处理不了，DTO 中用 Object，由 runtime 按类型分派 -->
+                            <schemaMappings>EmbeddingInput=java.lang.Object,EmbeddingVector=java.lang.Object</schemaMappings>
                             <configOptions>
                                 <useSealed>true</useSealed>
                             </configOptions>
+                        </configuration>
+                    </execution>
+                    <!-- 内部接口（服务之间调用）的 DTO，包与公开 API 分开（ADR-0033） -->
+                    <execution>
+                        <id>generate-internal-dto</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/src/main/resources/openapi/meridian-internal-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <modelPackage>cn.refinex.meridian.api.internal.model</modelPackage>
+                            <generateApis>false</generateApis>
+                            <generateModels>true</generateModels>
                         </configuration>
                     </execution>
                 </executions>

@@ -180,7 +180,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 开工：2026-11-08，基线 `scripts/dev/verify.sh` 通过（4cbce4c）。
 
 - [x] 1. `ModelInvoker` 实现（engine-agentscope，复用 `RoutedModel`）与 runtime 装配
-- [ ] 2. 规范：`meridian-v1.yaml` 增加 `/v1/chat/completions`、`/v1/embeddings`；新文件 `meridian-internal-v1.yaml`（`/internal/v1/embeddings`、`/internal/v1/rerank`）
+- [x] 2. 规范：`meridian-v1.yaml` 增加 `/v1/chat/completions`、`/v1/embeddings`；新文件 `meridian-internal-v1.yaml`（`/internal/v1/embeddings`、`/internal/v1/rerank`）
 - [ ] 3. runtime 直通接口 `/v1/chat/completions`（流式与非流式、`usage`、`models:invoke`）（A01）
 - [ ] 4. Embedding 与 rerank 客户端（平台自己的 HTTP 客户端，计量），`/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank`，开发期静态服务凭据（A02）
 - [ ] 5. `ScriptedOpenAiServer`（test-support）、YAML 脚本与内置脚本、`scripts/dev/scripted-model.sh`、`dev-config/providers/scripted.yaml`（只在 dev、test）

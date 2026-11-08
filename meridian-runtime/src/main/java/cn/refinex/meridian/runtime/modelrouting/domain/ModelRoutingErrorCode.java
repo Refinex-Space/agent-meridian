@@ -7,7 +7,9 @@ public enum ModelRoutingErrorCode implements ErrorCode {
     /** 模型不在模型目录中，或未授权给当前项目。 */
     MODEL_NOT_FOUND("model.not_found", 404, "模型不存在"),
     /** 供应商凭据不存在或不可读。 */
-    CREDENTIAL_UNAVAILABLE("model.credential_unavailable", 503, "模型供应商的凭据不可用");
+    CREDENTIAL_UNAVAILABLE("model.credential_unavailable", 503, "模型供应商的凭据不可用"),
+    /** 模型的种类与接口不符，例如用 Embedding 模型调用对话接口。 */
+    UNSUPPORTED_OPERATION("model.unsupported_operation", 400, "模型不支持该操作");
 
     private final String code;
     private final int status;

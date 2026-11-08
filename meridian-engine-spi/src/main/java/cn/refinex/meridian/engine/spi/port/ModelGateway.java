@@ -188,12 +188,16 @@ public interface ModelGateway {
         }
     }
 
-    /** 模型调用的用途，写进用量记录，区分智能体推理与压缩器的内部调用。 */
+    /** 模型调用的用途，写进用量记录，区分智能体推理、压缩器的内部调用与向量、重排调用。 */
     enum CallPurpose {
         /** 智能体推理（含 OpenAI 兼容直通接口的调用）。 */
         REASONING,
         /** 压缩器生成摘要的内部调用。 */
-        COMPACTION;
+        COMPACTION,
+        /** Embedding（直通接口与知识库写入、检索的内部接口），计量项"Embedding token"（架构设计「计量与预算」）。 */
+        EMBEDDING,
+        /** rerank（知识库检索的内部接口）。 */
+        RERANK;
 
         /**
          * 消息中的取值。

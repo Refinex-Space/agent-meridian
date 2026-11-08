@@ -1,0 +1,27 @@
+# 脚本化模型服务（ScriptedOpenAiServer，T09b）：OpenAI 兼容的本地假供应商，scripts/dev/scripted-model.sh 启动，默认端口 18090。
+# 只在 dev、test profile 加载（profiles）；不需要凭据，不访问外网。脚本写法与内置脚本见 meridian-test-support/CLAUDE.md。
+kind: provider_account
+provider_account_id: prv_dev_scripted
+provider: openai_compatible
+base_url: http://localhost:18090/v1
+profiles: [dev, test]
+models:
+  # 对话：按最近一条以 #script:<名称> 开头的用户消息选择脚本，没有标记时简短回显
+  - model_id: mdl_dev_scripted
+    upstream_model: scripted
+    context_window: 131072
+    max_output_tokens: 2048
+  # Embedding：按文本哈希生成确定的 1024 维向量
+  - model_id: mdl_dev_scripted_embedding
+    kind: embedding
+    upstream_model: scripted-embedding
+    context_window: 8192
+    max_output_tokens: 1
+    max_batch_size: 20
+  # rerank：按关键词重叠打分，DashScope 兼容格式
+  - model_id: mdl_dev_scripted_rerank
+    kind: rerank
+    upstream_model: scripted-rerank
+    base_url: http://localhost:18090/compatible-api/v1
+    context_window: 8192
+    max_output_tokens: 1

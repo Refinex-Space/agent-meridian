@@ -46,7 +46,9 @@ class OpenApiSpecTest {
             "GET /v1/sessions/{session_id}/stream",
             "GET /v1/sessions/{session_id}/threads",
             "GET /v1/sessions/{session_id}/threads/{thread_id}/stream",
-            "GET /v1/sessions/{session_id}/pending-actions");
+            "GET /v1/sessions/{session_id}/pending-actions",
+            "POST /v1/chat/completions",
+            "POST /v1/embeddings");
 
     /** 架构设计「事件」的事件类型清单中，持久化的 agent、session、span 与 user 四个域。 */
     private static final Set<String> EXPECTED_SESSION_EVENTS = Set.of(
@@ -124,7 +126,9 @@ class OpenApiSpecTest {
         operations().forEach((key, operation) -> {
             assertThat(operation.getOperationId()).as(key).isNotBlank();
             assertThat(operation.getTags()).as(key).hasSize(1);
-            String expectedScope = key.startsWith("GET ") ? "sessions:read" : "sessions:write";
+            String expectedScope = key.startsWith("POST /v1/chat/") || key.startsWith("POST /v1/embeddings")
+                    ? "models:invoke"
+                    : key.startsWith("GET ") ? "sessions:read" : "sessions:write";
             assertThat(operation.getSecurity()).as(key).hasSize(1);
             assertThat(operation.getSecurity().getFirst()).as(key).containsEntry("ApiKeyAuth", List.of(expectedScope));
         });

@@ -2,13 +2,13 @@ openapi: 3.1.0
 info:
   title: AgentMeridian API
   version: 1.0.0
-  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作与 SSE 事件流。
+  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作、SSE 事件流与 OpenAI 兼容的模型直通。
   description: |
     业务系统通过本 API 使用平台上的智能体：创建会话、发送事件、订阅事件流、回应待处理动作。
 
     **认证。** 每个请求带 `Authorization: Bearer <API Key>`。API Key 属于一个项目，数据按"项目 + `end_user_id`"隔离：
     同一项目内按 `end_user_id` 区分终端用户，跨项目不可见，即使 `end_user_id` 相同。API Key 的作用域决定能调用哪些接口：
-    读接口需要 `sessions:read`，写接口需要 `sessions:write`，每个操作的 `security` 列出所需作用域。
+    读接口需要 `sessions:read`，写接口需要 `sessions:write`，模型直通需要 `models:invoke`，每个操作的 `security` 列出所需作用域。
 
     **约定。**
     - 字段名 snake_case；时间为 RFC 3339 UTC，例如 `2026-11-07T08:30:12.345Z`。
@@ -35,6 +35,8 @@ tags:
     description: 线程：会话中的执行线，主智能体是主线程，每次拉起子智能体产生一条子线程。
   - name: PendingActions
     description: 待处理动作：需要调用方回应的事项。
+  - name: Models
+    description: 模型直通：OpenAI 兼容的对话补全与文本向量，与智能体共用平台的限流、预算与计量。
 
 paths:
   /v1/sessions:
@@ -524,6 +526,126 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /v1/chat/completions:
+    post:
+      operationId: createChatCompletion
+      tags: [Models]
+      summary: 对话补全（OpenAI 兼容）
+      description: |
+        OpenAI 兼容的对话补全。`model` 填平台模型目录中的模型 ID（mdl_…），平台按项目的供应商账号路由，与智能体的模型调用
+        共用限流（等待最长 30 秒）、预算预扣与计量；预扣按"估算输入 token 加 `max_tokens`"，结束时按实际用量结算。
+
+        `stream` 为 `true` 时以 SSE 返回：每条 `data:` 是一个 `ChatCompletionChunk`，最后一条是 `data: [DONE]`；
+        `stream_options.include_usage` 为 `true` 时，`[DONE]` 之前多一条 `choices` 为空、带 `usage` 的块。首包之前的错误
+        （预算不足、限流超时、供应商不可用）以对应状态码的 problem+json 返回；首包之后的错误以一条
+        `data: {"error": {...}}` 结束流。流式请求不支持 `Idempotency-Key`（返回 400）。
+
+        只支持文本消息与函数工具；请求中未列出的字段返回 400。
+      security:
+        - ApiKeyAuth: [models:invoke]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChatCompletionRequest'
+            example:
+              model: mdl_01JC8Z3C6E4G8J0L2N5Q7S9U1W
+              messages:
+                - role: user
+                  content: 用一句话介绍差旅报销流程。
+              max_tokens: 256
+      responses:
+        '200':
+          description: |
+            非流式为 `ChatCompletion`；流式为 SSE（`text/event-stream`），每条 `data:` 是一行 `ChatCompletionChunk` JSON，
+            以 `data: [DONE]` 结束。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletion'
+            text/event-stream:
+              schema:
+                type: array
+                format: event-stream
+                items:
+                  $ref: '#/components/schemas/ChatCompletionChunk'
+        '400':
+          $ref: '#/components/responses/ModelBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ModelNotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/ModelTooManyRequests'
+        '502':
+          $ref: '#/components/responses/ModelProviderError'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/embeddings:
+    post:
+      operationId: createEmbeddings
+      tags: [Models]
+      summary: 文本向量（OpenAI 兼容）
+      description: |
+        OpenAI 兼容的文本向量。`model` 填平台模型目录中的 Embedding 模型 ID（mdl_…）。输入超过供应商单次上限时，平台拆成
+        多次供应商请求，结果按输入顺序合并；每次供应商请求各自限流、预扣与计量（计量项为 Embedding token）。
+
+        `encoding_format` 为 `base64` 时，`embedding` 是小端 float32 数组的 Base64 编码（OpenAI SDK 的默认取法）。
+      security:
+        - ApiKeyAuth: [models:invoke]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmbeddingRequest'
+            example:
+              model: mdl_01JC8Z4D7F5H9K1M3P6R8T0V2X
+              input: [差旅住宿标准, 报销需要哪些票据]
+      responses:
+        '200':
+          description: 向量，`data` 与输入一一对应。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbeddingList'
+        '400':
+          $ref: '#/components/responses/ModelBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ModelNotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/ModelTooManyRequests'
+        '502':
+          $ref: '#/components/responses/ModelProviderError'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -664,6 +786,45 @@ components:
             $ref: '#/components/schemas/Problem'
     InternalError:
       description: '`internal.error`：服务内部错误，`detail` 不含内部信息，排查以 `request_id` 关联日志；`service.unavailable`（503）：依赖暂时不可用。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    ModelBadRequest:
+      description: |
+        请求不合法：`request.invalid`、`request.validation_failed`（见 `errors`）；`model.unsupported_operation`：模型的种类
+        与接口不符（例如用 Embedding 模型调用对话补全）。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ModelNotFound:
+      description: '`model.not_found`：模型不存在，或未授权给 API Key 所在的项目。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ModelTooManyRequests:
+      description: '`model.budget_exceeded`：租户、项目或 API Key 的预算不足；`model.rate_limit_timeout`：供应商账号的限流等待超过 30 秒。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ModelProviderError:
+      description: '`model.provider_error`：供应商拒绝了请求（认证失败、参数错误等）。供应商暂时不可用为 503 `model.provider_unavailable`。'
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -2521,3 +2682,394 @@ components:
           event_start: '#/components/schemas/EventStartEvent'
           event_delta: '#/components/schemas/EventDeltaEvent'
           ping: '#/components/schemas/PingEvent'
+
+    CreateChatCompletionRequest:
+      description: 对话补全请求，字段与 OpenAI Chat Completions 一致的子集；未列出的字段返回 400。
+      type: object
+      additionalProperties: false
+      required: [model, messages]
+      properties:
+        model:
+          description: 平台模型目录中的对话模型 ID（mdl_…）。
+          type: string
+          minLength: 1
+        messages:
+          description: 对话消息，按时间顺序，至少一条。
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ChatCompletionMessage'
+        tools:
+          description: 模型可以调用的函数工具。
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatCompletionTool'
+        max_tokens:
+          description: 最大输出 token 数；不传时使用模型目录的默认值。预算按"估算输入加它"预扣。
+          type: integer
+          minimum: 1
+        max_completion_tokens:
+          description: 与 `max_tokens` 相同（OpenAI 的新字段名）；两者都给出时以它为准。
+          type: integer
+          minimum: 1
+        temperature:
+          description: 采样温度。
+          type: number
+          minimum: 0
+          maximum: 2
+        stream:
+          description: 为 `true` 时以 SSE 流式返回。
+          type: boolean
+          default: false
+        stream_options:
+          $ref: '#/components/schemas/ChatCompletionStreamOptions'
+    ChatCompletionStreamOptions:
+      description: 流式选项，只在 `stream` 为 `true` 时有效。
+      type: object
+      additionalProperties: false
+      properties:
+        include_usage:
+          description: 为 `true` 时，`[DONE]` 之前多一条 `choices` 为空、带 `usage` 的块。
+          type: boolean
+          default: false
+    ChatCompletionMessage:
+      description: 一条对话消息。`tool` 消息必须带 `tool_call_id`；`assistant` 消息可以只有 `tool_calls`。
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          description: 角色。
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          description: 文本内容；只有工具调用的助手消息可以为空。
+          type: [string, 'null']
+        tool_calls:
+          description: 助手消息发起的工具调用。
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatCompletionMessageToolCall'
+        tool_call_id:
+          description: 工具消息回应的工具调用 ID。
+          type: string
+    ChatCompletionMessageToolCall:
+      description: 一个完整的函数工具调用。
+      type: object
+      additionalProperties: false
+      required: [id, type, function]
+      properties:
+        id:
+          description: 工具调用 ID。
+          type: string
+        type:
+          description: 固定为 `function`。
+          type: string
+          enum: [function]
+        function:
+          $ref: '#/components/schemas/ChatCompletionFunctionCall'
+    ChatCompletionFunctionCall:
+      description: 函数调用的名字与入参。
+      type: object
+      additionalProperties: false
+      required: [name, arguments]
+      properties:
+        name:
+          description: 函数名。
+          type: string
+        arguments:
+          description: 入参 JSON 文本，可能不是合法 JSON（由模型生成）。
+          type: string
+    ChatCompletionTool:
+      description: 一个函数工具。
+      type: object
+      additionalProperties: false
+      required: [type, function]
+      properties:
+        type:
+          description: 固定为 `function`。
+          type: string
+          enum: [function]
+        function:
+          $ref: '#/components/schemas/ChatCompletionFunction'
+    ChatCompletionFunction:
+      description: 函数工具的定义。
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          description: 函数名。
+          type: string
+          minLength: 1
+        description:
+          description: 函数说明，供模型决定何时调用。
+          type: string
+        parameters:
+          description: 入参的 JSON Schema；不传时为无参数的对象。
+          type: object
+          additionalProperties: true
+    ChatCompletion:
+      description: 非流式的对话补全结果。
+      type: object
+      required: [id, object, created, model, choices, usage]
+      properties:
+        id:
+          description: 本次补全的 ID（chatcmpl-…）。
+          type: string
+        object:
+          description: 固定为 `chat.completion`。
+          type: string
+          enum: [chat.completion]
+        created:
+          description: 创建时间，Unix 秒。
+          type: integer
+          format: int64
+        model:
+          description: 请求中的模型 ID。
+          type: string
+        choices:
+          description: 补全结果，只有一项。
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatCompletionChoice'
+        usage:
+          description: 用量；供应商没有报告用量时为空（平台按估算计量）。
+          oneOf:
+            - $ref: '#/components/schemas/CompletionUsage'
+            - type: 'null'
+    ChatCompletionChoice:
+      description: 一个补全结果。
+      type: object
+      required: [index, message, finish_reason]
+      properties:
+        index:
+          description: 序号，固定为 0。
+          type: integer
+        message:
+          $ref: '#/components/schemas/ChatCompletionResponseMessage'
+        finish_reason:
+          description: 结束原因：`stop`、`length`、`tool_calls` 等，取供应商的值。
+          type: [string, 'null']
+    ChatCompletionResponseMessage:
+      description: 模型生成的助手消息。
+      type: object
+      required: [role, content, reasoning_content, tool_calls]
+      properties:
+        role:
+          description: 固定为 `assistant`。
+          type: string
+          enum: [assistant]
+        content:
+          description: 文本内容；只有工具调用时为空。
+          type: [string, 'null']
+        reasoning_content:
+          description: 思考内容；模型不输出思考时为空。
+          type: [string, 'null']
+        tool_calls:
+          description: 模型发起的工具调用；没有时为空。
+          type: [array, 'null']
+          items:
+            $ref: '#/components/schemas/ChatCompletionMessageToolCall'
+    ChatCompletionChunk:
+      description: 流式对话补全的一个增量块。没有值的可选字段不出现（与 OpenAI 相同）。
+      type: object
+      required: [id, object, created, model, choices]
+      properties:
+        id:
+          description: 本次补全的 ID，同一次补全的所有块相同。
+          type: string
+        object:
+          description: 固定为 `chat.completion.chunk`。
+          type: string
+          enum: [chat.completion.chunk]
+        created:
+          description: 创建时间，Unix 秒，同一次补全的所有块相同。
+          type: integer
+          format: int64
+        model:
+          description: 请求中的模型 ID。
+          type: string
+        choices:
+          description: 增量，只有一项；带用量的最后一块为空列表，只有这一块出现 `usage`。
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatCompletionChunkChoice'
+        usage:
+          $ref: '#/components/schemas/CompletionUsage'
+    ChatCompletionChunkChoice:
+      description: 一个增量。
+      type: object
+      required: [index, delta, finish_reason]
+      properties:
+        index:
+          description: 序号，固定为 0。
+          type: integer
+        delta:
+          $ref: '#/components/schemas/ChatCompletionChunkDelta'
+        finish_reason:
+          description: 结束原因，只在最后一个增量给出，其余为空。
+          type: [string, 'null']
+    ChatCompletionChunkDelta:
+      description: 增量内容，只出现本块有的字段。
+      type: object
+      properties:
+        role:
+          description: 第一个增量为 `assistant`。
+          type: string
+          enum: [assistant]
+        content:
+          description: 追加的文本。
+          type: string
+        reasoning_content:
+          description: 追加的思考内容。
+          type: string
+        tool_calls:
+          description: 工具调用的增量，按 `index` 归并。
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatCompletionChunkToolCall'
+    ChatCompletionChunkToolCall:
+      description: 工具调用的增量：首个增量带 `id`、`type` 与函数名，之后只带入参片段。
+      type: object
+      required: [index]
+      properties:
+        index:
+          description: 工具调用在本条消息中的序号，从 0 开始。
+          type: integer
+        id:
+          description: 工具调用 ID，只在首个增量出现。
+          type: string
+        type:
+          description: 固定为 `function`，只在首个增量出现。
+          type: string
+          enum: [function]
+        function:
+          $ref: '#/components/schemas/ChatCompletionChunkFunction'
+    ChatCompletionChunkFunction:
+      description: 函数调用的增量。
+      type: object
+      properties:
+        name:
+          description: 函数名，只在首个增量出现。
+          type: string
+        arguments:
+          description: 追加的入参 JSON 片段。
+          type: string
+    CompletionUsage:
+      description: 本次补全的用量，与计量记录一致。
+      type: object
+      required: [prompt_tokens, completion_tokens, total_tokens, prompt_tokens_details, completion_tokens_details]
+      properties:
+        prompt_tokens:
+          description: 输入 token。
+          type: integer
+        completion_tokens:
+          description: 输出 token。
+          type: integer
+        total_tokens:
+          description: 输入与输出之和。
+          type: integer
+        prompt_tokens_details:
+          $ref: '#/components/schemas/PromptTokensDetails'
+        completion_tokens_details:
+          $ref: '#/components/schemas/CompletionTokensDetails'
+    PromptTokensDetails:
+      description: 输入 token 的明细。
+      type: object
+      required: [cached_tokens]
+      properties:
+        cached_tokens:
+          description: 命中提示词缓存的输入 token。
+          type: integer
+    CompletionTokensDetails:
+      description: 输出 token 的明细。
+      type: object
+      required: [reasoning_tokens]
+      properties:
+        reasoning_tokens:
+          description: 用于思考的输出 token。
+          type: integer
+    CreateEmbeddingRequest:
+      description: 文本向量请求，字段与 OpenAI Embeddings 一致的子集；未列出的字段返回 400。
+      type: object
+      additionalProperties: false
+      required: [model, input]
+      properties:
+        model:
+          description: 平台模型目录中的 Embedding 模型 ID（mdl_…）。
+          type: string
+          minLength: 1
+        input:
+          $ref: '#/components/schemas/EmbeddingInput'
+        encoding_format:
+          description: 向量的编码：`float`（默认）为数字数组，`base64` 为小端 float32 数组的 Base64。
+          type: string
+          enum: [float, base64]
+          default: float
+        dimensions:
+          description: 输出维度，模型支持时生效；不传时为模型的默认维度。
+          type: integer
+          minimum: 1
+    EmbeddingList:
+      description: 文本向量结果。
+      type: object
+      required: [object, data, model, usage]
+      properties:
+        object:
+          description: 固定为 `list`。
+          type: string
+          enum: [list]
+        data:
+          description: 向量，与输入一一对应，按 `index` 升序。
+          type: array
+          items:
+            $ref: '#/components/schemas/Embedding'
+        model:
+          description: 请求中的模型 ID。
+          type: string
+        usage:
+          $ref: '#/components/schemas/EmbeddingUsage'
+    Embedding:
+      description: 一条输入的向量。
+      type: object
+      required: [object, index, embedding]
+      properties:
+        object:
+          description: 固定为 `embedding`。
+          type: string
+          enum: [embedding]
+        index:
+          description: 对应输入的序号，从 0 开始。
+          type: integer
+        embedding:
+          $ref: '#/components/schemas/EmbeddingVector'
+    EmbeddingUsage:
+      description: 用量，所有供应商请求之和。
+      type: object
+      required: [prompt_tokens, total_tokens]
+      properties:
+        prompt_tokens:
+          description: 输入 token。
+          type: integer
+        total_tokens:
+          description: 与 `prompt_tokens` 相同。
+          type: integer
+    EmbeddingInput:
+      description: 一段文本，或文本数组（1 至 256 条），每段不能为空。生成的 DTO 中是 `Object`（ADR-0029 的多类型限制）。
+      oneOf:
+        - type: string
+          minLength: 1
+        - type: array
+          minItems: 1
+          maxItems: 256
+          items:
+            type: string
+            minLength: 1
+    EmbeddingVector:
+      description: 向量：`float` 编码为数字数组，`base64` 编码为小端 float32 数组的 Base64 字符串。生成的 DTO 中是 `Object`。
+      oneOf:
+        - type: array
+          items:
+            type: number
+        - type: string

@@ -118,7 +118,32 @@
                             <apiPackage>cn.refinex.meridian.runtime.openapi</apiPackage>
                             <generateApis>true</generateApis>
                             <generateModels>false</generateModels>
-                            <schemaMappings>SseFrame=org.springframework.http.codec.ServerSentEvent&lt;String&gt;</schemaMappings>
+                            <!--
+                              ChatCompletion 映射为 Object：同一操作按请求体的 stream 返回 JSON 或 SSE，生成器只按第一种响应取签名，
+                              处理器返回 ChatCompletion 或 Flux<ServerSentEvent<String>>（ADR-0033）
+                            -->
+                            <schemaMappings>SseFrame=org.springframework.http.codec.ServerSentEvent&lt;String&gt;,ChatCompletion=java.lang.Object</schemaMappings>
+                            <configOptions>
+                                <reactive>true</reactive>
+                                <interfaceOnly>true</interfaceOnly>
+                                <skipDefaultInterface>true</skipDefaultInterface>
+                                <useTags>true</useTags>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                    <!-- 内部接口（/internal/v1/）的服务端接口，DTO 在 meridian-api 的 api.internal.model（ADR-0033） -->
+                    <execution>
+                        <id>generate-internal-server</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/../meridian-api/src/main/resources/openapi/meridian-internal-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <apiPackage>cn.refinex.meridian.runtime.openapi.internal</apiPackage>
+                            <modelPackage>cn.refinex.meridian.api.internal.model</modelPackage>
+                            <generateApis>true</generateApis>
+                            <generateModels>false</generateModels>
                             <configOptions>
                                 <reactive>true</reactive>
                                 <interfaceOnly>true</interfaceOnly>

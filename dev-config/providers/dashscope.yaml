@@ -20,3 +20,17 @@ models:
     upstream_model: qwen3.7-flash
     context_window: 131072
     max_output_tokens: 2048
+  # Embedding（T09b）：1024 维，单次请求最多 20 条（2026-11-08 实测）
+  - model_id: mdl_dev_embedding
+    kind: embedding
+    upstream_model: qwen3.7-text-embedding
+    context_window: 8192
+    max_output_tokens: 1
+    max_batch_size: 20
+  # rerank（T09b）：兼容格式的端点在 compatible-api/v1 下，不在账号的 compatible-mode/v1 下
+  - model_id: mdl_dev_rerank
+    kind: rerank
+    upstream_model: qwen3.7-text-rerank
+    base_url: https://dashscope.aliyuncs.com/compatible-api/v1
+    context_window: 8192
+    max_output_tokens: 1
