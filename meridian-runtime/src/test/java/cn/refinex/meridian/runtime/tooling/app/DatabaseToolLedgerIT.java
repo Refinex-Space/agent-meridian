@@ -10,6 +10,7 @@ import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.common.time.MutableClock;
 import cn.refinex.meridian.engine.spi.event.BlobRef;
 import cn.refinex.meridian.engine.spi.port.ToolLedgerPort.InvocationStart;
+import cn.refinex.meridian.engine.spi.port.ToolLedgerPort.SandboxCommand;
 import cn.refinex.meridian.engine.spi.port.ToolLedgerPort.Status;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
@@ -112,6 +113,44 @@ class DatabaseToolLedgerIT {
                         .counter()
                         .count())
                 .isEqualTo(1.0);
+    }
+
+    @Test
+    void sandboxCommandsAreAuditedEvenWithoutTheLease() {
+        String longCommand = "echo " + "x".repeat(DatabaseToolLedger.AUDIT_COMMAND_MAX_CHARS);
+        block(
+                ledger.recordSandboxCommand(new SandboxCommand(
+                        session.mainThreadId(), "call_b", "git status --short", 0, false, Duration.ofMillis(420))),
+                lease.epoch());
+        block(
+                ledger.recordSandboxCommand(new SandboxCommand(
+                        session.mainThreadId(), "call_t", longCommand, 124, true, Duration.ofSeconds(3))),
+                lease.epoch() + 7);
+
+        List<Map<String, Object>> audits = DbAssertions.rows(
+                "SELECT payload ->> 'tool_use_id' AS tool_use_id, payload ->> 'command' AS command, "
+                        + "payload ->> 'command_truncated' AS truncated, payload ->> 'exit_code' AS exit_code, "
+                        + "payload ->> 'timed_out' AS timed_out, payload ->> 'duration_ms' AS duration_ms, "
+                        + "payload ->> 'turn_id' AS turn_id, payload ->> 'thread_id' AS thread_id "
+                        + "FROM rt.outbox WHERE topic = 'audit' AND payload ->> 'action' = 'sandbox.command'"
+                        + " AND payload ->> 'session_id' = ? ORDER BY created_at, id",
+                session.sessionId());
+        assertThat(audits).hasSize(2);
+        assertThat(audits.get(0))
+                .containsEntry("tool_use_id", "call_b")
+                .containsEntry("command", "git status --short")
+                .containsEntry("truncated", "false")
+                .containsEntry("exit_code", "0")
+                .containsEntry("timed_out", "false")
+                .containsEntry("duration_ms", "420")
+                .containsEntry("turn_id", lease.turn().turnId())
+                .containsEntry("thread_id", session.mainThreadId());
+        assertThat(audits.get(1))
+                .as("命令已经执行，审计不受租约约束；过长的命令截断")
+                .containsEntry("exit_code", "124")
+                .containsEntry("timed_out", "true")
+                .containsEntry("truncated", "true");
+        assertThat((String) audits.get(1).get("command")).hasSize(DatabaseToolLedger.AUDIT_COMMAND_MAX_CHARS);
     }
 
     @Test

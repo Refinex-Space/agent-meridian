@@ -27,7 +27,6 @@ import io.micrometer.core.instrument.Timer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
@@ -150,7 +149,7 @@ public class SandboxService {
             SandboxHandle orphan = fresh.get();
             if (orphan != null) {
                 try {
-                    await(driver.delete(orphan));
+                    run(driver.delete(orphan));
                 } catch (RuntimeException cleanup) {
                     e.addSuppressed(cleanup);
                 }
@@ -223,7 +222,7 @@ public class SandboxService {
         PlatformContext context = PlatformContexts.current();
         transactions.executeWithoutResult(tx -> sessions.lock(sessionId, false).ifPresent(row -> {
             Instant now = clock.instant();
-            row.handle().ifPresent(handle -> await(driver().delete(handle)));
+            row.handle().ifPresent(handle -> run(driver().delete(handle)));
             meter(row, now, context);
             sessions.clearSandbox(sessionId, null, now);
             outputs.deleteAll(sessionId);
@@ -357,7 +356,7 @@ public class SandboxService {
             sessions.clearSandbox(sessionId, row.snapshotKey(), now);
             return ReclaimOutcome.LOST;
         }
-        await(driver.delete(handle.get()));
+        run(driver.delete(handle.get()));
         Instant now = clock.instant();
         meter(row, now, context);
         sessions.clearSandbox(sessionId, snapshotKey, now);
@@ -413,17 +412,24 @@ public class SandboxService {
         return driver;
     }
 
-    /** 在当前线程上等待一个端口操作，把本线程的 {@code PlatformContext} 带进 Reactor Context。 */
+    /** 在当前线程上等待一个有结果的端口操作，把本线程的 {@code PlatformContext} 带进 Reactor Context。 */
     private <T> T await(Mono<T> operation) {
-        Duration timeout = properties.operationTimeout();
-        Mono<T> withContext = PlatformContexts.find()
-                .map(context -> operation.contextWrite(PlatformContexts.write(context)))
-                .orElse(operation);
-        T value = withContext.block(timeout);
+        T value = withContext(operation).block(properties.operationTimeout());
         if (value == null) {
             throw new IllegalStateException("沙箱操作没有返回结果");
         }
         return value;
+    }
+
+    /** 在当前线程上等待一个没有结果的端口操作。 */
+    private void run(Mono<Void> operation) {
+        withContext(operation).block(properties.operationTimeout());
+    }
+
+    private static <T> Mono<T> withContext(Mono<T> operation) {
+        return PlatformContexts.find()
+                .map(context -> operation.contextWrite(PlatformContexts.write(context)))
+                .orElse(operation);
     }
 
     private static String contentType(String path) {
