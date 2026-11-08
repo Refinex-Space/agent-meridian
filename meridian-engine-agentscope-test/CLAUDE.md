@@ -12,7 +12,7 @@
 - `testkit.model`：`ScriptedModel`（`respond`、`respondTo`、`failBeforeFirstChunk`、`failAfterChunks`）、`ScriptedResponse`（文本与思考按大小分块、工具调用入参分两块、`structuredOutput`、`rawChunk`、`usage`、`thenFail`）、`RecordedRequest`（`toolNames`、`lastUserText`、`toolResults`、`systemPrompt`、`options`）。
 - `testkit.port`：`InMemoryLeaseRegistry`、`InMemoryAgentStateRepository`（`activate`/`deactivate` 模拟数据库中的租约条件）、`InMemoryEventSink`、`InMemoryBlobStore`、`InMemoryAgentConfig`、`InMemoryInbox`、`InMemoryToolLedger`、`InMemoryThreadRegistry`。
 - `testkit.assembly`：`TestAssembly.builder(model)` 组装带替身的 `AgentAssembler`；`TestSpecs.agent()` 构建 `ResolvedAgentSpec`，`noneEnvironment()`/`sandboxEnvironment()`；`InMemoryWorkspaceFilesystems`（受保护路径各一个内存文件系统，`RecordingBaseStore` 记录访问）、`FakeSandboxFilesystemSpec`（能装配、不能建沙箱）。
-- `testkit.tool.RecordingTool`：继承 `ToolBase` 的测试工具，`echo(name)` 返回 `name:text`。
+- `testkit.tool.RecordingTool`：继承 `ToolBase` 的测试工具，`echo(name)` 返回 `name:text`。`PathRuleTool`：实现 `matchRule` 的路径工具（规则内容是路径 glob，`**` 匹配零或多级目录），`withSafetyAsk` 对指定路径返回安全类 ask（T08，P6、P15）。
 - 测试：`assembly.AgentAssemblerTest`（装配表逐行）、`assembly.AgentInstanceCacheTest`、`testkit.model.ScriptedModelScenarioTest`、`state.FencedAgentStateStoreTest`、`events.*`（穷举映射与映射器单测）、`turn.*`（引擎场景、下线、中间件链与 span、输入翻译）；包名与被测类相同，可读包内常量。
 - `turn.EngineHarness`（测试源码）：真实装配 + 平台中间件 + `FencedAgentStateStore` + 内存端口 + `AgentScopeEngine`；`claim(...)` 模拟 Worker 认领（同时登记 `LeaseRegistry` 与"数据库"的租约），`run(...)` 断言恰好一个终态且在最后。
 

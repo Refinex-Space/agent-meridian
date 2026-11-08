@@ -13,16 +13,17 @@
 - `turn.AgentScopeEngine`：`AgentEngine` 的实现，执行一轮的唯一入口。`runTurn` 取配置、租用实例、`begin`（身份映射、`clearStateCache`、带标记的权限安装）、`streamEvents`、`TurnEventMapper`，终态前归还资源；`TurnInputTranslator`、`PermissionTranslator` 做输入与权限翻译。
 - `events.TurnEventMapper`：事件映射与增量拼装，`complete()` 给出唯一终态，静态的 `fail(Throwable)` 把错误翻译为 `session.error` 加终态；`AgentEventDisposition`（31 个事件类型）与 `StopReasonMapping`（`GenerateReason`）是穷举的 switch。
 - `state.FencedAgentStateStore`：`AgentStateStore` 的实现，写入经 `LeaseRegistry` 取租约、经 `AgentStateRepository` 端口在同一事务中校验。
-- `middleware`：`PlatformMiddlewareProvider` 交给装配器的平台中间件（第二个参数关闭批次 checkpoint）；`PlatformStopRequest` 是平台中间件请求停止并记录原因的入口；`RecoveryNoteMiddleware` 与 `BatchCheckpointMiddleware` 从 `RuntimeContext` 读取引擎放入的 `RecoveryNoteSlot`、`BatchCheckpoint`（T06，ADR-0028）。
+- `middleware`：`PlatformMiddlewareProvider` 交给装配器的平台中间件（参数：租约、收件箱、是否开启批次 checkpoint；子智能体不含 steer）；`PlatformStopRequest` 是平台中间件请求停止并记录原因的入口；`RecoveryNoteMiddleware`、`BatchCheckpointMiddleware`、`InterruptCheckpointMiddleware` 从 `RuntimeContext` 读取引擎放入的 `RecoveryNoteSlot`、`BatchCheckpoint`、`PendingInterrupt`；`SteerMiddleware` 经 `InboxPort` 取 steer（T08，ADR-0031）。
+- `turn.AgentScopeEngine` 另有 `retryToolCall`（恢复确认的重试，直接调 Toolkit 中的工具，原幂等键放在 `ToolRetryContext`）与 `reservedToolNames`。
 - `assembly.AgentAssembler`：`HarnessAgent.Builder` 的全部配置都在 `configure`，按「引擎装配」表逐段对应；`AgentInstanceCache` 对外 `acquire`/`acquireSubagent`/`release`；`AssembledAgent.reservedToolNames()` 供自定义工具校验。
 
 ## 中间件顺序（P13，T04 测得）
 
 `order()` 数值大的在外层；`MiddlewareChainTest` 断言链路与 span 父子关系。装配后的实际链路（外层在前）：
 
-`GracefulShutdownMiddleware`（AgentScope 构造时固定放在最外层）→ `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200，委托 `OtelTracingMiddleware`) → `LeaseGuardMiddleware`(100) → `RecoveryNoteMiddleware`(90) → `BatchCheckpointMiddleware`(80) → `ToolSpanMiddleware`(50) → harness 自带：`WorkspaceContextMiddleware`、`AtPathExpansionMiddleware`、`CompactionMiddleware`、`ToolResultEvictionMiddleware`、`InboxMiddleware`、`HarnessSkillMiddleware`（都是 1，按注册顺序）。
+`GracefulShutdownMiddleware`（AgentScope 构造时固定放在最外层）→ `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200，委托 `OtelTracingMiddleware`) → `LeaseGuardMiddleware`(100) → `RecoveryNoteMiddleware`(90) → `InterruptCheckpointMiddleware`(88) → `SteerMiddleware`(85) → `BatchCheckpointMiddleware`(80) → `ToolSpanMiddleware`(50) → harness 自带：`WorkspaceContextMiddleware`、`AtPathExpansionMiddleware`、`CompactionMiddleware`、`ToolResultEvictionMiddleware`、`InboxMiddleware`、`HarnessSkillMiddleware`（都是 1，按注册顺序）。
 
-span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（批次）→ `execute_tool {name}`（每个调用）。后续中间件选 `order()` 时以此为准：要在压缩之前生效的（T09a 外层守卫）大于 1，要夹在压缩之内的小于 1；在推理前往上下文注入消息的（T08 的 `SteerMiddleware`）必须大于 80，注入的内容才进入该次 checkpoint。
+span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（批次）→ `execute_tool {name}`（每个调用）。后续中间件选 `order()` 时以此为准：要在压缩之前生效的（T09a 外层守卫）大于 1，要夹在压缩之内的小于 1；在推理前往上下文注入消息的必须大于 80，注入的内容才进入该次 checkpoint（`SteerMiddleware` 为 85）。
 
 ## 不变量
 
@@ -53,9 +54,14 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 - `GracefulShutdownManager` 是 JVM 单例，`performGracefulShutdown` 之后拒绝所有新调用；测试结束必须 `resetForTesting()`。`AgentScopeEngine` 构造时把它的超时设为 45 秒。
 - `OtelTracingMiddleware` 的 span 在它自己的方法里创建，补属性要在内层从 Reactor Context 取 span（`PlatformTracingMiddleware`）；`ContextPropagationOperator` 来自 AgentScope 带来的 `opentelemetry-reactor-3.1`。
 - 自定义工具挂起时 2.0.4 发出 `RUNNING` 的 `TOOL_RESULT_END`，映射器跳过它；`agent.custom_tool_use` 以 `REQUIRE_EXTERNAL_EXECUTION` 中的调用为准。
+- 权限（2.0.4 已核实，P15）：显式 ask 规则在 `DONT_ASK` 下仍返回 ask，只有最后一步的默认 ask 变成 deny，所以无人审批的执行要把 ask 改写为 deny；`ConfirmResult.rules` 只加进本次调用缓存的 `PermissionEngine`，不写回状态，"记住此决定"由平台保存。
+- 权限上下文"平凡"（`DEFAULT`、没有规则、没有工作目录）时 2.0.4 不走 `PermissionEngine`、一律放行；平台每轮注入安全规则，上下文永远不平凡，`SchemaOnlyTool`（自定义工具）也是 `ToolBase`，同样受规则约束。
+- 一批工具中只要有一个 ask，整批都不执行（含已放行与自定义工具），确认之后整批一起执行；全部被拒绝（`ALL_TOOLS_DENIED`）时默认继续推理。
+- 在 `onReasoning` 中以 `InterruptedException` 结束等同于用户中断（`handleInterrupt`：补齐悬空调用、保存状态、`INTERRUPTED`）；不调下游只发 `RequestStopEvent` 时没有模型输出，推理返回空，不能这样停。
+- 工具直接返回的 `ToolResultBlock` 状态默认为 `RUNNING`（由 `ToolExecutor` 定稿），直接调用工具时不能用 `SUCCESS` 判断成功。
 
 ## 对外接口
 
-- 实现 `meridian-engine-spi` 的 `AgentEngine`（`turn.AgentScopeEngine`）；依赖端口 `AgentConfigPort`、`LeaseRegistry`、`AgentStateRepository`、`BlobStorePort`。
+- 实现 `meridian-engine-spi` 的 `AgentEngine`（`turn.AgentScopeEngine`）；依赖端口 `AgentConfigPort`、`LeaseRegistry`、`AgentStateRepository`、`BlobStorePort`、`InboxPort`。
 - runtime 只能在 `config` 包引用本模块的装配入口：`AgentAssembler`、`AgentInstanceCache`、`AgentScopeEngine`、`FencedAgentStateStore`、`PlatformMiddlewareProvider` 与提供者接口。
-- 生产实现的提供者：模型工厂 T09a，中间件 T04 起（T06、T08、T09a、T10a、T19 继续加入），工具 T10a、T10b、T12a、T13，文件系统 T10a、T12a，技能仓库 T10a。
+- 生产实现的提供者：模型工厂 T09a，中间件 T04 起（T06、T08 已加入，T09a、T10a、T19 继续加入），工具 T10a、T10b、T12a、T13，文件系统 T10a、T12a，技能仓库 T10a。

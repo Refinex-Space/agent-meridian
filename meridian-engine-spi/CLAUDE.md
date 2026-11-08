@@ -9,7 +9,7 @@
 
 ## 包地图
 
-- `engine`：`AgentEngine`（`runTurn`、`interrupt`、`shutdown`）、`TurnContext`（只带配置 ID 与修订号，配置经 `AgentConfigPort` 取）、`ThreadRef`、`RecoveryOrigin`（失败的 epoch、第几次恢复、`REPLAY_INPUT`/`RESUME_SAVED_STATE`）。
+- `engine`：`AgentEngine`（`runTurn`、`interrupt`、`shutdown`，T08 起另有 `retryToolCall` 与 `reservedToolNames`）、`TurnContext`（只带配置 ID 与修订号，配置经 `AgentConfigPort` 取；`interruptRequested` 让内核在第一次推理前停止）、`ThreadRef`、`RecoveryOrigin`（失败的 epoch、第几次恢复、`REPLAY_INPUT`/`RESUME_SAVED_STATE`）、`ToolRetry`（恢复确认的重试）。
 - `engine.input`：`TurnInput` 四种输入（嵌套 record），`kind()` 给出 `rt.turns.kind`；`MessageContent`（文本、图片、文件引用）被用户消息、自定义工具结果、`agent.message` 共用。
 - `event`：`EngineEvent` 按域分为 `UserEvent`、`AgentOutputEvent`、`SessionEvent`、`SpanEvent`、`StreamEvent`，具体记录嵌套在域接口里；`EventType` 登记每种类型的取值、域与记录类，`type()` 由记录类反查。
 - `spec`：`ResolvedAgentSpec`（含 `SubagentSpec`、`McpServerSpec`、`SkillRef`、`KnowledgeSpec`、`CompactionSpec`）、`EnvironmentSpec`、`PermissionPolicy`/`PermissionRule`、`CustomToolDeclaration`、`PlatformToolNames`。
@@ -28,6 +28,7 @@
 
 - 工具入参、JSON Schema 可能含 null 值，复制时用 `Collections.unmodifiableMap(new LinkedHashMap<>(m))`，不用 `Map.copyOf`。
 - `PendingAction.expiresAt` 由内核留空、runtime 写入待处理动作时用 `withExpiresAt` 补上；动作 ID 由产生方生成。
+- `InboxPort.consumeSteer` 的实现要在同一事务中写 `session.message_consumed`（ADR-0031）；内存实现 `InMemoryInbox` 不写事件。
 - `SessionEvent.Error` 的名字会遮蔽 `java.lang.Error`，在 `SessionEvent` 内部引用 JDK 的 `Error` 要写全名。
 - `session.status_rescheduled` 的原因有三种：`lease_expired`、`node_shutdown`（`recovery_attempt` 不变）、`retryable_error`（前面一定有 `session.error(retryable)`）。内核遇到 `LeaseLostException` 不输出事件，以该异常结束 `runTurn` 的流（ADR-0026）。
 
