@@ -12,6 +12,7 @@ import cn.refinex.meridian.engine.agentscope.middleware.BatchCheckpoint;
 import cn.refinex.meridian.engine.agentscope.middleware.PendingInterrupt;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformStopRequest;
 import cn.refinex.meridian.engine.agentscope.middleware.RecoveryNoteSlot;
+import cn.refinex.meridian.engine.agentscope.sandbox.TurnSandboxes;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.engine.ThreadRef;
 import cn.refinex.meridian.engine.spi.engine.ToolRetry;
@@ -40,12 +41,16 @@ import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.ToolRequestConfig;
 import io.agentscope.core.util.JsonUtils;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.sandbox.Sandbox;
+import io.agentscope.harness.agent.sandbox.SandboxAcquireResult;
+import io.agentscope.harness.agent.sandbox.SandboxContext;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -96,6 +101,7 @@ public final class AgentScopeEngine implements AgentEngine {
     private final LeaseRegistry leases;
     private final BlobStorePort blobs;
     private final Clock clock;
+    private final TurnSandboxes sandboxes;
     private final Map<String, RunningTurn> running = new ConcurrentHashMap<>();
 
     /**
@@ -116,6 +122,28 @@ public final class AgentScopeEngine implements AgentEngine {
             LeaseRegistry leases,
             BlobStorePort blobs,
             Clock clock) {
+        this(instances, configs, leases, blobs, clock, null);
+    }
+
+    /**
+     * 创建支持 {@code sandbox} 档的内核：每轮经 {@link TurnSandboxes} 取得会话沙箱，作为外部沙箱放进 {@code RuntimeContext}
+     * （架构设计「会话沙箱」）。
+     *
+     * @param instances 智能体实例缓存
+     * @param configs 智能体版本与环境配置
+     * @param leases 本节点持有的租约，权限安装时在条目上做标记
+     * @param blobs 大对象存储，超过 16 KB 的工具结果写入这里
+     * @param clock 时钟，平台上下文消息中的当前时间取自它
+     * @param sandboxes 每轮的会话沙箱；为 null 时不支持 {@code sandbox} 档，这类轮次以错误结束
+     */
+    public AgentScopeEngine(
+            AgentInstanceCache instances,
+            AgentConfigPort configs,
+            LeaseRegistry leases,
+            BlobStorePort blobs,
+            Clock clock,
+            TurnSandboxes sandboxes) {
+        this.sandboxes = sandboxes;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.instances = Objects.requireNonNull(instances, "instances");
         this.configs = Objects.requireNonNull(configs, "configs");
@@ -166,10 +194,11 @@ public final class AgentScopeEngine implements AgentEngine {
         return Mono.zip(
                         configs.agentVersion(ctx.agentVersionId()),
                         configs.environment(ctx.environmentId(), ctx.environmentRevision()))
-                .flatMap(specs -> Mono.usingWhen(
-                        Blocking.call(() -> instances.acquire(specs.getT1(), specs.getT2())),
-                        handle -> callTool(ctx, retry, handle),
-                        handle -> Mono.fromRunnable(() -> instances.release(handle))))
+                .flatMap(specs -> Blocking.call(() -> sandbox(ctx.platform(), specs.getT2()))
+                        .flatMap(sandbox -> Mono.usingWhen(
+                                Blocking.call(() -> instances.acquire(specs.getT1(), specs.getT2())),
+                                handle -> callTool(ctx, retry, handle, sandbox),
+                                handle -> Mono.fromRunnable(() -> instances.release(handle)))))
                 .onErrorResume(error -> !(error instanceof LeaseLostException), error -> {
                     log.warn("重新执行工具调用失败 toolUseId={} tool={}", retry.toolUseId(), retry.toolName(), error);
                     return Mono.just(new ToolRetry.Result(false, "重新执行失败：" + error.getMessage()));
@@ -190,19 +219,27 @@ public final class AgentScopeEngine implements AgentEngine {
                 }));
     }
 
-    /** 在智能体实例的 Toolkit 中找到工具并直接调用，不经模型与权限引擎（调用已由人确认重试）。 */
-    private Mono<ToolRetry.Result> callTool(TurnContext ctx, ToolRetry retry, AgentHandle handle) {
+    /**
+     * 在智能体实例的 Toolkit 中找到工具并直接调用，不经模型与权限引擎（调用已由人确认重试）。{@code sandbox} 档把会话沙箱作为本次
+     * 调用绑定的沙箱放进上下文：直接调用工具不经过 harness 的沙箱生命周期，沙箱文件系统要从上下文取到它。
+     */
+    private Mono<ToolRetry.Result> callTool(
+            TurnContext ctx, ToolRetry retry, AgentHandle handle, Optional<Sandbox> sandbox) {
         AgentTool tool = handle.agent().getToolkit().getTool(retry.toolName());
         if (tool == null) {
             return Mono.just(new ToolRetry.Result(false, "工具已不存在：" + retry.toolName()));
         }
         PlatformContext platform = ctx.platform();
-        RuntimeContext runtime = RuntimeContext.builder()
+        RuntimeContext.Builder builder = RuntimeContext.builder()
                 .sessionId(platform.threadId())
                 .userId(AgentScopeIdentity.userId(platform.projectId(), ctx.endUserId()))
                 .put(PlatformContext.class, platform)
-                .put(ToolRetryContext.class, new ToolRetryContext(retry.idempotencyKey()))
-                .build();
+                .put(ToolRetryContext.class, new ToolRetryContext(retry.idempotencyKey()));
+        sandbox.ifPresent(s -> builder.put(
+                        SandboxContext.class,
+                        SandboxContext.builder().externalSandbox(s).build())
+                .put(SandboxAcquireResult.class, SandboxAcquireResult.userManaged(s)));
+        RuntimeContext runtime = builder.build();
         ToolUseBlock call = new ToolUseBlock(
                 retry.toolUseId(),
                 retry.toolName(),
@@ -247,8 +284,12 @@ public final class AgentScopeEngine implements AgentEngine {
         PlatformContext platform = ctx.platform();
         String threadId = platform.threadId();
         String userId = AgentScopeIdentity.userId(platform.projectId(), ctx.endUserId());
+        // sandbox 档：会话沙箱作为外部沙箱放进本轮的 RuntimeContext，harness 不停止也不持久化它（架构设计「会话沙箱」）
+        SandboxContext sandboxContext = sandbox(platform, environment)
+                .map(s -> SandboxContext.builder().externalSandbox(s).build())
+                .orElse(null);
         AgentHandle handle = instances.acquire(agent, environment);
-        RunningTurn turn = new RunningTurn(ctx, input, agent, handle, userId);
+        RunningTurn turn = new RunningTurn(ctx, input, agent, handle, userId, sandboxContext);
         if (running.putIfAbsent(threadId, turn) != null) {
             instances.release(handle);
             throw new IllegalStateException("线程已在本节点执行，上一次执行结束前不能再次认领：" + threadId);
@@ -274,6 +315,17 @@ public final class AgentScopeEngine implements AgentEngine {
             instances.release(handle);
             throw e;
         }
+    }
+
+    /** {@code sandbox} 档本轮的会话沙箱；{@code none} 档为空。会阻塞，在虚拟线程上调用。 */
+    private Optional<Sandbox> sandbox(PlatformContext platform, EnvironmentSpec environment) {
+        if (environment.tier() != EnvironmentSpec.Tier.SANDBOX) {
+            return Optional.empty();
+        }
+        if (sandboxes == null) {
+            throw new IllegalStateException("内核没有配置会话沙箱，不能执行 sandbox 档的轮次：" + environment.environmentId());
+        }
+        return Optional.of(sandboxes.sandbox(platform));
     }
 
     private Flux<EngineEvent> execute(RunningTurn turn) {
@@ -371,7 +423,13 @@ public final class AgentScopeEngine implements AgentEngine {
         private boolean admitted;
         private boolean interruptBeforeAdmission;
 
-        RunningTurn(TurnContext ctx, TurnInput input, ResolvedAgentSpec spec, AgentHandle handle, String userId) {
+        RunningTurn(
+                TurnContext ctx,
+                TurnInput input,
+                ResolvedAgentSpec spec,
+                AgentHandle handle,
+                String userId,
+                SandboxContext sandboxContext) {
             this.ctx = ctx;
             this.input = input;
             this.spec = spec;
@@ -390,6 +448,9 @@ public final class AgentScopeEngine implements AgentEngine {
             if (ctx.interruptRequested()) {
                 // 认领时已有中断请求：输入写进上下文后，在第一次推理前按用户中断结束（InterruptCheckpointMiddleware）
                 builder.put(PendingInterrupt.class, new PendingInterrupt());
+            }
+            if (sandboxContext != null) {
+                builder.put(SandboxContext.class, sandboxContext);
             }
             ToolRequestConfig customTools = TurnInputTranslator.toolRequestConfig(ctx.customTools());
             if (customTools != null) {

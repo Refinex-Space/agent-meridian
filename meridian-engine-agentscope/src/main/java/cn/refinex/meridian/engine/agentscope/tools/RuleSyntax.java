@@ -33,6 +33,16 @@ public interface RuleSyntax {
     Optional<String> suggest(Map<String, Object> input);
 
     /**
+     * 针对这次调用建议的全部规则内容。复合命令每一段一条，其余语法至多一条（{@link #suggest}）。
+     *
+     * @param input 工具入参
+     * @return 规则内容，按出现顺序去重；没有合适的内容级规则时为空
+     */
+    default List<String> suggestAll(Map<String, Object> input) {
+        return suggest(input).stream().toList();
+    }
+
+    /**
      * 没有内容级规则的工具（如 {@code web_search}）：任何非空的规则内容都不匹配。
      *
      * @return 语法
@@ -81,8 +91,12 @@ public interface RuleSyntax {
     }
 
     /**
-     * 命令前缀（{@code bash}）：规则内容 {@code prefix:*} 匹配以 {@code prefix} 开头的命令，不带 {@code :*} 时要求整条命令相同；
-     * 建议的规则取命令的第一个词。
+     * 命令前缀（{@code bash}）：规则内容 {@code prefix:*} 匹配以 {@code prefix} 开头的命令，不带 {@code :*} 时要求整条命令相同。
+     * 复合命令（{@code &&}、{@code ||}、{@code ;}、{@code |} 等）的每一段都匹配才算匹配；看不出会执行什么的命令（命令替换、子
+     * shell 等，见 {@link ShellCommands}）不匹配任何规则。建议的规则取每一段的第一个词。
+     *
+     * <p>拒绝规则需要"任一段匹配"的语义，由 {@code BashTool.checkPermissions} 另行判定：本方法被权限引擎同样用于 allow、ask、
+     * deny 三类规则，只能给出"每一段都匹配"这一种语义。
      *
      * @param parameter 入参中命令参数的名字
      * @return 语法
@@ -92,24 +106,30 @@ public interface RuleSyntax {
         return new RuleSyntax() {
             @Override
             public boolean matches(String ruleContent, Map<String, Object> input) {
-                if (!(input.get(parameter) instanceof String command)) {
+                if (!(input.get(parameter) instanceof String command)
+                        || !(ShellCommands.parse(command) instanceof ShellCommands.Segments parsed)
+                        || parsed.segments().isEmpty()) {
                     return false;
                 }
-                String normalized = command.strip();
-                if (ruleContent.endsWith(":*")) {
-                    String prefix =
-                            ruleContent.substring(0, ruleContent.length() - 2).strip();
-                    return normalized.equals(prefix) || normalized.startsWith(prefix + " ");
-                }
-                return normalized.equals(ruleContent.strip());
+                return parsed.segments().stream()
+                        .allMatch(segment -> ShellCommands.segmentMatches(ruleContent, segment));
             }
 
             @Override
             public Optional<String> suggest(Map<String, Object> input) {
-                if (!(input.get(parameter) instanceof String command) || command.isBlank()) {
-                    return Optional.empty();
+                return suggestAll(input).stream().findFirst();
+            }
+
+            @Override
+            public List<String> suggestAll(Map<String, Object> input) {
+                if (!(input.get(parameter) instanceof String command)
+                        || !(ShellCommands.parse(command) instanceof ShellCommands.Segments parsed)) {
+                    return List.of();
                 }
-                return Optional.of(command.strip().split("\\s+", 2)[0] + ":*");
+                return parsed.segments().stream()
+                        .map(segment -> segment.split(" ", 2)[0] + ":*")
+                        .distinct()
+                        .toList();
             }
         };
     }

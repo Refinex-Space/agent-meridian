@@ -17,12 +17,12 @@ import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.tool.ToolBase;
 import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.filesystem.AbstractFilesystem;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,8 +42,8 @@ import reactor.core.scheduler.Schedulers;
  *       结果引用进入账本（登记事项 D14），恢复说明据此给出结果摘要。账本写入受租约约束，被拒时以 {@code LeaseLostException}
  *       结束调用、不执行工具。指标 {@code meridian_tool_calls_total} 与审计记录由账本的实现在记录结束时写出，所以每个平台工具
  *       的调用都有且只有一条。
- *   <li>文件系统：经 {@code HarnessAgent.getWorkspaceManager().getFilesystem()} 取得（装配后由 {@link #attach} 绑定），调用时
- *       原样传入 {@code ToolCallParam.getRuntimeContext()}。
+ *   <li>文件系统：装配后由 {@link #attach} 绑定（{@code none} 档是 {@code HarnessAgent.getWorkspaceManager().getFilesystem()}，
+ *       {@code sandbox} 档见 {@code SandboxWorkspaceFilesystem}），调用时原样传入 {@code ToolCallParam.getRuntimeContext()}。
  * </ul>
  *
  * <p>线程安全：装配完成后不可变；同一实例被共享该智能体实例的所有会话并发调用，子类不能保存调用相关的状态。
@@ -57,6 +57,7 @@ public abstract class PlatformTool extends ToolBase {
     private final ToolLedgerPort ledger;
     private final BlobStorePort blobs;
     private volatile HarnessAgent agent;
+    private volatile AbstractFilesystem filesystem;
 
     /**
      * 创建平台工具。
@@ -112,18 +113,22 @@ public abstract class PlatformTool extends ToolBase {
     }
 
     /**
-     * 绑定所属的智能体实例，之后经它的工作区管理器取文件系统。由装配器在 {@code build()} 之后调用一次。
+     * 绑定所属的智能体实例与工具使用的文件系统。由装配器在 {@code build()} 之后调用一次。
      *
      * @param owner 智能体实例
+     * @param workspace 工具使用的文件系统：{@code none} 档是实例工作区管理器的文件系统；{@code sandbox} 档是平台以同一组路由
+     *     重建、主文件系统外包 {@code SandboxWorkspaceFilesystem} 的 {@code RoutedSandboxFilesystem}
      * @throws IllegalStateException 已经绑定到另一个实例时
      */
-    public final void attach(HarnessAgent owner) {
+    public final void attach(HarnessAgent owner, AbstractFilesystem workspace) {
         Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(workspace, "workspace");
         synchronized (this) {
             if (agent != null && agent != owner) {
                 throw new IllegalStateException("平台工具 " + getName() + " 已绑定到另一个智能体实例");
             }
             agent = owner;
+            filesystem = workspace;
         }
     }
 
@@ -137,9 +142,13 @@ public abstract class PlatformTool extends ToolBase {
 
     @Override
     public final List<PermissionRule> generateSuggestions(Map<String, Object> toolInput) {
-        Optional<String> content = ruleSyntax.suggest(toolInput == null ? Map.of() : toolInput);
-        return content.map(c -> List.of(new PermissionRule(getName(), c, PermissionBehavior.ALLOW, "suggested")))
-                .orElseGet(() -> super.generateSuggestions(toolInput));
+        List<String> contents = ruleSyntax.suggestAll(toolInput == null ? Map.of() : toolInput);
+        if (contents.isEmpty()) {
+            return super.generateSuggestions(toolInput);
+        }
+        return contents.stream()
+                .map(c -> new PermissionRule(getName(), c, PermissionBehavior.ALLOW, "suggested"))
+                .toList();
     }
 
     @Override
@@ -149,21 +158,15 @@ public abstract class PlatformTool extends ToolBase {
         if (platform == null || platform.sessionId() == null || platform.threadId() == null) {
             return Mono.error(new IllegalStateException("平台工具必须在带 PlatformContext 的轮次中调用：" + getName()));
         }
-        HarnessAgent owner = agent;
-        if (owner == null) {
+        AbstractFilesystem workspace = filesystem;
+        if (workspace == null) {
             return Mono.error(new IllegalStateException("平台工具还没有绑定智能体实例：" + getName()));
         }
         String toolUseId = param.getToolUseBlock().getId();
         ToolRetryContext retry = runtime.get(ToolRetryContext.class);
         String idempotencyKey = retry != null ? retry.idempotencyKey() : platform.sessionId() + ":" + toolUseId;
         Map<String, Object> input = param.getInput();
-        ToolCall call = new ToolCall(
-                toolUseId,
-                input,
-                runtime,
-                platform,
-                idempotencyKey,
-                owner.getWorkspaceManager().getFilesystem());
+        ToolCall call = new ToolCall(toolUseId, input, runtime, platform, idempotencyKey, workspace);
         InvocationStart start =
                 new InvocationStart(platform.threadId(), toolUseId, getName(), sideEffect, idempotencyKey, input);
         return ledger.recordStart(start)

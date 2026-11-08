@@ -8,6 +8,7 @@ import cn.refinex.meridian.engine.spi.port.ToolLedgerPort;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import reactor.core.publisher.Mono;
 
 /**
@@ -20,6 +21,7 @@ import reactor.core.publisher.Mono;
 public final class InMemoryToolLedger implements ToolLedgerPort {
 
     private final Map<String, Invocation> invocations = new ConcurrentHashMap<>();
+    private final List<SandboxCommand> commands = new CopyOnWriteArrayList<>();
 
     @Override
     public Mono<String> recordStart(InvocationStart start) {
@@ -42,6 +44,20 @@ public final class InMemoryToolLedger implements ToolLedgerPort {
             }
             invocations.put(invocationId, new Invocation(invocationId, previous.start(), status, resultRef));
         });
+    }
+
+    @Override
+    public Mono<Void> recordSandboxCommand(SandboxCommand command) {
+        return Mono.fromRunnable(() -> commands.add(command));
+    }
+
+    /**
+     * 记录过的沙箱命令，按记录顺序。
+     *
+     * @return 沙箱命令
+     */
+    public List<SandboxCommand> sandboxCommands() {
+        return List.copyOf(commands);
     }
 
     /**

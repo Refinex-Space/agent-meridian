@@ -2,6 +2,7 @@ package cn.refinex.meridian.engine.spi.port;
 
 import cn.refinex.meridian.engine.spi.event.BlobRef;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -33,6 +34,41 @@ public interface ToolLedgerPort {
      * @return 写入完成后结束
      */
     Mono<Void> recordFinish(String invocationId, Status status, BlobRef resultRef);
+
+    /**
+     * 记录一条在会话沙箱中执行的命令，写入审计（架构设计「智能体安全」：沙箱命令都写审计日志）。命令已经执行，所以这条写入不受租约
+     * 约束；会话、轮次从 {@code PlatformContext} 取。
+     *
+     * @param command 命令与执行结果
+     * @return 写入完成后结束
+     */
+    Mono<Void> recordSandboxCommand(SandboxCommand command);
+
+    /**
+     * 一条沙箱命令的执行记录。
+     *
+     * @param threadId 执行命令的线程；必填
+     * @param toolUseId 发起命令的工具调用 ID；必填
+     * @param command 智能体给出的命令原文；必填
+     * @param exitCode 退出码；超时为 124
+     * @param timedOut 是否超时被终止
+     * @param duration 执行耗时；必填
+     */
+    record SandboxCommand(
+            String threadId, String toolUseId, String command, int exitCode, boolean timedOut, Duration duration) {
+
+        /**
+         * 创建执行记录。
+         *
+         * @throws NullPointerException 缺少必填字段时
+         */
+        public SandboxCommand {
+            Objects.requireNonNull(threadId, "threadId");
+            Objects.requireNonNull(toolUseId, "toolUseId");
+            Objects.requireNonNull(command, "command");
+            Objects.requireNonNull(duration, "duration");
+        }
+    }
 
     /**
      * 一次工具执行的开始信息。

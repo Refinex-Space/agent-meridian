@@ -1,5 +1,6 @@
 package cn.refinex.meridian.engine.agentscope.assembly;
 
+import cn.refinex.meridian.engine.agentscope.fs.SandboxWorkspaceFilesystem;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import io.agentscope.core.message.Msg;
@@ -11,10 +12,14 @@ import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.filesystem.AbstractFilesystem;
 import io.agentscope.harness.agent.filesystem.CompositeFilesystem;
+import io.agentscope.harness.agent.filesystem.RoutedSandboxFilesystem;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -120,15 +125,17 @@ public final class AgentAssembler {
         HarnessAgent agent;
         try {
             HarnessAgent.Builder builder = HarnessAgent.builder();
-            configure(builder, profile, model, tenantPrompt, tools.tools());
+            Map<String, AbstractFilesystem> sandboxRoutes =
+                    configure(builder, profile, model, tenantPrompt, tools.tools());
             agent = builder.build();
             // 自检：非 ToolBase 工具不进权限引擎，只允许 harness 的白名单工具（登记事项 D02）
             ToolPolicy.verify(agent.getToolkit());
-            // 平台工具经本实例的工作区管理器取文件系统（架构设计「平台工具」）
+            // 平台工具经本实例的工作区文件系统操作文件与命令（架构设计「平台工具」）
+            AbstractFilesystem workspace = toolFilesystem(agent, sandboxRoutes);
             tools.tools().stream()
                     .filter(PlatformTool.class::isInstance)
                     .map(PlatformTool.class::cast)
-                    .forEach(tool -> tool.attach(agent));
+                    .forEach(tool -> tool.attach(agent, workspace));
         } catch (RuntimeException e) {
             closeQuietly(tools.resources(), e);
             throw e;
@@ -141,8 +148,29 @@ public final class AgentAssembler {
         return new AssembledAgent(profile, agent, tools.resources());
     }
 
-    /** 按「引擎装配」表配置 Builder，每一段对应表中的一行。 */
-    private void configure(
+    /**
+     * 平台工具使用的文件系统。{@code none} 档就是实例工作区管理器的文件系统；{@code sandbox} 档以同一组路由重建
+     * {@code RoutedSandboxFilesystem}，主文件系统外包 {@link SandboxWorkspaceFilesystem}：2.0.4 的沙箱文件系统把路径原样交给
+     * shell，平台工具的 {@code /x} 路径要翻译到 {@code /workspace} 下，且每次调用必须带本次绑定的会话沙箱（ADR-0037）。
+     */
+    private static AbstractFilesystem toolFilesystem(
+            HarnessAgent agent, Map<String, AbstractFilesystem> sandboxRoutes) {
+        AbstractFilesystem filesystem = agent.getWorkspaceManager().getFilesystem();
+        if (sandboxRoutes == null) {
+            return filesystem;
+        }
+        if (!(filesystem instanceof RoutedSandboxFilesystem routed)) {
+            throw new IllegalStateException("sandbox 档的工作区文件系统应为 RoutedSandboxFilesystem：" + filesystem.getClass());
+        }
+        return new RoutedSandboxFilesystem(new SandboxWorkspaceFilesystem(routed.primary()), sandboxRoutes);
+    }
+
+    /**
+     * 按「引擎装配」表配置 Builder，每一段对应表中的一行。
+     *
+     * @return {@code sandbox} 档挂载的路由（受保护路径与 {@code large_tool_results/}）；{@code none} 档为 null
+     */
+    private Map<String, AbstractFilesystem> configure(
             HarnessAgent.Builder builder,
             AgentProfile profile,
             Model model,
@@ -174,7 +202,7 @@ public final class AgentAssembler {
         builder.maxIters(profile.maxIters());
 
         // 文件系统：none 档 abstractFilesystem(...)；sandbox 档 filesystem(spec) 加 filesystemRoute(...)，两者互斥
-        configureFilesystem(builder, profile);
+        Map<String, AbstractFilesystem> sandboxRoutes = configureFilesystem(builder, profile);
         // 本机工作区根由平台控制，不取 ${user.dir}/.agentscope/workspace：harness 会从中读第 3 层技能与本机回退文件（D05）
         builder.workspace(filesystemProvider.localWorkspaceRoot());
 
@@ -228,22 +256,28 @@ public final class AgentAssembler {
         Toolkit toolkit = new Toolkit();
         tools.forEach(toolkit::registerAgentTool);
         builder.toolkit(toolkit);
+        return sandboxRoutes;
     }
 
-    private void configureFilesystem(HarnessAgent.Builder builder, AgentProfile profile) {
-        switch (profile.environment().tier()) {
-            case NONE ->
+    private Map<String, AbstractFilesystem> configureFilesystem(HarnessAgent.Builder builder, AgentProfile profile) {
+        return switch (profile.environment().tier()) {
+            case NONE -> {
                 builder.abstractFilesystem(new CompositeFilesystem(
                         filesystemProvider.platformStore(profile), filesystemProvider.protectedRoutes(profile)));
+                yield null;
+            }
             case SANDBOX -> {
-                // 会话沙箱由平台管理，默认的工作区投影关闭（架构设计「文件系统装配」）
+                // 会话沙箱由平台管理（每轮作为外部沙箱放进 RuntimeContext），默认的工作区投影关闭（架构设计「文件系统装配」）
                 builder.filesystem(filesystemProvider.sandboxSpec(profile).workspaceProjectionEnabled(false));
-                filesystemProvider.protectedRoutes(profile).forEach(builder::filesystemRoute);
-                builder.filesystemRoute(
+                Map<String, AbstractFilesystem> routes =
+                        new LinkedHashMap<>(filesystemProvider.protectedRoutes(profile));
+                routes.put(
                         WorkspaceFilesystemProvider.LARGE_TOOL_RESULTS_PREFIX,
                         filesystemProvider.largeToolResultStore(profile));
+                routes.forEach(builder::filesystemRoute);
+                yield routes;
             }
-        }
+        };
     }
 
     /** 把模型引用中的生成参数翻译为 GenerateOptions；都没有设置时返回 null，沿用模型默认值。 */

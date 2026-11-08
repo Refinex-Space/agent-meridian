@@ -75,7 +75,8 @@ public final class PlatformToolProvider implements ToolProvider {
      * 返回多登记一个工具的提供者，工厂可以读取装配对象。
      *
      * @param name 工具名，取自 {@code PlatformToolNames}
-     * @param factory 工厂：平台服务与装配对象 → 工具
+     * @param factory 工厂：平台服务与装配对象 → 工具；返回 null 表示该工具在这个装配对象上不可用（例如 {@code bash} 在
+     *     {@code none} 档）
      * @return 新的提供者
      */
     public PlatformToolProvider with(
@@ -112,6 +113,14 @@ public final class PlatformToolProvider implements ToolProvider {
             BiFunction<PlatformTool.ToolServices, AgentProfile, PlatformTool> factory = factories.get(name);
             if (factory != null) {
                 PlatformTool tool = factory.apply(services, profile);
+                if (tool == null) {
+                    // 工具在本装配对象上不可用，例如 bash 只在 sandbox 档注册
+                    log.debug(
+                            "平台工具在本环境不可用，未注册 agentVersionId={} tool={}",
+                            profile.key().agentVersionId(),
+                            name);
+                    continue;
+                }
                 if (!tool.getName().equals(name)) {
                     throw new IllegalStateException("工具工厂登记为 " + name + "，创建的工具名是 " + tool.getName());
                 }

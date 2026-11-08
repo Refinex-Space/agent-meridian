@@ -16,9 +16,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
- * 平台的工作区与技能仓库提供者（T10a，{@code none} 档）：
+ * 平台的工作区与技能仓库提供者（T10a 起 {@code none} 档，T12a 起 {@code sandbox} 档）：
  *
  * <ul>
  *   <li>默认后端：{@code RemoteFilesystem(MeridianBaseStore)}，命名空间 {@link WorkspaceNamespaces#FACTORY}，所有会话文件进
@@ -27,8 +28,8 @@ import java.util.Objects;
  *   <li>技能仓库：{@link MeridianSkillRepository}，读取同一份受保护内容中的 {@code skills/}。
  * </ul>
  *
- * <p>受保护内容在装配时经 {@link AgentConfigPort#skill} 取技能，装配在虚拟线程上执行，可以阻塞。{@code sandbox} 档的沙箱规格由
- * T12a 提供，本类不支持。
+ * <p>受保护内容在装配时经 {@link AgentConfigPort#skill} 取技能，装配在虚拟线程上执行，可以阻塞。{@code sandbox} 档（T12a）
+ * 的主文件系统是会话沙箱，受保护路径与 {@code large_tool_results/} 仍由本类提供，经 {@code filesystemRoute} 挂载。
  *
  * <p>线程安全：无状态。
  */
@@ -40,6 +41,18 @@ public final class PlatformWorkspace implements WorkspaceFilesystemProvider {
     private final WorkspaceStorePort store;
     private final AgentConfigPort configs;
     private final Path localWorkspaceRoot;
+    private final Supplier<SandboxFilesystemSpec> sandboxSpecs;
+
+    /**
+     * 创建只支持 {@code none} 档的提供者。
+     *
+     * @param store 工作区存储端口
+     * @param configs 配置端口，读取技能内容
+     * @param localWorkspaceRoot 平台控制的本机工作区根目录（登记事项 D05），harness 的本机回退读取都落在这里；平台不在其中写入
+     */
+    public PlatformWorkspace(WorkspaceStorePort store, AgentConfigPort configs, Path localWorkspaceRoot) {
+        this(store, configs, localWorkspaceRoot, null);
+    }
 
     /**
      * 创建提供者。
@@ -47,11 +60,18 @@ public final class PlatformWorkspace implements WorkspaceFilesystemProvider {
      * @param store 工作区存储端口
      * @param configs 配置端口，读取技能内容
      * @param localWorkspaceRoot 平台控制的本机工作区根目录（登记事项 D05），harness 的本机回退读取都落在这里；平台不在其中写入
+     * @param sandboxSpecs {@code sandbox} 档的沙箱文件系统规范，每次调用给一个新实例（T12a：{@code TurnSandboxes.filesystemSpec}）；
+     *     为 null 时不支持 {@code sandbox} 档
      */
-    public PlatformWorkspace(WorkspaceStorePort store, AgentConfigPort configs, Path localWorkspaceRoot) {
+    public PlatformWorkspace(
+            WorkspaceStorePort store,
+            AgentConfigPort configs,
+            Path localWorkspaceRoot,
+            Supplier<SandboxFilesystemSpec> sandboxSpecs) {
         this.store = Objects.requireNonNull(store, "store");
         this.configs = Objects.requireNonNull(configs, "configs");
         this.localWorkspaceRoot = Objects.requireNonNull(localWorkspaceRoot, "localWorkspaceRoot");
+        this.sandboxSpecs = sandboxSpecs;
     }
 
     @Override
@@ -71,7 +91,11 @@ public final class PlatformWorkspace implements WorkspaceFilesystemProvider {
 
     @Override
     public SandboxFilesystemSpec sandboxSpec(AgentProfile profile) {
-        throw new UnsupportedOperationException("sandbox 档的文件系统由 T12a 提供");
+        if (sandboxSpecs == null) {
+            throw new UnsupportedOperationException(
+                    "没有配置会话沙箱，不能装配 sandbox 档的智能体：" + profile.key().agentId());
+        }
+        return sandboxSpecs.get();
     }
 
     @Override

@@ -13,6 +13,8 @@ import cn.refinex.meridian.engine.agentscope.assembly.TenantPromptProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.fs.PlatformWorkspace;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
+import cn.refinex.meridian.engine.agentscope.sandbox.SandboxDriverSettings;
+import cn.refinex.meridian.engine.agentscope.sandbox.TurnSandboxes;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.InMemoryWorkspaceFilesystems;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.RecordingMiddlewareProvider;
@@ -26,11 +28,15 @@ import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryAgentStateRepo
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryBlobStore;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryInbox;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryLeaseRegistry;
+import cn.refinex.meridian.engine.agentscope.testkit.port.InMemorySandboxStates;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryToolLedger;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryWorkspaceStore;
+import cn.refinex.meridian.engine.agentscope.testkit.sandbox.FakeSandbox;
+import cn.refinex.meridian.engine.agentscope.tools.BashTool;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformToolProvider;
 import cn.refinex.meridian.engine.agentscope.tools.mcp.McpConnector;
+import cn.refinex.meridian.engine.spi.driver.SandboxHandle;
 import cn.refinex.meridian.engine.spi.engine.TurnContext;
 import cn.refinex.meridian.engine.spi.engine.input.InboundMessage;
 import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
@@ -40,6 +46,7 @@ import cn.refinex.meridian.engine.spi.event.SessionEvent;
 import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.PermissionPolicy;
+import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import io.agentscope.core.middleware.MiddlewareBase;
@@ -81,7 +88,9 @@ final class EngineHarness {
     final InMemoryToolLedger ledger = new InMemoryToolLedger();
     final InMemoryWorkspaceStore workspace = new InMemoryWorkspaceStore();
     final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+    final InMemorySandboxStates sandboxStates = new InMemorySandboxStates();
     final ResolvedAgentSpec spec;
+    final EnvironmentSpec environment;
     final AgentInstanceCache instances;
     final AgentScopeEngine engine;
 
@@ -91,7 +100,7 @@ final class EngineHarness {
             List<AgentTool> tools,
             List<MiddlewareBase> extraMiddlewares,
             Predicate<MiddlewareBase> keep) {
-        this(model, spec, tools, extraMiddlewares, keep, false, List.of(), Map.of(), null);
+        this(model, spec, tools, extraMiddlewares, keep, false, List.of(), Map.of(), null, null);
     }
 
     private EngineHarness(
@@ -103,22 +112,29 @@ final class EngineHarness {
             boolean platform,
             List<SkillDefinition> skills,
             Map<String, Function<PlatformTool.ToolServices, PlatformTool>> extraPlatformTools,
-            McpConnector mcp) {
+            McpConnector mcp,
+            FakeSandbox sandbox) {
         this.model = model;
         this.spec = spec;
+        this.environment = sandbox == null ? TestSpecs.noneEnvironment() : TestSpecs.sandboxEnvironment();
         List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(leases, inbox)
                 .middlewares(AgentProfile.main(spec, TestSpecs.noneEnvironment())));
         middlewares.removeIf(keep.negate());
         middlewares.addAll(extraMiddlewares);
-        configs.register(spec).register(TestSpecs.noneEnvironment());
+        configs.register(spec).register(environment);
         skills.forEach(configs::register);
         AgentAssembler assembler;
         if (platform) {
             // 生产的工具、工作区与技能提供者，端口用内存实现
-            PlatformWorkspace platformWorkspace =
-                    new PlatformWorkspace(workspace, configs, InMemoryWorkspaceFilesystems.LOCAL_WORKSPACE_ROOT);
-            PlatformToolProvider provider =
-                    PlatformToolProvider.withFileTools(new PlatformTool.ToolServices(ledger, blobs));
+            PlatformWorkspace platformWorkspace = new PlatformWorkspace(
+                    workspace,
+                    configs,
+                    InMemoryWorkspaceFilesystems.LOCAL_WORKSPACE_ROOT,
+                    () -> TurnSandboxes.filesystemSpec(
+                            SandboxDriverSettings.defaults(new SandboxDriverSettings.PortForward())));
+            PlatformToolProvider provider = PlatformToolProvider.withFileTools(
+                            new PlatformTool.ToolServices(ledger, blobs))
+                    .with(PlatformToolNames.BASH, BashTool.factory(BashTool.Settings.DEFAULTS));
             for (Map.Entry<String, Function<PlatformTool.ToolServices, PlatformTool>> extra :
                     extraPlatformTools.entrySet()) {
                 provider = provider.with(extra.getKey(), extra.getValue());
@@ -151,7 +167,14 @@ final class EngineHarness {
                     .assembler();
         }
         this.instances = new AgentInstanceCache(assembler);
-        this.engine = new AgentScopeEngine(instances, configs, leases, blobs, clock);
+        TurnSandboxes sandboxes = null;
+        if (sandbox != null) {
+            sandboxStates
+                    .save(SESSION, new SandboxHandle("sbx-fake", "10.0.0.7", "fake-state"))
+                    .block();
+            sandboxes = new TurnSandboxes(sandboxStates, state -> sandbox);
+        }
+        this.engine = new AgentScopeEngine(instances, configs, leases, blobs, clock, sandboxes);
     }
 
     static EngineHarness create(ScriptedModel model, AgentTool... tools) {
@@ -211,6 +234,7 @@ final class EngineHarness {
                 true,
                 skills,
                 platformTools,
+                null,
                 null);
     }
 
@@ -233,7 +257,33 @@ final class EngineHarness {
                 true,
                 List.of(),
                 Map.of(),
-                mcp);
+                mcp,
+                null);
+    }
+
+    /**
+     * {@code sandbox} 档：生产的平台工具（含只在 sandbox 档注册的 {@code bash}）、工作区与技能仓库，会话沙箱是脚本化的
+     * {@link FakeSandbox}，经内存的 {@code SandboxStatePort} 与 {@link TurnSandboxes} 每轮作为外部沙箱注入。
+     *
+     * @param model 模型
+     * @param spec 智能体配置
+     * @param sandbox 会话沙箱替身
+     * @param extraTools 额外注册的测试工具
+     * @return 组装
+     */
+    static EngineHarness withSandbox(
+            Model model, UnaryOperator<TestSpecs.AgentSpecBuilder> spec, FakeSandbox sandbox, AgentTool... extraTools) {
+        return new EngineHarness(
+                model,
+                spec.apply(TestSpecs.agent()).build(),
+                List.of(extraTools),
+                List.of(),
+                middleware -> true,
+                true,
+                List.of(),
+                Map.of(),
+                null,
+                sandbox);
     }
 
     /** 对照实验用：只保留 {@code keep} 为真的平台中间件。 */
@@ -253,7 +303,7 @@ final class EngineHarness {
     AgentHandle acquire() {
         PlatformContext platform =
                 PlatformContext.builder().tenantId(TENANT).projectId(PROJECT).build();
-        return PlatformContexts.call(platform, () -> instances.acquire(spec, TestSpecs.noneEnvironment()));
+        return PlatformContexts.call(platform, () -> instances.acquire(spec, environment));
     }
 
     TurnContext claim(String threadId, String turnId, long epoch, PermissionPolicy permissions) {
@@ -279,7 +329,6 @@ final class EngineHarness {
                 .interaction(Interaction.ATTENDED)
                 .endUserId(endUserId)
                 .build();
-        EnvironmentSpec environment = TestSpecs.noneEnvironment();
         return new TurnContext(
                 platform,
                 endUserId,

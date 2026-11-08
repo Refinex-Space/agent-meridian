@@ -47,6 +47,12 @@ public class DatabaseToolLedger implements ToolLedgerPort {
     /** 工具执行的审计动作名（主题 {@code audit}）。 */
     public static final String TOOL_EXECUTED = "tool.executed";
 
+    /** 沙箱命令的审计动作名（主题 {@code audit}，架构设计「智能体安全」）。 */
+    public static final String SANDBOX_COMMAND = "sandbox.command";
+
+    /** 审计记录中命令原文的上限，单位字符；超出时截断并标记，完整入参仍在 {@code rt.tool_invocations.input}。 */
+    static final int AUDIT_COMMAND_MAX_CHARS = 4096;
+
     /** 审计的 outbox 主题（架构设计「跨服务数据流」）。 */
     static final String AUDIT_TOPIC = "audit";
 
@@ -131,6 +137,17 @@ public class DatabaseToolLedger implements ToolLedgerPort {
     }
 
     /**
+     * 写一条沙箱命令的审计（主题 {@code audit}）。命令已经执行，所以不校验租约，在独立的事务中写入。
+     */
+    @Override
+    public Mono<Void> recordSandboxCommand(SandboxCommand command) {
+        Objects.requireNonNull(command, "command");
+        return PlatformContexts.currentReactive()
+                .flatMap(context -> Blocking.run(() -> transactions.executeWithoutResult(
+                        status -> outbox.append(AUDIT_TOPIC, sandboxCommand(context, command)))));
+    }
+
+    /**
      * 读取一轮的全部账本记录，恢复认领时生成恢复说明用。要求调用线程上已绑定该轮所在项目的 {@code PlatformContext}。
      *
      * @param turnId 轮次 ID
@@ -185,6 +202,56 @@ public class DatabaseToolLedger implements ToolLedgerPort {
             String sideEffect,
             String status,
             String idempotencyKey) {}
+
+    private SandboxCommandExecuted sandboxCommand(PlatformContext context, SandboxCommand command) {
+        boolean truncated = command.command().length() > AUDIT_COMMAND_MAX_CHARS;
+        return new SandboxCommandExecuted(
+                SANDBOX_COMMAND,
+                clock.instant(),
+                context.tenantId(),
+                context.projectId(),
+                context.sessionId(),
+                command.threadId(),
+                context.turnId(),
+                command.toolUseId(),
+                truncated ? command.command().substring(0, AUDIT_COMMAND_MAX_CHARS) : command.command(),
+                truncated,
+                command.exitCode(),
+                command.timedOut(),
+                command.duration().toMillis());
+    }
+
+    /**
+     * 一条沙箱命令的审计记录（主题 {@code audit}）。
+     *
+     * @param action 固定为 {@value #SANDBOX_COMMAND}
+     * @param occurredAt 记录时间
+     * @param tenantId 租户 ID
+     * @param projectId 项目 ID
+     * @param sessionId 会话 ID
+     * @param threadId 线程 ID
+     * @param turnId 轮次 ID
+     * @param toolUseId 工具调用 ID
+     * @param command 命令原文，至多 {@value #AUDIT_COMMAND_MAX_CHARS} 字符
+     * @param commandTruncated 命令是否被截断
+     * @param exitCode 退出码
+     * @param timedOut 是否超时
+     * @param durationMs 耗时，单位毫秒
+     */
+    record SandboxCommandExecuted(
+            String action,
+            Instant occurredAt,
+            String tenantId,
+            String projectId,
+            String sessionId,
+            String threadId,
+            String turnId,
+            String toolUseId,
+            String command,
+            boolean commandTruncated,
+            int exitCode,
+            boolean timedOut,
+            long durationMs) {}
 
     private void requireLease(Execution execution) {
         if (!repository.lockLease(execution.turnId(), nodeId.value(), execution.epoch())) {

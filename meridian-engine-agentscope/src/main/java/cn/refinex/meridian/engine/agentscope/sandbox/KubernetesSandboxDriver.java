@@ -9,12 +9,15 @@ import cn.refinex.meridian.engine.spi.driver.SandboxDriver;
 import cn.refinex.meridian.engine.spi.driver.SandboxHandle;
 import cn.refinex.meridian.engine.spi.error.SandboxUnavailableException;
 import cn.refinex.meridian.engine.spi.port.SnapshotStorePort;
+import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
+import io.agentscope.core.util.JsonUtils;
 import io.agentscope.extensions.sandbox.kubernetes.KubernetesSandbox;
 import io.agentscope.extensions.sandbox.kubernetes.KubernetesSandboxClient;
 import io.agentscope.extensions.sandbox.kubernetes.KubernetesSandboxClientOptions;
 import io.agentscope.extensions.sandbox.kubernetes.KubernetesSandboxState;
 import io.agentscope.extensions.sandbox.kubernetes.client.crd.SandboxClaim;
 import io.agentscope.extensions.sandbox.kubernetes.client.crd.SandboxResource;
+import io.agentscope.harness.agent.sandbox.ExecResult;
 import io.agentscope.harness.agent.sandbox.Sandbox;
 import io.agentscope.harness.agent.sandbox.WorkspaceSpec;
 import io.agentscope.harness.agent.sandbox.snapshot.NoopSnapshotSpec;
@@ -23,7 +26,9 @@ import io.agentscope.harness.agent.sandbox.snapshot.SandboxSnapshotSpec;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.base.PatchContext;
 import io.fabric8.kubernetes.client.dsl.base.PatchType;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -52,10 +57,43 @@ import reactor.core.publisher.Mono;
  * 时释放。所有操作都是阻塞的远程调用，经 {@link Blocking} 在虚拟线程上执行；基础设施失败统一转为
  * {@link SandboxUnavailableException}（可重试）。线程安全。
  */
-public final class KubernetesSandboxDriver implements SandboxDriver, AutoCloseable {
+public final class KubernetesSandboxDriver implements SandboxDriver, SandboxAttachment, AutoCloseable {
 
     /** SandboxClaim 上记录会话 ID 的标签，便于排查。 */
     public static final String SESSION_LABEL = "meridian.refinex.cn/session-id";
+
+    /** 沙箱执行服务的端口（ADR-0036）。 */
+    public static final int SERVER_PORT = 8888;
+
+    /** 驱动自己执行的辅助命令（摘要、清理、列产物）的超时，单位秒。 */
+    static final int HELPER_COMMAND_TIMEOUT_SECONDS = 120;
+
+    /**
+     * 列出产物的脚本：遍历 {@code outputs/}（不跟随符号链接），只列普通文件，输出 JSON 数组 {@code [{path,size,sha256}]}；
+     * 文件名不是合法 UTF-8 的跳过。用沙箱镜像中的 Python，避免 shell 输出对特殊文件名的转义。
+     */
+    static final String LIST_OUTPUTS_SCRIPT = """
+            import hashlib, json, os, sys
+            root = "%s"
+            out = []
+            if os.path.isdir(root) and not os.path.islink(root):
+                for d, dirs, files in os.walk(root):
+                    for f in files:
+                        p = os.path.join(d, f)
+                        if os.path.islink(p) or not os.path.isfile(p):
+                            continue
+                        rel = os.path.relpath(p, root)
+                        try:
+                            rel.encode("utf-8")
+                        except UnicodeEncodeError:
+                            continue
+                        h = hashlib.sha256()
+                        with open(p, "rb") as fh:
+                            for chunk in iter(lambda: fh.read(1048576), b""):
+                                h.update(chunk)
+                        out.append({"path": rel, "size": os.path.getsize(p), "sha256": h.hexdigest()})
+            json.dump(out, sys.stdout)
+            """.formatted(OUTPUTS_DIR);
 
     private static final Logger log = LoggerFactory.getLogger(KubernetesSandboxDriver.class);
     private static final Pattern LABEL_VALUE = Pattern.compile("[A-Za-z0-9]([A-Za-z0-9_.-]{0,61}[A-Za-z0-9])?");
@@ -142,6 +180,57 @@ public final class KubernetesSandboxDriver implements SandboxDriver, AutoCloseab
                 "删除沙箱失败");
     }
 
+    @Override
+    public Mono<Boolean> syncSkills(SandboxHandle handle, List<SkillDefinition> skills) {
+        Objects.requireNonNull(handle, "handle");
+        Objects.requireNonNull(skills, "skills");
+        return guard(
+                Blocking.call(() -> {
+                    SingleStartSandbox sandbox = attach(handle.state());
+                    Map<String, byte[]> files = SkillProjection.files(skills);
+                    String expected = SkillProjection.digest(files);
+                    String actual = run(sandbox, SkillProjection.DIGEST_COMMAND).strip();
+                    if (expected.equals(actual)) {
+                        return false;
+                    }
+                    run(sandbox, SkillProjection.CLEAR_COMMAND);
+                    if (!files.isEmpty()) {
+                        sandbox.hydrateWorkspace(new ByteArrayInputStream(SkillProjection.archive(files)));
+                    }
+                    log.info("技能资源已写入沙箱 sandbox={} files={}", handle.sandboxId(), files.size());
+                    return true;
+                }),
+                "同步技能资源失败");
+    }
+
+    @Override
+    public Mono<List<OutputFile>> listOutputs(SandboxHandle handle) {
+        Objects.requireNonNull(handle, "handle");
+        return guard(
+                Blocking.call(() -> {
+                    String json = run(attach(handle.state()), "python3 -c " + shellQuote(LIST_OUTPUTS_SCRIPT));
+                    List<?> entries = JsonUtils.getJsonCodec().fromJson(json.strip(), List.class);
+                    return entries.stream()
+                            .map(entry -> (Map<?, ?>) entry)
+                            .map(entry -> new OutputFile(
+                                    String.valueOf(entry.get("path")),
+                                    ((Number) entry.get("size")).longValue(),
+                                    String.valueOf(entry.get("sha256"))))
+                            .toList();
+                }),
+                "列出产物失败");
+    }
+
+    @Override
+    public Mono<byte[]> readOutput(SandboxHandle handle, String path) {
+        Objects.requireNonNull(handle, "handle");
+        String relative = new OutputFile(path, 0, "").path();
+        return guard(
+                Blocking.call(() -> attach(handle.state())
+                        .downloadFile(settings.workspaceRoot() + "/" + OUTPUTS_DIR + "/" + relative)),
+                "读取产物失败");
+    }
+
     /**
      * 取得可以交给 harness 的沙箱（{@code SandboxContext.externalSandbox}），本节点连接过的直接复用，否则按状态重新连接并启动。
      * 阻塞调用，在虚拟线程上执行。
@@ -150,6 +239,7 @@ public final class KubernetesSandboxDriver implements SandboxDriver, AutoCloseab
      * @return 已启动的沙箱
      * @throws NotFoundException claim 或沙箱已不存在时
      */
+    @Override
     public SingleStartSandbox attach(String state) {
         KubernetesSandboxState parsed = state(state);
         String claim = parsed.getClaimName();
@@ -262,7 +352,7 @@ public final class KubernetesSandboxDriver implements SandboxDriver, AutoCloseab
         options.setWarmPoolName(warmPoolName);
         options.setWorkspaceRoot(settings.workspaceRoot());
         options.setFileApiBaseDir(settings.workspaceRoot());
-        options.setServerPort(8888);
+        options.setServerPort(SERVER_PORT);
         switch (settings.connection()) {
             case SandboxDriverSettings.PortForward ignored -> {
                 // KubernetesSandboxClient 在既无 apiUrl 也无 gatewayName 时用端口转发，router 在沙箱命名空间
@@ -281,6 +371,16 @@ public final class KubernetesSandboxDriver implements SandboxDriver, AutoCloseab
         options.setPerAttemptTimeoutSeconds(httpSeconds);
         options.setRequestTimeoutSeconds(httpSeconds);
         return options;
+    }
+
+    /** 在工作区根执行驱动自己的辅助命令，返回 stdout；非零退出码以异常结束。 */
+    private static String run(SingleStartSandbox sandbox, String command) throws Exception {
+        ExecResult result = sandbox.exec(null, command, HELPER_COMMAND_TIMEOUT_SECONDS);
+        return result.stdout() == null ? "" : result.stdout();
+    }
+
+    private static String shellQuote(String text) {
+        return "'" + text.replace("'", "'\"'\"'") + "'";
     }
 
     private static void closeConnection(SingleStartSandbox sandbox) {
