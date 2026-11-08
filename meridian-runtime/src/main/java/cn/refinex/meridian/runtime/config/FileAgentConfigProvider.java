@@ -3,6 +3,7 @@ package cn.refinex.meridian.runtime.config;
 import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
+import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
 import cn.refinex.meridian.runtime.session.domain.SessionErrorCode;
 import cn.refinex.meridian.runtime.stream.infra.EngineJson;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -34,7 +36,11 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  *   <li>{@code kind: environment}：一个 {@link EnvironmentSpec}，按 {@code environment_id} 与 {@code revision} 查找；取当前修订时
  *       取 {@code revision} 最大的。
  * </ul>
- * 每次调用都重新读取目录，改了配置不必重启；只解析 YAML 的基本类型（{@link SafeConstructor}）。目录不存在时没有任何配置，
+ * 技能（T10a）在同级的 {@code skills} 目录（默认 {@code dev-config/skills}），每个版本一个目录
+ * {@code <skill_id>/v<version>/}：其中的 {@code SKILL.md} 是正文（frontmatter 的 {@code name}、{@code description} 是技能名与
+ * 清单中的说明），其余文件是附带资源，路径相对于版本目录。
+ *
+ * <p>每次调用都重新读取目录，改了配置不必重启；只解析 YAML 的基本类型（{@link SafeConstructor}）。目录不存在时没有任何配置，
  * 查找以 {@link NotFoundException} 失败。
  *
  * <p>方法会阻塞（文件读取），响应式调用方经 {@code Blocking} 调用。线程安全：无状态。
@@ -47,15 +53,30 @@ public final class FileAgentConfigProvider implements AgentConfigProvider {
     /** 环境配置的 {@code kind}。 */
     static final String KIND_ENVIRONMENT = "environment";
 
+    /** 技能文件的大小上限，单位字节：开发配置中的技能是文本，过大的文件多半是放错了。 */
+    static final long MAX_SKILL_FILE_BYTES = 1024 * 1024;
+
     private final Path directory;
+    private final Path skillsDirectory;
+
+    /**
+     * 创建配置来源，技能目录为配置目录的同级目录 {@code skills}。
+     *
+     * @param directory 配置目录
+     */
+    public FileAgentConfigProvider(Path directory) {
+        this(directory, directory.toAbsolutePath().resolveSibling("skills"));
+    }
 
     /**
      * 创建配置来源。
      *
      * @param directory 配置目录
+     * @param skillsDirectory 技能目录
      */
-    public FileAgentConfigProvider(Path directory) {
+    public FileAgentConfigProvider(Path directory, Path skillsDirectory) {
         this.directory = Objects.requireNonNull(directory, "directory");
+        this.skillsDirectory = Objects.requireNonNull(skillsDirectory, "skillsDirectory");
     }
 
     @Override
@@ -99,6 +120,51 @@ public final class FileAgentConfigProvider implements AgentConfigProvider {
                 .orElseThrow(
                         () -> new NotFoundException(SessionErrorCode.ENVIRONMENT_NOT_FOUND, "环境不存在：" + environmentId));
         return EngineJson.convert(document, EnvironmentSpec.class);
+    }
+
+    @Override
+    public SkillDefinition skill(String skillId, int version) {
+        Path root = skillsDirectory.resolve(skillId).resolve("v" + version);
+        Path skillFile = root.resolve(SkillDefinition.SKILL_FILE);
+        if (!Files.isRegularFile(skillFile)) {
+            throw new NotFoundException(SessionErrorCode.SKILL_NOT_FOUND, "技能不存在：" + skillId + " 版本 " + version);
+        }
+        Map<String, String> files = new TreeMap<>();
+        try (Stream<Path> paths = Files.walk(root)) {
+            for (Path file : paths.filter(Files::isRegularFile).sorted().toList()) {
+                if (Files.size(file) > MAX_SKILL_FILE_BYTES) {
+                    throw new IllegalStateException("技能文件超过 1 MB：" + file);
+                }
+                String relative = root.relativize(file).toString().replace('\\', '/');
+                files.put(relative, Files.readString(file, StandardCharsets.UTF_8));
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("读取技能目录失败：" + root, e);
+        }
+        String name = String.valueOf(
+                frontmatter(files.get(SkillDefinition.SKILL_FILE)).getOrDefault("name", ""));
+        if (name.isBlank()) {
+            throw new IllegalStateException("技能的 SKILL.md 缺少 frontmatter 中的 name：" + skillFile);
+        }
+        return new SkillDefinition(skillId, version, name, files);
+    }
+
+    /** 解析 Markdown 开头 {@code ---} 包围的 YAML frontmatter；没有时为空映射。 */
+    static Map<String, Object> frontmatter(String markdown) {
+        if (!markdown.startsWith("---")) {
+            return Map.of();
+        }
+        int end = markdown.indexOf("\n---", 3);
+        if (end < 0) {
+            return Map.of();
+        }
+        Object parsed = new Yaml(new SafeConstructor(new LoaderOptions())).load(markdown.substring(3, end));
+        if (!(parsed instanceof Map<?, ?> map)) {
+            return Map.of();
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> typed = (Map<String, Object>) map;
+        return typed;
     }
 
     private Optional<Map<String, Object>> find(String kind, Predicate<Map<String, Object>> matcher) {

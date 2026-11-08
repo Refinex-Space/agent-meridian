@@ -1,5 +1,6 @@
 package cn.refinex.meridian.engine.agentscope.assembly;
 
+import cn.refinex.meridian.engine.spi.spec.PermissionRule;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.skill.runtime.SkillLoadTool;
@@ -33,6 +34,7 @@ public final class AssembledAgent implements AutoCloseable {
     private final HarnessAgent agent;
     private final List<AutoCloseable> resources;
     private final Set<String> reservedToolNames;
+    private final List<PermissionRule> policyDenyRules;
 
     AssembledAgent(AgentProfile profile, HarnessAgent agent, List<AutoCloseable> resources) {
         this.profile = profile;
@@ -42,6 +44,7 @@ public final class AssembledAgent implements AutoCloseable {
         reserved.addAll(HARNESS_TOOL_NAMES);
         reserved.addAll(PlatformToolNames.ALL);
         this.reservedToolNames = Set.copyOf(reserved);
+        this.policyDenyRules = ToolPolicy.denyRules(profile, agent.getToolkit());
     }
 
     /**
@@ -71,6 +74,15 @@ public final class AssembledAgent implements AutoCloseable {
      */
     public Set<String> reservedToolNames() {
         return reservedToolNames;
+    }
+
+    /**
+     * 本实例的策略拒绝规则（{@link ToolPolicy#denyRules}），引擎每轮安装权限时并入合成结果。
+     *
+     * @return 整工具的拒绝规则
+     */
+    public List<PermissionRule> policyDenyRules() {
+        return policyDenyRules;
     }
 
     /**

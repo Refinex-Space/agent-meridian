@@ -24,9 +24,28 @@ final class PermissionTranslator {
      * @return AgentScope 的权限上下文
      */
     static PermissionContextState toContextState(PermissionPolicy policy) {
+        return toContextState(policy, List.of());
+    }
+
+    /**
+     * 翻译合成后的策略，并入智能体实例的策略拒绝规则（{@code ToolPolicy.denyRules}，ADR-0034）。拒绝规则在权限引擎中最先判定，
+     * 并入的规则不会被合成结果中的 allow 放开。平凡的策略不并入（见方法体）。
+     *
+     * @param policy 合成后的权限策略
+     * @param policyDenyRules 智能体实例的策略拒绝规则
+     * @return AgentScope 的权限上下文
+     */
+    static PermissionContextState toContextState(
+            PermissionPolicy policy, List<cn.refinex.meridian.engine.spi.spec.PermissionRule> policyDenyRules) {
         PermissionContextState.Builder builder = PermissionContextState.builder()
                 .mode(PermissionMode.valueOf(policy.mode().name()));
-        for (cn.refinex.meridian.engine.spi.spec.PermissionRule rule : policy.rules()) {
+        List<cn.refinex.meridian.engine.spi.spec.PermissionRule> rules = new java.util.ArrayList<>(policy.rules());
+        // 平凡的策略（DEFAULT、没有规则）在 2.0.4 中一律放行；并入规则会把它变成"没有命中 allow 都要确认"，改变语义。
+        // runtime 合成的策略总带平台安全规则（ADR-0031），从不平凡，所以生产中拒绝规则总会并入；平凡策略只出现在内核测试中
+        if (!isTrivial(policy)) {
+            rules.addAll(policyDenyRules);
+        }
+        for (cn.refinex.meridian.engine.spi.spec.PermissionRule rule : rules) {
             PermissionRule translated = toRule(rule);
             switch (rule.behavior()) {
                 case ALLOW -> builder.addAllowRule(rule.toolName(), translated);
@@ -35,6 +54,11 @@ final class PermissionTranslator {
             }
         }
         return builder.build();
+    }
+
+    private static boolean isTrivial(PermissionPolicy policy) {
+        return policy.mode() == cn.refinex.meridian.engine.spi.spec.PermissionMode.DEFAULT
+                && policy.rules().isEmpty();
     }
 
     /**

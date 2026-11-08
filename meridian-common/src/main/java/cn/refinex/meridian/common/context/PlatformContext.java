@@ -1,7 +1,7 @@
 package cn.refinex.meridian.common.context;
 
 /**
- * 一次请求或一轮执行的平台上下文：租户、项目、会话、线程、轮次、API Key、租约 epoch、预算句柄与值守方式，
+ * 一次请求或一轮执行的平台上下文：租户、项目、会话、线程、轮次、API Key、租约 epoch、预算句柄、值守方式与终端用户，
  * 字段按架构设计「身份映射」中的类型键 {@code PlatformContext} 一行。
  *
  * <p>它由 Web 入口（{@code meridian-security}）或轮次 Worker 填充，经 {@link PlatformContexts} 传递：
@@ -20,6 +20,8 @@ package cn.refinex.meridian.common.context;
  * @param leaseEpoch 当前执行持有的租约 epoch（架构设计「租约与 fencing」）；可为空，表示不在轮次执行中
  * @param budgetHandle 预算句柄：本轮预扣与结算所依据的预算标识，由模型层解释（架构设计「计量与预算」）；可为空
  * @param interaction 会话的值守方式；可为空，表示与会话无关
+ * @param endUserId 会话的终端用户 ID；可为空，表示会话没有终端用户或与会话无关。工作区命名空间
+ *     {@code [tenant_id, project_id, end_user_id, session_id]} 从这里取（架构设计「文件系统装配」）
  */
 public record PlatformContext(
         String tenantId,
@@ -30,7 +32,8 @@ public record PlatformContext(
         String apiKeyId,
         Long leaseEpoch,
         String budgetHandle,
-        Interaction interaction) {
+        Interaction interaction,
+        String endUserId) {
 
     /**
      * 创建上下文。
@@ -67,7 +70,8 @@ public record PlatformContext(
                 .apiKeyId(apiKeyId)
                 .leaseEpoch(leaseEpoch)
                 .budgetHandle(budgetHandle)
-                .interaction(interaction);
+                .interaction(interaction)
+                .endUserId(endUserId);
     }
 
     /** {@link PlatformContext} 的构建器，字段含义见记录组件说明。 */
@@ -81,6 +85,7 @@ public record PlatformContext(
         private Long leaseEpoch;
         private String budgetHandle;
         private Interaction interaction;
+        private String endUserId;
 
         private Builder() {}
 
@@ -184,6 +189,17 @@ public record PlatformContext(
         }
 
         /**
+         * 设置终端用户 ID。
+         *
+         * @param value 终端用户 ID，可为空
+         * @return 本构建器
+         */
+        public Builder endUserId(String value) {
+            this.endUserId = value;
+            return this;
+        }
+
+        /**
          * 构建上下文。
          *
          * @return 不可变的上下文
@@ -191,7 +207,16 @@ public record PlatformContext(
          */
         public PlatformContext build() {
             return new PlatformContext(
-                    tenantId, projectId, sessionId, threadId, turnId, apiKeyId, leaseEpoch, budgetHandle, interaction);
+                    tenantId,
+                    projectId,
+                    sessionId,
+                    threadId,
+                    turnId,
+                    apiKeyId,
+                    leaseEpoch,
+                    budgetHandle,
+                    interaction,
+                    endUserId);
         }
     }
 }

@@ -1,5 +1,6 @@
 package cn.refinex.meridian.engine.agentscope.middleware;
 
+import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
@@ -11,6 +12,7 @@ import io.agentscope.core.middleware.MiddlewareBase;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanBuilder;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.context.Context;
 import java.util.Map;
@@ -37,6 +39,9 @@ public final class ToolSpanMiddleware implements MiddlewareBase {
     /** 工具结果状态的 span 属性。 */
     static final AttributeKey<String> TOOL_STATE = AttributeKey.stringKey("meridian.tool.state");
 
+    /** 平台工具副作用等级的 span 属性。 */
+    static final AttributeKey<String> SIDE_EFFECT = AttributeKey.stringKey("meridian.tool.side_effect");
+
     static final AttributeKey<String> OPERATION = AttributeKey.stringKey("gen_ai.operation.name");
     static final AttributeKey<String> TOOL_NAME = AttributeKey.stringKey("gen_ai.tool.name");
     static final AttributeKey<String> TOOL_CALL_ID = AttributeKey.stringKey("gen_ai.tool.call.id");
@@ -56,16 +61,21 @@ public final class ToolSpanMiddleware implements MiddlewareBase {
             return next.apply(input)
                     .doOnNext(event -> {
                         if (event instanceof ToolResultStartEvent start && start.getToolCallId() != null) {
-                            spans.put(
-                                    start.getToolCallId(),
-                                    Tracing.tracer()
-                                            .spanBuilder("execute_tool " + start.getToolCallName())
-                                            .setParent(parent)
-                                            .setAllAttributes(platform)
-                                            .setAttribute(OPERATION, "execute_tool")
-                                            .setAttribute(TOOL_NAME, start.getToolCallName())
-                                            .setAttribute(TOOL_CALL_ID, start.getToolCallId())
-                                            .startSpan());
+                            SpanBuilder builder = Tracing.tracer()
+                                    .spanBuilder("execute_tool " + start.getToolCallName())
+                                    .setParent(parent)
+                                    .setAllAttributes(platform)
+                                    .setAttribute(OPERATION, "execute_tool")
+                                    .setAttribute(TOOL_NAME, start.getToolCallName())
+                                    .setAttribute(TOOL_CALL_ID, start.getToolCallId());
+                            // 平台工具带上副作用等级（PlatformTool），排查恢复与重放问题时用
+                            if (agent.getToolkit() != null
+                                    && agent.getToolkit().getTool(start.getToolCallName())
+                                            instanceof PlatformTool tool) {
+                                builder.setAttribute(
+                                        SIDE_EFFECT, tool.sideEffect().value());
+                            }
+                            spans.put(start.getToolCallId(), builder.startSpan());
                         } else if (event instanceof ToolResultEndEvent end && end.getToolCallId() != null) {
                             Span span = spans.remove(end.getToolCallId());
                             if (span != null) {

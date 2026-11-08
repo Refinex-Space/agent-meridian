@@ -2,6 +2,7 @@ package cn.refinex.meridian.runtime.session.app;
 
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
+import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 
 /**
  * runtime 内部的智能体配置来源：已解析的智能体版本与环境（架构设计「引擎装配」）。Worker 用它取智能体版本的权限策略，
@@ -51,4 +52,14 @@ public interface AgentConfigProvider {
      * @throws cn.refinex.meridian.common.error.NotFoundException 环境不存在时
      */
     EnvironmentSpec currentEnvironment(String environmentId);
+
+    /**
+     * 读取一个技能版本的内容，内核装配时生成受保护路径 {@code skills/} 与技能清单用（T10a）。
+     *
+     * @param skillId 技能 ID（{@code skl_…}）
+     * @param version 技能版本号
+     * @return 技能内容
+     * @throws cn.refinex.meridian.common.error.NotFoundException 不存在时
+     */
+    SkillDefinition skill(String skillId, int version);
 }

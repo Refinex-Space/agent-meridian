@@ -3,16 +3,18 @@ package cn.refinex.meridian.runtime.config;
 import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
+import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** 内存中的智能体配置来源：测试登记智能体版本与环境，多个节点共用一份。 */
+/** 内存中的智能体配置来源：测试登记智能体版本、环境与技能，多个节点共用一份。 */
 final class TestAgents implements AgentConfigProvider {
 
     private final Map<String, ResolvedAgentSpec> agents = new ConcurrentHashMap<>();
     private final Map<String, EnvironmentSpec> environments = new ConcurrentHashMap<>();
+    private final Map<String, SkillDefinition> skills = new ConcurrentHashMap<>();
 
     TestAgents register(ResolvedAgentSpec spec) {
         agents.put(spec.agentVersionId(), spec);
@@ -22,6 +24,20 @@ final class TestAgents implements AgentConfigProvider {
     TestAgents register(EnvironmentSpec environment) {
         environments.put(environment.environmentId() + "@" + environment.revision(), environment);
         return this;
+    }
+
+    TestAgents register(SkillDefinition skill) {
+        skills.put(skill.skillId() + "@" + skill.version(), skill);
+        return this;
+    }
+
+    @Override
+    public SkillDefinition skill(String skillId, int version) {
+        SkillDefinition skill = skills.get(skillId + "@" + version);
+        if (skill == null) {
+            throw new NotFoundException("没有技能：" + skillId + "@" + version);
+        }
+        return skill;
     }
 
     @Override

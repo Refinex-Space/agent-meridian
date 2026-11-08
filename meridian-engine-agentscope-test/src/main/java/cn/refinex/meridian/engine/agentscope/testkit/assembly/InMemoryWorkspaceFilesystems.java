@@ -5,6 +5,7 @@ import cn.refinex.meridian.engine.agentscope.assembly.WorkspaceFilesystemProvide
 import io.agentscope.harness.agent.filesystem.AbstractFilesystem;
 import io.agentscope.harness.agent.filesystem.remote.RemoteFilesystem;
 import io.agentscope.harness.agent.filesystem.spec.SandboxFilesystemSpec;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +24,10 @@ public final class InMemoryWorkspaceFilesystems implements WorkspaceFilesystemPr
     /** 受保护路径的路由前缀，单个文件不带结尾斜杠。 */
     public static final List<String> PROTECTED_PREFIXES =
             List.of("/AGENTS.md", "/skills/", "/subagents/", "/tools.json", "/MEMORY.md");
+
+    /** 测试用的本机工作区根，装配后不应出现任何文件。 */
+    public static final Path LOCAL_WORKSPACE_ROOT =
+            Path.of(System.getProperty("java.io.tmpdir"), "meridian-test-agent-workspace");
 
     private final RecordingBaseStore platformBackend = new RecordingBaseStore();
     private final AbstractFilesystem platformStore = new RemoteFilesystem(platformBackend);
@@ -57,6 +62,16 @@ public final class InMemoryWorkspaceFilesystems implements WorkspaceFilesystemPr
         FakeSandboxFilesystemSpec spec = new FakeSandboxFilesystemSpec();
         sandboxSpecs.add(spec);
         return spec;
+    }
+
+    /**
+     * 测试用的本机工作区根：系统临时目录下一个不会被创建的目录。
+     *
+     * @return 目录
+     */
+    @Override
+    public Path localWorkspaceRoot() {
+        return LOCAL_WORKSPACE_ROOT;
     }
 
     /**

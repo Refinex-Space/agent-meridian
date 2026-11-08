@@ -328,6 +328,7 @@ public class TurnPreparer {
                 .turnId(turn.turnId())
                 .leaseEpoch(turn.epoch())
                 .interaction(session.interaction())
+                .endUserId(session.endUserId())
                 .build();
     }
 }

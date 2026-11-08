@@ -15,7 +15,9 @@ public enum SessionErrorCode implements ErrorCode {
     /** 智能体或智能体版本不存在，或不属于当前项目。 */
     AGENT_NOT_FOUND("agent.not_found", 404, "智能体不存在"),
     /** 环境不存在，或不属于当前项目。 */
-    ENVIRONMENT_NOT_FOUND("environment.not_found", 404, "环境不存在");
+    ENVIRONMENT_NOT_FOUND("environment.not_found", 404, "环境不存在"),
+    /** 智能体版本引用的技能版本不存在（配置错误，装配智能体时出现）。 */
+    SKILL_NOT_FOUND("skill.not_found", 404, "技能不存在");
 
     private final String code;
     private final int status;

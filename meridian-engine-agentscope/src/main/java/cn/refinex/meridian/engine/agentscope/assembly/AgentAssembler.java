@@ -1,7 +1,12 @@
 package cn.refinex.meridian.engine.agentscope.assembly;
 
+import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.GenerateOptions;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.model.ToolSchema;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.Toolkit;
@@ -13,6 +18,7 @@ import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 /**
  * 把智能体版本加环境装配为 {@link HarnessAgent}，逐行落实架构设计「引擎装配」表，表中每一行在
@@ -83,12 +89,39 @@ public final class AgentAssembler {
      * @return 装配好的实例
      */
     public AssembledAgent assemble(AgentProfile profile) {
+        return assemble(profile, modelFactory.create(profile.key().agentVersionId(), profile.model()));
+    }
+
+    /**
+     * 启动自检（登记事项 D02）：用探测对象走一遍完整装配并立即关闭，Toolkit 中出现白名单外的非 {@code ToolBase} 工具时抛出异常。
+     * 探测装配不经模型工厂，使用一个不能调用的占位模型，所以不需要模型目录中存在探测对象的模型。
+     *
+     * @param probe 探测对象，通常启用全部平台工具与计划模式
+     * @throws IllegalStateException 自检失败时
+     */
+    public void selfCheck(AgentProfile probe) {
+        AssembledAgent assembled = assemble(probe, new ProbeModel());
+        try {
+            assembled.close();
+        } catch (Exception e) {
+            log.warn("关闭自检用的智能体实例失败", e);
+        }
+    }
+
+    private AssembledAgent assemble(AgentProfile profile, Model model) {
         ToolProvider.ToolBundle tools = toolProvider.tools(profile);
         HarnessAgent agent;
         try {
             HarnessAgent.Builder builder = HarnessAgent.builder();
-            configure(builder, profile, tools.tools());
+            configure(builder, profile, model, tools.tools());
             agent = builder.build();
+            // 自检：非 ToolBase 工具不进权限引擎，只允许 harness 的白名单工具（登记事项 D02）
+            ToolPolicy.verify(agent.getToolkit());
+            // 平台工具经本实例的工作区管理器取文件系统（架构设计「平台工具」）
+            tools.tools().stream()
+                    .filter(PlatformTool.class::isInstance)
+                    .map(PlatformTool.class::cast)
+                    .forEach(tool -> tool.attach(agent));
         } catch (RuntimeException e) {
             closeQuietly(tools.resources(), e);
             throw e;
@@ -102,14 +135,14 @@ public final class AgentAssembler {
     }
 
     /** 按「引擎装配」表配置 Builder，每一段对应表中的一行。 */
-    private void configure(HarnessAgent.Builder builder, AgentProfile profile, List<AgentTool> tools) {
+    private void configure(HarnessAgent.Builder builder, AgentProfile profile, Model model, List<AgentTool> tools) {
         builder.name(profile.name()).agentId(profile.key().agentId()).sysPrompt(profile.systemPrompt());
         if (profile.isSubagent()) {
             builder.description(profile.subagent().description());
         }
 
         // model(Model)：平台的 RoutedModel，内含主模型与备用模型；不经 ModelRegistry
-        builder.model(modelFactory.create(profile.key().agentVersionId(), profile.model()));
+        builder.model(model);
         GenerateOptions generateOptions = generateOptions(profile.model());
         if (generateOptions != null) {
             builder.generateOptions(generateOptions);
@@ -127,6 +160,8 @@ public final class AgentAssembler {
 
         // 文件系统：none 档 abstractFilesystem(...)；sandbox 档 filesystem(spec) 加 filesystemRoute(...)，两者互斥
         configureFilesystem(builder, profile);
+        // 本机工作区根由平台控制，不取 ${user.dir}/.agentscope/workspace：harness 会从中读第 3 层技能与本机回退文件（D05）
+        builder.workspace(filesystemProvider.localWorkspaceRoot());
 
         // 内置工具一律关闭，由平台工具替代
         builder.disableWebTools()
@@ -202,6 +237,20 @@ public final class AgentAssembler {
                 .maxTokens(model.maxOutputTokens())
                 .temperature(model.temperature())
                 .build();
+    }
+
+    /** 自检装配用的占位模型：自检不执行推理，被调用说明装配之外有人用了它。 */
+    private static final class ProbeModel implements Model {
+
+        @Override
+        public Flux<ChatResponse> stream(List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+            return Flux.error(new IllegalStateException("自检装配的智能体不能执行推理"));
+        }
+
+        @Override
+        public String getModelName() {
+            return "meridian-self-check";
+        }
     }
 
     private static void closeQuietly(List<AutoCloseable> resources, RuntimeException cause) {

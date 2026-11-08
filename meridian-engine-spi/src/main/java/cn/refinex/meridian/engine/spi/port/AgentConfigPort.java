@@ -2,6 +2,8 @@ package cn.refinex.meridian.engine.spi.port;
 
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
+import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
+import cn.refinex.meridian.engine.spi.spec.SkillRef;
 import reactor.core.publisher.Mono;
 
 /**
@@ -29,4 +31,13 @@ public interface AgentConfigPort {
      * @return 已解析的配置；不存在时以 {@code NotFoundException} 失败
      */
     Mono<EnvironmentSpec> environment(String environmentId, long revision);
+
+    /**
+     * 读取智能体版本引用的一个技能版本的内容，装配时生成受保护路径 {@code skills/} 与技能清单用（架构设计「引擎装配」
+     * 中的 {@code skillRepository}）。技能版本发布后不可变，内核可以随智能体实例缓存。
+     *
+     * @param ref 技能引用
+     * @return 技能内容；不存在时以 {@code NotFoundException} 失败
+     */
+    Mono<SkillDefinition> skill(SkillRef ref);
 }

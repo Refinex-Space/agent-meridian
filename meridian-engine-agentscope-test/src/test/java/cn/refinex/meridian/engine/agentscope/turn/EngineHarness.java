@@ -4,11 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cn.refinex.meridian.common.context.Interaction;
 import cn.refinex.meridian.common.context.PlatformContext;
+import cn.refinex.meridian.engine.agentscope.assembly.AgentAssembler;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentProfile;
+import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
+import cn.refinex.meridian.engine.agentscope.fs.PlatformWorkspace;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
+import cn.refinex.meridian.engine.agentscope.testkit.assembly.InMemoryWorkspaceFilesystems;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.RecordingMiddlewareProvider;
+import cn.refinex.meridian.engine.agentscope.testkit.assembly.RecordingModelFactory;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.StaticToolProvider;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestAssembly;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestSpecs;
@@ -18,6 +23,10 @@ import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryAgentStateRepo
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryBlobStore;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryInbox;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryLeaseRegistry;
+import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryToolLedger;
+import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryWorkspaceStore;
+import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
+import cn.refinex.meridian.engine.agentscope.tools.PlatformToolProvider;
 import cn.refinex.meridian.engine.spi.engine.TurnContext;
 import cn.refinex.meridian.engine.spi.engine.input.InboundMessage;
 import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
@@ -28,13 +37,16 @@ import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.PermissionPolicy;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
+import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import io.agentscope.core.middleware.MiddlewareBase;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.AgentTool;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import reactor.core.publisher.Flux;
@@ -56,6 +68,8 @@ final class EngineHarness {
     final InMemoryAgentStateRepository states = new InMemoryAgentStateRepository();
     final InMemoryBlobStore blobs = new InMemoryBlobStore();
     final InMemoryAgentConfig configs = new InMemoryAgentConfig();
+    final InMemoryToolLedger ledger = new InMemoryToolLedger();
+    final InMemoryWorkspaceStore workspace = new InMemoryWorkspaceStore();
     final ResolvedAgentSpec spec;
     final AgentInstanceCache instances;
     final AgentScopeEngine engine;
@@ -66,19 +80,60 @@ final class EngineHarness {
             List<AgentTool> tools,
             List<MiddlewareBase> extraMiddlewares,
             Predicate<MiddlewareBase> keep) {
+        this(model, spec, tools, extraMiddlewares, keep, false, List.of(), Map.of());
+    }
+
+    private EngineHarness(
+            Model model,
+            ResolvedAgentSpec spec,
+            List<AgentTool> tools,
+            List<MiddlewareBase> extraMiddlewares,
+            Predicate<MiddlewareBase> keep,
+            boolean platform,
+            List<SkillDefinition> skills,
+            Map<String, Function<PlatformTool.ToolServices, PlatformTool>> extraPlatformTools) {
         this.model = model;
         this.spec = spec;
         List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(leases, inbox)
                 .middlewares(AgentProfile.main(spec, TestSpecs.noneEnvironment())));
         middlewares.removeIf(keep.negate());
         middlewares.addAll(extraMiddlewares);
-        TestAssembly assembly = TestAssembly.builder(model)
-                .stateStore(new FencedAgentStateStore(states, leases))
-                .middlewares(new RecordingMiddlewareProvider(middlewares, middlewares))
-                .tools(new StaticToolProvider(List.of(), tools))
-                .build();
         configs.register(spec).register(TestSpecs.noneEnvironment());
-        this.instances = new AgentInstanceCache(assembly.assembler());
+        skills.forEach(configs::register);
+        AgentAssembler assembler;
+        if (platform) {
+            // 生产的工具、工作区与技能提供者，端口用内存实现
+            PlatformWorkspace platformWorkspace =
+                    new PlatformWorkspace(workspace, configs, InMemoryWorkspaceFilesystems.LOCAL_WORKSPACE_ROOT);
+            PlatformToolProvider provider =
+                    PlatformToolProvider.withFileTools(new PlatformTool.ToolServices(ledger, blobs));
+            for (Map.Entry<String, Function<PlatformTool.ToolServices, PlatformTool>> extra :
+                    extraPlatformTools.entrySet()) {
+                provider = provider.with(extra.getKey(), extra.getValue());
+            }
+            ToolProvider platformTools = provider;
+            ToolProvider combined = profile -> {
+                List<AgentTool> all =
+                        new ArrayList<>(platformTools.tools(profile).tools());
+                all.addAll(tools);
+                return ToolProvider.ToolBundle.of(all);
+            };
+            assembler = new AgentAssembler(
+                    new RecordingModelFactory(model),
+                    new FencedAgentStateStore(states, leases),
+                    new RecordingMiddlewareProvider(middlewares, middlewares),
+                    combined,
+                    platformWorkspace,
+                    platformWorkspace);
+        } else {
+            assembler = TestAssembly.builder(model)
+                    .stateStore(new FencedAgentStateStore(states, leases))
+                    .middlewares(new RecordingMiddlewareProvider(middlewares, middlewares))
+                    .tools(new StaticToolProvider(List.of(), tools))
+                    .build()
+                    .assembler();
+        }
+        this.instances = new AgentInstanceCache(assembler);
         this.engine = new AgentScopeEngine(instances, configs, leases, blobs);
     }
 
@@ -93,6 +148,52 @@ final class EngineHarness {
             AgentTool... tools) {
         return new EngineHarness(
                 model, spec.apply(TestSpecs.agent()).build(), List.of(tools), extraMiddlewares, middleware -> true);
+    }
+
+    /**
+     * 用生产的平台工具（{@code PlatformToolProvider} 的文件工具）、工作区（{@code PlatformWorkspace}，内存的
+     * {@code WorkspaceStorePort}）与技能仓库装配；账本、对象存储、配置都是内存端口。
+     *
+     * @param model 模型
+     * @param spec 智能体配置
+     * @param skills 技能内容，登记到配置端口
+     * @param extraTools 额外注册的测试工具
+     * @return 组装
+     */
+    static EngineHarness withPlatform(
+            Model model,
+            UnaryOperator<TestSpecs.AgentSpecBuilder> spec,
+            List<SkillDefinition> skills,
+            AgentTool... extraTools) {
+        return withPlatform(model, spec, skills, Map.of(), extraTools);
+    }
+
+    /**
+     * 同 {@link #withPlatform(Model, UnaryOperator, List, AgentTool...)}，另经 {@code PlatformToolProvider.with} 登记平台工具
+     * （新增平台工具的真实路径），工具用组装中的内存账本与对象存储。
+     *
+     * @param model 模型
+     * @param spec 智能体配置
+     * @param skills 技能内容
+     * @param platformTools 额外的平台工具：工具名 → 工厂
+     * @param extraTools 额外注册的测试工具
+     * @return 组装
+     */
+    static EngineHarness withPlatform(
+            Model model,
+            UnaryOperator<TestSpecs.AgentSpecBuilder> spec,
+            List<SkillDefinition> skills,
+            Map<String, Function<PlatformTool.ToolServices, PlatformTool>> platformTools,
+            AgentTool... extraTools) {
+        return new EngineHarness(
+                model,
+                spec.apply(TestSpecs.agent()).build(),
+                List.of(extraTools),
+                List.of(),
+                middleware -> true,
+                true,
+                skills,
+                platformTools);
     }
 
     /** 对照实验用：只保留 {@code keep} 为真的平台中间件。 */
@@ -125,6 +226,7 @@ final class EngineHarness {
                 .turnId(turnId)
                 .leaseEpoch(epoch)
                 .interaction(Interaction.ATTENDED)
+                .endUserId(endUserId)
                 .build();
         EnvironmentSpec environment = TestSpecs.noneEnvironment();
         return new TurnContext(

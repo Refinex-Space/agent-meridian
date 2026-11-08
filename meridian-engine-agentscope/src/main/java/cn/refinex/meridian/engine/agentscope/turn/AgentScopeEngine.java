@@ -250,7 +250,10 @@ public final class AgentScopeEngine implements AgentEngine {
             try {
                 harness.getDelegate()
                         .replacePermissionContext(
-                                userId, threadId, PermissionTranslator.toContextState(ctx.permissions()));
+                                userId,
+                                threadId,
+                                PermissionTranslator.toContextState(
+                                        ctx.permissions(), handle.assembled().policyDenyRules()));
             } finally {
                 leases.markPermissionInstall(threadId, false);
             }

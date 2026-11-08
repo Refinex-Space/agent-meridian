@@ -114,6 +114,17 @@ public record ResolvedAgentSpec(
     }
 
     /**
+     * 判断智能体的工具集是否包含某个工具：平台工具看 {@code tools}，MCP 工具（{@code mcp__{server}__{tool}}）看服务是否挂载、
+     * 该工具是否启用。{@code PolicyMiddleware} 据此做纵深防御（架构设计「平台中间件」）。
+     *
+     * @param toolName 工具名
+     * @return 包含时为 true
+     */
+    public boolean grants(String toolName) {
+        return grants(tools, mcpServers, toolName);
+    }
+
+    /**
      * 按名字查找子智能体。
      *
      * @param subagentName 子智能体名

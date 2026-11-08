@@ -54,6 +54,7 @@ public final class PlatformMiddlewareProvider implements MiddlewareProvider {
                 new RecoveryNoteMiddleware(),
                 new InterruptCheckpointMiddleware(),
                 new ToolSpanMiddleware(),
+                new PolicyMiddleware(),
                 new ContextCompositionMiddleware(),
                 new CompactionGuardMiddleware.Inner()));
         if (batchCheckpoint) {
