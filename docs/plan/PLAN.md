@@ -66,7 +66,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 已完成 | c1fd533 |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 已完成 | c6ca61a |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 已完成 | 708f7ca |
-| T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 未开始 | — |
+| T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 进行中 | — |
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 未开始 | — |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 未开始 | — |
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 未开始 | — |
@@ -175,7 +175,16 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+**T08 消息投递、待处理动作与权限合成**（开工基线：`scripts/dev/verify.sh` 通过，提交 8257c24）
+
+- [ ] 1. 权限合成：`PermissionSynthesizer`（五层、模式收紧、unattended 与子线程改写、`plan_enter` deny、子智能体策略）、平台安全规则、`PolicyStorePort` 与 `rt` 表实现、接入 `TurnPreparer`（A06 的单测部分）
+- [ ] 2. 投递：中断（`interrupt_requested_at`、`node:{lease_owner}` 频道、续租兜底、`queued` → `cancelled`）、`awaiting_action` 下 steer 降级与中断拒绝全部动作、`SteerMiddleware`（A01、A02、A03）
+- [ ] 3. 待处理动作：回应标记、恢复轮生成（先确认后工具结果、`recovery_confirmation` 的 retry/skip 与 D13）、超时调度（`SKIP LOCKED`）、unattended 兜底自动拒绝（A04、A05）
+- [ ] 4. "记住此决定"会话级与项目级（A07）
+- [ ] 5. 自定义工具：名称与保留名校验、挂起回传续跑（A08）
+- [ ] 6. 审计 outbox：权限判定与动作回应（A09）
+- [ ] 7. P15 报告、P10 steer 重跑与报告补全（A06、A10）
+- [ ] 8. 收尾：`verify.sh`（A11）、模块 CLAUDE.md、P6/P15 状态、验收记录、看板与会话日志
 
 ## 控制台设计轨道
 
