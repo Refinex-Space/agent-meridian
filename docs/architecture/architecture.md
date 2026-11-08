@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.9 |
+| 版本 | v1.10 |
 | 日期 | 2026-11-08 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -230,7 +230,7 @@ agent-meridian/
 | `SecretResolver` | 凭据明文解析 | `config` |
 | `BlobStorePort` | 大对象写入与读取（超过 16 KB 的工具结果等） | `stream` |
 | `ThreadRegistryPort` | 创建子线程、更新线程状态 | `session` |
-| `AgentConfigPort` | 读取已解析的智能体版本与环境配置，智能体实例缓存未命中时使用（ADR-0024） | `config` |
+| `AgentConfigPort` | 读取已解析的智能体版本与环境配置，智能体实例缓存未命中时使用（ADR-0024）；读取技能版本的内容，装配时生成受保护路径 `skills/`（ADR-0034） | `config` |
 
 上表是落地时的初始清单。为落实本文档已规定的行为，可以在 `meridian-engine-spi` 中新增端口或给既有端口加方法，签名只出现平台类型，并同步更新本表；删除端口或改变既有端口的语义，才需要走 ADR。
 
@@ -438,7 +438,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 |---|---|---|
 | `RuntimeContext.sessionId` | 线程 ID（`thr_…`） | 每条线程一份状态，主智能体与子智能体互不覆盖 |
 | `RuntimeContext.userId` | `{project_id}:{end_user_id}`；没有终端用户时为 `{project_id}:_` | 按项目加终端用户隔离 |
-| 类型键 `PlatformContext` | 租户、项目、会话、线程、轮次、API Key、租约 epoch、预算句柄、`interaction` | 平台中间件和工具读取 |
+| 类型键 `PlatformContext` | 租户、项目、会话、线程、轮次、API Key、租约 epoch、预算句柄、`interaction`、终端用户（ADR-0034） | 平台中间件和工具读取；工作区命名空间的四个值从这里取 |
 | Reactor Context | `runTurn` 顶层 `contextWrite(PlatformContext)` | `RoutedModel` 在压缩等内部模型调用中也能取到上下文 |
 
 ### 引擎装配
@@ -461,7 +461,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `stateStore` | `FencedAgentStateStore` | 所有状态写入都受租约约束，见"租约与 fencing" |
 | `enablePendingToolRecovery` | `true` | 悬空的 tool_use 自动补结果 |
 | `maxIters` | 智能体配置，默认 50，上限 200 | 控制单轮成本 |
-| 文件系统 | `none` 档用 `abstractFilesystem(...)`；`sandbox` 档用 `filesystem(KubernetesFilesystemSpec)` 加 `filesystemRoute(...)`。两者在 AgentScope 中互斥 | 见"工作区与沙箱" |
+| 文件系统 | `none` 档用 `abstractFilesystem(...)`；`sandbox` 档用 `filesystem(KubernetesFilesystemSpec)` 加 `filesystemRoute(...)`。两者在 AgentScope 中互斥。`workspace(...)` 设为平台控制、平台不写入的本机目录（ADR-0034） | 见"工作区与沙箱"；不设时本机工作区根是 `${user.dir}/.agentscope/workspace`，harness 会从中回退读取 |
 | `disableWebTools()` | 必须 | 内置 `web_search` 写死 Tavily 和环境变量，`web_fetch` 没有 SSRF 防护 |
 | `disableToolsConfig()` | 必须 | `tools.json` 只在构建时加载一次，无法按租户注入 MCP 凭据 |
 | `disableFilesystemTools()`、`disableShellTool()` | 必须 | 由平台工具替代，以支持内容级权限规则 |
@@ -469,10 +469,10 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `disableMemoryTools()`、`disableMemoryHooks()` | 一期必须 | `session_search` 只扫本机磁盘；长期记忆在二期 |
 | `disableDefaultWorkspaceSkills()`、`disableDynamicSkills()` | 必须 | 技能只来自平台技能仓库，智能体不能自建技能 |
 | `disableTranscript()` | 必须 | 转录写入工作区或沙箱，不受 fencing 约束且无限增长；会话记录以 `session_events` 为准 |
-| `messageBus(...)` | 平台的 `NoopMessageBus` | 默认的工作区消息总线会让每次推理都读一次工作区；`wait_async_results` 仍会注册，它不是 `ToolBase`，不进权限引擎，由 `PolicyMiddleware` 直接拦截 |
+| `messageBus(...)` | 平台的 `NoopMessageBus` | 默认的工作区消息总线会让每次推理都读一次工作区；`wait_async_results` 仍会注册（2.0.4 把它包装为 `ReflectiveFunctionTool`，是 `ToolBase`），由工具策略的整工具拒绝规则拒绝（ADR-0034） |
 | `asyncToolRegistry(...)` | 平台的 `NoopAsyncToolRegistry` | 不设置时 harness 创建基于工作区的异步工具登记，`InboxMiddleware` 每次推理前仍会读工作区（ADR-0024） |
 | `enableAgentTracingLog(false)` | 必须 | 默认的 `AgentTraceMiddleware` 以 INFO 记录模型输出正文，违反日志规范（ADR-0024） |
-| `skillRepository(...)` | 平台的 `MeridianSkillRepository`（实现 `RuntimeContextSkillRepository`） | 按租户、项目、智能体解析技能 |
+| `skillRepository(...)` | 平台的 `MeridianSkillRepository`（继承 2.0.4 的 `WorkspaceSkillRepository`，它实现 `RuntimeContextSkillRepository`），读取受保护路径 `skills/` 的只读视图 | 按租户、项目、智能体解析技能；`MarketplaceStager` 只对 `WorkspaceSkillRepository` 不做本机暂存（ADR-0034） |
 | `compaction(...)` | 见"上下文管理"，其中 `flushBeforeCompact(false)`、`offloadBeforeCompact(false)`、`triggerMessages(0)`，摘要提示词由平台维护（ADR-0032） | 一期没有长期记忆；原文卸载同样不受 fencing 约束；只按 token 阈值触发 |
 | `toolResultEviction(...)` | 见"上下文管理" | — |
 | `enablePlanMode(...)` | 按智能体配置 | 这是构建期配置，实例被 attended 和 unattended 会话共享；`unattended` 会话靠权限规则禁止 `plan_enter`，见"权限判定" |
@@ -486,7 +486,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 |---|---|---|
 | `PlatformContextMiddleware` | `onAgent` | 校验 `PlatformContext`，写入 MDC，打开轮次 span |
 | `LeaseGuardMiddleware` | `onReasoning`、`onActing` | 每次推理和工具执行前，向 `LeaseRegistry` 确认租约仍然有效；已失效则抛 `LeaseLostException` |
-| `PolicyMiddleware` | `onActing` | 纵深防御：工具必须在智能体允许的工具集内；非 `ToolBase` 工具只放行 `load_skill_through_path`，`wait_async_results` 直接返回合成的 DENIED 结果；子智能体拉起数量上限 |
+| `PolicyMiddleware` | `onActing` | 纵深防御：工具必须在智能体允许的工具集内；非 `ToolBase` 工具只放行 `load_skill_through_path`，`wait_async_results` 得到 DENIED 结果；子智能体拉起数量上限。2.0.4 不发布 `onActing` 中间件自己合成的事件，所以工具集外的工具与 `wait_async_results` 由工具策略生成整工具拒绝规则、每轮并入权限，经权限引擎拒绝（有事件与审计）；中间件只拦截非 `ToolBase` 工具，违反时本轮以错误结束（ADR-0034） |
 | `RecoveryNoteMiddleware` | `onReasoning` | 恢复轮的第一次推理前，把恢复说明追加到输入和 `AgentState` 上下文。恢复说明不走调用入参，因为 AgentScope 在停机中断后的下一次调用会丢弃全部入参 |
 | `BatchCheckpointMiddleware` | `onActing`、`onReasoning` | 每批工具执行完成后、下一次推理之前保存一次状态（批次级 checkpoint，P3），强杀后从最近的批次续跑；可配置关闭。`SteerMiddleware` 必须排在它之外（ADR-0028） |
 | `InterruptCheckpointMiddleware` | `onReasoning` | 认领时已有中断请求的轮次（等待回应时被中断生成的恢复轮、中断后被恢复认领的轮次），在第一次推理前按用户中断结束：本轮的输入已写进上下文，不再调用模型。排在 `RecoveryNoteMiddleware` 之内、`SteerMiddleware` 之外（ADR-0031） |
@@ -528,6 +528,8 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 - `web_search` 的后端按租户配置，可选博查、Tavily、Brave、SearXNG。
 
 平台工具的文件和命令操作，通过 `HarnessAgent.getWorkspaceManager().getFilesystem()` 拿到的文件系统执行：`none` 档是平台的 `CompositeFilesystem`；`sandbox` 档是 harness 包装的 `RoutedSandboxFilesystem`，`bash` 调用它的 `execute`。调用时**必须**传入 `ToolCallParam.getRuntimeContext()`，因为沙箱实例要从这个上下文里取；传新建的上下文会退回到跨会话共享的字段。
+
+**工具基类（ADR-0034）。** 平台工具继承 `PlatformTool`：子类声明名称、英文描述、入参 schema、副作用等级与规则内容语法；基类实现 `matchRule`（规则内容为空时匹配全部调用）与带内容的 `generateSuggestions`，执行前经 `ToolLedgerPort` 记录开始（幂等键 `session_id:tool_use_id`，恢复确认重试时沿用原键），执行后记录结束；`non_idempotent` 工具把幂等键传给下游，结果写入对象存储、引用进账本。指标 `meridian_tool_calls_total` 与审计 `tool.executed`（有副作用的调用）由账本实现在记录结束时写出。规则与工具中的路径相对工作区根，`**` 匹配零或多级目录，`dir/**` 也匹配 `dir`；`grep_files` 的命中再按它的拒绝规则过滤。修改已有文件要求本线程读过当前版本（"先读后改"），读取状态随工具结果的元数据保存在 `AgentState` 中。装配后 Toolkit 中只允许 `load_skill_through_path` 一个非 `ToolBase` 工具，违反时装配失败，runtime 启动时自检一次。
 
 **保留工具名。** 业务方声明的自定义工具不能与以下名称重名：平台工具名、harness 仍然注册的工具（`plan_enter`、`plan_write`、`plan_exit`、`load_skill_through_path`、`wait_async_results`），以及 `mcp__` 前缀。原因是 `ToolRequestConfig` 遇到同名时外部工具优先，会顶掉平台工具。保留名单由 `AgentAssembler` 在装配后从 Toolkit 读出，API 校验时使用。
 
@@ -877,7 +879,9 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 
 **`MeridianBaseStore`** 是平台自研的 `BaseStore` 实现，**必须**覆盖 `putIfVersion`：默认实现返回 false，会导致所有写入失败。删除会话时按命名空间前缀清除。
 
-**受保护路径**包括 `AGENTS.md`、`skills/`、`subagents/`、`tools.json`、`MEMORY.md`，由平台从控制面配置生成，对智能体只读。这样，智能体不能通过写文件改写自己的提示词、技能或子智能体。
+**受保护路径**包括 `AGENTS.md`、`skills/`、`subagents/`、`tools.json`、`MEMORY.md`，由平台从控制面配置生成，对智能体只读。这样，智能体不能通过写文件改写自己的提示词、技能或子智能体。内容在装配时按智能体版本生成（ADR-0034）：`AGENTS.md` 为智能体层的系统提示词，`skills/<name>/` 为技能文件（经 `AgentConfigPort.skill` 取得），`subagents/<name>.md` 为子智能体定义，`tools.json` 为启用的工具与 MCP 服务的说明，`MEMORY.md` 一期为空。
+
+**存储细则（ADR-0034）。** `WorkspaceStorePort` 的值序列化为 JSON，不超过 64 KB 内联在 `workspace_entries`，否则写进对象存储（`rt/{tenant}/{session}/workspace/…`），表中存键；版本号从 1 开始，`putIfVersion` 的 0 表示"不存在才创建"。本机工作区根（`workspace(...)`）是平台控制的目录，平台不在其中写入。
 
 ### 会话沙箱
 
@@ -1409,6 +1413,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.6 | 2026-11-07 | T07：`sessions` 增加 `deleted_at`；会话的删除返回 202、归档只允许 `idle` 与 `requires_action`；SSE 第 1 步由每节点一个不阻塞的 `XREAD` 读取循环完成，去重与跳号按会话的全部序号判断，会话终止后关闭连接；OpenAPI 生成链与 3.1 写作约束（ADR-0029、ADR-0030） |
 | v1.8 | 2026-11-08 | T09a：模型调用的重试与降级细则、结算方式、平台 HTTP 传输与供应商扩展点；压缩只按 token 阈值触发、平台摘要提示词；`CompactionGuardMiddleware` 的顺序与失败恢复、新增 `ContextCompositionMiddleware`，`span.model_request_start` 带上下文构成；事件映射中 `CUSTOM` 的平台事件；预算以 token 计与用量记录格式（ADR-0032） |
 | v1.9 | 2026-11-08 | T09b：模型直通接口的流式与错误约定、Embedding 与 rerank 的计量与拆批、模型目录的种类与模型级端点；内部接口规范与开发期服务凭据；测试策略增加脚本化模型服务（ADR-0033） |
+| v1.10 | 2026-11-08 | T10a：`PlatformContext` 带终端用户；`wait_async_results` 在 2.0.4 中是 `ToolBase`，工具集外的工具与它由工具策略的拒绝规则拒绝，`PolicyMiddleware` 只拦截非 `ToolBase` 工具；技能仓库继承 `WorkspaceSkillRepository`；平台工具基类、路径约定、先读后改、账本的指标与审计；受保护路径的内容与工作区存储细则；本机工作区根；`AgentConfigPort` 读取技能内容（ADR-0034） |
 
 ## 待决问题
 

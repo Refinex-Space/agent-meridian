@@ -1,6 +1,6 @@
 # meridian-engine-agentscope
 
-内核适配层的 AgentScope 2.0.4 实现，唯一依赖 AgentScope 的生产模块：智能体装配与实例缓存、执行一轮、事件映射、带租约校验的状态存储、平台中间件。
+内核适配层的 AgentScope 2.0.4 实现，唯一依赖 AgentScope 的生产模块：智能体装配与实例缓存、执行一轮、事件映射、带租约校验的状态存储、平台中间件、平台工具、`none` 档工作区与技能仓库。
 
 ## 命令
 
@@ -16,15 +16,27 @@
 - `middleware`：`PlatformMiddlewareProvider` 交给装配器的平台中间件（参数：租约、收件箱、是否开启批次 checkpoint；子智能体不含 steer）；`PlatformStopRequest` 是平台中间件请求停止并记录原因的入口；`RecoveryNoteMiddleware`、`BatchCheckpointMiddleware`、`InterruptCheckpointMiddleware` 从 `RuntimeContext` 读取引擎放入的 `RecoveryNoteSlot`、`BatchCheckpoint`、`PendingInterrupt`；`SteerMiddleware` 经 `InboxPort` 取 steer（T08，ADR-0031）。
 - `turn.AgentScopeEngine` 另有 `retryToolCall`（恢复确认的重试，直接调 Toolkit 中的工具，原幂等键放在 `ToolRetryContext`）与 `reservedToolNames`。
 - `assembly.AgentAssembler`：`HarnessAgent.Builder` 的全部配置都在 `configure`，按「引擎装配」表逐段对应；`AgentInstanceCache` 对外 `acquire`/`acquireSubagent`/`release`；`AssembledAgent.reservedToolNames()` 供自定义工具校验；`CompactionPrompt` 是平台的摘要提示词。
+- `tools`（T10a，ADR-0034）：`PlatformTool` 是所有平台工具的基类（`matchRule`、`generateSuggestions`、账本与幂等键、文件系统绑定），`RuleSyntax` 是规则内容语法，`WorkspacePaths` 是路径规范化与路径 glob；六个文件工具与 `FileToolSupport`（先读后改、`grep_files` 按拒绝规则过滤）；`PlatformToolProvider` 按工具名登记工厂。
+- `fs`（T10a）：`PlatformWorkspace` 是 `none` 档的 `WorkspaceFilesystemProvider`（`skills()` 给出技能仓库提供者）；`MeridianBaseStore`（`BaseStore` → `WorkspaceStorePort`）、`WorkspaceNamespaces`（命名空间取自 `PlatformContext`）、`ReadOnlyFilesystem`、`ProtectedContent`（受保护路径的内容）、`MeridianSkillRepository`（继承 `WorkspaceSkillRepository`）。
+- `assembly.ToolPolicy`：装配自检（非 `ToolBase` 只允许 `load_skill_through_path`）、策略拒绝规则（`wait_async_results`、工具集外的工具，`AssembledAgent.policyDenyRules()`，引擎每轮并入权限）、启动自检的探测对象；`AgentAssembler.selfCheck`。
 - `model`（T09a，ADR-0032）：`RoutedModel`（`doStream`：resolve → 限流 → 预扣 → 带重试的调用 → `usingWhen` 结算；降级在 `ProviderFailure` 之上决定）、`RoutedModelFactory`（装配时 `describe` 取上下文窗口）、`ProviderClients`（按账号加模型缓存不含凭据的客户端）、`OpenAiCompatibleClientFactory`、`ProviderHttpTransport`（记录 `Retry-After`）、`ProviderErrors`（可重试、拒绝、非供应商错误）、`TokenEstimator`、`CompactionWatch`（压缩期间的 Reactor Context 标记）。`RoutedModelInvoker`（T09b，ADR-0033）是 `ModelInvoker`：每次调用一个只含主模型的 `RoutedModel`，`ChunkTranslator` 把 2.0.4 的流式工具调用（首块带名字，后续片段名为 `__fragment__`、不带序号）归并到序号上。
 
 ## 中间件顺序（P13，T04 测得）
 
 `order()` 数值大的在外层；`MiddlewareChainTest` 断言链路与 span 父子关系。装配后的实际链路（外层在前）：
 
-`GracefulShutdownMiddleware`（AgentScope 构造时固定放在最外层）→ `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200，委托 `OtelTracingMiddleware`) → `LeaseGuardMiddleware`(100) → `RecoveryNoteMiddleware`(90) → `InterruptCheckpointMiddleware`(88) → `SteerMiddleware`(85) → `BatchCheckpointMiddleware`(80) → `ToolSpanMiddleware`(50) → `CompactionGuardMiddleware`(20，外层，按智能体的压缩预留创建) → `ContextCompositionMiddleware`(10，`onModelCall`) → harness 自带：`WorkspaceContextMiddleware`、`AtPathExpansionMiddleware`、`CompactionMiddleware`、`ToolResultEvictionMiddleware`、`InboxMiddleware`、`HarnessSkillMiddleware`（都是 1，按注册顺序）→ `CompactionGuardMiddleware.Inner`(0)。P13 通过（T09a），报告 `docs/poc/P13-中间件顺序.md`。
+`GracefulShutdownMiddleware`（AgentScope 构造时固定放在最外层）→ `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200，委托 `OtelTracingMiddleware`) → `LeaseGuardMiddleware`(100) → `RecoveryNoteMiddleware`(90) → `InterruptCheckpointMiddleware`(88) → `SteerMiddleware`(85) → `BatchCheckpointMiddleware`(80) → `PolicyMiddleware`(70) → `ToolSpanMiddleware`(50) → `CompactionGuardMiddleware`(20，外层，按智能体的压缩预留创建) → `ContextCompositionMiddleware`(10，`onModelCall`) → harness 自带：`WorkspaceContextMiddleware`、`AtPathExpansionMiddleware`、`CompactionMiddleware`、`ToolResultEvictionMiddleware`、`InboxMiddleware`、`HarnessSkillMiddleware`（都是 1，按注册顺序）→ `CompactionGuardMiddleware.Inner`(0)。P13 通过（T09a），报告 `docs/poc/P13-中间件顺序.md`。
 
 span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（批次）→ `execute_tool {name}`（每个调用）。后续中间件选 `order()` 时以此为准：要在压缩之前生效的大于 1，要夹在压缩之内的小于 1；在推理前往上下文注入消息的必须大于 80，注入的内容才进入该次 checkpoint（`SteerMiddleware` 为 85）。
+
+## 新增平台工具（T10b、T12a、T13 照此做）
+
+1. 在 `tools` 包写一个 `PlatformTool` 子类：构造时给 `Spec`（名字取自 `PlatformToolNames`、英文描述写清用途、何时使用、参数、返回格式、限制；入参 JSON Schema；副作用等级；`RuleSyntax`；能否与同批调用并行），实现 `execute(ToolCall)`。
+2. `execute` 在有界弹性线程上运行，可以阻塞；文件与命令操作用 `call.filesystem()` 并传入 `call.runtimeContext()`；可预期的问题抛 `ToolInputException`（英文说明，交给模型修正）；`non_idempotent` 工具把 `call.idempotencyKey()` 传给下游。不要自己记账。
+3. 在 `PlatformToolProvider` 登记工厂（runtime 的 `PlatformToolsAutoConfiguration` 经 `with(name, factory)` 加入）；输出超过 50000 字符时自己截断并提示如何继续（工具结果卸载阈值 80000）。
+4. 测试：`turn.EngineHarness.withPlatform(...)` 加 `ScriptedModel` 的场景测试（规则、账本、结果）；ArchUnit 规则 13 要求生产代码中的 `ToolBase` 子类都继承 `PlatformTool`。
+
+规则内容语法：路径 glob（相对工作区根，`**` 匹配零或多级目录，`dir/**` 也匹配 `dir`）、命令前缀（`git status:*`）、域名（`domain:example.com`，含子域名）、资源 ID（列表中每个值都要被覆盖）；规则内容为空时匹配全部调用。
 
 ## 不变量
 
@@ -50,7 +62,11 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 - `Toolkit.copy()` 不转移 MCP 客户端所有权：需要关闭的资源放进 `ToolBundle.resources`。
 - `disableDynamicSkills()` 让技能清单在构建时冻结；技能仓库必须按装配时的智能体版本解析。
 - `CompositeFilesystem` 会剥离目录路由前缀，单文件路由不剥离；每个目录前缀要有自己的后端视图。
-- 不设 `workspace(...)` 时本机工作区根是 `${user.dir}/.agentscope/workspace`（登记事项 D05，T10a 处理）。
+- 装配时 `workspace(...)` 设为提供者给的本机目录（D05）：不设时 harness 用 `${user.dir}/.agentscope/workspace` 并从中回退读取 `AGENTS.md` 等；平台不在其中写入，P4 测试断言它不存在。
+- `MarketplaceStager` 每次构建系统提示词都把非 `WorkspaceSkillRepository` 仓库的技能资源写到本机 `.skills-cache/`：技能仓库必须继承 `WorkspaceSkillRepository`。
+- `wait_async_results` 在 2.0.4 中是 `ReflectiveFunctionTool`（`ToolBase`），会进权限引擎；`onActing` 中间件自己合成的事件不会被发布（2.0.4 只发布 `actingStream` 内部的事件），要拒绝工具就用权限规则（`ToolPolicy.denyRules`）。策略拒绝规则只并入非平凡的策略，否则平凡上下文的"一律放行"会变成"都要确认"。
+- 工具结果的元数据随 `AgentState` 持久化、不发给模型：先读后改的读取状态存在 `meridian_file` 里；超过 16 KB 的结果在事件中只有对象存储引用。
+- `RemoteFilesystem.write` 只在键不存在时成功，覆盖要用 `uploadFiles`；`CompositeFilesystem` 对单文件路由查存在性时传 `//AGENTS.md`、列目录时大小报 0。
 - 2.0.4 从不赋值 `GenerateReason.STRUCTURED_OUTPUT`，结构化输出完成时为 `MODEL_STOP`。
 - 2.0.4 的块 ID 每次模型调用都从 `text` 重新编号，平台块 ID 是 `{replyId}:{blockId}`；并行工具调用交错时同一 ID 会多次 `TOOL_CALL_START/END`，入参在 `MODEL_CALL_END` 才完整（ADR-0026）。
 - 一批工具的 `TOOL_RESULT_END` 在整批执行完后才逐个发出；`AgentScopeEngine` 之外不要据此计时单个工具。
@@ -67,6 +83,6 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 
 ## 对外接口
 
-- 实现 `meridian-engine-spi` 的 `AgentEngine`（`turn.AgentScopeEngine`）；依赖端口 `AgentConfigPort`、`LeaseRegistry`、`AgentStateRepository`、`BlobStorePort`、`InboxPort`。
-- runtime 只能在 `config` 包引用本模块的装配入口：`AgentAssembler`、`AgentInstanceCache`、`AgentScopeEngine`、`FencedAgentStateStore`、`PlatformMiddlewareProvider`、`RoutedModelFactory`、`RoutedModelInvoker`、`ProviderClients`、`ProviderHttpTransport`、`OpenAiCompatibleClientFactory` 与提供者接口。依赖端口另有 `ModelGateway`（T09a）。
-- 生产实现的提供者：模型工厂已有（T09a，`ModelFactoryAutoConfiguration`），中间件 T04 起（T10a、T19 继续加入），工具 T10a、T10b、T12a、T13，文件系统 T10a、T12a，技能仓库 T10a。`ModelInvoker` 由 `RoutedModelInvoker` 实现（T09b），runtime 在 `config` 装配。
+- 实现 `meridian-engine-spi` 的 `AgentEngine`（`turn.AgentScopeEngine`）；依赖端口 `AgentConfigPort`（含 `skill`）、`LeaseRegistry`、`AgentStateRepository`、`BlobStorePort`、`InboxPort`、`ToolLedgerPort`、`WorkspaceStorePort`。
+- runtime 只能在 `config` 包引用本模块的装配入口：`AgentAssembler`、`AgentInstanceCache`、`AgentScopeEngine`、`FencedAgentStateStore`、`PlatformMiddlewareProvider`、`RoutedModelFactory`、`RoutedModelInvoker`、`ProviderClients`、`ProviderHttpTransport`、`OpenAiCompatibleClientFactory`、`PlatformToolProvider`、`PlatformTool.ToolServices`、`PlatformWorkspace`、`ToolPolicy` 与提供者接口。依赖端口另有 `ModelGateway`（T09a）。
+- 生产实现的提供者：模型工厂（T09a，`ModelFactoryAutoConfiguration`）；工具、`none` 档文件系统、技能仓库（T10a，`PlatformToolsAutoConfiguration`），T10b、T12a、T13 继续加工具，T12a 加 `sandbox` 档文件系统；中间件 T04 起（T19 继续加入）。`ModelInvoker` 由 `RoutedModelInvoker` 实现（T09b），runtime 在 `config` 装配。

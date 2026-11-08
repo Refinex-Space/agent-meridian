@@ -692,43 +692,43 @@
       "id": "T10a-A01",
       "task": "T10a",
       "description": "所有平台工具继承 `PlatformTool`；启动自检在出现白名单外的非 `ToolBase` 工具时启动失败。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ArchUnit 规则 13（生产代码中继承 ToolBase 的类都继承 PlatformTool）通过；`./mvnw -pl meridian-runtime -am verify -Dit.test=ToolkitSelfCheckStartupIT`：工具提供者给出白名单外的非 ToolBase 工具 raw_shell 时 runtime 启动失败（堆栈含\"Toolkit 自检失败\"），Tests run: 1, Failures: 0；`ToolPolicyTest`（装配与 selfCheck 抛出、PlatformToolProvider 只创建 PlatformTool）通过；`RuntimeApplicationIT` 的生产装配通过自检"
     },
     {
       "id": "T10a-A02",
       "task": "T10a",
       "description": "文件类工具的路径规则：`read_file(reports/**)` 放行匹配路径、其他路径按默认处理；`write_file` 写受保护路径被拒绝；`edit_file` 未读先改被拒绝。验证：集成测试；P6 报告的文件工具部分。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`FileToolsWorkerIT#pathRulesAllowMatchingPathsDenyProtectedPathsAndAskForTheRest`：read_file(reports/**) 下 reports/q3.md permission=allowed，private/salary.md 产生 tool_confirmation、轮次 awaiting_action，write_file AGENTS.md 与 skills/x/SKILL.md 被平台安全规则拒绝；`#editingAFileThatWasNotReadIsRejected`：未读先改返回 error、文件不变；内核层 `FileToolScenarioTest` 8 个通过；报告 docs/poc/P06-规则与审批.md（T10a 文件工具部分）"
     },
     {
       "id": "T10a-A03",
       "task": "T10a",
       "description": "P4（`none` 档）：完整跑一轮读写文件的会话后，runtime 节点本地磁盘上没有任何会话文件；大文件进入对象存储，小文件进入 `workspace_entries`。验证：集成测试；报告 `docs/poc/P04-文件系统装配.md`（`none` 档部分）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`FileToolsWorkerIT#aTurnThatReadsAndWritesFilesLeavesNothingOnTheLocalDisk`：一轮写 50 字节周报与约 100 KB CSV、编辑、读取、列目录后，rt.workspace_entries 两行（命名空间 [tenant, project, u_1024, session]），周报内联、CSV 的 object_key 为 rt/{tenant}/{session}/workspace/… 且 MinIO 中存在、size 大于 64 KB；本机工作区根不存在，${user.dir}/.agentscope 无新文件；`DatabaseWorkspaceStoreIT` 4 个通过；报告 docs/poc/P04-文件系统装配.md（none 档）"
     },
     {
       "id": "T10a-A04",
       "task": "T10a",
       "description": "工具账本：每次调用都有记录，幂等键为 `session_id` 加 `tool_use_id`，`non_idempotent` 工具把幂等键传给下游。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`FileToolsWorkerIT#everyCallIsInTheLedgerWithTheSessionToolUseKeyAndSideEffectsAreAudited`：三次调用在 rt.tool_invocations 各一条，idempotency_key 为 {session_id}:{tool_use_id}，状态 succeeded/succeeded/failed，审计 tool.executed 只有写入调用；`PlatformToolLedgerTest`：non_idempotent 工具收到 {session}:call_c 并把结果写进对象存储（result_ref 进账本），恢复确认重试沿用原键 ses_x:call_old；`DatabaseToolLedgerIT` 3 个通过（指标 meridian.tool.calls 按 tool、state 计数）"
     },
     {
       "id": "T10a-A05",
       "task": "T10a",
       "description": "技能清单出现在系统提示词中，`load_skill_through_path` 能加载技能正文。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=SkillScenarioTest`：技能 report-writer 的名字与说明出现在第一次模型请求的系统提示词中，load_skill_through_path 加载 SKILL.md 正文与 templates/outline.md 资源，skills/ 下文件可读不可写，本机工作区没有暂存；`FileAgentConfigProviderTest` 读取 dev-config/skills"
     },
     {
       "id": "T10a-A06",
       "task": "T10a",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`scripts/dev/verify.sh`：BUILD SUCCESS（engine-agentscope-test 164、runtime 单元 158、runtime 集成 209、ArchitectureRulesTest 13 条规则，全部 Failures: 0, Errors: 0），check-pom-versions: OK，2026-11-08"
     },
     {
       "id": "T10b-A01",

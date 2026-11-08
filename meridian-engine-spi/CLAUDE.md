@@ -12,8 +12,8 @@
 - `engine`：`AgentEngine`（`runTurn`、`interrupt`、`shutdown`，T08 起另有 `retryToolCall` 与 `reservedToolNames`）、`TurnContext`（只带配置 ID 与修订号，配置经 `AgentConfigPort` 取；`interruptRequested` 让内核在第一次推理前停止）、`ThreadRef`、`RecoveryOrigin`（失败的 epoch、第几次恢复、`REPLAY_INPUT`/`RESUME_SAVED_STATE`）、`ToolRetry`（恢复确认的重试）。
 - `engine.input`：`TurnInput` 四种输入（嵌套 record），`kind()` 给出 `rt.turns.kind`；`MessageContent`（文本、图片、文件引用）被用户消息、自定义工具结果、`agent.message` 共用。
 - `event`：`EngineEvent` 按域分为 `UserEvent`、`AgentOutputEvent`、`SessionEvent`、`SpanEvent`、`StreamEvent`，具体记录嵌套在域接口里；`EventType` 登记每种类型的取值、域与记录类，`type()` 由记录类反查。
-- `spec`：`ResolvedAgentSpec`（含 `SubagentSpec`、`McpServerSpec`、`SkillRef`、`KnowledgeSpec`、`CompactionSpec`）、`EnvironmentSpec`、`PermissionPolicy`/`PermissionRule`、`CustomToolDeclaration`、`PlatformToolNames`。
-- `port`：架构设计「端口」表的全部端口，加 `AgentConfigPort`（ADR-0024）；`ModelGateway` 另有 `describe`、`precheck` 与计量记录 `ModelCallRecord`（ADR-0032）；`CallPurpose` 另有 `EMBEDDING`、`RERANK`（ADR-0033）。`event.ContextComposition` 是 `span.model_request_start` 的上下文构成。端口专用的值类型嵌套在端口接口里（如 `LeaseRegistry.Lease`、`AgentStateRepository.StateFence`）。
+- `spec`：`ResolvedAgentSpec`（含 `SubagentSpec`、`McpServerSpec`、`SkillRef`、`KnowledgeSpec`、`CompactionSpec`；`grants(tool)` 判断工具集）、`SkillDefinition`（技能内容，T10a）、`EnvironmentSpec`、`PermissionPolicy`/`PermissionRule`、`CustomToolDeclaration`、`PlatformToolNames`。
+- `port`：架构设计「端口」表的全部端口，加 `AgentConfigPort`（ADR-0024，T10a 起另有 `skill`）；`ModelGateway` 另有 `describe`、`precheck` 与计量记录 `ModelCallRecord`（ADR-0032）；`CallPurpose` 另有 `EMBEDDING`、`RERANK`（ADR-0033）。`event.ContextComposition` 是 `span.model_request_start` 的上下文构成。端口专用的值类型嵌套在端口接口里（如 `LeaseRegistry.Lease`、`AgentStateRepository.StateFence`）。
 - `driver`：`SandboxDriver`、`SandboxHandle`、`ModelInvoker`（OpenAI 兼容消息模型）。
 - `error`：决定一轮如何结束的异常与 `ModelErrorCode`：`BudgetExceededException`（`budget_exceeded`）、`RetryableTurnException`（可重试错误的基类，`RateLimitTimeoutException`、`ProviderUnavailableException` 继承它）（ADR-0026）、`ProviderRejectedException`（终止）、`CompactionFailedException`（原因链决定本轮如何结束，ADR-0032）。
 

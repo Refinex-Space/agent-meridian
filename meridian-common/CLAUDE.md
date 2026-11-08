@@ -20,7 +20,7 @@
 ## 不变量
 
 - 只依赖 JDK、Jackson 3、reactor-core、ulid-creator；reactor 只能出现在 `context` 与 `concurrent`（架构设计「模块依赖规则」，ArchUnit 规则 7）。
-- `PlatformContext.tenantId` 必填，其余可为空；Reactor Context 的键是 `PlatformContext.class`（架构设计「身份映射」）。
+- `PlatformContext.tenantId` 必填，其余可为空；Reactor Context 的键是 `PlatformContext.class`（架构设计「身份映射」）。`endUserId`（T10a）由 Worker 从会话填入，工作区命名空间取它；外部只用 `builder()` 构造，记录组件可以增加。
 - 错误码一经发布只能新增，不能改名；`MeridianException.detail` 原样返回调用方，不能含凭据与内部信息。
 
 ## 易错点
