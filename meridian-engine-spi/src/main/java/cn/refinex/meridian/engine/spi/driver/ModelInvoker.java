@@ -20,7 +20,9 @@ public interface ModelInvoker {
      * 流式聊天调用。
      *
      * @param request 请求
-     * @return 增量块，最后一块带用量与结束原因；预算不足以 {@code BudgetExceededException} 失败
+     * @return 增量块；结束原因与用量在供应商给出它们的块中出现（通常是最后一两块，用量可能单独成块）；预算不足以
+     *     {@code BudgetExceededException} 失败，限流等待超时以 {@code RateLimitTimeoutException} 失败，供应商错误以
+     *     {@code ProviderUnavailableException} 或 {@code ProviderRejectedException} 失败
      */
     Flux<ChatChunk> stream(ChatRequest request);
 
@@ -147,8 +149,8 @@ public interface ModelInvoker {
      * @param textDelta 追加的文本；可为空
      * @param reasoningDelta 追加的思考内容；可为空
      * @param toolCalls 工具调用的增量；可为空列表
-     * @param usage 用量，只在最后一块给出；其余为空
-     * @param finishReason 结束原因，例如 {@code stop}、{@code tool_calls}、{@code length}，只在最后一块给出；其余为空
+     * @param usage 用量，只在供应商报告用量的块中给出；其余为空
+     * @param finishReason 结束原因，例如 {@code stop}、{@code tool_calls}、{@code length}，只在供应商给出它的块中出现；其余为空
      */
     record ChatChunk(
             String textDelta,
