@@ -734,50 +734,50 @@
       "id": "T10b-A01",
       "task": "T10b",
       "description": "`web_fetch` 的 SSRF 表驱动测试全部通过；5 MB 上限生效。验证：测试报告。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "GuardedWebFetcherTest 42 项通过（./mvnw -pl meridian-runtime -am test -Dtest=GuardedWebFetcherTest）：30 个被拒目标表驱动（IPv4/IPv6 私有、回环、链路本地、169.254.169.254、100.100.100.200、fd00:ec2::254、十进制 2130706433/2852039166、八进制 0177.0.0.1/0251.0376.0251.0376、十六进制、省略段 127.1、IPv4 映射、解析到内网的主机名、混合解析结果、非 http 协议、带用户信息），被拒时测试站点收到 0 个请求；DNS 重绑定（第二次解析变为 10.0.0.7）被拒且每次都重新解析；5 种重定向到内网目标被拒；6 MB 响应体截断为 5 MB 并标记 truncated；AddressPolicyTest 70 项表驱动通过；verify.sh BUILD SUCCESS"
     },
     {
       "id": "T10b-A02",
       "task": "T10b",
       "description": "`web_search` 两个适配器通过 WireMock 测试，按租户配置切换。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "WebSearchAdaptersTest 3 项通过（WireMock）：ten_searxng 走 SearXNG（GET /search?q=&format=json，取 results[] 前 N 条）、ten_bocha 走博查（POST /v1/web-search，Authorization: Bearer 解析出的密钥，请求体 query/count/summary/freshness，取 data.webPages.value[]，摘要优先 summary），各自不触达另一后端；HTTP 401、code 403、租户未配置分别给出英文错误且不含密钥；租户设置来自 kind: tenant_settings 的 YAML"
     },
     {
       "id": "T10b-A03",
       "task": "T10b",
       "description": "MCP：进程内 MCP 服务的工具被发现并以 `mcp__` 前缀暴露，凭据在请求头中注入且未出现在日志与事件中。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "McpToolsIT 4 项通过（./mvnw -pl meridian-engine-agentscope-test -am verify -Dit.test=McpToolsIT）：进程内 MCP 服务（Boot 4.1 Servlet 注册 HttpServletStreamableServerTransportProvider 与 SSE 传输）的工具以 mcp__crm__* 暴露、事件为 agent.mcp_tool_use；服务端收到的每个请求（初始化、发现、调用）都带 Authorization: Bearer <令牌>（McpCredentialInjector 按请求注入）；事件与 DEBUG 级日志中不含令牌；凭据错误时 tool.mcp_unavailable（retryable），实例关闭时客户端关闭"
     },
     {
       "id": "T10b-A04",
       "task": "T10b",
       "description": "`knowledge_search` 在未配置时返回明确的错误结果给模型，不抛异常中断轮次。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ExternalContentToolScenarioTest#unconfiguredKnowledgeSearchReturnsAnErrorResultAndTheTurnContinues 通过：knowledge_search 的端口以未配置错误失败时，工具结果 state=ERROR、文本为 \"Error: knowledge search failed: …not configured…\"，没有 session.error，模型收到错误结果后继续回答，本轮以 status_idle(end_turn) 结束；runtime 装配 UnconfiguredKnowledgeSearch"
     },
     {
       "id": "T10b-A05",
       "task": "T10b",
       "description": "P8 预验证：MCP SDK 0.17.2 的 Servlet 传输在 Spring Boot 4.1 中暴露的 MCP 服务，能被平台的 MCP 客户端发现并调用。验证：集成测试；报告 `docs/poc/P08-MCP-Server.md`（预验证部分）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "McpToolsIT（P8 预验证）：MCP SDK 0.17.2 的 HttpServletStreamableServerTransportProvider 以 ServletRegistrationBean 注册在 Spring Boot 4.1.2 Spring MVC（Tomcat 11.0.27）中，平台 McpConnector（AgentScope 2.0.4 McpClientBuilder，buildAsync）完成初始化、工具发现与调用；SSE 传输同样调通；报告 docs/poc/P08-MCP-Server.md（预验证部分，真实 knowledge_search 与 MCP Inspector 待 T19）"
     },
     {
       "id": "T10b-A06",
       "task": "T10b",
       "description": "系统提示词按四层顺序组装；同一智能体的两个会话请求前缀逐字节相同；外部内容的工具结果带来源标签，内容中的伪造标签被转义。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "PromptLayeringScenarioTest：系统提示词依次为平台基础提示词、租户层、智能体层、技能清单，不含日期与 AGENTS.md 的重复注入，时间以 <platform_context> 消息注入；AgentAssemblerTest#sysPrompt_layersPlatformBaseThenTenantThenAgent；ScriptedModelSessionIT#twoSessionsOfTheSameAgentSendIdenticalRequestPrefixes：两个会话发给供应商的请求体在第一条用户消息之前逐字节相同、消息之外的字段也相同（含租户提示词）；SourceTagsTest 8 项（大小写、空白、伪造开标签均被转义）与 ExternalContentToolScenarioTest、McpToolsIT 中 web_fetch/web_search/knowledge_search/MCP 结果均带来源标签且伪造闭合标签被转义"
     },
     {
       "id": "T10b-A07",
       "task": "T10b",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh 退出码 0：BUILD SUCCESS，15 个模块全部 SUCCESS（spotless、编译、单元与集成测试、ArchitectureRulesTest 13 项、enforcer、覆盖率、POM 版本检查）"
     },
     {
       "id": "T11-A01",

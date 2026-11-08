@@ -13,7 +13,7 @@ M0 要用代码验证架构设计中依赖运行时行为、读源码无法确�
 | P5 | agent-sandbox + gVisor + 预热池 | 未开始 | |
 | P6 | 平台工具 `matchRule` 与审批流程 | 进行中（T08 审批流程部分通过：ask 产生 `tool_confirmation`，批准执行、拒绝后智能体收到拒绝结果并继续、超时视为拒绝，内容级规则经 `matchRule` 生效；T10a 文件工具规则通过：路径 glob 放行匹配路径、其他按默认处理，受保护路径拒绝，未读先改拒绝；`bash(git status:*)` 待 T12a） | [P06-规则与审批.md](P06-规则与审批.md) |
 | P7 | 单 Pod 容量 | 未开始 | |
-| P8 | MCP SDK 0.17.2 Servlet 传输暴露 MCP Server | 未开始 | |
+| P8 | MCP SDK 0.17.2 Servlet 传输暴露 MCP Server | 预验证通过（T10b：`HttpServletStreamableServerTransportProvider` 与 SSE 传输注册为 Boot 4.1 Spring MVC 中的 Servlet，平台的 MCP 客户端完成初始化、工具发现与调用，凭据经请求定制器注入；真实的 `knowledge_search` 与 MCP Inspector 待 T19） | [P08-MCP-Server.md](P08-MCP-Server.md) |
 | P9 | 外部 `SandboxContext` 跨轮次复用与子线程共享 | 未开始 | |
 | P10 | 四种终止方式下的恢复语义 | 通过（T06：强杀重放完整输入、出错与停机从保存的状态续跑、用户中断以 interrupted 结束；不重复用户消息、不丢 steer、不重复执行 `non_idempotent` 工具；修正了跨轮 epoch 碰撞，ADR-0028；T08 用 `SteerMiddleware` 重跑强杀场景：被失败执行消费的 steer 重新投递并再次注入，开启 checkpoint 时随状态保存，均不丢失、不重复） | [P10-恢复语义.md](P10-恢复语义.md) |
 | P11 | `clearStateCache` 后的内存稳定性 | 未开始 | |

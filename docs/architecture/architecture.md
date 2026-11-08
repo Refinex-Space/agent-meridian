@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.10 |
+| 版本 | v1.11 |
 | 日期 | 2026-11-08 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -230,7 +230,7 @@ agent-meridian/
 | `SecretResolver` | 凭据明文解析 | `config` |
 | `BlobStorePort` | 大对象写入与读取（超过 16 KB 的工具结果等） | `stream` |
 | `ThreadRegistryPort` | 创建子线程、更新线程状态 | `session` |
-| `AgentConfigPort` | 读取已解析的智能体版本与环境配置，智能体实例缓存未命中时使用（ADR-0024）；读取技能版本的内容，装配时生成受保护路径 `skills/`（ADR-0034） | `config` |
+| `AgentConfigPort` | 读取已解析的智能体版本与环境配置，智能体实例缓存未命中时使用（ADR-0024）；读取技能版本的内容，装配时生成受保护路径 `skills/`（ADR-0034）；读取租户提示词，装配时作为系统提示词的租户层（ADR-0035） | `config` |
 
 上表是落地时的初始清单。为落实本文档已规定的行为，可以在 `meridian-engine-spi` 中新增端口或给既有端口加方法，签名只出现平台类型，并同步更新本表；删除端口或改变既有端口的语义，才需要走 ADR。
 
@@ -455,6 +455,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 
 | 配置 | 取值 | 原因 |
 |---|---|---|
+| `sysPrompt(...)` | 「平台基础提示词 → 租户 → 智能体」（`PlatformPrompt.compose`），技能清单由 harness 追加在最后（ADR-0035） | 见"上下文管理"中的提示词分层 |
 | `model(Model)` | 平台构造的 `RoutedModel` 实例，内含主模型与备用模型 | 不经 `ModelRegistry` 全局注册表；凭据和路由在调用时按 `PlatformContext` 解析 |
 | `fallbackModel` | 不设置 | AgentScope 对首个信号的任何错误都会切换，包括预算和限流异常；降级由 `RoutedModel` 自己做 |
 | `maxRetries(1)` | 必须 | 同理，重试由 `RoutedModel` 只针对供应商错误进行。参数是含首次在内的总尝试次数，1 即不重试；2.0.4 中 0 非法（ADR-0023） |
@@ -469,6 +470,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `disableMemoryTools()`、`disableMemoryHooks()` | 一期必须 | `session_search` 只扫本机磁盘；长期记忆在二期 |
 | `disableDefaultWorkspaceSkills()`、`disableDynamicSkills()` | 必须 | 技能只来自平台技能仓库，智能体不能自建技能 |
 | `disableTranscript()` | 必须 | 转录写入工作区或沙箱，不受 fencing 约束且无限增长；会话记录以 `session_events` 为准 |
+| `disableWorkspaceContext()` | 必须 | 2.0.4 的 `WorkspaceContextMiddleware` 每次推理往系统提示词追加当天日期、本机路径与再读一遍的 `AGENTS.md`，破坏提示词分层与缓存前缀；时间改以消息注入（ADR-0035） |
 | `messageBus(...)` | 平台的 `NoopMessageBus` | 默认的工作区消息总线会让每次推理都读一次工作区；`wait_async_results` 仍会注册（2.0.4 把它包装为 `ReflectiveFunctionTool`，是 `ToolBase`），由工具策略的整工具拒绝规则拒绝（ADR-0034） |
 | `asyncToolRegistry(...)` | 平台的 `NoopAsyncToolRegistry` | 不设置时 harness 创建基于工作区的异步工具登记，`InboxMiddleware` 每次推理前仍会读工作区（ADR-0024） |
 | `enableAgentTracingLog(false)` | 必须 | 默认的 `AgentTraceMiddleware` 以 INFO 记录模型输出正文，违反日志规范（ADR-0024） |
@@ -526,6 +528,13 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 
 - `web_fetch` 必须做 SSRF 防护：拒绝内网、回环、链路本地地址；DNS 解析后再校验一次；响应体上限 5 MB。
 - `web_search` 的后端按租户配置，可选博查、Tavily、Brave、SearXNG。
+
+**联网、知识检索与 MCP 工具（ADR-0035）。**
+
+- `web_fetch`：runtime 的 `GuardedWebFetcher` 用 Reactor Netty 加平台的解析器组，DNS 解析后校验全部地址，连接用的就是校验过的地址；不复用连接、不走代理、逐跳处理重定向（至多 5 跳）。IP 字面量（含十进制、八进制、十六进制写法与 IPv6）由平台解析判定，不合法的数字主机名直接拒绝。拒绝的段见 `AddressPolicy`（私有、CGNAT、回环、链路本地与云元数据、唯一本地、保留、组播等，映射与隧道地址按内嵌 IPv4 判定）。读满 5 MB 停止并标记截断；HTML 经 jsoup 去掉不可见元素后由 flexmark 转 Markdown，文本与 JSON 原样，其他类型拒绝。工具一次输出至多 50000 字符，`offset` 续读。
+- `web_search`：一期实现 SearXNG 与博查两个后端，按 `tenant_settings` 中的配置选择，密钥经 `SecretResolver` 每次解析。
+- `knowledge_search`：按智能体实例创建，`knowledge_base_ids` 必填，schema 只列出智能体绑定的知识库；knowledge 未接入时检索以错误结果交给模型。
+- MCP：`McpConnector` 用 `McpClientBuilder` 先选传输、再设置 HTTP 客户端与请求定制器、显式声明协议版本，构建异步客户端（同步客户端在内部另起订阅，凭据传不到传输层）。每个工具包成继承 `PlatformTool` 的 `McpPlatformTool`，进权限引擎与账本，未标注副作用等级时按 `non_idempotent`，幂等键放进请求的 `_meta`。凭据在每次请求前解析，只放进这一次调用的 Reactor Context，由请求定制器写入请求头。装配时连不上服务以 `tool.mcp_unavailable`（可重试）结束本轮。MCP 端点由管理员登记、允许内网地址；客户端不跟随重定向，拒绝链路本地与云元数据地址。
 
 平台工具的文件和命令操作，通过 `HarnessAgent.getWorkspaceManager().getFilesystem()` 拿到的文件系统执行：`none` 档是平台的 `CompositeFilesystem`；`sandbox` 档是 harness 包装的 `RoutedSandboxFilesystem`，`bash` 调用它的 `execute`。调用时**必须**传入 `ToolCallParam.getRuntimeContext()`，因为沙箱实例要从这个上下文里取；传新建的上下文会退回到跨会话共享的字段。
 
@@ -831,7 +840,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 - **压缩**：使用 harness 的 `CompactionMiddleware`，`flushBeforeCompact(false)`。`RoutedModel` 通过 `setContextWindowSize` 报告模型的上下文窗口（装配时经 `ModelGateway.describe` 取模型目录的值），压缩阈值等于窗口减去 `reserved`（默认 20000 token）；关闭 2.0.4 默认的 50 条消息阈值，只按 token 触发。摘要提示词由平台统一维护，要求保留目标、关键决定、产物、未完成事项、下一步。
 - **上下文构成**：每次模型请求的 `span.model_request_start` 带 `context`：系统提示词、技能清单、历史消息、工具结果、平台注入内容（steer、前置检索、恢复说明）各自的条数与 token 估算，不含正文，供控制台展示"模型这一轮实际看到了什么"。命中提示词缓存的 token 在响应结束后才知道，在 `span.model_request_end` 的 `usage.cached_tokens` 与用量记录中给出（ADR-0032）。
 - **工具结果卸载**：使用 `ToolResultEvictionMiddleware`，阈值 80000 字符，预览 2000 字符，写入工作区 `large_tool_results/`。这个路径在两个档位都路由到平台存储。
-- **提示词分层**：平台基础提示词和工具定义放在最前，作为跨租户共享的缓存前缀；其后依次是租户、智能体、技能清单；时间、待办提醒等动态内容以消息形式注入，不改前缀。`RoutedModel` 记录每次请求的缓存命中 token，用于成本分析。
+- **提示词分层**：平台基础提示词和工具定义放在最前，作为跨租户共享的缓存前缀；其后依次是租户、智能体、技能清单；时间、待办提醒等动态内容以消息形式注入，不改前缀。`RoutedModel` 记录每次请求的缓存命中 token，用于成本分析。落点（ADR-0035）：装配时 `sysPrompt` 为前三层，技能清单由 `HarnessSkillMiddleware` 追加；关闭 `WorkspaceContextMiddleware`；当前时间以 `<platform_context>` 用户消息在每个新消息轮次的用户消息之前注入；平台工具的入参 schema 按键排序，跨节点的工具定义也相同。
 
 ### 模型调用
 
@@ -1014,7 +1023,7 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 
 - 工具权限默认 ask，沙箱默认无出网，受保护路径只读。
 - `web_fetch` 和 MCP 的 HTTP 调用经过 SSRF 防护。
-- 检索结果、网页内容、工具结果进入上下文前，包上来源标签；平台基础提示词声明这类内容一律视为数据，不是指令。
+- 检索结果、网页内容、工具结果进入上下文前，包上来源标签；平台基础提示词声明这类内容一律视为数据，不是指令。标签为 `<external_content source="…" …>`，内容中出现的 `<external_content`、`</external_content`（不区分大小写，允许空白）把 `<` 转义为 `&lt;`，防止伪造闭合（ADR-0035）。
 - 每次权限判定、待处理动作的回应、凭据访问、沙箱命令都写审计日志。
 
 ## API 设计
@@ -1414,6 +1423,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.8 | 2026-11-08 | T09a：模型调用的重试与降级细则、结算方式、平台 HTTP 传输与供应商扩展点；压缩只按 token 阈值触发、平台摘要提示词；`CompactionGuardMiddleware` 的顺序与失败恢复、新增 `ContextCompositionMiddleware`，`span.model_request_start` 带上下文构成；事件映射中 `CUSTOM` 的平台事件；预算以 token 计与用量记录格式（ADR-0032） |
 | v1.9 | 2026-11-08 | T09b：模型直通接口的流式与错误约定、Embedding 与 rerank 的计量与拆批、模型目录的种类与模型级端点；内部接口规范与开发期服务凭据；测试策略增加脚本化模型服务（ADR-0033） |
 | v1.10 | 2026-11-08 | T10a：`PlatformContext` 带终端用户；`wait_async_results` 在 2.0.4 中是 `ToolBase`，工具集外的工具与它由工具策略的拒绝规则拒绝，`PolicyMiddleware` 只拦截非 `ToolBase` 工具；技能仓库继承 `WorkspaceSkillRepository`；平台工具基类、路径约定、先读后改、账本的指标与审计；受保护路径的内容与工作区存储细则；本机工作区根；`AgentConfigPort` 读取技能内容（ADR-0034） |
+| v1.11 | 2026-11-08 | T10b：系统提示词的落点（`sysPrompt` 三层、关闭 `WorkspaceContextMiddleware`、时间以 `<platform_context>` 消息注入、工具 schema 按键排序）；`AgentConfigPort` 读取租户提示词；来源标签格式与转义；`web_fetch` 的 SSRF 实现、`web_search` 的两个后端、`knowledge_search` 的入参、MCP 客户端的构建与凭据注入（ADR-0035） |
 
 ## 待决问题
 

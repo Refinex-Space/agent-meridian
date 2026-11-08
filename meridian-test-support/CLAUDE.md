@@ -14,7 +14,7 @@
 - `PostgresImage`：从 `deploy/docker/postgres/` 构建 `agent-meridian/postgres:test-<内容摘要>`，本机已有同摘要镜像时跳过构建。
 - `TestDatabase`：`appDataSource()`（`meridian_app`，只有 DML）、`migratorDataSource()`、`migrate(schema)`、`runScript(schema, 资源)`、`truncate(schema)`。
 - `SpringContainerProperties`：`@DynamicPropertySource` 中调用 `postgres`、`redis`、`minio`。
-- `model.ScriptedOpenAiServer`：`builder().script(yaml).scriptsDirectory(dir).start()`（默认回环地址的随机端口）；`baseUrl()` 作供应商账号的 `base_url`，`rerankBaseUrl()` 作 rerank 模型的 `base_url`；`calls()` 记录每次请求（路径、脚本、步骤、是否流式），断言重试次数用。`ScriptLoader` 解析 YAML，`ScriptedVectors` 是 Embedding 与 rerank 的确定算法。
+- `model.ScriptedOpenAiServer`：`builder().script(yaml).scriptsDirectory(dir).start()`（默认回环地址的随机端口）；`baseUrl()` 作供应商账号的 `base_url`，`rerankBaseUrl()` 作 rerank 模型的 `base_url`；`calls()` 记录每次请求（路径、脚本、步骤、是否流式；对话补全另有请求体原文 `body`，T10b 比较请求前缀用），断言重试次数用。`ScriptLoader` 解析 YAML，`ScriptedVectors` 是 Embedding 与 rerank 的确定算法。
 
 ## 脚本化模型服务
 

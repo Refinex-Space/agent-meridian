@@ -11,16 +11,17 @@
 
 - `testkit.model`：`ScriptedModel`（`respond`、`respondTo`、`failBeforeFirstChunk`、`failAfterChunks`）、`ScriptedResponse`（文本与思考按大小分块、工具调用入参分两块、`structuredOutput`、`rawChunk`、`usage`、`thenFail`）、`RecordedRequest`（`toolNames`、`lastUserText`、`toolResults`、`systemPrompt`、`options`）。
 - `testkit.model`（T09a）：`InMemoryModelGateway`（登记路由、一级预算、限流超时开关，记录预扣、结算、释放与预检）、`StaticProviderClientFactory`（按供应商侧模型名返回脚本作为底层客户端），配合 `RoutedModelFactory` 测 `RoutedModel` 与压缩守护。
-- `testkit.port`：`InMemoryLeaseRegistry`、`InMemoryAgentStateRepository`（`activate`/`deactivate` 模拟数据库中的租约条件）、`InMemoryEventSink`、`InMemoryBlobStore`、`InMemoryAgentConfig`（含技能）、`InMemoryInbox`、`InMemoryToolLedger`、`InMemoryThreadRegistry`、`InMemoryWorkspaceStore`（与数据库实现相同的版本语义）。
-- `testkit.assembly`：`TestAssembly.builder(model)` 组装带替身的 `AgentAssembler`；`TestSpecs.agent()` 构建 `ResolvedAgentSpec`，`noneEnvironment()`/`sandboxEnvironment()`；`InMemoryWorkspaceFilesystems`（受保护路径各一个内存文件系统，`RecordingBaseStore` 记录访问）、`FakeSandboxFilesystemSpec`（能装配、不能建沙箱）。
+- `testkit.port`：`InMemoryLeaseRegistry`、`InMemoryAgentStateRepository`（`activate`/`deactivate` 模拟数据库中的租约条件）、`InMemoryEventSink`、`InMemoryBlobStore`、`InMemoryAgentConfig`（含技能与租户提示词 `tenantPrompt(tenantId, text)`）、`InMemoryInbox`、`InMemoryToolLedger`、`InMemoryThreadRegistry`、`InMemoryWorkspaceStore`（与数据库实现相同的版本语义）。
+- `testkit.assembly`：`TestAssembly.builder(model)` 组装带替身的 `AgentAssembler`（默认没有租户层，`tenantPrompts(...)` 指定）；`TestSpecs.agent()` 构建 `ResolvedAgentSpec`（`mcpServer(...)` 挂 MCP 服务），`noneEnvironment()`/`sandboxEnvironment()`；`InMemoryWorkspaceFilesystems`（受保护路径各一个内存文件系统，`RecordingBaseStore` 记录访问）、`FakeSandboxFilesystemSpec`（能装配、不能建沙箱）。
 - `testkit.tool.RecordingTool`：继承 `ToolBase` 的测试工具，`echo(name)` 返回 `name:text`。`PathRuleTool`：实现 `matchRule` 的路径工具（规则内容是路径 glob，`**` 匹配零或多级目录），`withSafetyAsk` 对指定路径返回安全类 ask（T08，P6、P15）。
 - 测试：`assembly.AgentAssemblerTest`（装配表逐行）、`assembly.AgentInstanceCacheTest`、`testkit.model.ScriptedModelScenarioTest`、`state.FencedAgentStateStoreTest`、`events.*`（穷举映射与映射器单测）、`turn.*`（引擎场景、下线、中间件链与 span、输入翻译）；包名与被测类相同，可读包内常量。
 - `turn.EngineHarness.withPlatform(...)`（T10a）：生产的 `PlatformToolProvider`、`PlatformWorkspace` 与技能仓库，端口用内存实现（`harness.workspace`、`harness.ledger`）；可经 `PlatformToolProvider.with` 登记测试用的平台工具。文件工具、技能、工具策略的场景测试：`turn.FileToolScenarioTest`、`SkillScenarioTest`、`PlatformToolLedgerTest`、`PolicyMiddlewareScenarioTest`。
+- T10b：`turn.EngineHarness` 的装配读租户提示词（`harness.configs.tenantPrompt`），时钟固定为 `EngineHarness.NOW`；直接租用实例用 `harness.acquire()`（带 `PlatformContext`）；`withMcp(model, spec, connector)` 登记 MCP 连接器。场景测试：`PromptLayeringScenarioTest`、`ExternalContentToolScenarioTest`、`tools.SourceTagsTest`；集成测试 `turn.McpToolsIT`：`McpTestServer` 是 Boot 4.1 Spring MVC 应用，以 Servlet 注册 MCP SDK 的 Streamable HTTP 与 SSE 传输（P8 预验证）。
 - `turn.EngineHarness`（测试源码）：真实装配 + 平台中间件（按智能体配置创建，含压缩守护外层）+ `FencedAgentStateStore` + 内存端口 + `AgentScopeEngine`；接受任意 `Model`（例如 `RoutedModel`）；`claim(...)` 模拟 Worker 认领，`run(...)` 断言恰好一个终态且在最后；`createFiltered` 去掉某些平台中间件做对照实验；`states.jsonOf(userId, threadId)` 读状态原文。
 
 ## 不变量
 
-- 可以依赖 common、engine-spi、engine-agentscope 与 AgentScope（ADR-0025）；被其他模块依赖时只能是 test 作用域（根 POM 的 enforcer）。
+- 可以依赖 common、engine-spi、engine-agentscope 与 AgentScope（ADR-0025）；被其他模块依赖时只能是 test 作用域（根 POM 的 enforcer）。测试作用域另有 `spring-boot-starter-webmvc`（只给进程内 MCP 服务用），它带来 Logback，日志级别在 `src/test/resources/logback-test.xml`。
 - 智能体行为测试只用 `ScriptedModel`，不依赖真实模型（架构原则第 10 条）。
 
 ## 易错点
@@ -32,6 +33,8 @@
 - 并发测试的线程池大小不能小于"装配函数等待到达的调用者数"，否则会卡到超时。
 - 动用 `GracefulShutdownManager`（JVM 单例）的用例放在独立的类里，`@AfterEach` 调 `resetForTesting()`，否则同一 JVM 中后面的用例都会以 `node_shutdown` 结束。
 - span 断言用 `OpenTelemetryExtension`（`opentelemetry-sdk-testing`，test 作用域）；它注册全局 `GlobalOpenTelemetry`，平台与 AgentScope 的 span 都取全局 tracer。
+- 实例缓存的移除回调异步执行：`instances.close()` 之后资源（MCP 客户端）稍晚才关闭，断言要等待。
+- 每个新消息轮次多一条 `<platform_context>` 消息：断言上下文构成、压缩前后消息数时要算上它。
 - 要在执行中途中断、取消或下线，用阻塞到测试放行的工具（`AgentScopeEngineScenarioTest.LatchTool`）卡住执行；`ScriptedModel` 的回应不能延迟。
 
 ## 对外接口

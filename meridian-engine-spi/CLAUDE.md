@@ -13,15 +13,16 @@
 - `engine.input`：`TurnInput` 四种输入（嵌套 record），`kind()` 给出 `rt.turns.kind`；`MessageContent`（文本、图片、文件引用）被用户消息、自定义工具结果、`agent.message` 共用。
 - `event`：`EngineEvent` 按域分为 `UserEvent`、`AgentOutputEvent`、`SessionEvent`、`SpanEvent`、`StreamEvent`，具体记录嵌套在域接口里；`EventType` 登记每种类型的取值、域与记录类，`type()` 由记录类反查。
 - `spec`：`ResolvedAgentSpec`（含 `SubagentSpec`、`McpServerSpec`、`SkillRef`、`KnowledgeSpec`、`CompactionSpec`；`grants(tool)` 判断工具集）、`SkillDefinition`（技能内容，T10a）、`EnvironmentSpec`、`PermissionPolicy`/`PermissionRule`、`CustomToolDeclaration`、`PlatformToolNames`。
-- `port`：架构设计「端口」表的全部端口，加 `AgentConfigPort`（ADR-0024，T10a 起另有 `skill`）；`ModelGateway` 另有 `describe`、`precheck` 与计量记录 `ModelCallRecord`（ADR-0032）；`CallPurpose` 另有 `EMBEDDING`、`RERANK`（ADR-0033）。`event.ContextComposition` 是 `span.model_request_start` 的上下文构成。端口专用的值类型嵌套在端口接口里（如 `LeaseRegistry.Lease`、`AgentStateRepository.StateFence`）。
+- `port`：架构设计「端口」表的全部端口，加 `AgentConfigPort`（ADR-0024，T10a 起另有 `skill`，T10b 起另有 `tenantPrompt`）；`WebFetchPort` 被拒绝时以 `ForbiddenException` 失败、其他失败的消息是给模型看的英文；`ModelGateway` 另有 `describe`、`precheck` 与计量记录 `ModelCallRecord`（ADR-0032）；`CallPurpose` 另有 `EMBEDDING`、`RERANK`（ADR-0033）。`event.ContextComposition` 是 `span.model_request_start` 的上下文构成。端口专用的值类型嵌套在端口接口里（如 `LeaseRegistry.Lease`、`AgentStateRepository.StateFence`）。
 - `driver`：`SandboxDriver`、`SandboxHandle`、`ModelInvoker`（OpenAI 兼容消息模型）。
-- `error`：决定一轮如何结束的异常与 `ModelErrorCode`：`BudgetExceededException`（`budget_exceeded`）、`RetryableTurnException`（可重试错误的基类，`RateLimitTimeoutException`、`ProviderUnavailableException` 继承它）（ADR-0026）、`ProviderRejectedException`（终止）、`CompactionFailedException`（原因链决定本轮如何结束，ADR-0032）。
+- `error`：决定一轮如何结束的异常与 `ModelErrorCode`、`ToolErrorCode`（T10b：`McpUnavailableException`，装配时连不上 MCP 服务，可重试，ADR-0035）：`BudgetExceededException`（`budget_exceeded`）、`RetryableTurnException`（可重试错误的基类，`RateLimitTimeoutException`、`ProviderUnavailableException` 继承它）（ADR-0026）、`ProviderRejectedException`（终止）、`CompactionFailedException`（原因链决定本轮如何结束，ADR-0032）。
 
 ## 不变量
 
 - 签名只出现平台类型，不依赖 AgentScope 与 Spring（ArchUnit 规则 12）；只依赖 common 与 reactor-core。
 - `EventType` 与架构设计「事件」清单逐一对应，`EventTypeCatalogTest` 直接解析 `docs/architecture/architecture.md` 比对；新增事件类型要同时改文档、`EventType` 与域接口。
 - 被 AgentScope 同步接口调用的端口（`AgentStateRepository`、`WorkspaceStorePort`、`LeaseRegistry`）是同步方法，其余返回 `Mono`/`Flux`；租户、项目、会话、epoch 从 `PlatformContext` 取（架构设计「端口」）。
+- `McpServerSpec.sideEffect` 缺省为 `NON_IDEMPOTENT`（ADR-0035）。
 - 配置记录在构造时校验取值范围：`maxIters` ∈ [1, 200]、子智能体超时 ≤ 600 秒、子智能体工具是父智能体工具的子集、`sandbox` 档必须有规格。
 
 ## 易错点
