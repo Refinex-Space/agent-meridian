@@ -1,0 +1,40 @@
+{{- /*
+runtime 经 AgentScope Kubernetes 扩展操作沙箱需要的权限：创建、等待、删除 SandboxClaim，读取 Sandbox 的状态与 Pod IP，
+端口转发方式还要查找 sandbox-router 的 Endpoints 并对其 Pod 端口转发（本机开发；生产用直连 router 服务）。
+*/}}
+{{- if .Values.runtimeAccess.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: meridian-runtime-sandbox
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: ["sandboxclaims"]
+    verbs: ["create", "get", "list", "watch", "patch", "delete"]
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: ["sandboxes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["endpoints", "pods"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: meridian-runtime-sandbox
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: meridian-runtime-sandbox
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.runtimeAccess.serviceAccount }}
+    namespace: {{ .Values.runtimeAccess.namespace }}
+{{- end }}

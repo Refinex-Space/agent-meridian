@@ -1,0 +1,66 @@
+# AgentMeridian 沙箱集群侧资源的默认值（生产）。本机 kind 集群叠加 values-kind.yaml。
+# 前提：集群已安装 agent-sandbox v1.0.10 控制器（含扩展）与 RuntimeClass gvisor；
+# 安装在命名空间 meridian-sandbox，该命名空间应带 Pod Security 标签 enforce=restricted。
+
+# 沙箱镜像（sandbox-runtime/）
+image:
+  repository: agent-meridian/sandbox-runtime
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# 模板与预热池名为 <namePrefix><规格>，与 SandboxDriver 的约定一致（例如 sandbox-small）
+namePrefix: sandbox-
+runtimeClassName: gvisor
+
+# 三个规格，资源上限按架构设计「沙箱 Pod 与镜像」；requests 默认等于 limits。
+# disk 是容器的 ephemeral-storage 上限，也是 /workspace 的 sizeLimit。
+sizes:
+  small:
+    limits: { cpu: "1", memory: 2Gi, disk: 5Gi }
+    requests: { cpu: "1", memory: 2Gi, disk: 5Gi }
+    maxProcesses: 256
+    warmPoolReplicas: 2
+  medium:
+    limits: { cpu: "2", memory: 4Gi, disk: 10Gi }
+    requests: { cpu: "2", memory: 4Gi, disk: 10Gi }
+    maxProcesses: 512
+    warmPoolReplicas: 1
+  large:
+    limits: { cpu: "4", memory: 8Gi, disk: 20Gi }
+    requests: { cpu: "4", memory: 8Gi, disk: 20Gi }
+    maxProcesses: 1024
+    warmPoolReplicas: 1
+
+# /tmp 的 emptyDir 上限（计入 disk）
+tmpSizeLimit: 1Gi
+
+# 执行服务（sandbox-runtime/README.md「命令执行的约束」）
+exec:
+  timeoutSeconds: 600
+  outputLimitBytes: 1048576
+
+# 出网代理（T12b 部署 Envoy）。HTTP_PROXY、HTTPS_PROXY 固定指向它，代理按源 Pod IP 鉴权
+egressProxy:
+  url: http://meridian-egress-proxy.meridian-sandbox.svc.cluster.local:10000
+  noProxy: localhost,127.0.0.1
+
+# agent-sandbox v1.0.10 的 Go 版 sandbox-router（发布清单不含它）。AgentScope 扩展的端口转发与网关方式都经它访问沙箱，
+# 服务名固定为 sandbox-router-svc、端口 8080。不开 Pod IP 缓存：扩展每次请求都带 X-Sandbox-Pod-IP。
+router:
+  enabled: true
+  image: registry.k8s.io/agent-sandbox/sandbox-router-go:v1.0.10
+  replicas: 2
+  # 大于执行服务的命令超时
+  proxyTimeout: 660s
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: "2", memory: 1Gi }
+  # 允许访问 router 的命名空间（runtime 所在）。kubectl 端口转发不经过 Pod 网络，不受此限制
+  clientNamespaces:
+    - meridian
+
+# runtime 的 ServiceAccount 在沙箱命名空间中的权限：认领与删除沙箱、读取沙箱状态、端口转发（本机开发）
+runtimeAccess:
+  enabled: true
+  serviceAccount: meridian-runtime
+  namespace: meridian

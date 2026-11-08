@@ -178,8 +178,8 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 ### T11 沙箱运行时镜像、集群与驱动（开工 2026-11-08，基线 `verify.sh` 通过）
 
 - [x] 1. `sandbox-runtime/`：镜像（Debian slim、非 root、`/workspace`、uv 管理的 Python 3、Node.js、文档库）与 FastAPI 执行服务（8888，`/execute`、`/upload`、`/download`、`/list`、`/exists`），pytest 覆盖每个接口；对照表（T11-A01、A02）
-- [ ] 2. 集群：`kind-gvisor.sh meridian` 与 `kind-verify.sh meridian` PASS（T11-A03）；`install-agent-sandbox.sh`（v1.0.10 控制器与 sandbox-router）
-- [ ] 3. `deploy/helm/meridian-sandbox/`：三个规格的 `SandboxTemplate`、`SandboxWarmPool`，NetworkPolicy 默认拒绝出网，`values-kind.yaml`；部署与 Pod 安全上下文核对（T11-A04）
+- [x] 2. 集群：`kind-gvisor.sh meridian` 与 `kind-verify.sh meridian` PASS（T11-A03）；`install-agent-sandbox.sh`（v1.0.10 控制器与 sandbox-router）
+- [x] 3. `deploy/helm/meridian-sandbox/`：三个规格的 `SandboxTemplate`、`SandboxWarmPool`，NetworkPolicy 默认拒绝出网，`values-kind.yaml`；部署与 Pod 安全上下文核对（T11-A04）
 - [ ] 4. `engine.agentscope.sandbox`：`KubernetesSandboxDriver`、`SingleStartSandbox`、对象存储快照客户端；单测与并发测试（T11-A06）
 - [ ] 5. `kind` 标签的集成测试与 `-Pkind`：认领、执行、上传下载、快照、删除、恢复（T11-A05）
 - [ ] 6. P5 测量与报告 `docs/poc/P05-沙箱与预热池.md`（T11-A07）

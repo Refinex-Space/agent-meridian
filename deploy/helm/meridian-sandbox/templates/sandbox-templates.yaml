@@ -1,0 +1,96 @@
+{{- /* 每个规格一套 SandboxTemplate 与同名的 SandboxWarmPool，见架构设计「沙箱 Pod 与镜像」 */}}
+{{- range $size := list "small" "medium" "large" }}
+{{- $spec := index $.Values.sizes $size }}
+{{- $name := printf "%s%s" $.Values.namePrefix $size }}
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxTemplate
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "meridian-sandbox.labels" $ | nindent 4 }}
+    meridian.refinex.cn/sandbox-size: {{ $size }}
+spec:
+  # 出网与入网由本 chart 的 NetworkPolicy 管理；Managed 的默认策略允许访问公网，不符合"默认无出网"
+  networkPolicyManagement: Unmanaged
+  envVarsInjectionPolicy: Disallowed
+  podTemplate:
+    metadata:
+      labels:
+        {{- include "meridian-sandbox.sandboxSelector" $ | nindent 8 }}
+        meridian.refinex.cn/sandbox-size: {{ $size }}
+    spec:
+      runtimeClassName: {{ $.Values.runtimeClassName }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: runtime
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8888
+              protocol: TCP
+          env:
+            - { name: SANDBOX_BASE_DIR, value: /workspace }
+            - { name: SANDBOX_EXEC_TIMEOUT_SECONDS, value: {{ $.Values.exec.timeoutSeconds | quote }} }
+            - { name: SANDBOX_EXEC_OUTPUT_LIMIT_BYTES, value: {{ $.Values.exec.outputLimitBytes | int | quote }} }
+            - { name: SANDBOX_MAX_PROCESSES, value: {{ $spec.maxProcesses | int | quote }} }
+            - { name: HTTP_PROXY, value: {{ $.Values.egressProxy.url | quote }} }
+            - { name: HTTPS_PROXY, value: {{ $.Values.egressProxy.url | quote }} }
+            - { name: http_proxy, value: {{ $.Values.egressProxy.url | quote }} }
+            - { name: https_proxy, value: {{ $.Values.egressProxy.url | quote }} }
+            - { name: NO_PROXY, value: {{ $.Values.egressProxy.noProxy | quote }} }
+            - { name: no_proxy, value: {{ $.Values.egressProxy.noProxy | quote }} }
+          resources:
+            limits:
+              cpu: {{ $spec.limits.cpu | quote }}
+              memory: {{ $spec.limits.memory }}
+              ephemeral-storage: {{ $spec.limits.disk }}
+            requests:
+              cpu: {{ $spec.requests.cpu | quote }}
+              memory: {{ $spec.requests.memory }}
+              ephemeral-storage: {{ $spec.requests.disk }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 1
+            failureThreshold: 3
+          volumeMounts:
+            - { name: workspace, mountPath: /workspace }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: workspace
+          emptyDir:
+            sizeLimit: {{ $spec.limits.disk }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ $.Values.tmpSizeLimit }}
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "meridian-sandbox.labels" $ | nindent 4 }}
+    meridian.refinex.cn/sandbox-size: {{ $size }}
+spec:
+  replicas: {{ $spec.warmPoolReplicas }}
+  sandboxTemplateRef:
+    name: {{ $name }}
+{{- end }}

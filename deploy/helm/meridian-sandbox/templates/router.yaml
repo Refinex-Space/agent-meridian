@@ -1,0 +1,91 @@
+{{- /*
+agent-sandbox v1.0.10 的 Go 版 sandbox-router，改编自上游 sandbox-router/deploy/（Apache-2.0）：
+部署在沙箱命名空间（AgentScope 扩展在沙箱命名空间中查找 sandbox-router-svc），关闭 Pod IP 缓存因而不需要访问 API，
+不挂载 ServiceAccount 令牌；出网只到本命名空间的沙箱 Pod。
+*/}}
+{{- if .Values.router.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sandbox-router
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox-router
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+    {{- include "meridian-sandbox.routerSelector" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.router.replicas }}
+  selector:
+    matchLabels:
+      {{- include "meridian-sandbox.routerSelector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "meridian-sandbox.routerSelector" . | nindent 8 }}
+    spec:
+      serviceAccountName: sandbox-router
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sandbox-router
+          image: {{ .Values.router.image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --http-bind-address=:8080
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=:9090
+            - --cluster-domain=cluster.local
+            - --proxy-timeout={{ .Values.router.proxyTimeout }}
+            - --upstream-max-retries=3
+            - --cache-enabled=false
+          ports:
+            - { name: proxy, containerPort: 8080, protocol: TCP }
+            - { name: metrics, containerPort: 9090, protocol: TCP }
+            - { name: healthz, containerPort: 8081, protocol: TCP }
+          livenessProbe:
+            httpGet: { path: /healthz, port: healthz }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: healthz }
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.router.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+      terminationGracePeriodSeconds: 45
+---
+# 服务名与端口是 AgentScope 扩展的固定约定（client.Constants.ROUTER_SERVICE_NAME、ROUTER_PORT）
+apiVersion: v1
+kind: Service
+metadata:
+  name: sandbox-router-svc
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+    {{- include "meridian-sandbox.routerSelector" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "meridian-sandbox.routerSelector" . | nindent 4 }}
+  ports:
+    - name: proxy
+      port: 8080
+      targetPort: proxy
+      protocol: TCP
+{{- end }}

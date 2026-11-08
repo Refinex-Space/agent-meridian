@@ -1,0 +1,6 @@
+apiVersion: v2
+name: meridian-sandbox
+description: AgentMeridian 会话沙箱的集群侧资源：三个规格的 SandboxTemplate 与 SandboxWarmPool、sandbox-router、默认拒绝出网的 NetworkPolicy、runtime 的访问权限
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
