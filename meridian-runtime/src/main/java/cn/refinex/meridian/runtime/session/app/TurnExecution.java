@@ -111,6 +111,15 @@ public final class TurnExecution {
      */
     public Mono<TurnResult> run() {
         Instant startedAt = clock.instant();
+        // 时长在结果交给订阅方之前记录（调用方拿到结果时指标已经可读）；没有结果的取消在 doFinally 中补记，只记一次
+        AtomicBoolean durationRecorded = new AtomicBoolean();
+        Runnable recordDuration = () -> {
+            if (durationRecorded.compareAndSet(false, true)) {
+                metrics.executed(
+                        agentVersionId == null ? "unknown" : agentVersionId,
+                        Duration.between(startedAt, clock.instant()));
+            }
+        };
         return Mono.defer(() -> {
                     lease.listen(new Listener());
                     return Blocking.call(() -> preparer.prepare(turn)).flatMap(this::execute);
@@ -119,12 +128,11 @@ public final class TurnExecution {
                 .switchIfEmpty(Mono.defer(() -> Mono.just(abandoned())))
                 .onErrorResume(this::failed)
                 .doOnNext(this::countLeaseLoss)
+                .doOnNext(result -> recordDuration.run())
                 .contextWrite(PlatformContexts.write(baseContext()))
                 .doFinally(signal -> {
                     lease.release();
-                    metrics.executed(
-                            agentVersionId == null ? "unknown" : agentVersionId,
-                            Duration.between(startedAt, clock.instant()));
+                    recordDuration.run();
                 });
     }
 

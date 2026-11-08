@@ -77,6 +77,16 @@ class MiddlewareChainTest {
             assertThat(chain.subList(11, chain.size() - 1))
                     .as("harness 自带的中间件都是默认 order 1，位于平台中间件之内")
                     .allSatisfy(m -> assertThat(m.order()).isEqualTo(1));
+            assertThat(chain.subList(11, chain.size() - 1))
+                    .as("harness 自带的中间件按注册顺序")
+                    .extracting(m -> m.getClass().getSimpleName())
+                    .containsExactly(
+                            "WorkspaceContextMiddleware",
+                            "AtPathExpansionMiddleware",
+                            "CompactionMiddleware",
+                            "ToolResultEvictionMiddleware",
+                            "InboxMiddleware",
+                            "HarnessSkillMiddleware");
             assertThat(chain.getLast())
                     .as("压缩守护的内层（order 0）在全部 harness 中间件之内")
                     .isInstanceOf(CompactionGuardMiddleware.Inner.class);

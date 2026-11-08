@@ -18,6 +18,6 @@ M0 要用代码验证架构设计中依赖运行时行为、读源码无法确�
 | P10 | 四种终止方式下的恢复语义 | 通过（T06：强杀重放完整输入、出错与停机从保存的状态续跑、用户中断以 interrupted 结束；不重复用户消息、不丢 steer、不重复执行 `non_idempotent` 工具；修正了跨轮 epoch 碰撞，ADR-0028；T08 用 `SteerMiddleware` 重跑强杀场景：被失败执行消费的 steer 重新投递并再次注入，开启 checkpoint 时随状态保存，均不丢失、不重复） | [P10-恢复语义.md](P10-恢复语义.md) |
 | P11 | `clearStateCache` 后的内存稳定性 | 未开始 | |
 | P12 | `SpawnSubagentTool` 并行拉起与中断传递 | 未开始 | |
-| P13 | 平台中间件与 harness 中间件的执行顺序 | 进行中（T04 测得链路：`GracefulShutdownMiddleware` 固定最外层 → `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200) → `LeaseGuardMiddleware`(100) → `RecoveryNoteMiddleware`(90，T06) → `InterruptCheckpointMiddleware`(88，T08) → `SteerMiddleware`(85，T08) → `BatchCheckpointMiddleware`(80，T06) → `ToolSpanMiddleware`(50) → harness 自带的 6 个中间件（均为 1，按注册顺序）；span 层级 `turn` → `invoke_agent` → `chat`/`execute_tool` 批次 → 每个调用的 `execute_tool`，见 `MiddlewareChainTest`；压缩守护的结论由 T09a 给出） | 待 T09a |
+| P13 | 平台中间件与 harness 中间件的执行顺序 | 通过（T04 测得链路；T09a：压缩守护外层 20、内层 0 夹住 order 为 1 的 `CompactionMiddleware`，预算耗尽时压缩被阻止、失败摘要被拦截且历史不被替换；对照实验确认 2.0.4 会把失败文本写进历史；真实模型触发了一次真实压缩） | [P13-中间件顺序.md](P13-中间件顺序.md) |
 | P14 | 出网代理按源 Pod IP 鉴权 | 未开始 | |
 | P15 | 无人审批执行的权限改写 | 通过（T08：显式 ask 规则在 `DONT_ASK` 下仍返回 ask，合成时改写为 deny 后，`unattended` 会话与子线程得到拒绝结果并继续推理、不停在等待审批；`unattended` 不能进入计划模式；安全类 ask 由平台自动拒绝并运行恢复轮） | [P15-权限改写.md](P15-权限改写.md) |

@@ -15,19 +15,21 @@
 - `state.FencedAgentStateStore`：`AgentStateStore` 的实现，写入经 `LeaseRegistry` 取租约、经 `AgentStateRepository` 端口在同一事务中校验。
 - `middleware`：`PlatformMiddlewareProvider` 交给装配器的平台中间件（参数：租约、收件箱、是否开启批次 checkpoint；子智能体不含 steer）；`PlatformStopRequest` 是平台中间件请求停止并记录原因的入口；`RecoveryNoteMiddleware`、`BatchCheckpointMiddleware`、`InterruptCheckpointMiddleware` 从 `RuntimeContext` 读取引擎放入的 `RecoveryNoteSlot`、`BatchCheckpoint`、`PendingInterrupt`；`SteerMiddleware` 经 `InboxPort` 取 steer（T08，ADR-0031）。
 - `turn.AgentScopeEngine` 另有 `retryToolCall`（恢复确认的重试，直接调 Toolkit 中的工具，原幂等键放在 `ToolRetryContext`）与 `reservedToolNames`。
-- `assembly.AgentAssembler`：`HarnessAgent.Builder` 的全部配置都在 `configure`，按「引擎装配」表逐段对应；`AgentInstanceCache` 对外 `acquire`/`acquireSubagent`/`release`；`AssembledAgent.reservedToolNames()` 供自定义工具校验。
+- `assembly.AgentAssembler`：`HarnessAgent.Builder` 的全部配置都在 `configure`，按「引擎装配」表逐段对应；`AgentInstanceCache` 对外 `acquire`/`acquireSubagent`/`release`；`AssembledAgent.reservedToolNames()` 供自定义工具校验；`CompactionPrompt` 是平台的摘要提示词。
+- `model`（T09a，ADR-0032）：`RoutedModel`（`doStream`：resolve → 限流 → 预扣 → 带重试的调用 → `usingWhen` 结算；降级在 `ProviderFailure` 之上决定）、`RoutedModelFactory`（装配时 `describe` 取上下文窗口）、`ProviderClients`（按账号加模型缓存不含凭据的客户端）、`OpenAiCompatibleClientFactory`、`ProviderHttpTransport`（记录 `Retry-After`）、`ProviderErrors`（可重试、拒绝、非供应商错误）、`TokenEstimator`、`CompactionWatch`（压缩期间的 Reactor Context 标记）。
 
 ## 中间件顺序（P13，T04 测得）
 
 `order()` 数值大的在外层；`MiddlewareChainTest` 断言链路与 span 父子关系。装配后的实际链路（外层在前）：
 
-`GracefulShutdownMiddleware`（AgentScope 构造时固定放在最外层）→ `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200，委托 `OtelTracingMiddleware`) → `LeaseGuardMiddleware`(100) → `RecoveryNoteMiddleware`(90) → `InterruptCheckpointMiddleware`(88) → `SteerMiddleware`(85) → `BatchCheckpointMiddleware`(80) → `ToolSpanMiddleware`(50) → harness 自带：`WorkspaceContextMiddleware`、`AtPathExpansionMiddleware`、`CompactionMiddleware`、`ToolResultEvictionMiddleware`、`InboxMiddleware`、`HarnessSkillMiddleware`（都是 1，按注册顺序）。
+`GracefulShutdownMiddleware`（AgentScope 构造时固定放在最外层）→ `PlatformContextMiddleware`(300) → `PlatformTracingMiddleware`(200，委托 `OtelTracingMiddleware`) → `LeaseGuardMiddleware`(100) → `RecoveryNoteMiddleware`(90) → `InterruptCheckpointMiddleware`(88) → `SteerMiddleware`(85) → `BatchCheckpointMiddleware`(80) → `ToolSpanMiddleware`(50) → `CompactionGuardMiddleware`(20，外层，按智能体的压缩预留创建) → `ContextCompositionMiddleware`(10，`onModelCall`) → harness 自带：`WorkspaceContextMiddleware`、`AtPathExpansionMiddleware`、`CompactionMiddleware`、`ToolResultEvictionMiddleware`、`InboxMiddleware`、`HarnessSkillMiddleware`（都是 1，按注册顺序）→ `CompactionGuardMiddleware.Inner`(0)。P13 通过（T09a），报告 `docs/poc/P13-中间件顺序.md`。
 
-span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（批次）→ `execute_tool {name}`（每个调用）。后续中间件选 `order()` 时以此为准：要在压缩之前生效的（T09a 外层守卫）大于 1，要夹在压缩之内的小于 1；在推理前往上下文注入消息的必须大于 80，注入的内容才进入该次 checkpoint（`SteerMiddleware` 为 85）。
+span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（批次）→ `execute_tool {name}`（每个调用）。后续中间件选 `order()` 时以此为准：要在压缩之前生效的大于 1，要夹在压缩之内的小于 1；在推理前往上下文注入消息的必须大于 80，注入的内容才进入该次 checkpoint（`SteerMiddleware` 为 85）。
 
 ## 不变量
 
-- 装配必须满足「引擎装配」表：`maxRetries(1)`、不设 `fallbackModel`、`enablePendingToolRecovery(true)`、关闭全部内置工具与 transcript、`NoopMessageBus` 加 `NoopAsyncToolRegistry`、`enableAgentTracingLog(false)`；`AgentAssemblerTest` 逐项断言，改装配先改表。
+- 装配必须满足「引擎装配」表：`maxRetries(1)`、不设 `fallbackModel`、`enablePendingToolRecovery(true)`、关闭全部内置工具与 transcript、`NoopMessageBus` 加 `NoopAsyncToolRegistry`、`enableAgentTracingLog(false)`、压缩 `triggerMessages(0)` 加平台摘要提示词；`AgentAssemblerTest` 逐项断言，改装配先改表。
+- 所有模型调用（含压缩器）都经 `RoutedModel`；底层客户端每次调用只尝试一次（`ExecutionConfig.maxAttempts(1)`），重试只在 `RoutedModel` 针对首包之前的供应商错误；预扣与结算由 `usingWhen` 成对保证。
 - 缓存键 `(agent_version_id, environment_id, environment_revision[, 子智能体名])`，容量 500，空闲 30 分钟；淘汰只退役，引用归零才关闭（ADR-0024）。`release` 由 `AgentScopeEngine` 在终态之前调用，每个凭据一次。
 - 每轮恰好一个终态：正常结束按 `GenerateReason`；错误先 `session.error` 后终态；`AgentShuttingDownException` 只发 `rescheduled(node_shutdown)`；`RetryableTurnException` 发 `error(retryable)` 加 `rescheduled(retryable_error)`；`LeaseLostException` 不发任何事件、原样结束；取消订阅不发事件、不写状态（ADR-0026）。
 - 每轮开始前与结束时（含异常、取消）都 `clearStateCache(userId, threadId)`；权限安装期间 `LeaseRegistry.markPermissionInstall` 为真，状态存储据此不更新 `content_epoch`（「租约与 fencing」）。
@@ -40,7 +42,10 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 - 推理输入是 `PreReasoningEvent` 复制出来的列表：往上下文注入消息要同时加进 `ReasoningInput.messages()` 与 `ctx.getAgentState().contextMutable()`，否则本次模型调用看不到或状态里存不下。
 - 工具的 `Mono` 出错（例如账本写入被拒）时，2.0.4 的 `ToolExecutor` 把它转成错误结果，调用继续；不会让整轮失败。
 
-- `maxRetries` 是含首次在内的总尝试次数，0 会抛异常（ADR-0023）。`RoutedModel` 调用底层模型时不能放大它。
+- `maxRetries` 是含首次在内的总尝试次数，0 会抛异常（ADR-0023）。`RoutedModel` 调用底层模型时不能放大它；压缩器以空选项调用，底层客户端会取 `MODEL_DEFAULTS`（3 次），所以平台选项必须显式带 `maxAttempts(1)`。
+- `CompactionMiddleware` 在调用下游之前就把失败的摘要写进 `AgentState`：内层守护必须先用 `CompactionWatch` 的副本恢复上下文再抛异常，否则出错时保存的状态丢了历史（P13 对照实验）。
+- 2.0.4 的 `JdkHttpTransport` 在流式路径上丢弃响应头，`OpenAIException` 也不带头：`Retry-After` 只能由 `ProviderHttpTransport` 记到 Reactor Context 的 `ProviderResponseObserver` 上。
+- 中间件经 `CustomEvent` 向事件流发平台事件，`TurnEventMapper` 按名字映射（`PLATFORM_CUSTOM`）；上下文构成挂在 `ModelCallStartEvent` 的元数据上，不经端口写库。
 - 只设 `messageBus` 不够：不显式设置 `asyncToolRegistry` 时，harness 用工作区实现，`InboxMiddleware` 每次推理前都会读工作区。
 - `Toolkit.copy()` 不转移 MCP 客户端所有权：需要关闭的资源放进 `ToolBundle.resources`。
 - `disableDynamicSkills()` 让技能清单在构建时冻结；技能仓库必须按装配时的智能体版本解析。
@@ -63,5 +68,5 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 ## 对外接口
 
 - 实现 `meridian-engine-spi` 的 `AgentEngine`（`turn.AgentScopeEngine`）；依赖端口 `AgentConfigPort`、`LeaseRegistry`、`AgentStateRepository`、`BlobStorePort`、`InboxPort`。
-- runtime 只能在 `config` 包引用本模块的装配入口：`AgentAssembler`、`AgentInstanceCache`、`AgentScopeEngine`、`FencedAgentStateStore`、`PlatformMiddlewareProvider` 与提供者接口。
-- 生产实现的提供者：模型工厂 T09a，中间件 T04 起（T06、T08 已加入，T09a、T10a、T19 继续加入），工具 T10a、T10b、T12a、T13，文件系统 T10a、T12a，技能仓库 T10a。
+- runtime 只能在 `config` 包引用本模块的装配入口：`AgentAssembler`、`AgentInstanceCache`、`AgentScopeEngine`、`FencedAgentStateStore`、`PlatformMiddlewareProvider`、`RoutedModelFactory`、`ProviderHttpTransport`、`OpenAiCompatibleClientFactory` 与提供者接口。依赖端口另有 `ModelGateway`（T09a）。
+- 生产实现的提供者：模型工厂已有（T09a，`ModelFactoryAutoConfiguration`），中间件 T04 起（T10a、T19 继续加入），工具 T10a、T10b、T12a、T13，文件系统 T10a、T12a，技能仓库 T10a。T09b 的 `ModelInvoker` 复用 `RoutedModel`。

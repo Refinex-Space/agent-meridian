@@ -13,9 +13,9 @@
 - `engine.input`：`TurnInput` 四种输入（嵌套 record），`kind()` 给出 `rt.turns.kind`；`MessageContent`（文本、图片、文件引用）被用户消息、自定义工具结果、`agent.message` 共用。
 - `event`：`EngineEvent` 按域分为 `UserEvent`、`AgentOutputEvent`、`SessionEvent`、`SpanEvent`、`StreamEvent`，具体记录嵌套在域接口里；`EventType` 登记每种类型的取值、域与记录类，`type()` 由记录类反查。
 - `spec`：`ResolvedAgentSpec`（含 `SubagentSpec`、`McpServerSpec`、`SkillRef`、`KnowledgeSpec`、`CompactionSpec`）、`EnvironmentSpec`、`PermissionPolicy`/`PermissionRule`、`CustomToolDeclaration`、`PlatformToolNames`。
-- `port`：架构设计「端口」表的全部端口，加 `AgentConfigPort`（ADR-0024）。端口专用的值类型嵌套在端口接口里（如 `LeaseRegistry.Lease`、`AgentStateRepository.StateFence`）。
+- `port`：架构设计「端口」表的全部端口，加 `AgentConfigPort`（ADR-0024）；`ModelGateway` 另有 `describe`、`precheck` 与计量记录 `ModelCallRecord`（ADR-0032）。`event.ContextComposition` 是 `span.model_request_start` 的上下文构成。端口专用的值类型嵌套在端口接口里（如 `LeaseRegistry.Lease`、`AgentStateRepository.StateFence`）。
 - `driver`：`SandboxDriver`、`SandboxHandle`、`ModelInvoker`（OpenAI 兼容消息模型）。
-- `error`：决定一轮如何结束的异常与 `ModelErrorCode`：`BudgetExceededException`（`budget_exceeded`）、`RetryableTurnException`（可重试错误的基类，`RateLimitTimeoutException` 继承它）（ADR-0026）。
+- `error`：决定一轮如何结束的异常与 `ModelErrorCode`：`BudgetExceededException`（`budget_exceeded`）、`RetryableTurnException`（可重试错误的基类，`RateLimitTimeoutException`、`ProviderUnavailableException` 继承它）（ADR-0026）、`ProviderRejectedException`（终止）、`CompactionFailedException`（原因链决定本轮如何结束，ADR-0032）。
 
 ## 不变量
 

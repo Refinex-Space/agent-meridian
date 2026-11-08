@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.7 |
+| 版本 | v1.8 |
 | 日期 | 2026-11-08 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -253,7 +253,7 @@ Maven groupId 与 Java 包根都是 `cn.refinex.meridian`。
 ```text
 cn.refinex.meridian.engine.agentscope
 ├── assembly/    AgentAssembler：智能体版本 → HarnessAgent；实例缓存
-├── model/       RoutedModel（继承 ChatModelBase）
+├── model/       RoutedModel（继承 ChatModelBase）、模型工厂、供应商客户端与 HTTP 传输（ADR-0032）
 ├── state/       FencedAgentStateStore（实现 AgentStateStore）
 ├── fs/          MeridianBaseStore（实现 BaseStore）、ReadOnlyFilesystem
 ├── tools/       平台工具（继承 ToolBase）、SpawnSubagentTool
@@ -473,7 +473,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `asyncToolRegistry(...)` | 平台的 `NoopAsyncToolRegistry` | 不设置时 harness 创建基于工作区的异步工具登记，`InboxMiddleware` 每次推理前仍会读工作区（ADR-0024） |
 | `enableAgentTracingLog(false)` | 必须 | 默认的 `AgentTraceMiddleware` 以 INFO 记录模型输出正文，违反日志规范（ADR-0024） |
 | `skillRepository(...)` | 平台的 `MeridianSkillRepository`（实现 `RuntimeContextSkillRepository`） | 按租户、项目、智能体解析技能 |
-| `compaction(...)` | 见"上下文管理"，其中 `flushBeforeCompact(false)`、`offloadBeforeCompact(false)` | 一期没有长期记忆；原文卸载同样不受 fencing 约束 |
+| `compaction(...)` | 见"上下文管理"，其中 `flushBeforeCompact(false)`、`offloadBeforeCompact(false)`、`triggerMessages(0)`，摘要提示词由平台维护（ADR-0032） | 一期没有长期记忆；原文卸载同样不受 fencing 约束；只按 token 阈值触发 |
 | `toolResultEviction(...)` | 见"上下文管理" | — |
 | `enablePlanMode(...)` | 按智能体配置 | 这是构建期配置，实例被 attended 和 unattended 会话共享；`unattended` 会话靠权限规则禁止 `plan_enter`，见"权限判定" |
 | `middlewares(...)` | 平台中间件 | — |
@@ -491,12 +491,13 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `BatchCheckpointMiddleware` | `onActing`、`onReasoning` | 每批工具执行完成后、下一次推理之前保存一次状态（批次级 checkpoint，P3），强杀后从最近的批次续跑；可配置关闭。`SteerMiddleware` 必须排在它之外（ADR-0028） |
 | `InterruptCheckpointMiddleware` | `onReasoning` | 认领时已有中断请求的轮次（等待回应时被中断生成的恢复轮、中断后被恢复认领的轮次），在第一次推理前按用户中断结束：本轮的输入已写进上下文，不再调用模型。排在 `RecoveryNoteMiddleware` 之内、`SteerMiddleware` 之外（ADR-0031） |
 | `SteerMiddleware` | `onReasoning` | 读取本线程 `delivery=steer` 的待投递消息，追加到本次推理输入和 `AgentState` 上下文，记录 `consumed_turn_id` 和 `consumed_epoch`，同一事务写 `session.message_consumed`。只挂在主智能体上，排在 `BatchCheckpointMiddleware` 之外 |
-| `CompactionGuardMiddleware` | `onReasoning`，分内外两层，夹住 harness 的 `CompactionMiddleware` | 外层在压缩前预检预算、限流、租约，不满足就抛出平台异常；内层检查压缩结果，摘要以 `(Summarization failed` 开头时抛 `CompactionFailedException`，防止失败文本替换历史；新出现 `__compaction_summary__` 消息时发出压缩事件 |
+| `CompactionGuardMiddleware` | `onReasoning`，分内外两层（外层 order 20、内层 0），夹住 harness 的 `CompactionMiddleware`（1） | 外层在本次推理会触发压缩时预检预算、限流、租约（只检查不占用），不满足就抛出平台异常；内层检查压缩结果，摘要以 `(Summarization failed` 开头或为 `(Summary unavailable)` 时把上下文恢复为压缩前的副本并抛 `CompactionFailedException`（原因链决定本轮如何结束），防止失败文本替换历史；新出现 `__compaction_summary__` 消息时发出压缩事件（ADR-0032） |
+| `ContextCompositionMiddleware` | `onModelCall` | 统计本次模型请求的上下文构成（系统提示词、技能清单、历史、工具结果、平台注入内容的条数与 token 估算），放进 `span.model_request_start`，不含正文（ADR-0032） |
 | `KnowledgePrefetchMiddleware` | `onAgent` | 智能体配置为"前置检索"时，用最后一条用户消息检索并注入 |
 | `ToolSpanMiddleware` | `onActing` | 每个工具调用单独建 span（AgentScope 一批工具只建一个 span） |
 | `OtelTracingMiddleware` | AgentScope 自带，由平台的 `PlatformTracingMiddleware` 委托装配 | GenAI 语义约定的 span；平台补上公共属性 |
 
-模型的限流、预算、计量不放在中间件里，而是在 `RoutedModel` 内实现。原因是压缩器直接调用 `model.stream(...)`，不经过 `onModelCall`。压缩器会吞掉模型异常，所以压缩前由 `CompactionGuardMiddleware` 预检；预检通过后压缩中途仍然失败，内层检查会拦住失败的摘要。中间件之间的实际执行顺序由 `order()` 决定，M0 验证（P13）。
+模型的限流、预算、计量不放在中间件里，而是在 `RoutedModel` 内实现。原因是压缩器直接调用 `model.stream(...)`，不经过 `onModelCall`。压缩器会吞掉模型异常，所以压缩前由 `CompactionGuardMiddleware` 预检；预检通过后压缩中途仍然失败，内层检查会拦住失败的摘要。中间件之间的实际执行顺序由 `order()` 决定（数值大的在外层），P13 已验证：两层守护夹住 `CompactionMiddleware`，实测链路见 `docs/poc/P13-中间件顺序.md`。
 
 ### 平台工具
 
@@ -684,7 +685,8 @@ AgentScope 的 `AgentEventType` 有 31 个值。结束类事件只带 ID，不�
 | `EXCEED_MAX_ITERS`、`REQUEST_STOP`、`AGENT_RESULT`、`AGENT_END` | 合并 `GenerateReason` 后输出终态事件 | 是 |
 | `ALL_TOOLS_DENIED` | 不单独输出；各工具的 `agent.tool_result` 已带 DENIED 状态 | — |
 | `USER_CONFIRM_RESULT`、`EXTERNAL_EXECUTION_RESULT` | 不输出；对应的 `user.*` 事件已经持久化 | — |
-| `SUBAGENT_EXPOSED`、`HINT_BLOCK`、`CUSTOM` | 不输出，只记日志。子线程事件由 `SpawnSubagentTool` 通过 `EventSinkPort` 直接写入 | — |
+| `SUBAGENT_EXPOSED`、`HINT_BLOCK` | 不输出，只记日志。子线程事件由 `SpawnSubagentTool` 通过 `EventSinkPort` 直接写入 | — |
+| `CUSTOM` | 平台中间件以约定名字发出的事件按名字映射：`meridian.context_compacted` → `agent.context_compacted`；其余只记日志（ADR-0032） | 是 |
 | `Flux.error` | `session.error`（带 `retry_status`），然后输出终态事件 | 是 |
 
 AgentScope 没有 ERROR 事件类型，错误以 `Flux.error` 结束事件流。适配层**必须**捕获错误并补发终态事件，保证每个轮次有且只有一个终态。`AgentShuttingDownException` 映射为 `session.status_rescheduled`，不发 `session.error`。内核自己发现租约丢失（`LeaseLostException`）时，本节点已不拥有这一轮，不输出任何事件，以该异常结束事件流，终态由回收器或新的认领者给出（ADR-0026）。
@@ -824,7 +826,8 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 
 ### 上下文管理
 
-- **压缩**：使用 harness 的 `CompactionMiddleware`，`flushBeforeCompact(false)`。`RoutedModel` 通过 `setContextWindowSize` 报告模型的上下文窗口，压缩阈值等于窗口减去 `reserved`（默认 20000 token）。摘要提示词由平台统一维护，要求保留目标、关键决定、产物、未完成事项、下一步。
+- **压缩**：使用 harness 的 `CompactionMiddleware`，`flushBeforeCompact(false)`。`RoutedModel` 通过 `setContextWindowSize` 报告模型的上下文窗口（装配时经 `ModelGateway.describe` 取模型目录的值），压缩阈值等于窗口减去 `reserved`（默认 20000 token）；关闭 2.0.4 默认的 50 条消息阈值，只按 token 触发。摘要提示词由平台统一维护，要求保留目标、关键决定、产物、未完成事项、下一步。
+- **上下文构成**：每次模型请求的 `span.model_request_start` 带 `context`：系统提示词、技能清单、历史消息、工具结果、平台注入内容（steer、前置检索、恢复说明）各自的条数与 token 估算，不含正文，供控制台展示"模型这一轮实际看到了什么"。命中提示词缓存的 token 在响应结束后才知道，在 `span.model_request_end` 的 `usage.cached_tokens` 与用量记录中给出（ADR-0032）。
 - **工具结果卸载**：使用 `ToolResultEvictionMiddleware`，阈值 80000 字符，预览 2000 字符，写入工作区 `large_tool_results/`。这个路径在两个档位都路由到平台存储。
 - **提示词分层**：平台基础提示词和工具定义放在最前，作为跨租户共享的缓存前缀；其后依次是租户、智能体、技能清单；时间、待办提醒等动态内容以消息形式注入，不改前缀。`RoutedModel` 记录每次请求的缓存命中 token，用于成本分析。
 
@@ -839,8 +842,11 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 
 **错误处理：**
 
-- 供应商错误（连接失败、5xx、429）发生在首包之前时，`RoutedModel` 自己重试 2 次；仍失败且配置了备用模型，就切到备用模型。预算和限流异常不重试、不切换。这也是装配时禁用 AgentScope `fallbackModel` 和 `maxRetries` 的原因。
-- 首包之后的错误不切换模型，本轮以 `session.error` 结束。
+- 供应商错误（连接失败、5xx、429）发生在首包之前时，`RoutedModel` 自己重试 2 次（指数退避从 500 毫秒起，429 遵循 `Retry-After`，要求等待超过 10 秒的不原地重试；每次重试前重新等待限流，预扣只做一次）；仍失败且配置了备用模型，就切到备用模型。预算和限流异常不重试、不切换。这也是装配时禁用 AgentScope `fallbackModel` 和 `maxRetries` 的原因。
+- 首包之后的错误不重试、不切换模型，本轮以 `session.error` 结束：连接中断、5xx 一类仍按可重试处理，其余按终止处理。
+- 其余 4xx（认证失败、参数错误）抛 `ProviderRejectedException`，以 `session.error`（`terminal`）结束。
+- 结算：流完成、出错、被取消都会结算（`Flux.usingWhen`）。供应商报告了用量按报告结算；没有报告（被取消、首包之后出错）时按字符数估算的输入与已收到的输出结算并标为估算；首包之前失败只释放预扣、不写用量记录。估算输入 token 按 ASCII 每 3 个字符、其余字符每个 1 个 token，误差方向偏多（ADR-0032）。
+- 供应商 HTTP 走平台的 `ProviderHttpTransport`：2.0.4 自带的传输在流式路径上丢弃响应头，拿不到 `Retry-After`。底层客户端按"供应商账号加模型"缓存且不含凭据，凭据与端点在每次调用的选项中给出。T09a 实现 OpenAI 兼容类型（含 DashScope 的 `compatible-mode/v1`）；Anthropic、Gemini 等经同一扩展点 `ProviderClientFactory` 加入（ADR-0032）。
 - `RateLimitTimeoutException` 和可重试的供应商错误，产生 `session.error`（`retry_status=retryable`），平台按"置回队列的三种情况"重新排队。
 - `BudgetExceededException` 以 `budget_exceeded` 结束本轮。
 
@@ -1123,7 +1129,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 - **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天。
 - **账本**：每条记录带租户、项目、API Key、智能体版本、会话、线程、轮次、模型、价格表版本。价格表有版本，调价不影响历史记录。
 - **预算**：分租户、项目、API Key、会话四级，每级有软阈值（告警）和硬阈值（停止）。
-- **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。
+- **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。Redis 计数以 token（输入加输出）计，四级计数都记（没有限额的级别也记，供对账），键带租户哈希标签；用量记录经 outbox 的 `usage` 主题投递，输入、输出、缓存读、缓存写、推理 token 分别记，带调用用途（推理或压缩）。T16 之前限额来自开发配置，没有配置的级别不限（ADR-0032）。
 - **对账**：Redis 中的预算计数每小时与账本对账一次，以账本为准。
 
 ## 可观测性
@@ -1395,6 +1401,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.5 | 2026-11-07 | T06：`agent_states` 增加 `content_turn_id`，崩溃恢复按本轮的内容写入判定并写明恢复认领与恢复次数用尽；批次级 checkpoint 通过 P3 并默认开启，平台中间件增加 `BatchCheckpointMiddleware`；结束轮次的事务顺序与线程咨询锁；指标增加 `meridian_event_publish_failures_total`（ADR-0028） |
 | v1.7 | 2026-11-08 | T08：权限合成的并集与排序、平台安全规则的内容、平凡权限上下文与自定义工具的放行、子线程 allow 的子集规则；中断经节点频道触发立即续租，排队轮次的取消与恢复轮的"带中断请求执行"，平台中间件增加 `InterruptCheckpointMiddleware`；`pending_actions` 增加 `response`、`consumed_turn_id`，新增 `permission_rules`；恢复确认在 `replay_input` 模式下重放原轮输入；无人值守会话的自动拒绝以 `tools_denied` 结束并入队恢复轮；`AgentEngine` 增加重试与保留工具名（ADR-0031） |
 | v1.6 | 2026-11-07 | T07：`sessions` 增加 `deleted_at`；会话的删除返回 202、归档只允许 `idle` 与 `requires_action`；SSE 第 1 步由每节点一个不阻塞的 `XREAD` 读取循环完成，去重与跳号按会话的全部序号判断，会话终止后关闭连接；OpenAPI 生成链与 3.1 写作约束（ADR-0029、ADR-0030） |
+| v1.8 | 2026-11-08 | T09a：模型调用的重试与降级细则、结算方式、平台 HTTP 传输与供应商扩展点；压缩只按 token 阈值触发、平台摘要提示词；`CompactionGuardMiddleware` 的顺序与失败恢复、新增 `ContextCompositionMiddleware`，`span.model_request_start` 带上下文构成；事件映射中 `CUSTOM` 的平台事件；预算以 token 计与用量记录格式（ADR-0032） |
 
 ## 待决问题
 
