@@ -70,7 +70,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 已完成 | 5e8b21a |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 已完成 | 003dbfc |
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 已完成 | b724148 |
-| T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 进行中 | — |
+| T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 已完成 | 7e490f5 |
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 未开始 | — |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 未开始 | — |
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 未开始 | — |
@@ -175,16 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T10b Web 工具、知识检索工具、MCP 客户端与提示词分层（开工基线：`verify.sh` 通过）
-
-- [x] 1. 来源标签（格式、转义）与平台基础提示词；系统提示词四层组装（关闭 `WorkspaceContextMiddleware`，D29）、租户层来源、日期以消息注入
-- [x] 2. `web_fetch`（SSRF 防护：IP 分类、DNS 解析后校验、逐跳重定向、5 MB 上限、HTML 转 Markdown、域名规则）
-- [x] 3. `web_search`（`WebSearchPort`，SearXNG 与商业 API 适配器，按租户切换，WireMock 测试）
-- [x] 4. `knowledge_search`（`KnowledgeSearchPort`，未配置实现返回错误结果，场景测试）
-- [x] 5. MCP 客户端（`McpClientBuilder`、传输先于定制器、协议版本、凭据按请求注入、`mcp__{server}__{tool}`、随实例关闭）与进程内 MCP 服务集成测试
-- [ ] 6. P8 预验证（`McpToolsIT` 已通过，报告待写）：Boot 4.1 Servlet 注册 `HttpServletStreamableServerTransportProvider`，平台客户端调通；`docs/poc/P08-MCP-Server.md`
-- [x] 7. runtime 生产装配（工具、端口实现、租户配置的文件实现）；前缀稳定性测试（两会话首条用户消息之前逐字节相同）
-- [ ] 8. 模块 `CLAUDE.md`、架构设计与 ADR、`docs/poc/README.md`；`acceptance.json`；收尾 `verify.sh`
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -346,6 +337,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：6 项通过，0 项阻塞
 - 决策：ADR-0034（`PlatformContext` 带终端用户；`wait_async_results` 在 2.0.4 中是 `ToolBase`、`onActing` 中间件的事件不发布，工具集外的工具由策略拒绝规则经权限引擎拒绝；技能仓库继承 `WorkspaceSkillRepository` 避免本机暂存；先读后改的读取状态随工具结果元数据持久化；工作区存储细则；本机工作区根；Worker 开关）；架构设计升至 v1.10；开工时修复 `AgentScopeEngineShutdownTest` 的下线竞态
 - 遗留：登记事项 D21 内容级"记住此决定"的带出与保存（T12a）、D29 `AGENTS.md` 与 `sysPrompt` 重复（T10b）、D30 删除会话时清除工作区（T17a）、D31 工作区列举读出整个命名空间（R1）
+
+### 2026-11-08 T10b 已完成（提交 7e490f5）
+- 交付：engine-agentscope 的提示词分层（`PlatformPrompt`、`TenantPromptProvider`、`PlatformContextMessage`，装配时 `disableWorkspaceContext()`）、`SourceTags`、`WebFetchTool`、`WebSearchTool`、`KnowledgeSearchTool`、`tools.mcp`（`McpConnector`、`McpPlatformTool`、`McpCredentials`、`McpCredentialInjector`）、`PlatformToolProvider` 的按装配对象工厂与 MCP、`PlatformTool` 入参 schema 按键排序、`AgentScopeEngine` 注入时钟；engine-spi 的 `AgentConfigPort.tenantPrompt`、`ToolErrorCode`/`McpUnavailableException`、`McpServerSpec` 副作用缺省值；runtime 的 `tooling`（`AddressPolicy`、`GuardedWebFetcher`、`GuardedResolverGroup`、`WebContentConverter`、`TenantWebSearch` 与 SearXNG、博查适配器、`UnconfiguredKnowledgeSearch`）、`TenantSettings` 与 `kind: tenant_settings`、装配；test-support 记录请求体；BOM 加 flexmark、jsoup、WireMock；开发配置的租户设置与联网工具；测试 `PromptLayeringScenarioTest`、`ExternalContentToolScenarioTest`、`SourceTagsTest`、`McpToolsIT`（Boot 4.1 Servlet 的进程内 MCP 服务）、`AddressPolicyTest`、`GuardedWebFetcherTest`、`WebSearchAdaptersTest`、`ScriptedModelSessionIT` 前缀用例；P8 预验证报告
+- 验收：7 项通过，0 项阻塞
+- 决策：ADR-0035（提示词分层的落点与时间以消息注入；租户层经 `AgentConfigPort` 在装配时读取；来源标签格式与转义；`web_fetch` 用 Reactor Netty 加校验解析器、不复用连接、平台解析 IP 字面量；商业搜索选博查；`knowledge_search` 按实例创建；MCP 用异步客户端、凭据经单次调用的 Reactor Context 注入、工具包成 `PlatformTool`、连不上服务为可重试错误、MCP 端点允许内网但拒绝元数据地址）；架构设计升至 v1.11；登记事项 D29 已落地
+- 遗留：登记事项 D32 租户设置变更与 MCP 端点登记校验（T15b）、D33 前置检索的切片包来源标签（T19）
 
 ## 计划变更记录
 
