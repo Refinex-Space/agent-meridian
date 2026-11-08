@@ -265,13 +265,15 @@ class PermissionRewriteIT {
                                 .toolCall("call_o", PlatformToolNames.READ_FILE, Map.of("path", "docs/readme.md")))
                         .respond(r -> r.text("完成"))
                         .build(),
-                agent -> agent.permissions(new PermissionPolicy(
-                        PermissionMode.BYPASS,
-                        List.of(new PermissionRule(
-                                PlatformToolNames.WRITE_FILE,
-                                null,
-                                PermissionBehavior.ALLOW,
-                                PolicyLayer.AGENT_VERSION)))));
+                // 测试替身以平台工具名注册，智能体工具集要包含它们，否则被工具策略拒绝（ADR-0034）
+                agent -> agent.tools(PlatformToolNames.WRITE_FILE, PlatformToolNames.READ_FILE)
+                        .permissions(new PermissionPolicy(
+                                PermissionMode.BYPASS,
+                                List.of(new PermissionRule(
+                                        PlatformToolNames.WRITE_FILE,
+                                        null,
+                                        PermissionBehavior.ALLOW,
+                                        PolicyLayer.AGENT_VERSION)))));
         fixture.extraTools.add(write);
         fixture.extraTools.add(read);
         WorkerNode node = fixture.node("node-a");

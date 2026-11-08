@@ -432,7 +432,8 @@ class ScriptedModelSessionIT {
                     model:
                       model_id: mdl_e2e_scripted
                     system_prompt: 你是测试智能体。
-                    tools: []
+                    # 测试替身以平台工具名 spawn_subagent 注册，工具集外的平台工具会被策略拒绝（ADR-0034）
+                    tools: [spawn_subagent]
                     mcp_servers: []
                     skills: []
                     subagents: []

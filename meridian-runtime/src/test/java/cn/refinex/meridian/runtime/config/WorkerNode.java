@@ -188,7 +188,7 @@ record WorkerNode(
                     new RecordingMiddlewareProvider(middlewares, middlewares),
                     combined,
                     workspace,
-                    workspace);
+                    workspace.skills());
         } else {
             assembler = TestAssembly.builder(spec.model())
                     .stateStore(new FencedAgentStateStore(states, node.registry()))

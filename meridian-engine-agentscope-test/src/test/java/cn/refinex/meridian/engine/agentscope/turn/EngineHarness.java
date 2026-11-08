@@ -124,7 +124,7 @@ final class EngineHarness {
                     new RecordingMiddlewareProvider(middlewares, middlewares),
                     combined,
                     platformWorkspace,
-                    platformWorkspace);
+                    platformWorkspace.skills());
         } else {
             assembler = TestAssembly.builder(model)
                     .stateStore(new FencedAgentStateStore(states, leases))

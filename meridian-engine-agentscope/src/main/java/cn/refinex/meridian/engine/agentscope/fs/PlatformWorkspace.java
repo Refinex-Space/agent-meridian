@@ -32,7 +32,7 @@ import java.util.Objects;
  *
  * <p>线程安全：无状态。
  */
-public final class PlatformWorkspace implements WorkspaceFilesystemProvider, SkillRepositoryProvider {
+public final class PlatformWorkspace implements WorkspaceFilesystemProvider {
 
     /** 装配时读取一个技能的超时。 */
     static final Duration SKILL_READ_TIMEOUT = Duration.ofSeconds(30);
@@ -79,7 +79,22 @@ public final class PlatformWorkspace implements WorkspaceFilesystemProvider, Ski
         return localWorkspaceRoot;
     }
 
-    @Override
+    /**
+     * 平台技能仓库的提供者：读取同一份受保护内容中的 {@code skills/}。不让本类直接实现 {@link SkillRepositoryProvider}：
+     * 同时实现两个提供者接口的对象作为 Spring bean 时，按接口注入会出现两个候选。
+     *
+     * @return 技能仓库提供者
+     */
+    public SkillRepositoryProvider skills() {
+        return this::repository;
+    }
+
+    /**
+     * 装配对象的技能仓库。
+     *
+     * @param profile 装配对象
+     * @return 技能仓库
+     */
     public RuntimeContextSkillRepository repository(AgentProfile profile) {
         return new MeridianSkillRepository(content(profile).skillsFilesystem());
     }

@@ -114,8 +114,8 @@ class TurnWorkerIT {
                                 + " ORDER BY id",
                         String.class,
                         turnId))
-                .as("工具调用的权限判定（T08）与轮次结束")
-                .containsExactly("permission.decided", "turn.finished");
+                .as("有副作用的工具执行（T10a，账本结束时写入）、工具调用的权限判定（T08）与轮次结束")
+                .containsExactly("tool.executed", "permission.decided", "turn.finished");
         assertThat(node.node().registry().heldThreadIds())
                 .as("finally 中释放了本节点的条目")
                 .isEmpty();

@@ -36,11 +36,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  *       由各自任务的单元测试、契约测试与 gitleaks 落地，不属于 ArchUnit。
  * </ul>
  *
- * <p>由后续任务补上的规则（已在 {@code docs/plan/PLAN.md}「登记事项」登记）：
- * <ul>
- *   <li>T10a：平台工具继承 {@code ToolBase}（经平台基类 {@code PlatformTool}）；运行时 Toolkit 中的非 {@code ToolBase}
- *       工具必须在白名单内（启动自检）。平台工具基类在 T10a 创建。
- * </ul>
+ * <p>运行时 Toolkit 中的非 {@code ToolBase} 工具必须在白名单内：由装配与启动自检落地（{@code ToolPolicy}，T10a），不属于
+ * ArchUnit；本类的规则 13 检查"平台工具继承 {@code PlatformTool}"。
  */
 @AnalyzeClasses(packages = MeridianModule.ROOT_PACKAGE, importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureRulesTest {
@@ -193,5 +190,18 @@ class ArchitectureRulesTest {
             .areAssignableTo(SystemRepository.class)
             .as("规则 11：..api.. 不能依赖 SystemRepository 的子类")
             .because("SystemRepository 只供本上下文的后台作业与端口实现使用，见架构设计「租户隔离」")
+            .allowEmptyShould(true);
+
+    @ArchTest
+    static final ArchRule rule13_platform_tools_extend_platform_tool = classes()
+            .that()
+            .areAssignableTo("io.agentscope.core.tool.ToolBase")
+            .and()
+            .resideOutsideOfPackage("cn.refinex.meridian.engine.agentscope.testkit..")
+            .should()
+            .beAssignableTo("cn.refinex.meridian.engine.agentscope.tools.PlatformTool")
+            .as("规则 13：生产代码中继承 ToolBase 的类必须继承 PlatformTool（测试夹具 ..testkit.. 除外）")
+            .because("平台工具经 PlatformTool 统一实现 matchRule、记账、幂等键与文件系统访问，见架构设计「平台工具」与 ADR-0034；"
+                    + "运行时 Toolkit 中的非 ToolBase 工具由装配自检检查（ToolPolicy）")
             .allowEmptyShould(true);
 }

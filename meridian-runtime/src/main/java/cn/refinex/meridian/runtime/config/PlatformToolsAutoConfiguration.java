@@ -21,8 +21,7 @@ import org.springframework.context.annotation.Bean;
  * 端口）、{@code none} 档工作区与平台技能仓库（{@link PlatformWorkspace}，经工作区存储与配置端口）。排在
  * {@link EngineAutoConfiguration} 之前；测试自己声明某个提供者时不创建对应的生产实现。
  *
- * <p>工作区与技能仓库各是一个 bean：{@code PlatformWorkspace} 同时实现两个接口，作为一个 bean 注册时按接口注入会出现两个候选，
- * 所以技能仓库的 bean 是委托给它的方法引用。
+ * <p>工作区与技能仓库各是一个 bean，技能仓库经 {@code PlatformWorkspace.skills()} 取得，两个 bean 各自只有一个提供者类型。
  */
 @AutoConfiguration(before = EngineAutoConfiguration.class)
 public class PlatformToolsAutoConfiguration {
@@ -74,7 +73,6 @@ public class PlatformToolsAutoConfiguration {
             AgentConfigPort configs,
             @Value("${meridian.runtime.workspace.local-root:${java.io.tmpdir}/meridian/agent-workspace}")
                     Path localWorkspaceRoot) {
-        PlatformWorkspace workspace = new PlatformWorkspace(store, configs, localWorkspaceRoot);
-        return workspace::repository;
+        return new PlatformWorkspace(store, configs, localWorkspaceRoot).skills();
     }
 }
