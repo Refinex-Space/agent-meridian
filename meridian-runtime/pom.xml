@@ -58,6 +58,12 @@
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-html2md-converter</artifactId>
         </dependency>
+        <!-- 出网授权按源 IP 缓存 30 秒（架构设计「沙箱出网」），命中率经 Micrometer 的 CaffeineCacheMetrics 导出；版本由 BOM 管理，
+             engine-agentscope 已经依赖它 -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>cn.refinex.meridian</groupId>

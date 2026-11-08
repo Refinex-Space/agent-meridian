@@ -38,6 +38,9 @@ import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchWakeups;
 import cn.refinex.meridian.runtime.dispatch.app.NodeChannel;
 import cn.refinex.meridian.runtime.dispatch.app.NodeChannelListener;
+import cn.refinex.meridian.runtime.egress.app.EgressGrants;
+import cn.refinex.meridian.runtime.egress.app.EgressRevocations;
+import cn.refinex.meridian.runtime.egress.infra.system.SandboxAddressRepository;
 import cn.refinex.meridian.runtime.sandbox.app.DatabaseSandboxStates;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxProperties;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxService;
@@ -245,6 +248,9 @@ record WorkerNode(
                     new OutboxWriter(dataSource, "rt", spec.clock()),
                     transactions,
                     spec.sandbox().properties(),
+                    new EgressRevocations(
+                            new EgressGrants(new SandboxAddressRepository(dataSource), configs, node.meters()),
+                            RuntimeTestRedis.reactiveMessaging()),
                     node.meters(),
                     spec.clock());
         }

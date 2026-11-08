@@ -14,6 +14,7 @@ import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import cn.refinex.meridian.persistence.objectstore.ObjectStore;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
+import cn.refinex.meridian.runtime.egress.app.EgressRevocations;
 import cn.refinex.meridian.runtime.sandbox.domain.OutputSyncPlan;
 import cn.refinex.meridian.runtime.sandbox.domain.SandboxMetering;
 import cn.refinex.meridian.runtime.sandbox.domain.SandboxObjectKeys;
@@ -59,6 +60,9 @@ import reactor.core.publisher.Mono;
  *   <li><b>删除会话</b>（{@link #deleteSessionSandbox}）：删除沙箱、全部快照与产物副本（会话删除的总流程在 T17a）。
  * </ul>
  *
+ * <p>会话的 Pod IP 每次变化（新认领或恢复、重新连接时 IP 变了、回收、删除）都在同一事务里交给 {@link EgressRevocations}：出网授权按
+ * 源 IP 缓存 30 秒，提交后各节点立即淘汰旧 IP 与新 IP 的授权，同 IP 的新 Pod 不继承旧授权（架构设计「沙箱出网」，T12b）。
+ *
  * <p>行锁内会执行远程操作（认领约 0.1 秒，100 MB 工作区的快照或恢复约 3 至 5 秒，P5），单个操作的等待上限是
  * {@link SandboxProperties#operationTimeout()}；持锁期间同一会话的事件写入会等待，这只发生在会话的第一轮、回收后的第一轮与回收时。
  *
@@ -83,6 +87,7 @@ public class SandboxService {
     private final OutboxWriter outbox;
     private final TransactionTemplate transactions;
     private final SandboxProperties properties;
+    private final EgressRevocations egress;
     private final Timer claimTimer;
     private final Clock clock;
 
@@ -97,6 +102,7 @@ public class SandboxService {
      * @param outbox outbox 写入，用量用
      * @param transactions 事务模板
      * @param properties 沙箱配置
+     * @param egress 出网授权的失效
      * @param meters 指标注册表
      * @param clock 时钟
      */
@@ -109,6 +115,7 @@ public class SandboxService {
             OutboxWriter outbox,
             TransactionTemplate transactions,
             SandboxProperties properties,
+            EgressRevocations egress,
             MeterRegistry meters,
             Clock clock) {
         this.drivers = drivers;
@@ -119,6 +126,7 @@ public class SandboxService {
         this.outbox = outbox;
         this.transactions = transactions;
         this.properties = properties;
+        this.egress = egress;
         this.clock = clock;
         this.claimTimer = Timer.builder(CLAIM_METRIC)
                 .description("从预热池认领会话沙箱的耗时")
@@ -232,6 +240,7 @@ public class SandboxService {
             row.handle().ifPresent(handle -> run(driver().delete(handle)));
             meter(row, now, context);
             sessions.clearSandbox(sessionId, null, now);
+            egress.podIpChanged(row.podIp(), null);
             outputs.deleteAll(sessionId);
         }));
         objects.deleteByPrefix(SandboxObjectKeys.outputsPrefix(context.tenantId(), context.projectId(), sessionId));
@@ -257,6 +266,7 @@ public class SandboxService {
                         resumed.get().podIp(),
                         now,
                         null);
+                egress.podIpChanged(row.podIp(), resumed.get().podIp());
                 return resumed.get();
             }
             // 沙箱在回收之外消失了（Pod 被驱逐、claim 被删）：结算它的用量，按没有沙箱处理
@@ -270,6 +280,8 @@ public class SandboxService {
         SandboxHandle created = restoreOrCreate(driver, request, row.snapshotKey());
         fresh.set(created);
         sessions.saveSandbox(sessionId, SandboxRecord.of(created, environment.size()), created.podIp(), now, now);
+        // 新 IP 即使与原来的相同也要淘汰：错过了上一个持有者的失效广播的节点，此时不能再用它缓存的授权
+        egress.revoke(row.podIp(), created.podIp());
         return created;
     }
 
@@ -361,12 +373,14 @@ public class SandboxService {
             Instant now = clock.instant();
             meter(row, now, context);
             sessions.clearSandbox(sessionId, row.snapshotKey(), now);
+            egress.podIpChanged(row.podIp(), null);
             return ReclaimOutcome.LOST;
         }
         run(driver.delete(handle.get()));
         Instant now = clock.instant();
         meter(row, now, context);
         sessions.clearSandbox(sessionId, snapshotKey, now);
+        egress.podIpChanged(row.podIp(), null);
         if (row.snapshotKey() != null && !row.snapshotKey().equals(snapshotKey)) {
             superseded.set(row.snapshotKey());
         }

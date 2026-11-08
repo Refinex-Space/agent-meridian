@@ -180,8 +180,8 @@ T12b 沙箱出网控制（开工 2026-11-08，基线 `verify.sh` 通过）：
 - [x] 1. kind 上实测 Envoy 的 HTTP `ext_authz` 对普通代理请求与 CONNECT 的回调形态：检查请求沿用客户端的方法，CONNECT 的检查本身成了 CONNECT，授权不了 HTTPS；Lua 过滤器回调四种情况全部正确。写 ADR-0038（提议，变更型），受影响部分（Envoy 的授权过滤器、内部接口的形态、P14 实测）等用户确认
 - [x] 1b. kind 集群的 Pod 网段与 Docker Desktop 的宿主地址 `192.168.65.254` 重叠（Calico 对池内目的地址不做 NAT），Pod 访问不到 `host.docker.internal`：`kind-gvisor.sh` 改用 `10.244.0.0/16`（Calico IP 池同步设置）并重建集群，Pod 已能访问宿主
 - [ ] 2. 内部接口规范 `/internal/v1/egress:authorize`（`meridian-internal-v1.yaml`）
-- [ ] 3. runtime `egress`：按 Pod IP 查会话与环境（`infra.system`，`SystemRepository`）、白名单判定、30 秒缓存、Pod IP 清空时立即失效、指标 `meridian_egress_authorize_seconds` 与缓存命中率
-- [ ] 4. 集成测试：Pod IP 清空后缓存内的授权立即失效（T12b-A02）
+- [x] 3. runtime `egress`：按 Pod IP 查会话与环境（`infra.system.SandboxAddressRepository`，迁移 `V0007` 的部分索引）、白名单判定（`EgressTarget`、`EgressAllowlist`）、30 秒缓存（`EgressGrants`，Caffeine）、Pod IP 变化时本节点立即淘汰并经 Pub/Sub `egress:revoke` 广播（`EgressRevocations`，`SandboxService` 的获取、回收、删除都调用）、指标 `meridian_egress_authorize_seconds` 与 `cache_gets_total{cache="egress_grants"}`。HTTP 接口等 ADR-0038
+- [x] 4. 集成测试：Pod IP 清空后缓存内的授权立即失效（T12b-A02）：`SandboxEgressRevocationIT`（回收、删除、重新连接换 IP、错过广播的节点在同 IP 新认领时淘汰）、`EgressAuthorizerIT`
 - [ ] 5. Helm chart：Envoy（HTTP 与 CONNECT、`ext_authz`、超时与连接上限写明理由）、NetworkPolicy（沙箱只到代理与 DNS），两种拓扑按 values 切换，`helm lint`（T12b-A03）
 - [ ] 6. kind 实测 P14 四条（`allowed-echo`、`denied-echo`、新 Pod 不继承授权、直连被阻断）与 `-Pkind` 测试（T12b-A01）
 - [ ] 7. 文档：ADR、架构设计、P14 报告、`docs/poc/README.md`、runtime `CLAUDE.md`、chart README

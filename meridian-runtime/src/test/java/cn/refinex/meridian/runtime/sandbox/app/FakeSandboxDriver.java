@@ -35,6 +35,7 @@ final class FakeSandboxDriver implements SandboxDriver {
     final List<String> calls = new CopyOnWriteArrayList<>();
     final List<List<SkillDefinition>> skillSyncs = new CopyOnWriteArrayList<>();
     private final AtomicInteger sequence = new AtomicInteger();
+    private volatile String nextPodIp;
     private final ObjectStore objects;
     private volatile Gate resumeGate;
     private volatile Gate snapshotGate;
@@ -57,6 +58,16 @@ final class FakeSandboxDriver implements SandboxDriver {
 
     Box box(SandboxHandle handle) {
         return live.get(handle.state());
+    }
+
+    /** 下一个新建或恢复的沙箱使用这个 Pod IP（模拟 IP 被新 Pod 复用）。 */
+    void nextPodIp(String ip) {
+        nextPodIp = ip;
+    }
+
+    /** 沙箱的 Pod 在平台之外被重建、换了 IP：之后的 {@code resume} 返回新 IP。 */
+    void changePodIp(SandboxHandle handle, String ip) {
+        live.computeIfPresent(handle.state(), (state, box) -> new Box(box.id(), ip, box.outputs()));
     }
 
     @Override
@@ -148,7 +159,9 @@ final class FakeSandboxDriver implements SandboxDriver {
 
     private SandboxHandle newBox(Map<String, byte[]> outputs) {
         int n = sequence.incrementAndGet();
-        Box box = new Box("sbx-" + n, "10.0.0." + n, outputs);
+        String ip = nextPodIp;
+        nextPodIp = null;
+        Box box = new Box("sbx-" + n, ip != null ? ip : "10.0.0." + n, outputs);
         live.put("state-" + n, box);
         return new SandboxHandle(box.id(), box.podIp(), "state-" + n);
     }

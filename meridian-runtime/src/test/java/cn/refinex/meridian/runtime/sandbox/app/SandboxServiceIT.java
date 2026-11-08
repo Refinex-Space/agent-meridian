@@ -23,6 +23,9 @@ import cn.refinex.meridian.engine.spi.spec.SkillRef;
 import cn.refinex.meridian.persistence.objectstore.ObjectStore;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.dispatch.domain.NewTurn;
+import cn.refinex.meridian.runtime.egress.app.EgressGrants;
+import cn.refinex.meridian.runtime.egress.app.EgressRevocations;
+import cn.refinex.meridian.runtime.egress.infra.system.SandboxAddressRepository;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxService.ReclaimOutcome;
 import cn.refinex.meridian.runtime.sandbox.infra.SandboxOutputRepository;
 import cn.refinex.meridian.runtime.sandbox.infra.SessionSandboxRepository;
@@ -30,6 +33,7 @@ import cn.refinex.meridian.runtime.sandbox.infra.system.IdleSandboxRepository;
 import cn.refinex.meridian.runtime.support.DbAssertions;
 import cn.refinex.meridian.runtime.support.RuntimeTestDatabase;
 import cn.refinex.meridian.runtime.support.RuntimeTestObjectStore;
+import cn.refinex.meridian.runtime.support.RuntimeTestRedis;
 import cn.refinex.meridian.runtime.support.TestNode;
 import cn.refinex.meridian.runtime.support.TestSessions;
 import cn.refinex.meridian.runtime.support.TestSessions.TestSession;
@@ -117,6 +121,9 @@ class SandboxServiceIT {
                 new OutboxWriter(dataSource, "rt", clock),
                 RuntimeTestDatabase.transactions(),
                 properties(maxOutput),
+                new EgressRevocations(
+                        new EgressGrants(new SandboxAddressRepository(dataSource), configs, meters),
+                        RuntimeTestRedis.reactiveMessaging()),
                 meters,
                 clock);
     }
