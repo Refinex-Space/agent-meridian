@@ -177,8 +177,10 @@ class SandboxPoolMeasurementKindIT {
     }
 
     private static int poolTarget(String pool) {
-        GenericKubernetesResource resource =
-                kube.genericKubernetesResources(WARM_POOL).inNamespace(NS).withName(pool).get();
+        GenericKubernetesResource resource = kube.genericKubernetesResources(WARM_POOL)
+                .inNamespace(NS)
+                .withName(pool)
+                .get();
         return ((Number) ((Map<?, ?>) resource.get("spec")).get("replicas")).intValue();
     }
 
@@ -231,7 +233,9 @@ class SandboxPoolMeasurementKindIT {
         stats.put("p95", percentile(sorted, 95));
         stats.put("p99", percentile(sorted, 99));
         stats.put("max", sorted.getLast());
-        stats.put("mean", Math.round(sorted.stream().mapToLong(Long::longValue).average().orElse(0)));
+        stats.put(
+                "mean",
+                Math.round(sorted.stream().mapToLong(Long::longValue).average().orElse(0)));
         stats.put("samples", samples);
         return stats;
     }

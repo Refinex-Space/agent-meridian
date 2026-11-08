@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.11 |
+| 版本 | v1.12 |
 | 日期 | 2026-11-08 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -225,6 +225,7 @@ agent-meridian/
 | `ModelGateway` | 解析供应商账号与凭据、限流、预算预扣与结算、用量记录 | `modelrouting` |
 | `WorkspaceStorePort` | 工作区 KV 存储 | `workspace` |
 | `SandboxStatePort` | 读写会话的沙箱状态（序列化后的字符串）与使用标记 | `sandbox` |
+| `SnapshotStorePort` | 沙箱工作区快照（tar）的写入、读取与存在性，键为 `rt/snapshots/{tenant_id}/{project_id}/{session_id}/{snapshot_id}.tar`（ADR-0036） | `sandbox` |
 | `KnowledgeSearchPort` | 知识库检索 | `tooling` |
 | `WebSearchPort`、`WebFetchPort` | 联网搜索与抓取（含 SSRF 防护） | `tooling` |
 | `SecretResolver` | 凭据明文解析 | `config` |
@@ -900,6 +901,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 - **启动的并发。** 每次调用 harness 都会对外部沙箱执行 `start()`，而它不是线程安全的；并行的子智能体会同时触发。所以适配层把沙箱包装成 `SingleStartSandbox`，保证 `start()` 在每个会话只真正执行一次。
 - **空闲回收。** 轮次开始时更新 `sessions.sandbox_last_used_at`。回收器找出空闲超过 10 分钟（可配置）的会话，在 `sessions` 行锁内确认该会话没有 `queued`、`running`、`awaiting_action` 的轮次，然后把工作区打成快照存入对象存储，再删除沙箱。下一轮需要时，新建沙箱并从快照恢复。
 - **产物。** 约定 `outputs/` 为产物目录。每轮结束时，平台把它同步到对象存储。在沙箱档，工作区 API 读取的是这份副本。
+- **驱动（ADR-0036）。** `KubernetesSandboxDriver` 按规格从预热池 `sandbox-<规格>` 认领（claim 带会话标签），恢复前确认 claim 与 `Sandbox` 都存在、否则以 `NotFoundException` 失败；快照经 `SnapshotStorePort` 写入对象存储，恢复时把快照放进新沙箱的状态，由 harness 的"从快照恢复"分支展开；基础设施失败为可重试的 `SandboxUnavailableException`。runtime 连接沙箱都经 sandbox-router：本机开发用端口转发，生产环境 runtime 在集群内直连 router 服务，在集群外时用网关。
 - **技能资源。** 技能附带的脚本和模板，在沙箱创建或恢复后，由 `SandboxDriver` 用 `execute` 加 tar 写入 `/workspace/.meridian/skills/`。每轮开始时校验哈希，不一致就重新写入。沙箱内的智能体与上传使用同一个系统用户，这些文件无法做成只读；被篡改只影响本会话，下一轮也会被恢复。技能正文仍通过 `load_skill_through_path` 加载。
 
 ### 沙箱 Pod 与镜像
@@ -919,7 +921,9 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
   | `large` | 4 | 8 GiB | 20 GiB | 1024 |
 
   环境只能在这三个规格中选择。新增规格要改 Helm 并发布，属于运维变更。
-- **镜像**：`sandbox-runtime` 是平台自建镜像，基于 Debian slim，预装 Python 3、Node.js 和常用文档处理库。它实现 AgentScope Kubernetes 扩展约定的 `POST /execute`、`/upload`、`/download` 接口，监听 8888 端口。
+
+  落地细则（ADR-0036）：Helm chart `meridian-sandbox` 装在命名空间 `meridian-sandbox`（Pod Security `restricted`）；模板的 `networkPolicyManagement` 为 `Unmanaged`，网络策略由 chart 提供（agent-sandbox 的默认策略允许访问公网）；同一命名空间部署 agent-sandbox 的 sandbox-router（服务 `sandbox-router-svc:8080`，AgentScope 扩展的三种连接方式都经它转发）；工作区 emptyDir 挂在 `/var/lib/sandbox`，`/workspace` 是镜像中指向其下 `workspace/` 的符号链接（emptyDir 挂载点属于 root，恢复快照的 `tar` 要设置归档根目录的时间与权限）；进程数由入口脚本的 `ulimit -u` 限制，gVisor 中按沙箱计数；磁盘为 `ephemeral-storage` 上限与工作区 emptyDir 的 `sizeLimit`。
+- **镜像**：`sandbox-runtime` 是平台自建镜像，基于 Debian slim，预装 Python 3、Node.js 和常用文档处理库。它实现 AgentScope Kubernetes 扩展约定的 `POST /execute`、`/upload`、`/download` 接口（扩展另外调用 `GET /list`、`/exists`，字段对照见 `sandbox-runtime/README.md`），监听 8888 端口。命令有超时与输出上限，结束后整个进程组被终止（ADR-0036）。
 
 ### 沙箱出网
 
@@ -1423,6 +1427,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.8 | 2026-11-08 | T09a：模型调用的重试与降级细则、结算方式、平台 HTTP 传输与供应商扩展点；压缩只按 token 阈值触发、平台摘要提示词；`CompactionGuardMiddleware` 的顺序与失败恢复、新增 `ContextCompositionMiddleware`，`span.model_request_start` 带上下文构成；事件映射中 `CUSTOM` 的平台事件；预算以 token 计与用量记录格式（ADR-0032） |
 | v1.9 | 2026-11-08 | T09b：模型直通接口的流式与错误约定、Embedding 与 rerank 的计量与拆批、模型目录的种类与模型级端点；内部接口规范与开发期服务凭据；测试策略增加脚本化模型服务（ADR-0033） |
 | v1.10 | 2026-11-08 | T10a：`PlatformContext` 带终端用户；`wait_async_results` 在 2.0.4 中是 `ToolBase`，工具集外的工具与它由工具策略的拒绝规则拒绝，`PolicyMiddleware` 只拦截非 `ToolBase` 工具；技能仓库继承 `WorkspaceSkillRepository`；平台工具基类、路径约定、先读后改、账本的指标与审计；受保护路径的内容与工作区存储细则；本机工作区根；`AgentConfigPort` 读取技能内容（ADR-0034） |
+| v1.12 | 2026-11-08 | T11：端口表增加 `SnapshotStorePort`；会话沙箱的驱动行为与连接方式；沙箱 Pod 的落地细则（sandbox-router、`Unmanaged` 网络策略、工作区符号链接、进程数上限）；镜像接口的完整清单（ADR-0036） |
 | v1.11 | 2026-11-08 | T10b：系统提示词的落点（`sysPrompt` 三层、关闭 `WorkspaceContextMiddleware`、时间以 `<platform_context>` 消息注入、工具 schema 按键排序）；`AgentConfigPort` 读取租户提示词；来源标签格式与转义；`web_fetch` 的 SSRF 实现、`web_search` 的两个后端、`knowledge_search` 的入参、MCP 客户端的构建与凭据注入（ADR-0035） |
 
 ## 待决问题

@@ -9,6 +9,8 @@
 | 单元测试 | `*Test` | Surefire，默认运行 | 无外部依赖 |
 | 集成测试 | `*IT` | Failsafe，`verify` 阶段运行 | Docker（Testcontainers） |
 | 真实模型测试 | `*LiveIT`，JUnit 标签 `live` | 默认不运行；`-Plive` 时运行 | `DASHSCOPE_API_KEY` |
+| kind 集群测试 | `*KindIT`，JUnit 标签 `kind` | 默认不运行（CI 没有 kind）；`-Pkind` 时只运行它们 | 本机 kind 集群 `meridian` 与已部署的沙箱（根 `CLAUDE.md`「环境脚本」） |
+| Python 子项目 | `tests/test_*.py` | pytest，`scripts/dev/verify.sh` 运行 | uv |
 | 智能体场景测试 | `*ScenarioTest` | 默认运行 | `ScriptedModel`，不依赖真实模型 |
 | 契约测试 | `*ContractIT` | 默认运行 | OpenAPI 规范 |
 | 端到端测试 | `e2e/` 下的脚本或 `*E2EIT` | 按任务说明运行 | 本地基础设施与服务 |

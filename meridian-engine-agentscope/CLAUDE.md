@@ -1,11 +1,12 @@
 # meridian-engine-agentscope
 
-内核适配层的 AgentScope 2.0.4 实现，唯一依赖 AgentScope 的生产模块：智能体装配与实例缓存、系统提示词分层、执行一轮、事件映射、带租约校验的状态存储、平台中间件、平台工具（文件、联网、知识检索、MCP）、`none` 档工作区与技能仓库。
+内核适配层的 AgentScope 2.0.4 实现，唯一依赖 AgentScope 的生产模块：智能体装配与实例缓存、系统提示词分层、执行一轮、事件映射、带租约校验的状态存储、平台中间件、平台工具（文件、联网、知识检索、MCP）、`none` 档工作区与技能仓库、会话沙箱驱动。
 
 ## 命令
 
 - 编译与单测：`./mvnw -pl meridian-engine-agentscope -am test`
 - 装配、映射与场景测试在 `meridian-engine-agentscope-test`（它依赖本模块，测试放这里会形成循环）：`./mvnw -pl meridian-engine-agentscope-test -am test`
+- kind 集成测试（`*KindIT`，标签 `kind`，在 engine-agentscope-test；先按根 `CLAUDE.md` 建集群并 `scripts/dev/deploy-sandbox.sh`）：`./mvnw -Pkind -pl meridian-engine-agentscope-test -am verify`
 - 读 2.0.4 源码：`./mvnw -pl meridian-engine-agentscope -am compile dependency:sources -DincludeGroupIds=io.agentscope`，再 `unzip -p ~/.m2/repository/io/agentscope/<构件>/2.0.4/<构件>-2.0.4-sources.jar <类路径>.java`
 
 ## 包地图
@@ -20,6 +21,7 @@
 - `tools`（T10a，ADR-0034）：`PlatformTool` 是所有平台工具的基类（`matchRule`、`generateSuggestions`、账本与幂等键、文件系统绑定、入参 schema 按键排序），`RuleSyntax` 是规则内容语法，`WorkspacePaths` 是路径规范化与路径 glob；六个文件工具与 `FileToolSupport`（先读后改、`grep_files` 按拒绝规则过滤）；`PlatformToolProvider` 按工具名登记工厂（工厂可以读 `AgentProfile`），`withMcp` 登记 MCP 连接器。
 - `tools`（T10b，ADR-0035）：`WebFetchTool`、`WebSearchTool`、`KnowledgeSearchTool`（经端口，结果包来源标签，端口失败是错误结果）；`SourceTags` 是来源标签；`tools.mcp`：`McpConnector`（装配时建客户端、发现工具）、`McpPlatformTool`（`mcp__{server}__{tool}`）、`McpCredentials` 与 `McpCredentialInjector`（凭据经 Reactor Context 的 `McpTransportContext` 到请求头）。
 - `fs`（T10a）：`PlatformWorkspace` 是 `none` 档的 `WorkspaceFilesystemProvider`（`skills()` 给出技能仓库提供者）；`MeridianBaseStore`（`BaseStore` → `WorkspaceStorePort`）、`WorkspaceNamespaces`（命名空间取自 `PlatformContext`）、`ReadOnlyFilesystem`、`ProtectedContent`（受保护路径的内容）、`MeridianSkillRepository`（继承 `WorkspaceSkillRepository`）。
+- `sandbox`（T11，ADR-0036）：`KubernetesSandboxDriver` 实现 `SandboxDriver`（经 `KubernetesSandboxClient` 认领 `sandbox-<规格>` 预热池、`resume` 先查 claim 与 `Sandbox` 是否存在、`restore` 由 harness 的快照分支展开、`attach(state)` 给出本节点缓存的 `SingleStartSandbox` 供 `SandboxContext.externalSandbox`）；`SingleStartSandbox`（`start()` 只执行一次，失败可重试，委托 `SandboxFileTransfer`）；`PlatformSnapshotClient`（`RemoteSnapshotClient` → `SnapshotStorePort`，快照 ID 即对象键）；`SandboxDriverSettings`（命名空间、预热池前缀、连接方式 `PortForward`/`Direct`/`Gateway`、超时）。
 - `assembly.ToolPolicy`：装配自检（非 `ToolBase` 只允许 `load_skill_through_path`）、策略拒绝规则（`wait_async_results`、工具集外的工具，`AssembledAgent.policyDenyRules()`，引擎每轮并入权限）、启动自检的探测对象；`AgentAssembler.selfCheck`。
 - `model`（T09a，ADR-0032）：`RoutedModel`（`doStream`：resolve → 限流 → 预扣 → 带重试的调用 → `usingWhen` 结算；降级在 `ProviderFailure` 之上决定）、`RoutedModelFactory`（装配时 `describe` 取上下文窗口）、`ProviderClients`（按账号加模型缓存不含凭据的客户端）、`OpenAiCompatibleClientFactory`、`ProviderHttpTransport`（记录 `Retry-After`）、`ProviderErrors`（可重试、拒绝、非供应商错误）、`TokenEstimator`、`CompactionWatch`（压缩期间的 Reactor Context 标记）。`RoutedModelInvoker`（T09b，ADR-0033）是 `ModelInvoker`：每次调用一个只含主模型的 `RoutedModel`，`ChunkTranslator` 把 2.0.4 的流式工具调用（首块带名字，后续片段名为 `__fragment__`、不带序号）归并到序号上。
 
@@ -90,10 +92,11 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 - 在 `onReasoning` 中以 `InterruptedException` 结束等同于用户中断（`handleInterrupt`：补齐悬空调用、保存状态、`INTERRUPTED`）；不调下游只发 `RequestStopEvent` 时没有模型输出，推理返回空，不能这样停。
 - 工具直接返回的 `ToolResultBlock` 状态默认为 `RUNNING`（由 `ToolExecutor` 定稿），直接调用工具时不能用 `SUCCESS` 判断成功。
 - `Map.of` 的迭代顺序每个 JVM 随机：工具定义（入参 schema）由 `PlatformTool` 规整为按键排序，否则不同节点的请求前缀不同、命中不了提示词缓存。
+- 沙箱（2.0.4 已核实）：`KubernetesSandboxClient` 合并单次选项时非空字段一律覆盖默认值，命名空间、工作区、文件接口目录、端口都有非空缺省，单次选项必须完整设置；超时只取默认选项。`getSandbox` 在 claim 不存在时会监听等满 30 秒，所以 `resume` 先用 fabric8 查 claim。`KubernetesSandbox.shutdown()` 删除 claim 失败只打日志，驱动自己删 claim。`doExec` 不把超时传给执行服务，非零退出码抛 `ExecException`。三种连接方式都经沙箱命名空间中的 `sandbox-router-svc`。
 - 2.0.4 在执行工具前按入参 schema 校验参数（含 `enum`），不合法的调用直接得到 "Parameter validation failed" 错误结果，不进 `execute`。
 
 ## 对外接口
 
-- 实现 `meridian-engine-spi` 的 `AgentEngine`（`turn.AgentScopeEngine`，构造时注入 `Clock`）；依赖端口 `AgentConfigPort`（含 `skill`、`tenantPrompt`）、`LeaseRegistry`、`AgentStateRepository`、`BlobStorePort`、`InboxPort`、`ToolLedgerPort`、`WorkspaceStorePort`、`WebFetchPort`、`WebSearchPort`、`KnowledgeSearchPort`、`SecretResolver`（MCP）。
+- 实现 `meridian-engine-spi` 的 `AgentEngine`（`turn.AgentScopeEngine`，构造时注入 `Clock`）与 `SandboxDriver`（`sandbox.KubernetesSandboxDriver`，依赖 `SnapshotStorePort`，T12a 在 runtime 的 `config` 装配）；依赖端口 `AgentConfigPort`（含 `skill`、`tenantPrompt`）、`LeaseRegistry`、`AgentStateRepository`、`BlobStorePort`、`InboxPort`、`ToolLedgerPort`、`WorkspaceStorePort`、`WebFetchPort`、`WebSearchPort`、`KnowledgeSearchPort`、`SecretResolver`（MCP）。
 - runtime 只能在 `config` 包引用本模块的装配入口：`AgentAssembler`、`AgentInstanceCache`、`AgentScopeEngine`、`FencedAgentStateStore`、`PlatformMiddlewareProvider`、`RoutedModelFactory`、`RoutedModelInvoker`、`ProviderClients`、`ProviderHttpTransport`、`OpenAiCompatibleClientFactory`、`PlatformToolProvider`、`PlatformTool.ToolServices`、`PlatformWorkspace`、`ToolPolicy`、`TenantPromptProvider`、三个联网与知识检索工具、`McpConnector` 与提供者接口。依赖端口另有 `ModelGateway`（T09a）。
 - 生产实现的提供者：模型工厂（T09a，`ModelFactoryAutoConfiguration`）；工具、`none` 档文件系统、技能仓库（T10a，`PlatformToolsAutoConfiguration`），T10b、T12a、T13 继续加工具，T12a 加 `sandbox` 档文件系统；中间件 T04 起（T19 继续加入）。`ModelInvoker` 由 `RoutedModelInvoker` 实现（T09b），runtime 在 `config` 装配。
