@@ -34,6 +34,12 @@
         <!-- OpenAPI 兼容性检查（openapi-diff-core 2.1.7，2026-01-26）与契约测试的请求响应校验（2026-05-13），ADR-0029 -->
         <openapi-diff.version>2.1.7</openapi-diff.version>
         <openapi-request-validator.version>3.0.0</openapi-request-validator.version>
+        <!-- web_fetch 的 HTML 转 Markdown（ADR-0035）：flexmark-html2md-converter 0.64.8（2023-05-23，最新稳定版），基于 jsoup -->
+        <flexmark.version>0.64.8</flexmark.version>
+        <!-- flexmark 传递引入的 jsoup 是 1.15.4（2023）；它解析不可信的网页，固定到 1.22.2（2026-04-20） -->
+        <jsoup.version>1.22.2</jsoup.version>
+        <!-- web_search 适配器的 HTTP 模拟（ADR-0035）：WireMock 3.13.2（2025-11-14），独立打包版自带 Jetty，不影响应用类路径 -->
+        <wiremock.version>3.13.2</wiremock.version>
 
         <!-- 与根 POM 的 spotless-maven-plugin.version 保持一致 -->
         <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
@@ -208,6 +214,21 @@
                 <groupId>com.github.f4b6a3</groupId>
                 <artifactId>ulid-creator</artifactId>
                 <version>${ulid-creator.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.vladsch.flexmark</groupId>
+                <artifactId>flexmark-html2md-converter</artifactId>
+                <version>${flexmark.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jsoup</groupId>
+                <artifactId>jsoup</artifactId>
+                <version>${jsoup.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.wiremock</groupId>
+                <artifactId>wiremock-standalone</artifactId>
+                <version>${wiremock.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.openapitools.openapidiff</groupId>
