@@ -650,43 +650,43 @@
       "id": "T09b-A01",
       "task": "T09b",
       "description": "`/v1/chat/completions` 的流式与非流式响应符合 OpenAI 格式，带 `usage`，并经过限流、预扣与计量。验证：契约测试与集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dit.test='ModelEndpointsIT,SessionApiContractIT' → ModelEndpointsIT 11 项、SessionApiContractIT 1 项通过：非流式响应按 meridian-v1.yaml 校验（object、tool_calls、finish_reason、usage），流式每个块按 ChatCompletionChunk schema 校验（首块 role、每块 finish_reason、include_usage 时 choices 为空的用量块、[DONE]），首包前 5xx 为 503 problem+json，断流以 error 块结束；计量：outbox usage 记录（api_key_id、无会话、usage_source=provider）与 Redis API Key 计数的增量等于 total_tokens；预扣：10 token 预算的 Key 返回 429 model.budget_exceeded 且不调用供应商；限流：rpm=1 的模型第二次返回 429 model.rate_limit_timeout。契约：ScriptedProviderContractIT 7 项通过（AgentScope OpenAIChatModel 与 RoutedModelInvoker 对脚本服务）"
     },
     {
       "id": "T09b-A02",
       "task": "T09b",
       "description": "`/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank` 可用并被计量；内部接口拒绝没有服务凭据的请求。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ModelEndpointsIT：/v1/embeddings 的 float 与 base64 两种编码、按 max_batch_size=2 拆批（供应商共收到 3 次请求）、每次一条 embedding_tokens 用量记录；/internal/v1/embeddings 无凭据 401 auth.unauthenticated、用 API Key 401 auth.invalid_service_credential、服务凭据 200，用量记入请求体声明的租户与项目（项目级 Redis 计数等于 prompt_tokens），被拒绝的请求不到达供应商；/internal/v1/rerank 顺序正确、rerank_tokens 用量、无凭据 401；内部接口按 meridian-internal-v1.yaml 校验。ServiceCredentialAutoConfigurationTest、ServiceCredentialWebFilterTest：开发期凭据只在 dev、test 启用，没有来源时一律拒绝"
     },
     {
       "id": "T09b-A03",
       "task": "T09b",
       "description": "经 HTTP 启动的 runtime 以 `scripted` 供应商跑通一轮带工具调用的会话，事件序列与脚本一致；同一脚本重复运行结果相同。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dit.test=ScriptedModelSessionIT → 6 项通过（连续运行两次均通过）：RANDOM_PORT 启动的 runtime 不声明 ModelFactory，生产的 RoutedModelFactory 经 HTTP 调用内嵌的 ScriptedOpenAiServer；#script:tool-once 会话的事件序列含 user.message → session.status_running → agent.message:我先查一下订单。→ agent.tool_use:lookup_order → agent.tool_result:lookup_order → agent.message:订单 o-1001 已发货，预计明天送达。→ session.status_idle:end_turn，两次会话的归一化事件序列相同，供应商收到的步骤为 0,1,0,1"
     },
     {
       "id": "T09b-A04",
       "task": "T09b",
       "description": "内置脚本覆盖审批、自定义工具、长时间流式、子智能体、首包前 5xx 五种情形，各有一个用例证明可用。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ScriptedModelSessionIT：approval（requires_action，tool_confirmation 动作 refund_order，批准后执行并 end_turn）、custom-tool（custom_tool_result 动作 get_weather，回传结果后回答）、long-stream（流上出现 event_delta 后中断，status_idle:interrupted，用时少于 10 秒，脚本完整输出约 11 秒）、subagent（spawn_subagent 收到 subagent=researcher 与 task，结果回到父智能体）、error-before-first-chunk（3 次尝试后 session.error retry_status=retryable、code=model.provider_unavailable，随后 status_rescheduled reason=retryable_error）各一个用例通过；ScriptedOpenAiServerTest 10 项覆盖协议"
     },
     {
       "id": "T09b-A05",
       "task": "T09b",
       "description": "真实模型：Embedding（1024 维）、rerank 顺序、直通流式调用，全部通过。验证：`./mvnw -Plive ...` 的输出（命令与结果，不含密钥）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -Plive -pl meridian-runtime -am verify -Dit.test=ModelEndpointsLiveIT -Dfailsafe.failIfNoSpecifiedTests=false → Tests run: 3, Failures: 0, Errors: 0，BUILD SUCCESS（2026-11-08）：/internal/v1/embeddings 用 qwen3.7-text-embedding 返回两条 1024 维向量；/internal/v1/rerank 用 qwen3.7-text-rerank 把『苹果通常是红色的』排在『香蕉是黄色的』之前且得分更高；/v1/chat/completions 经 DashScope qwen-plus 流式调用，块通过 schema 校验，用量块的输入、输出与 outbox 记录一致（usage_source=provider），API Key 预算计数增量等于输入加输出。共 3 次真实调用"
     },
     {
       "id": "T09b-A06",
       "task": "T09b",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh → 全部模块 SUCCESS，BUILD SUCCESS，check-pom-versions: OK，exit=0（engine-agentscope-test 121 项、runtime 单测 157 项、runtime 集成测试 199 项、架构测试 12 项通过；2026-11-08）。首次运行时 ArchUnit 规则 5 拒绝 api 层引用 infra 的 RerankScore，移到 modelrouting.domain 后重跑通过"
     },
     {
       "id": "T10a-A01",

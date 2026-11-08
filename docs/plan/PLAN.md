@@ -68,7 +68,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 已完成 | 708f7ca |
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 已完成 | f75bc4f |
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 已完成 | 5e8b21a |
-| T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 进行中 | — |
+| T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 已完成 | 003dbfc |
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 未开始 | — |
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 未开始 | — |
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 未开始 | — |
@@ -175,20 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-### T09b 模型直通接口、Embedding 与 rerank、脚本化模型服务
-
-开工：2026-11-08，基线 `scripts/dev/verify.sh` 通过（4cbce4c）。
-
-- [x] 1. `ModelInvoker` 实现（engine-agentscope，复用 `RoutedModel`）与 runtime 装配
-- [x] 2. 规范：`meridian-v1.yaml` 增加 `/v1/chat/completions`、`/v1/embeddings`；新文件 `meridian-internal-v1.yaml`（`/internal/v1/embeddings`、`/internal/v1/rerank`）
-- [x] 3. runtime 直通接口 `/v1/chat/completions`（流式与非流式、`usage`、`models:invoke`）（A01）
-- [x] 4. Embedding 与 rerank 客户端（平台自己的 HTTP 客户端，计量），`/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank`，开发期静态服务凭据（A02）
-- [x] 5. `ScriptedOpenAiServer`（test-support）、YAML 脚本与内置脚本、`scripts/dev/scripted-model.sh`、`dev-config/providers/scripted.yaml`（只在 dev、test）
-- [x] 6. 契约测试：runtime 的真实 OpenAI 兼容客户端对脚本服务
-- [x] 7. 经 HTTP 启动的 runtime 以 `scripted` 供应商跑通带工具调用的会话，重复一致（A03）
-- [x] 8. 五种内置脚本各一个用例：审批、自定义工具、长时间流式、子智能体、首包前 5xx（A04）
-- [x] 9. 真实模型测试：Embedding 1024 维、rerank 顺序、直通流式 `usage` 结算（A05）
-- [ ] 10. 收尾：模块与根 `CLAUDE.md`、文档与 ADR、`verify.sh`（A06）、acceptance、PLAN
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -258,6 +245,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D23 | T09a | 开发期的模型目录（`dev-config/providers`）与凭据解析（`EnvironmentSecretResolver`）不按项目授权：任何项目的智能体都能使用目录中的模型；`ModelGateway.resolve` 的"未授权给该项目"由 control-plane 的目录实现 | T15a |
 | D24 | T09a | 预算以 token（输入加输出）计，Redis 计数不分周期；软阈值告警、按价格表换算金额、预扣记录过期（1 小时）后未结算部分的修正、四级计数与账本的每小时对账都未实现（ADR-0032 第 6 条） | T16 |
 | D25 | T09a | `ModelGateway.Provider` 中只有 OpenAI 兼容类型有底层客户端（DashScope 走 `compatible-mode/v1`）；Anthropic、Gemini 的 2.0.4 模型类需要引入 `anthropic-java`、`google-genai`，DashScope 原生与 Ollama 同样未接入，扩展点是 `ProviderClientFactory`。供应商账号管理只能开放已实现的类型 | T15a |
+| D26 | T09b | `/v1/chat/completions` 只支持文本消息与函数工具（ADR-0033）：`content` 为内容块数组、`tool_choice`、`top_p`、`stop`、`n`、`response_format` 等字段返回 400；OpenAI SDK 的常用参数需要按业务方反馈补齐（与 `/v1/responses` 一起评估） | T17b |
+| D27 | T09b | Embedding 与 rerank 只接入了 OpenAI 兼容格式（rerank 为 DashScope 的 `compatible-api/v1/reranks`）的供应商，`ProviderVectorClient` 不区分供应商类型；其他格式（DashScope 原生 rerank、Cohere 等）需要按供应商类型扩展 | T15a |
+| D28 | T09b | 用量记录新增 `kind`：`embedding_tokens`、`rerank_tokens`（用途 `embedding`、`rerank`，只有输入 token），control-plane 的消费者与价格表要按 `kind` 计价 | T16 |
 
 ## 技术债
 
@@ -330,6 +320,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：9 项通过，0 项阻塞
 - 决策：ADR-0032（重试与结算细则、平台 HTTP 传输拿 `Retry-After`、失败摘要先恢复上下文再抛异常、`CUSTOM` 的平台事件、压缩只按 token 阈值、预算以 token 计、用量消息格式、供应商扩展点）；架构设计升至 v1.8；沿用 ADR-0023 的 `maxRetries(1)`（任务描述写的 0 在 2.0.4 中非法）
 - 遗留：登记事项 D23 开发期模型目录不按项目授权（T15a）、D24 预算的周期、金额与对账（T16）、D25 Anthropic、Gemini 等供应商类型未接入（T15a）；修复 T06 `TurnExecution` 的指标记录竞态（`TurnMetricsIT` 偶发失败）
+
+### 2026-11-08 T09b 已完成（提交 003dbfc）
+- 交付：engine-agentscope 的 `RoutedModelInvoker`（`ModelInvoker`，流式工具调用片段按序号归并）；runtime 的 `modelrouting.api`（`/v1/chat/completions` 流式与非流式、`/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank`）、`VectorModelService` 与 `ProviderVectorClient`（拆批、限流、预扣、计量、重试）、模型目录的 `kind`、模型级 `base_url`、`max_batch_size` 与按 profile 加载；engine-spi 的 `CallPurpose.EMBEDDING`/`RERANK`；security 的 `servicejwt` 包（开发期静态服务凭据，只在 dev、test）；`meridian-v1.yaml` 两个操作与新文件 `meridian-internal-v1.yaml`；test-support 的 `ScriptedOpenAiServer`、8 个内置脚本与 `scripts/dev/scripted-model.sh`（默认端口 18090）；`dev-config/providers/scripted.yaml` 与 DashScope 的 Embedding、rerank 模型；测试 `RoutedModelInvokerTest`、`ScriptedOpenAiServerTest`、`ScriptedProviderContractIT`、`ModelEndpointsIT`、`ScriptedModelSessionIT`、`ModelEndpointsLiveIT` 等
+- 验收：6 项通过，0 项阻塞
+- 决策：ADR-0033（一个操作两种响应与多类型字段的生成方式、流式先等第一个信号、请求严格与错误格式、非对话模型的计量与拆批、内部接口的租户与服务凭据、脚本服务的无状态选择与断流实现）；架构设计升至 v1.9
+- 遗留：登记事项 D26 直通接口支持的 OpenAI 字段（T17b）、D27 Embedding 与 rerank 的供应商类型（T15a）、D28 用量记录的新 `kind`（T16）
 
 ## 计划变更记录
 
