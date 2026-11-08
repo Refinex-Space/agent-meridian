@@ -219,7 +219,13 @@ class ScriptedOpenAiServerTest {
                 {"model": "scripted", "messages": [{"role": "user", "content": "#script:chat"}]}
                 """);
 
-        assertThat(server.calls()).contains(new ScriptedOpenAiServer.Call("/v1/chat/completions", "chat", 0, false));
+        assertThat(server.calls()).anySatisfy(call -> {
+            assertThat(call.path()).isEqualTo("/v1/chat/completions");
+            assertThat(call.script()).isEqualTo("chat");
+            assertThat(call.step()).isZero();
+            assertThat(call.stream()).isFalse();
+            assertThat(call.body()).as("记录请求体原文").contains("\"content\": \"#script:chat\"");
+        });
     }
 
     private static HttpResponse<String> post(String path, String body) throws IOException, InterruptedException {

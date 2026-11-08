@@ -190,14 +190,16 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
                 return;
             }
             JsonNode body;
+            String raw;
             try (InputStream in = exchange.getRequestBody()) {
-                body = JSON.readTree(in.readAllBytes());
+                raw = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                body = JSON.readTree(raw);
             } catch (RuntimeException e) {
                 error(exchange, 400, "请求体不是 JSON", null);
                 return;
             }
             switch (path) {
-                case "/v1/chat/completions" -> chat(exchange, body);
+                case "/v1/chat/completions" -> chat(exchange, body, raw);
                 case "/v1/embeddings" -> embeddings(exchange, body);
                 case "/compatible-api/v1/reranks" -> rerank(exchange, body);
                 default -> error(exchange, 404, "未知的路径：" + path, null);
@@ -209,10 +211,10 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
 
     // ---- 对话补全 ----
 
-    private void chat(HttpExchange exchange, JsonNode body) throws IOException {
+    private void chat(HttpExchange exchange, JsonNode body, String raw) throws IOException {
         Selection selection = select(body.path("messages"));
         boolean stream = body.path("stream").asBoolean(false);
-        calls.add(new Call("/v1/chat/completions", selection.script(), selection.step(), stream));
+        calls.add(new Call("/v1/chat/completions", selection.script(), selection.step(), stream, raw));
         ModelScript script;
         if (selection.script() == null) {
             script = new ModelScript("echo", null, List.of(Step.text(echo(selection.lastUserText()))));
@@ -461,7 +463,7 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
     // ---- Embedding 与 rerank ----
 
     private void embeddings(HttpExchange exchange, JsonNode body) throws IOException {
-        calls.add(new Call("/v1/embeddings", null, 0, false));
+        calls.add(new Call("/v1/embeddings", null, 0, false, null));
         JsonNode input = body.path("input");
         List<String> texts = new ArrayList<>();
         if (input.isString()) {
@@ -502,7 +504,7 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
     }
 
     private void rerank(HttpExchange exchange, JsonNode body) throws IOException {
-        calls.add(new Call("/compatible-api/v1/reranks", null, 0, false));
+        calls.add(new Call("/compatible-api/v1/reranks", null, 0, false, null));
         String query = body.path("query").asString("");
         List<String> documents = new ArrayList<>();
         body.path("documents").forEach(item -> documents.add(item.asString("")));
@@ -588,8 +590,9 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
      * @param script 选中的脚本；没有标记（回显）或不是对话补全时为空
      * @param step 步骤序号，从 0 开始
      * @param stream 是否流式
+     * @param body 对话补全的请求体原文（UTF-8），比较请求前缀用（T10b）；其他路径为空
      */
-    public record Call(String path, String script, int step, boolean stream) {}
+    public record Call(String path, String script, int step, boolean stream, String body) {}
 
     /** 选中的脚本、带标记的消息位置、步骤与最后一条用户消息的文本。 */
     private record Selection(String script, int markerIndex, int step, String lastUserText) {}

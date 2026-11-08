@@ -8,9 +8,12 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.resolver.AddressResolverGroup;
+import io.netty.resolver.dns.DefaultDnsServerAddressStreamProvider;
 import io.netty.resolver.dns.DnsAddressResolverGroup;
 import io.netty.resolver.dns.DnsNameResolverBuilder;
+import io.netty.resolver.dns.DnsServerAddressStreamProvider;
 import io.netty.resolver.dns.DnsServerAddressStreamProviders;
+import io.netty.util.internal.PlatformDependent;
 import java.io.ByteArrayOutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -274,12 +277,18 @@ public final class GuardedWebFetcher implements WebFetchPort, AutoCloseable {
         return new WebFetchException("the request failed: " + reason, unwrapped);
     }
 
-    /** 系统 DNS：非阻塞的 Netty 解析器，名字服务器取自操作系统配置。 */
+    /**
+     * 系统 DNS：非阻塞的 Netty 解析器，名字服务器取自操作系统配置（Linux 读 {@code /etc/resolv.conf}，含 Kubernetes 的搜索域）。macOS
+     * 开发机上 {@code platformDefault()} 要加载原生库，加载失败会打 ERROR 日志，所以直接用它失败后的同一个回退。
+     */
     private static AddressResolverGroup<InetSocketAddress> systemDns() {
+        DnsServerAddressStreamProvider nameServers = PlatformDependent.isOsx()
+                ? DefaultDnsServerAddressStreamProvider.INSTANCE
+                : DnsServerAddressStreamProviders.platformDefault();
         return new DnsAddressResolverGroup(new DnsNameResolverBuilder()
                 .datagramChannelType(NioDatagramChannel.class)
                 .socketChannelType(NioSocketChannel.class)
-                .nameServerProvider(DnsServerAddressStreamProviders.platformDefault()));
+                .nameServerProvider(nameServers));
     }
 
     @Override

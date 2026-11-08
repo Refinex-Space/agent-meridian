@@ -1,0 +1,10 @@
+# 开发租户的设置（FileAgentConfigProvider，T10b）。T15b 起由 control-plane 的 tenant_settings 下发，本目录只留给开发与测试。
+# system_prompt 是系统提示词的租户层：平台基础提示词之后、智能体提示词之前（ADR-0035）。
+kind: tenant_settings
+tenant_id: ten_dev
+system_prompt: 本组织的回答使用简体中文；涉及金额时注明币种。
+# 联网搜索后端（web_search）。不配置时 web_search 返回"未配置"的错误结果。
+# 自建 SearXNG（需在 settings.yml 的 search.formats 中开启 json）：
+#   web_search: {backend: searxng, base_url: http://localhost:8888}
+# 博查（secret_id 在开发期是以 _API_KEY 结尾的环境变量名）：
+#   web_search: {backend: bocha, base_url: https://api.bochaai.com, secret_id: BOCHA_API_KEY}

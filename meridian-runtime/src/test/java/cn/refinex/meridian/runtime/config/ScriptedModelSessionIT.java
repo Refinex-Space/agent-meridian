@@ -62,6 +62,7 @@ class ScriptedModelSessionIT {
     private static final String AGENT = "agt_e2e_scripted";
     private static final String ENVIRONMENT = "env_e2e_none";
     private static final Duration WAIT = Duration.ofSeconds(30);
+    private static final String TENANT_PROMPT = "本租户的回答一律使用简体中文。";
 
     private static final ScriptedOpenAiServer SERVER =
             ScriptedOpenAiServer.builder().start();
@@ -140,6 +141,53 @@ class ScriptedModelSessionIT {
                         .map(ScriptedOpenAiServer.Call::step))
                 .as("每次会话两步：工具调用、回答")
                 .containsExactly(0, 1, 0, 1);
+    }
+
+    @Test
+    void twoSessionsOfTheSameAgentSendIdenticalRequestPrefixes() {
+        for (String question : List.of("第一个会话的问题", "另一个会话，问题也不同")) {
+            Session session = start(null);
+            try {
+                session.send(question);
+                session.await(types -> types.contains("session.status_idle:end_turn"));
+            } finally {
+                session.close();
+            }
+        }
+
+        List<String> bodies = SERVER.calls().stream()
+                .filter(call -> call.path().equals("/v1/chat/completions"))
+                .map(ScriptedOpenAiServer.Call::body)
+                .toList();
+        assertThat(bodies).hasSize(2);
+        String first = bodies.getFirst();
+        String second = bodies.getLast();
+        assertThat(prefix(second))
+                .as("第一条用户消息之前的请求内容逐字节相同（T10b-A06）")
+                .isEqualTo(prefix(first))
+                .contains("You are an AI agent running on AgentMeridian")
+                .contains(TENANT_PROMPT)
+                .contains("你是测试智能体。");
+        assertThat(prefix(first).indexOf(TENANT_PROMPT))
+                .as("租户层在智能体层之前")
+                .isLessThan(prefix(first).indexOf("你是测试智能体。"));
+        assertThat(withoutMessages(second)).as("消息之外的请求字段（模型、工具定义、生成参数）也相同").isEqualTo(withoutMessages(first));
+        assertThat(first).contains("<platform_context>").contains("第一个会话的问题");
+    }
+
+    /** 请求体中第一条用户消息之前的部分。 */
+    private static String prefix(String body) {
+        int user = body.indexOf("\"role\":\"user\"");
+        assertThat(user).as("请求中有用户消息：" + body).isPositive();
+        return body.substring(0, user);
+    }
+
+    /** 去掉 {@code messages} 之后的请求体。 */
+    private static String withoutMessages(String body) {
+        tools.jackson.databind.node.ObjectNode node = (tools.jackson.databind.node.ObjectNode)
+                cn.refinex.meridian.common.json.JsonMappers.lenient().readTree(body);
+        node.remove("messages");
+        return node.toString();
     }
 
     @Test
@@ -452,6 +500,11 @@ class ScriptedModelSessionIT {
                     max_iters: 10
                     expose_thinking: false
                     """.formatted(AGENT));
+            Files.writeString(agents.resolve("tenant.yaml"), """
+                    kind: tenant_settings
+                    tenant_id: %s
+                    system_prompt: %s
+                    """.formatted(ApiTestKeys.TENANT, TENANT_PROMPT));
             Files.writeString(agents.resolve("environment.yaml"), """
                     kind: environment
                     environment_id: %s
