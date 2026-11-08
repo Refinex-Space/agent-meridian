@@ -72,7 +72,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 已完成 | b724148 |
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 已完成 | 7e490f5 |
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 已完成 | bcd2246 |
-| T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 未开始 | — |
+| T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 进行中 | — |
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 未开始 | — |
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 未开始 | — |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 未开始 | — |
@@ -175,7 +175,20 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+### T12a 会话沙箱生命周期、bash 与产物
+
+开工：2026-11-08，基线 `scripts/dev/verify.sh` 通过；kind 集群 `meridian` 已存在。
+
+- [ ] 1. engine：`sandbox` 档文件系统装配（`KubernetesFilesystemSpec` 加受保护路径与 `large_tool_results/` 路由，关闭投影，拒绝 harness 自建沙箱）；每轮注入外部 `SandboxContext`（`SingleStartSandbox`）
+- [ ] 2. runtime `sandbox` 上下文：`SandboxService` 获取（预热池认领、状态与 Pod IP 落库、`sandbox_last_used_at`）、`SandboxStatePort`、`meridian_sandbox_claim_seconds`
+- [ ] 3. 空闲回收：`infra.system` 扫描仓储、行锁内判定无活动轮次、快照、删除、清 Pod IP、下一轮从快照恢复、恢复后清理旧快照（D35）；竞争测试
+- [ ] 4. `bash` 工具：命令前缀规则、复合命令逐段匹配、输出截断、超时；只在 `sandbox` 档注册；内容级"记住此决定"（D21）
+- [ ] 5. 产物 `outputs/` 每轮同步到 `rt/outputs/{tenant}/{project}/{session}/`；技能资源投影 `/workspace/.meridian/skills/` 与哈希校验；删除会话的沙箱部分
+- [ ] 6. 计量与审计：沙箱 vCPU 秒用量、沙箱命令审计
+- [ ] 7. 内置技能 `skills/builtin/docx/`（SKILL.md + python-docx 脚本）
+- [ ] 8. 验证：kind 集成测试（A01、A02、A05、A06、A07）、P4 沙箱档、P6 bash 规则、P9；报告 P04、P06、P09
+- [ ] 9. 收尾：ADR、架构设计、模块 CLAUDE.md、`docs/poc/README.md`、`verify.sh`、`-Pkind`、acceptance、PLAN
+
 
 ## 控制台设计轨道
 
