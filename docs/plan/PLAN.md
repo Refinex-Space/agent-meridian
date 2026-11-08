@@ -186,7 +186,7 @@ T12b 沙箱出网控制（开工 2026-11-08，基线 `verify.sh` 通过）：
   - [x] 5a. NetworkPolicy（沙箱只到代理与 DNS；代理只到 DNS、按拓扑的 runtime、排除私网的公网与列出的命名空间）、values 的两种拓扑与限额、`deploy/kind/egress-echo.yaml`（`deploy-sandbox.sh` 部署），`helm lint` 通过
   - [x] 5b. Envoy 的 Deployment、Service 与配置（Lua 回调、CONNECT、动态转发代理、超时与连接上限、健康检查监听），`envoy --mode validate` 两种拓扑通过；`deploy-sandbox.sh` 建凭据 Secret
 - [x] 6. kind 实测 P14 四条（`allowed-echo`、`denied-echo`、新 Pod 不继承授权、直连被阻断）与 `-Pkind` 测试（T12b-A01）：`config.EgressProxyKindIT` 通过；runtime 未启动时代理拒绝（失败即拒绝）手工验证
-- [ ] 7. 文档：ADR、架构设计、P14 报告、`docs/poc/README.md`、runtime `CLAUDE.md`、chart README
+- [x] 7. 文档：ADR-0038（采纳）、ADR-0039（补充）、架构设计 v1.14、P14 报告、`docs/poc/README.md`、runtime 与根 `CLAUDE.md`、chart README；登记事项 D38–D40
 - [ ] 8. 收尾：`verify.sh`、`-Pkind`（T12b-A04）、`acceptance.json`、PLAN、报告
 
 ## 控制台设计轨道
@@ -269,6 +269,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D36 | T11 | 2.0.4 的扩展把快照归档整个读进内存（`byte[]`），100 MB 工作区的快照或恢复在 runtime 侧占用约同等大小的堆；runtime 的堆与并发回收数要按工作区上限估算 | R1（P7 容量） |
 | D37 | T12a | 无人管理的沙箱：获取沙箱的事务在认领之后失败时会删除新沙箱，但 runtime 进程在认领之后、提交之前崩溃时，带会话标签 `meridian.refinex.cn/session-id` 的 `SandboxClaim` 没有记进任何会话，一直占用资源；需要一个按标签比对 `rt.sessions.sandbox_state` 的清理作业（也覆盖已删除会话的残留） | T17a（会话删除与保留作业）或 T28（部署运维） |
 | D33 | T10b | `KnowledgePrefetchMiddleware` 前置检索注入的切片同样是外部内容，要用 `SourceTags`（`knowledge_search` 来源）包标签，并带 `ContextCompositionMiddleware` 的注入标记 | T19 |
+| D38 | T12b | 出网代理（Envoy 的 Lua 过滤器）回调 runtime 的 `/internal/v1/egress:authorize` 用开发期静态服务凭据（Secret `meridian-egress-proxy-credential`，本机取 `MERIDIAN_DEV_SERVICE_CREDENTIAL`，`dev`、`test` 之外不被接受）；Envoy 不能签发服务 JWT，T14b 要为代理另定凭据方式（例如 control-plane 为 `egress-proxy` 签发的长期凭据，或由边车刷新 JWT 写入文件、Lua 每次读取），并决定是否按调用方服务限定内部接口 | T14b |
+| D39 | T12b | 沙箱的网络策略放行集群 DNS（解析代理的服务名），CoreDNS 会把任意外部域名的查询转发出去，沙箱可以用 DNS 查询外带数据（DNS 隧道）；可选做法：CoreDNS 对沙箱网段只解析 `cluster.local`、沙箱改用固定 ClusterIP 的代理地址不放行 DNS，或 DNS 出口加策略（ADR-0039） | T37 |
+| D40 | T12b | 出网代理的可观测与运维：管理接口只绑定 127.0.0.1，`/stats/prometheus` 没有被采集；访问日志（JSON，含源 IP、目标、状态码）只在容器标准输出；下线时不排空（SIGTERM 即退出，进行中的隧道被切断）；生产的沙箱节点池污点（`meridian.io/sandbox=true:NoSchedule`）在沙箱模板与代理上都还没有容忍配置 | T27（指标与日志）、T28（排空与节点池） |
 
 ## 技术债
 

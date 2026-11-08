@@ -42,6 +42,6 @@ T12b 在本机 kind 集群用 Envoy v1.40.2（`envoyproxy/envoy:distroless-v1.40
 
 - 架构设计：「技术基线」"沙箱出网代理"一行改为"Envoy（Lua 过滤器回调 runtime 做域名授权）"；「沙箱出网」第 3 条写明回调由 Lua 过滤器发出、HTTP 与 CONNECT 同一路径、失败即拒绝、不转发沙箱的请求头；「架构决策记录」表增加本 ADR；版本号递增。
 - 代码与配置：`deploy/helm/meridian-sandbox` 的 Envoy 配置用 Lua 过滤器；`meridian-internal-v1.yaml` 增加 `POST /internal/v1/egress:authorize`（JSON 请求体：`source_ip`、`target`、`method`；响应体给出结论与原因）；runtime 的 `egress` 上下文实现它。没有数据迁移。
-- 验证：P14 的四条在 kind 中实测；Lua 脚本的 JSON 转义与失败即拒绝由 kind 用例覆盖（授权服务不可达时请求被拒绝）。
+- 验证：P14 的四条在 kind 中实测（`EgressProxyKindIT`）；授权服务不可达时请求被拒绝（手工验证，见 `docs/poc/P14-出网控制.md`）。目标中的引号、反斜杠与控制字符由脚本转义；Envoy 的 HTTP 解析器先拒绝了带这类字符的 `:authority`，转义是第二道防线。
 - 风险：Envoy 升级时 Lua API（`httpCall`、`streamInfo`）的兼容性，升级 Envoy 版本时重跑 P14 的 kind 用例。
 - 不受本决策影响、T12b 继续完成的部分：runtime 按 Pod IP 解析会话与环境、白名单判定、缓存与失效、指标；NetworkPolicy；Envoy 的部署、监听、CONNECT 与动态转发代理；两种拓扑的 values；`allowed-echo`、`denied-echo`。

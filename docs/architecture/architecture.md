@@ -938,6 +938,14 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 3. Envoy 对每个 CONNECT 或 HTTP 请求，带上源 IP 调用 runtime 的 `/internal/v1/egress:authorize`。runtime 用 `sessions.sandbox_pod_ip` 找到会话和环境，按环境的白名单判定目标域名，结果缓存 30 秒。沙箱删除时清空该会话的 Pod IP。回调由 Envoy 内置的 Lua 过滤器发出（ADR-0038）：`ext_authz` 的 HTTP 服务模式把客户端的方法带进检查请求，CONNECT 的检查本身成了 CONNECT，授权不了 HTTPS。HTTP 与 CONNECT 走同一段脚本，源 IP 取 TCP 对端地址，检查请求由脚本从头构造（沙箱的请求头不会到达 runtime），响应不是 200、超时或出错一律拒绝。
 4. HTTPS 走 CONNECT 隧道，代理不终止 TLS。
 
+落地细则（ADR-0039）：
+
+- **按 IP 找会话。** 只认 `deleted_at` 为空、未终止的会话；同一 IP 被两个会话记录（沙箱在平台之外重建、旧 IP 被复用）时拒绝。查询走部分索引 `sessions (sandbox_pod_ip)`。
+- **白名单。** 条目是主机名或 IP 字面量（逐字匹配），或 `*.` 加域名（匹配任意层级的子域名，不含域名本身）；不区分大小写，不限定端口，非法条目被忽略。目标只接受规整的 DNS 名与 IP 字面量。
+- **缓存与失效。** 每个节点按源 IP 缓存会话与白名单 30 秒，找不到会话不缓存。会话的 Pod IP 每次变化（认领、恢复、重新连接时 IP 变了、回收、删除），本节点立即淘汰旧 IP 与新 IP，提交后经 Redis Pub/Sub 频道 `egress:revoke` 通知其他节点。
+- **接口。** 放行返回 200 与会话 ID；拒绝返回 403 problem+json，`code` 为 `egress.not_allowlisted`、`egress.unknown_source`、`egress.invalid_target`。
+- **网络策略。** 沙箱只能访问代理与集群 DNS。代理只能访问 DNS、授权回调的 runtime 与公网（排除私网、链路本地、CGNAT、回环），白名单域名被解析到内网地址时也连不上。runtime 在集群内时代理经 Service 回调，在宿主（本机开发）时经 `host.docker.internal`，由 Helm values 切换。
+
 ## 知识库架构
 
 知识库服务完全自研，不依赖任何智能体框架。
@@ -1184,6 +1192,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 | `meridian_sse_connections` | gauge | — |
 | `meridian_sse_gap_refills_total` | counter | — |
 | `meridian_sandbox_claim_seconds` | histogram | — |
+| `meridian_egress_authorize_seconds` | histogram | `result`、`reason`（ADR-0039；授权缓存的命中率为 `cache_gets_total{cache="egress_grants"}`） |
 | `meridian_budget_rejections_total` | counter | `level` |
 
 **日志。** JSON 格式，每行带 `trace_id`、`span_id`、`tenant_id`、`session_id`，不记录提示词正文。
@@ -1222,7 +1231,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 
 ### 本地开发
 
-`deploy/compose` 启动 PostgreSQL、Redis、MinIO 等数据组件；`app` profile 启动三个 Java 服务与 doc-parser，`observability` profile 启动可观测组件，`auth` profile 启动 Keycloak。本地的沙箱档使用 `scripts/dev/kind-gvisor.sh` 创建的 kind 集群（Calico 加 gVisor），与生产的隔离方式一致。
+`deploy/compose` 启动 PostgreSQL、Redis、MinIO 等数据组件；`app` profile 启动三个 Java 服务与 doc-parser，`observability` profile 启动可观测组件，`auth` profile 启动 Keycloak。本地的沙箱档使用 `scripts/dev/kind-gvisor.sh` 创建的 kind 集群（Calico 加 gVisor），与生产的隔离方式一致。集群的 Pod 网段是 `10.244.0.0/16`，不能与 Docker Desktop 的宿主地址重叠，否则集群中的出网代理回调不到宿主上的 runtime（ADR-0039）。
 
 ## 控制台
 
@@ -1434,7 +1443,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.12 | 2026-11-08 | T11：端口表增加 `SnapshotStorePort`；会话沙箱的驱动行为与连接方式；沙箱 Pod 的落地细则（sandbox-router、`Unmanaged` 网络策略、工作区符号链接、进程数上限）；镜像接口的完整清单（ADR-0036） |
 | v1.11 | 2026-11-08 | T10b：系统提示词的落点（`sysPrompt` 三层、关闭 `WorkspaceContextMiddleware`、时间以 `<platform_context>` 消息注入、工具 schema 按键排序）；`AgentConfigPort` 读取租户提示词；来源标签格式与转义；`web_fetch` 的 SSRF 实现、`web_search` 的两个后端、`knowledge_search` 的入参、MCP 客户端的构建与凭据注入（ADR-0035） |
 | v1.13 | 2026-11-08 | T12a：会话沙箱的获取、注入、回收与快照保留、产物同步、技能投影的细则；`sandbox` 档平台工具的文件系统（路径翻译与沙箱绑定）；`bash` 的复合命令规则、超时、输出上限与审计，"记住此决定"对 `bash` 记命令原文；`sessions` 的沙箱列与 `sandbox_outputs`；沙箱 vCPU 秒的计量；`ToolLedgerPort`、`SandboxDriver` 加方法（ADR-0037） |
-| v1.14 | 2026-11-08 | T12b：沙箱出网的授权回调改用 Envoy 的 Lua 过滤器，技术基线一行随之修改（ADR-0038） |
+| v1.14 | 2026-11-08 | T12b：沙箱出网的授权回调改用 Envoy 的 Lua 过滤器，技术基线一行随之修改（ADR-0038）；沙箱出网的按 IP 找会话、白名单语法、缓存的跨节点失效、接口、网络策略与两种拓扑，指标增加 `meridian_egress_authorize_seconds`，本地 kind 的 Pod 网段（ADR-0039） |
 
 ## 待决问题
 
