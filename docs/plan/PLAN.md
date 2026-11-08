@@ -185,8 +185,8 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 4. Embedding 与 rerank 客户端（平台自己的 HTTP 客户端，计量），`/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank`，开发期静态服务凭据（A02）
 - [x] 5. `ScriptedOpenAiServer`（test-support）、YAML 脚本与内置脚本、`scripts/dev/scripted-model.sh`、`dev-config/providers/scripted.yaml`（只在 dev、test）
 - [x] 6. 契约测试：runtime 的真实 OpenAI 兼容客户端对脚本服务
-- [ ] 7. 经 HTTP 启动的 runtime 以 `scripted` 供应商跑通带工具调用的会话，重复一致（A03）
-- [ ] 8. 五种内置脚本各一个用例：审批、自定义工具、长时间流式、子智能体、首包前 5xx（A04）
+- [x] 7. 经 HTTP 启动的 runtime 以 `scripted` 供应商跑通带工具调用的会话，重复一致（A03）
+- [x] 8. 五种内置脚本各一个用例：审批、自定义工具、长时间流式、子智能体、首包前 5xx（A04）
 - [ ] 9. 真实模型测试：Embedding 1024 维、rerank 顺序、直通流式 `usage` 结算（A05）
 - [ ] 10. 收尾：模块与根 `CLAUDE.md`、文档与 ADR、`verify.sh`（A06）、acceptance、PLAN
 

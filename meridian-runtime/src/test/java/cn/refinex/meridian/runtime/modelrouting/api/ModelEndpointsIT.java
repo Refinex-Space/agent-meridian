@@ -67,8 +67,12 @@ class ModelEndpointsIT extends ApiTestBase {
 
     @DynamicPropertySource
     static void modelProperties(DynamicPropertyRegistry registry) {
-        registry.add("meridian.runtime.model-routing.providers-directory", () -> DIRECTORY.resolve("providers"));
-        registry.add("meridian.runtime.model-routing.budgets-directory", () -> DIRECTORY.resolve("budgets"));
+        registry.add(
+                "meridian.runtime.model-routing.providers-directory",
+                () -> DIRECTORY.resolve("providers").toString());
+        registry.add(
+                "meridian.runtime.model-routing.budgets-directory",
+                () -> DIRECTORY.resolve("budgets").toString());
         String prefix = "meridian.security.dev-api-keys.keys[3].";
         registry.add(prefix + "key", () -> KEY_TINY_BUDGET);
         registry.add(prefix + "api-key-id", () -> KEY_TINY_BUDGET_ID);
