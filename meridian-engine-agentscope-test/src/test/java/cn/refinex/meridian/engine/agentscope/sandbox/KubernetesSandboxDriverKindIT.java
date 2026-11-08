@@ -7,9 +7,11 @@ import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemorySnapshotStore;
+import cn.refinex.meridian.engine.spi.driver.SandboxDriver;
 import cn.refinex.meridian.engine.spi.driver.SandboxDriver.SandboxRequest;
 import cn.refinex.meridian.engine.spi.driver.SandboxHandle;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec.SandboxSize;
+import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import io.agentscope.extensions.sandbox.kubernetes.client.crd.SandboxClaim;
 import io.agentscope.harness.agent.sandbox.ExecResult;
 import io.agentscope.harness.agent.sandbox.SandboxException;
@@ -20,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -144,6 +147,65 @@ class KubernetesSandboxDriverKindIT {
                             .stdout())
                     .isEqualTo("kept\n");
         }
+    }
+
+    @Test
+    void skillResourcesAreProjectedRewrittenWhenTamperedAndOutputsAreListed() throws Exception {
+        driver = newDriver(kube, snapshots);
+        SandboxHandle handle = track(in(driver.create(new SandboxRequest(CONTEXT.sessionId(), SandboxSize.SMALL))));
+        SingleStartSandbox sandbox = driver.attach(handle.state());
+        SkillDefinition docx = new SkillDefinition(
+                "skl_docx",
+                1,
+                "docx",
+                Map.of(
+                        "SKILL.md", "---\nname: docx\n---\n正文",
+                        "scripts/md_to_docx.py", "print('转换')\n",
+                        "templates/空白 模板.md", "# 标题\n"));
+
+        assertThat(in(driver.syncSkills(handle, List.of(docx)))).as("第一次写入").isTrue();
+        assertThat(in(driver.syncSkills(handle, List.of(docx))))
+                .as("沙箱内的摘要与平台计算的一致，不重写")
+                .isFalse();
+        assertThat(sandbox.exec(null, "cat .meridian/skills/docx/scripts/md_to_docx.py", 10)
+                        .stdout())
+                .isEqualTo("print('转换')\n");
+        assertThat(sandbox.exec(null, "test -e .meridian/skills/docx/SKILL.md && echo yes || echo no", 10)
+                        .stdout())
+                .as("技能正文不投影")
+                .isEqualTo("no\n");
+
+        sandbox.exec(null, "echo hacked > .meridian/skills/docx/scripts/md_to_docx.py && touch .meridian/skills/x", 10);
+        assertThat(in(driver.syncSkills(handle, List.of(docx)))).as("被篡改后重写").isTrue();
+        assertThat(sandbox.exec(null, "cat .meridian/skills/docx/scripts/md_to_docx.py; ls .meridian/skills", 10)
+                        .stdout())
+                .isEqualTo("print('转换')\ndocx\n");
+        assertThat(in(driver.syncSkills(handle, List.of()))).as("没有技能时删除目录").isTrue();
+        assertThat(sandbox.exec(null, "test -e .meridian/skills && echo yes || echo no", 10)
+                        .stdout())
+                .isEqualTo("no\n");
+
+        assertThat(in(driver.listOutputs(handle))).as("outputs/ 不存在时为空").isEmpty();
+        sandbox.exec(
+                null,
+                "mkdir -p outputs/sub && printf 'a,b\\n' > outputs/sub/表.csv && head -c 3000 /dev/zero > outputs/z.bin"
+                        + " && ln -s /etc/passwd outputs/link",
+                10);
+        List<SandboxDriver.OutputFile> outputs = in(driver.listOutputs(handle));
+        assertThat(outputs)
+                .as("只列普通文件，不跟随符号链接")
+                .extracting(SandboxDriver.OutputFile::path, SandboxDriver.OutputFile::size)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("sub/表.csv", 4L),
+                        org.assertj.core.groups.Tuple.tuple("z.bin", 3000L));
+        assertThat(in(driver.readOutput(handle, "sub/表.csv"))).isEqualTo("a,b\n".getBytes(StandardCharsets.UTF_8));
+        assertThat(outputs)
+                .filteredOn(f -> f.path().equals("z.bin"))
+                .singleElement()
+                .satisfies(f -> assertThat(f.sha256())
+                        .isEqualTo(java.util.HexFormat.of()
+                                .formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                                        .digest(new byte[3000]))));
     }
 
     @Test

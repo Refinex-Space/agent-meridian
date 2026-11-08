@@ -7,16 +7,22 @@ import cn.refinex.meridian.engine.agentscope.assembly.TenantPromptProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.fs.PlatformWorkspace;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
+import cn.refinex.meridian.engine.agentscope.sandbox.SandboxAttachment;
+import cn.refinex.meridian.engine.agentscope.sandbox.SandboxDriverSettings;
+import cn.refinex.meridian.engine.agentscope.sandbox.TurnSandboxes;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.RecordingMiddlewareProvider;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.RecordingModelFactory;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.StaticToolProvider;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestAssembly;
+import cn.refinex.meridian.engine.agentscope.tools.BashTool;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformToolProvider;
 import cn.refinex.meridian.engine.agentscope.turn.AgentScopeEngine;
+import cn.refinex.meridian.engine.spi.driver.SandboxDriver;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
+import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
@@ -32,6 +38,11 @@ import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchWakeups;
 import cn.refinex.meridian.runtime.dispatch.app.NodeChannel;
 import cn.refinex.meridian.runtime.dispatch.app.NodeChannelListener;
+import cn.refinex.meridian.runtime.sandbox.app.DatabaseSandboxStates;
+import cn.refinex.meridian.runtime.sandbox.app.SandboxProperties;
+import cn.refinex.meridian.runtime.sandbox.app.SandboxService;
+import cn.refinex.meridian.runtime.sandbox.infra.SandboxOutputRepository;
+import cn.refinex.meridian.runtime.sandbox.infra.SessionSandboxRepository;
 import cn.refinex.meridian.runtime.session.app.TurnExecution;
 import cn.refinex.meridian.runtime.session.app.TurnFinisher;
 import cn.refinex.meridian.runtime.session.app.TurnMetrics;
@@ -62,6 +73,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.UnaryOperator;
 import javax.sql.DataSource;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import reactor.core.scheduler.Schedulers;
@@ -96,7 +108,8 @@ record WorkerNode(
         WorkerProperties properties,
         EventIntake intake,
         PendingActionResolver resolver,
-        NodeChannelListener channelListener) {
+        NodeChannelListener channelListener,
+        SandboxService sandboxes) {
 
     /** 等待一次执行结束的上限。 */
     static final Duration RUN_TIMEOUT = Duration.ofSeconds(30);
@@ -128,7 +141,17 @@ record WorkerNode(
             UnaryOperator<AgentStateRepository> states,
             DataSource dataSource,
             List<AgentTool> extraTools,
-            boolean platform) {}
+            boolean platform,
+            SandboxWiring sandbox) {}
+
+    /**
+     * {@code sandbox} 档的装配（T12a）：沙箱驱动（kind 集群中的 {@code KubernetesSandboxDriver}）与配置。平台模式下才生效。
+     *
+     * @param driver 沙箱驱动
+     * @param attachment 按状态取得沙箱，交给 {@code TurnSandboxes}
+     * @param properties 沙箱配置
+     */
+    record SandboxWiring(SandboxDriver driver, SandboxAttachment attachment, SandboxProperties properties) {}
 
     /**
      * 一个记账工具的定义。
@@ -173,9 +196,14 @@ record WorkerNode(
                             transactions,
                             spec.clock()),
                     configs,
-                    WorkerFixture.LOCAL_WORKSPACE_ROOT);
-            ToolProvider platformTools =
-                    PlatformToolProvider.withFileTools(new PlatformTool.ToolServices(ledger, blobs));
+                    WorkerFixture.LOCAL_WORKSPACE_ROOT,
+                    spec.sandbox() == null
+                            ? null
+                            : () -> TurnSandboxes.filesystemSpec(
+                                    SandboxDriverSettings.defaults(new SandboxDriverSettings.PortForward())));
+            ToolProvider platformTools = PlatformToolProvider.withFileTools(
+                            new PlatformTool.ToolServices(ledger, blobs))
+                    .with(PlatformToolNames.BASH, BashTool.factory(BashTool.Settings.DEFAULTS));
             List<AgentTool> testTools = allTools(tools, spec.extraTools());
             ToolProvider combined = profile -> {
                 List<AgentTool> all =
@@ -200,8 +228,28 @@ record WorkerNode(
                     .build()
                     .assembler();
         }
-        AgentScopeEngine engine =
-                new AgentScopeEngine(new AgentInstanceCache(assembler), configs, node.registry(), blobs, spec.clock());
+        SandboxService sandboxes = null;
+        TurnSandboxes turnSandboxes = null;
+        if (spec.sandbox() != null) {
+            turnSandboxes = new TurnSandboxes(
+                    new DatabaseSandboxStates(new SessionSandboxRepository(dataSource), transactions, spec.clock()),
+                    spec.sandbox().attachment());
+            sandboxes = new SandboxService(
+                    new StaticListableBeanFactory(
+                                    Map.of("driver", spec.sandbox().driver()))
+                            .getBeanProvider(SandboxDriver.class),
+                    configs,
+                    new SessionSandboxRepository(dataSource),
+                    new SandboxOutputRepository(dataSource),
+                    RuntimeTestObjectStore.get(),
+                    new OutboxWriter(dataSource, "rt", spec.clock()),
+                    transactions,
+                    spec.sandbox().properties(),
+                    node.meters(),
+                    spec.clock());
+        }
+        AgentScopeEngine engine = new AgentScopeEngine(
+                new AgentInstanceCache(assembler), configs, node.registry(), blobs, spec.clock(), turnSandboxes);
 
         PendingActionRepository pendingActions = new PendingActionRepository(dataSource);
         PermissionRuleRepository rules = new PermissionRuleRepository(dataSource);
@@ -246,7 +294,15 @@ record WorkerNode(
                 pendingActions,
                 transactions);
         TurnWorker worker = new TurnWorker(
-                node.claimer(), preparer, finisher, engine, approvalAudit, node.publisher(), metrics, spec.clock());
+                node.claimer(),
+                preparer,
+                finisher,
+                engine,
+                approvalAudit,
+                node.publisher(),
+                metrics,
+                sandboxes,
+                spec.clock());
         NodeChannel channel = new NodeChannel(RuntimeTestRedis.reactiveMessaging());
         EventIntake intake = new EventIntake(
                 new SessionRepository(dataSource),
@@ -272,7 +328,8 @@ record WorkerNode(
                 spec.properties(),
                 intake,
                 resolver,
-                new NodeChannelListener(channel, node.renewer(), node.nodeId(), 0));
+                new NodeChannelListener(channel, node.renewer(), node.nodeId(), 0),
+                sandboxes);
     }
 
     private static List<AgentTool> allTools(Map<String, LedgerTool> ledgerTools, List<AgentTool> extraTools) {

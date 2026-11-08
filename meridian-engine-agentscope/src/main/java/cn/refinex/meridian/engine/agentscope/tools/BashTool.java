@@ -251,7 +251,7 @@ public final class BashTool extends PlatformTool {
      * @return 给模型看的文本
      */
     static String render(String output, int exitCode, boolean timedOut, int timeout) {
-        StringBuilder text = new StringBuilder(output.isEmpty() ? "(no output)" : truncate(output.stripTrailing()));
+        StringBuilder text = new StringBuilder(output.isBlank() ? "(no output)" : truncate(output.stripTrailing()));
         if (timedOut) {
             text.append("\n\n[The command timed out after ").append(timeout).append(" seconds and was killed.]");
         }

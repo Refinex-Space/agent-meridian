@@ -95,7 +95,7 @@ final class WorkerFixture {
     final Model agentModel;
     final TestAgents agents = new TestAgents();
     final ResolvedAgentSpec spec;
-    final EnvironmentSpec environment = TestSpecs.noneEnvironment();
+    EnvironmentSpec environment = TestSpecs.noneEnvironment();
     final LedgerTool.Calls lookupCalls = new LedgerTool.Calls();
     final LedgerTool.Calls writeCalls = new LedgerTool.Calls();
 
@@ -104,6 +104,9 @@ final class WorkerFixture {
 
     /** 创建节点前设置：用生产的平台工具、工作区与技能仓库装配（T10a）。 */
     boolean platform;
+
+    /** {@link #useSandbox} 设置的 {@code sandbox} 档装配（T12a）。 */
+    private WorkerNode.SandboxWiring sandbox;
 
     WorkerFixture(ScriptedModel model) {
         this(model, UnaryOperator.identity());
@@ -135,6 +138,18 @@ final class WorkerFixture {
         agents.register(spec).register(environment);
     }
 
+    /**
+     * 改用 {@code sandbox} 档（small 规格）与平台模式，在创建节点与会话之前调用（T12a）。
+     *
+     * @param wiring 沙箱驱动与配置
+     */
+    void useSandbox(WorkerNode.SandboxWiring wiring) {
+        this.sandbox = wiring;
+        this.platform = true;
+        this.environment = TestSpecs.sandboxEnvironment();
+        agents.register(environment);
+    }
+
     WorkerNode node(String nodeId) {
         return node(nodeId, WorkerProperties.defaults(), UnaryOperator.identity());
     }
@@ -162,7 +177,8 @@ final class WorkerFixture {
                 states,
                 dataSource,
                 List.copyOf(extraTools),
-                platform));
+                platform,
+                sandbox));
     }
 
     static WorkerProperties withoutCheckpoint() {
