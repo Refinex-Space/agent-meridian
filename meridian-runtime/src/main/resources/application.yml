@@ -40,6 +40,23 @@ meridian:
     workspace:
       # 平台控制的本机工作区根目录（登记事项 D05）：harness 的本机回退读取落在这里，平台不在其中写入
       local-root: ${java.io.tmpdir}/meridian/agent-workspace
+    sandbox:
+      # 会话沙箱（T12a，ADR-0036、ADR-0037）：关闭时 sandbox 档的轮次以错误结束，none 档不受影响。
+      # 本机 kind 集群：enabled: true、kube-context: kind-meridian、connection: port-forward；集群内部署用 direct 与 router-url
+      enabled: false
+      connection: port-forward
+      namespace: meridian-sandbox
+      warm-pool-prefix: sandbox-
+      # 空闲回收（架构设计「会话沙箱」：10 分钟）；单个沙箱操作的等待上限，回收时它决定会话行锁最多持有多久
+      idle-timeout: 10m
+      reap-interval: 60s
+      reap-batch-size: 20
+      operation-timeout: 10m
+      # bash 的超时（不超过执行服务的命令超时 exec-timeout，ADR-0036）与产物同步的单文件上限
+      bash-default-timeout: 120s
+      bash-max-timeout: 600s
+      exec-timeout: 600s
+      output-max-file-size: 64MB
     dev-agent-config:
       # 开发配置目录（FileAgentConfigProvider），相对于工作目录；T15b 起智能体配置改由 control-plane 下发
       directory: dev-config/agents

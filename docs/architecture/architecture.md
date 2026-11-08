@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.12 |
+| 版本 | v1.13 |
 | 日期 | 2026-11-08 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -220,11 +220,11 @@ agent-meridian/
 | `LeaseRegistry` | 查询某线程在本节点持有的租约 epoch | `dispatch` |
 | `AgentStateRepository` | 智能体状态的带租约读写 | `session` |
 | `InboxPort` | 读取并标记 steer 消息 | `delivery` |
-| `ToolLedgerPort` | 工具调用账本 | `tooling` |
+| `ToolLedgerPort` | 工具调用账本；沙箱命令的审计（ADR-0037） | `tooling` |
 | `EventSinkPort` | 子线程事件、自定义事件写入 | `stream` |
 | `ModelGateway` | 解析供应商账号与凭据、限流、预算预扣与结算、用量记录 | `modelrouting` |
 | `WorkspaceStorePort` | 工作区 KV 存储 | `workspace` |
-| `SandboxStatePort` | 读写会话的沙箱状态（序列化后的字符串）与使用标记 | `sandbox` |
+| `SandboxStatePort` | 读写会话的沙箱状态（序列化后的字符串）与使用标记；内核每轮经它读出 runtime 准备好的沙箱（ADR-0037） | `sandbox` |
 | `SnapshotStorePort` | 沙箱工作区快照（tar）的写入、读取与存在性，键为 `rt/snapshots/{tenant_id}/{project_id}/{session_id}/{snapshot_id}.tar`（ADR-0036） | `sandbox` |
 | `KnowledgeSearchPort` | 知识库检索 | `tooling` |
 | `WebSearchPort`、`WebFetchPort` | 联网搜索与抓取（含 SSRF 防护） | `tooling` |
@@ -240,7 +240,7 @@ agent-meridian/
 | 接口 | 用途 |
 |---|---|
 | `AgentEngine` | 执行一轮、中断、下线，见"内核适配层"；恢复确认选择 `retry` 时用原幂等键重新执行工具调用、读取装配后的保留工具名（ADR-0031） |
-| `SandboxDriver` | 沙箱的创建、恢复、快照、删除。入参和返回值是平台的 `SandboxHandle` 和序列化后的状态，内部使用 AgentScope Kubernetes 扩展的 `SandboxClient` |
+| `SandboxDriver` | 沙箱的创建、恢复、快照、删除；技能资源的投影、产物的清单与读取（ADR-0037）。入参和返回值是平台的 `SandboxHandle` 和序列化后的状态，内部使用 AgentScope Kubernetes 扩展的 `SandboxClient` |
 | `ModelInvoker` | OpenAI 兼容直通接口用的聊天调用，内部使用 `RoutedModel` |
 
 `PlatformContext` 定义在 `meridian-common`，所以 security、engine-agentscope、runtime 都能使用它。
@@ -355,7 +355,7 @@ erDiagram
 
 | 表 | 关键列 | 说明 |
 |---|---|---|
-| `sessions` | `id`、`agent_version_id`、`environment_id`、`environment_revision`、`end_user_id`、`interaction`、`status`、`last_seq`、`sandbox_state jsonb`、`sandbox_pod_ip`、`sandbox_last_used_at`、`budget_limit`、`deleted_at` | `last_seq` 用于分配事件序号；`deleted_at` 不为空表示已删除、等待清理（ADR-0030） |
+| `sessions` | `id`、`agent_version_id`、`environment_id`、`environment_revision`、`end_user_id`、`interaction`、`status`、`last_seq`、`sandbox_state jsonb`、`sandbox_pod_ip`、`sandbox_last_used_at`、`sandbox_snapshot_key`、`sandbox_metered_at`、`budget_limit`、`deleted_at` | `last_seq` 用于分配事件序号；`deleted_at` 不为空表示已删除、等待清理（ADR-0030）；`sandbox_state` 为 `{sandbox_id, size, state}`，回收后清空并在 `sandbox_snapshot_key` 留下快照（ADR-0037） |
 | `threads` | `id`、`session_id`、`parent_thread_id`、`parent_tool_use_id`、`agent_name`、`status` | 主线程的 `parent_thread_id` 为空 |
 | `turns` | `id`、`thread_id`、`tenant_id`、`kind`、`status`、`priority`、`not_before`、`lease_owner`、`lease_epoch`、`lease_expires_at`、`claim_count`、`recovery_attempt`、`interrupt_requested_at`、`stop_reason` | 轮次队列与租约 |
 | `turn_inputs` | `turn_id`、`payload jsonb` | 每轮的完整输入，用于恢复时重放 |
@@ -367,6 +367,7 @@ erDiagram
 | `pending_actions` | `id`、`turn_id`、`thread_id`、`type`、`payload jsonb`、`status`、`decided_by`、`remember_scope`、`expires_at`、`response jsonb`、`consumed_turn_id` | 待处理动作；`response` 是回应或超时、中断、自动拒绝给出的结论，`consumed_turn_id` 是交出结论的恢复轮（ADR-0031） |
 | `permission_rules` | `layer`（`tenant`、`project`、`session`）、`tool_name`、`rule_content`、`behavior`、`session_id`、`source_action_id` | 五层权限中的租户、项目、会话三层；项目级与会话级的"记住此决定"写在这里。T15b 起租户与项目策略由 control-plane 下发（ADR-0031） |
 | `workspace_entries` | `namespace text[]`、`key`、`version`、`size`、`inline_content`、`object_key` | `MeridianBaseStore` 的存储 |
+| `sandbox_outputs` | `session_id`、`path`、`size`、`sha256`、`object_key`、`synced_at` | `sandbox` 档 `outputs/` 同步到对象存储的清单（ADR-0037） |
 | `outbox` | `id`、`topic`、`payload`、`created_at`、`published_at` | 用量与审计的可靠投递 |
 
 `turns` 上有一个部分唯一索引：`UNIQUE (thread_id) WHERE status IN ('queued','running','awaiting_action')`。所以每个线程同时最多一个未结束的轮次，插入用 `ON CONFLICT DO NOTHING`。
@@ -463,7 +464,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `stateStore` | `FencedAgentStateStore` | 所有状态写入都受租约约束，见"租约与 fencing" |
 | `enablePendingToolRecovery` | `true` | 悬空的 tool_use 自动补结果 |
 | `maxIters` | 智能体配置，默认 50，上限 200 | 控制单轮成本 |
-| 文件系统 | `none` 档用 `abstractFilesystem(...)`；`sandbox` 档用 `filesystem(KubernetesFilesystemSpec)` 加 `filesystemRoute(...)`。两者在 AgentScope 中互斥。`workspace(...)` 设为平台控制、平台不写入的本机目录（ADR-0034） | 见"工作区与沙箱"；不设时本机工作区根是 `${user.dir}/.agentscope/workspace`，harness 会从中回退读取 |
+| 文件系统 | `none` 档用 `abstractFilesystem(...)`；`sandbox` 档用 `filesystem(KubernetesFilesystemSpec)` 加 `filesystemRoute(...)`，规范的客户端一律拒绝创建沙箱、工作区投影关闭（ADR-0037）。两者在 AgentScope 中互斥。`workspace(...)` 设为平台控制、平台不写入的本机目录（ADR-0034） | 见"工作区与沙箱"；不设时本机工作区根是 `${user.dir}/.agentscope/workspace`，harness 会从中回退读取 |
 | `disableWebTools()` | 必须 | 内置 `web_search` 写死 Tavily 和环境变量，`web_fetch` 没有 SSRF 防护 |
 | `disableToolsConfig()` | 必须 | `tools.json` 只在构建时加载一次，无法按租户注入 MCP 凭据 |
 | `disableFilesystemTools()`、`disableShellTool()` | 必须 | 由平台工具替代，以支持内容级权限规则 |
@@ -537,9 +538,11 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 - `knowledge_search`：按智能体实例创建，`knowledge_base_ids` 必填，schema 只列出智能体绑定的知识库；knowledge 未接入时检索以错误结果交给模型。
 - MCP：`McpConnector` 用 `McpClientBuilder` 先选传输、再设置 HTTP 客户端与请求定制器、显式声明协议版本，构建异步客户端（同步客户端在内部另起订阅，凭据传不到传输层）。每个工具包成继承 `PlatformTool` 的 `McpPlatformTool`，进权限引擎与账本，未标注副作用等级时按 `non_idempotent`，幂等键放进请求的 `_meta`。凭据在每次请求前解析，只放进这一次调用的 Reactor Context，由请求定制器写入请求头。装配时连不上服务以 `tool.mcp_unavailable`（可重试）结束本轮。MCP 端点由管理员登记、允许内网地址；客户端不跟随重定向，拒绝链路本地与云元数据地址。
 
-平台工具的文件和命令操作，通过 `HarnessAgent.getWorkspaceManager().getFilesystem()` 拿到的文件系统执行：`none` 档是平台的 `CompositeFilesystem`；`sandbox` 档是 harness 包装的 `RoutedSandboxFilesystem`，`bash` 调用它的 `execute`。调用时**必须**传入 `ToolCallParam.getRuntimeContext()`，因为沙箱实例要从这个上下文里取；传新建的上下文会退回到跨会话共享的字段。
+平台工具的文件和命令操作，通过 `HarnessAgent.getWorkspaceManager().getFilesystem()` 拿到的文件系统执行：`none` 档是平台的 `CompositeFilesystem`；`sandbox` 档是 harness 包装的 `RoutedSandboxFilesystem`，`bash` 调用它的 `execute`。`sandbox` 档的平台工具实际使用装配器以同一组路由重建的 `RoutedSandboxFilesystem`，主文件系统外包 `SandboxWorkspaceFilesystem`：把平台路径翻译到 `/workspace` 下、按 `RemoteFilesystem` 的语义做 `glob`、拒绝没有本次绑定沙箱的调用（ADR-0037）。调用时**必须**传入 `ToolCallParam.getRuntimeContext()`，因为沙箱实例要从这个上下文里取；传新建的上下文会退回到跨会话共享的字段。
 
 **工具基类（ADR-0034）。** 平台工具继承 `PlatformTool`：子类声明名称、英文描述、入参 schema、副作用等级与规则内容语法；基类实现 `matchRule`（规则内容为空时匹配全部调用）与带内容的 `generateSuggestions`，执行前经 `ToolLedgerPort` 记录开始（幂等键 `session_id:tool_use_id`，恢复确认重试时沿用原键），执行后记录结束；`non_idempotent` 工具把幂等键传给下游，结果写入对象存储、引用进账本。指标 `meridian_tool_calls_total` 与审计 `tool.executed`（有副作用的调用）由账本实现在记录结束时写出。规则与工具中的路径相对工作区根，`**` 匹配零或多级目录，`dir/**` 也匹配 `dir`；`grep_files` 的命中再按它的拒绝规则过滤。修改已有文件要求本线程读过当前版本（"先读后改"），读取状态随工具结果的元数据保存在 `AgentState` 中。装配后 Toolkit 中只允许 `load_skill_through_path` 一个非 `ToolBase` 工具，违反时装配失败，runtime 启动时自检一次。
+
+**`bash`（ADR-0037）。** 复合命令（`&&`、`||`、`;`、`|`、`|&`、`&`、换行）在引号外分段：放行规则要求每一段都被某条规则覆盖，拒绝与询问规则任一段命中即生效（剥离开头的环境变量赋值与 `nice`、`timeout` 等包装命令后再比较）；含命令替换、进程替换、反引号、子 shell 的命令不匹配任何内容级规则，存在内容级拒绝规则时询问。命令以 coreutils 的 `timeout` 落实超时（默认 120 秒、最多 600 秒，退出码 124），输出上限 30000 字符、保留头尾，每条命令写审计 `sandbox.command`。"记住此决定"对 `bash` 记这一条命令（规则内容为命令原文）。
 
 **保留工具名。** 业务方声明的自定义工具不能与以下名称重名：平台工具名、harness 仍然注册的工具（`plan_enter`、`plan_write`、`plan_exit`、`load_skill_through_path`、`wait_async_results`），以及 `mcp__` 前缀。原因是 `ToolRequestConfig` 遇到同名时外部工具优先，会顶掉平台工具。保留名单由 `AgentAssembler` 在装配后从 Toolkit 读出，API 校验时使用。
 
@@ -903,6 +906,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 - **产物。** 约定 `outputs/` 为产物目录。每轮结束时，平台把它同步到对象存储。在沙箱档，工作区 API 读取的是这份副本。
 - **驱动（ADR-0036）。** `KubernetesSandboxDriver` 按规格从预热池 `sandbox-<规格>` 认领（claim 带会话标签），恢复前确认 claim 与 `Sandbox` 都存在、否则以 `NotFoundException` 失败；快照经 `SnapshotStorePort` 写入对象存储，恢复时把快照放进新沙箱的状态，由 harness 的"从快照恢复"分支展开；基础设施失败为可重试的 `SandboxUnavailableException`。runtime 连接沙箱都经 sandbox-router：本机开发用端口转发，生产环境 runtime 在集群内直连 router 服务，在集群外时用网关。
 - **技能资源。** 技能附带的脚本和模板，在沙箱创建或恢复后，由 `SandboxDriver` 用 `execute` 加 tar 写入 `/workspace/.meridian/skills/`。每轮开始时校验哈希，不一致就重新写入。沙箱内的智能体与上传使用同一个系统用户，这些文件无法做成只读；被篡改只影响本会话，下一轮也会被恢复。技能正文仍通过 `load_skill_through_path` 加载。
+- **生命周期细则（ADR-0037）。** 获取在 runtime 调用内核之前、会话行锁内完成：已有沙箱重新连接，不存在时从快照恢复或认领，基础设施暂时不可用时本轮置回队列；内核经 `SandboxStatePort` 读出沙箱注入。回收在 `FOR UPDATE SKIP LOCKED` 的行锁内判定并快照、删除、提交，删除在提交之前；每个会话至多保留一个快照，被取代的在提交后删除，删除会话时按前缀清除快照与产物。产物按 `rt.sandbox_outputs` 的清单镜像同步（单文件上限 64 MB），在轮次以 `idle` 或 `requires_action` 结束之前完成。技能资源只投影 `SKILL.md` 之外的文件，摘要与沙箱内的 `sha256sum` 管道一致时不重写。
 
 ### 沙箱 Pod 与镜像
 
@@ -1148,7 +1152,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 
 ## 计量与预算
 
-- **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天。
+- **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天。沙箱 vCPU 秒是沙箱存活时间乘以规格的 vCPU 数，在每轮结束、回收与删除会话时分段记录，用量种类 `sandbox_vcpu_seconds`（ADR-0037）。
 - **账本**：每条记录带租户、项目、API Key、智能体版本、会话、线程、轮次、模型、价格表版本。价格表有版本，调价不影响历史记录。
 - **预算**：分租户、项目、API Key、会话四级，每级有软阈值（告警）和硬阈值（停止）。
 - **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。Redis 计数以 token（输入加输出）计，四级计数都记（没有限额的级别也记，供对账），键带租户哈希标签；用量记录经 outbox 的 `usage` 主题投递，输入、输出、缓存读、缓存写、推理 token 分别记，带调用用途（推理、压缩、Embedding、rerank）；Embedding 与 rerank 的记录种类分别为 `embedding_tokens`、`rerank_tokens`（ADR-0033）。T16 之前限额来自开发配置，没有配置的级别不限（ADR-0032）。
@@ -1429,6 +1433,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.10 | 2026-11-08 | T10a：`PlatformContext` 带终端用户；`wait_async_results` 在 2.0.4 中是 `ToolBase`，工具集外的工具与它由工具策略的拒绝规则拒绝，`PolicyMiddleware` 只拦截非 `ToolBase` 工具；技能仓库继承 `WorkspaceSkillRepository`；平台工具基类、路径约定、先读后改、账本的指标与审计；受保护路径的内容与工作区存储细则；本机工作区根；`AgentConfigPort` 读取技能内容（ADR-0034） |
 | v1.12 | 2026-11-08 | T11：端口表增加 `SnapshotStorePort`；会话沙箱的驱动行为与连接方式；沙箱 Pod 的落地细则（sandbox-router、`Unmanaged` 网络策略、工作区符号链接、进程数上限）；镜像接口的完整清单（ADR-0036） |
 | v1.11 | 2026-11-08 | T10b：系统提示词的落点（`sysPrompt` 三层、关闭 `WorkspaceContextMiddleware`、时间以 `<platform_context>` 消息注入、工具 schema 按键排序）；`AgentConfigPort` 读取租户提示词；来源标签格式与转义；`web_fetch` 的 SSRF 实现、`web_search` 的两个后端、`knowledge_search` 的入参、MCP 客户端的构建与凭据注入（ADR-0035） |
+| v1.13 | 2026-11-08 | T12a：会话沙箱的获取、注入、回收与快照保留、产物同步、技能投影的细则；`sandbox` 档平台工具的文件系统（路径翻译与沙箱绑定）；`bash` 的复合命令规则、超时、输出上限与审计，"记住此决定"对 `bash` 记命令原文；`sessions` 的沙箱列与 `sandbox_outputs`；沙箱 vCPU 秒的计量；`ToolLedgerPort`、`SandboxDriver` 加方法（ADR-0037） |
 
 ## 待决问题
 
