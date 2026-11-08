@@ -72,7 +72,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 已完成 | b724148 |
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 已完成 | 7e490f5 |
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 已完成 | bcd2246 |
-| T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 进行中 | — |
+| T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 已完成 | b3bdef7 |
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 未开始 | — |
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 未开始 | — |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 未开始 | — |
@@ -175,20 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-### T12a 会话沙箱生命周期、bash 与产物
-
-开工：2026-11-08，基线 `scripts/dev/verify.sh` 通过；kind 集群 `meridian` 已存在。
-
-- [x] 1. engine：`sandbox` 档文件系统装配（`KubernetesFilesystemSpec` 加受保护路径与 `large_tool_results/` 路由，关闭投影，拒绝 harness 自建沙箱）；每轮注入外部 `SandboxContext`（`SingleStartSandbox`）
-- [x] 2. runtime `sandbox` 上下文：`SandboxService` 获取（预热池认领、状态与 Pod IP 落库、`sandbox_last_used_at`）、`SandboxStatePort`、`meridian_sandbox_claim_seconds`
-- [x] 3. 空闲回收：`infra.system` 扫描仓储、行锁内判定无活动轮次、快照、删除、清 Pod IP、下一轮从快照恢复、恢复后清理旧快照（D35）；竞争测试
-- [x] 4. `bash` 工具：命令前缀规则、复合命令逐段匹配、输出截断、超时；只在 `sandbox` 档注册；"记住此决定"对 bash 记命令原文（D21 的 bash 部分，其余留登记事项）
-- [x] 5. 产物 `outputs/` 每轮同步到 `rt/outputs/{tenant}/{project}/{session}/`；技能资源投影 `/workspace/.meridian/skills/` 与哈希校验；删除会话的沙箱部分
-- [x] 6. 计量与审计：沙箱 vCPU 秒用量、沙箱命令审计
-- [x] 7. 内置技能 `skills/builtin/docx/`（SKILL.md + python-docx 脚本）
-- [x] 8. 验证：kind 集成测试（A01、A02、A05、A06、A07）、P4 沙箱档、P6 bash 规则、P9；报告 P04、P06、P09
-- [ ] 9. 收尾：ADR、架构设计、模块 CLAUDE.md、`docs/poc/README.md`、`verify.sh`、`-Pkind`、acceptance、PLAN
-
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -366,6 +353,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：8 项通过，0 项阻塞
 - 决策：ADR-0036（sandbox-router 部署在沙箱命名空间；模板 `Unmanaged`、chart 自带默认拒绝出网的策略；`/workspace` 为指向 emptyDir 中 uid 1000 目录的符号链接，emptyDir 挂载点上恢复快照的 `tar` 会失败；进程数用 `ulimit -u`，gVisor 中按沙箱计数；新增 `SnapshotStorePort`；驱动的完整单次选项、`resume` 先查 claim；本机端口转发、生产直连 router；`kind` 测试的命名与 profile）；架构设计升至 v1.12；登记事项 D03 关闭
 - 遗留：登记事项 D34 router 的鉴权（T28）、D35 快照对象的清除（T12a、T17a）、D36 快照在 runtime 侧的内存占用（R1）；kind 集群 `meridian` 保留给 T12a、T12b（`kind delete cluster --name meridian` 释放内存）
+
+### 2026-11-08 T12a 已完成（提交 b3bdef7）
+- 交付：engine-spi 的 `SandboxDriver.syncSkills`/`listOutputs`/`readOutput` 与 `ToolLedgerPort.recordSandboxCommand`；engine-agentscope 的 `tools.BashTool`（命令前缀逐段匹配、`checkPermissions` 补拒绝与询问的任一段命中和多规则放行、`timeout` 落实超时、30000 字符保留头尾、沙箱命令审计）与 `ShellCommands`，`fs.SandboxWorkspaceFilesystem`（路径翻译到 `/workspace`、`glob` 语义、要求本次调用绑定的沙箱），`sandbox.TurnSandboxes`、`SandboxAttachment`、`PlatformManagedSandboxClient`、`SkillProjection`，装配器为 sandbox 档重建工具用的 `RoutedSandboxFilesystem`，`AgentScopeEngine` 每轮注入外部 `SandboxContext`；runtime 的 `sandbox` 上下文（`SandboxService` 获取、回收、产物同步、计量、删除会话的沙箱部分，`DatabaseSandboxStates`、`IdleSandboxReaper`、`SandboxProperties`、仓储与领域类型）、`TurnExecution` 的准备与收尾、`config.SandboxConfiguration`、迁移 `V0006`、`DatabaseToolLedger` 的 `sandbox.command` 审计、"记住此决定"对 bash 记命令原文、指标 `meridian_sandbox_claim_seconds`；内置技能 `skills/builtin/docx`（`verify.sh` 检查其脚本）；测试 `BashToolScenarioTest`、`ShellCommandsTest`、`SandboxWorkspaceFilesystemTest`、`SkillProjectionTest`、`RememberedRulesTest`、`SandboxServiceIT`、`DatabaseToolLedgerIT` 新用例，kind 测试 `SandboxSessionKindIT` 与 `KubernetesSandboxDriverKindIT` 新用例；P4、P6 补全，P9 报告
+- 验收：8 项通过，0 项阻塞
+- 决策：ADR-0037（获取与回收都在会话行锁内、删除先于提交、每个会话至多一个快照；内核经 `SandboxStatePort` 读沙箱、拒绝自建沙箱的客户端；工具文件系统的路径翻译与沙箱绑定；bash 复合命令语义、超时与输出上限；沙箱命令审计走 `ToolLedgerPort`；技能摘要算法；产物镜像同步与 64 MB 上限；vCPU 秒分段计量与 `sandbox_vcpu_seconds`；认领指标只计预热池认领；bash 的"记住此决定"记命令原文）；架构设计升至 v1.13；登记事项 D35 回收部分落地
+- 遗留：登记事项 D21 内核带出建议规则（建议 T19b）、D35 删除会话时调用（T17a）、D37 无人管理的沙箱清理（T17a 或 T28）；kind 集群 `meridian` 保留给 T12b
 
 ## 计划变更记录
 
