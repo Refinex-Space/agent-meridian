@@ -6,6 +6,8 @@ import cn.refinex.meridian.runtime.modelrouting.app.ModelCatalogPort;
 import cn.refinex.meridian.runtime.modelrouting.app.ModelRoutingProperties;
 import cn.refinex.meridian.runtime.modelrouting.infra.FileBudgetLimits;
 import cn.refinex.meridian.runtime.modelrouting.infra.FileModelCatalog;
+import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient;
+import java.time.Clock;
 import java.util.Set;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -58,5 +60,17 @@ public class ModelRoutingConfiguration {
     @ConditionalOnMissingBean
     public SecretResolver secretResolver() {
         return new EnvironmentSecretResolver();
+    }
+
+    /**
+     * Embedding 与 rerank 的供应商 HTTP 客户端，一个连接池，容器关闭时关闭。
+     *
+     * @param clock 时钟
+     * @return 客户端
+     */
+    @Bean(destroyMethod = "close")
+    @ConditionalOnMissingBean
+    public ProviderVectorClient providerVectorClient(Clock clock) {
+        return new ProviderVectorClient(clock);
     }
 }

@@ -106,8 +106,8 @@ public class RoutingModelGateway implements ModelGateway {
     }
 
     /**
-     * 解析指定种类的模型：对话模型经 {@link #resolve(String)}，Embedding 与 rerank 由 {@link EmbeddingService}、
-     * {@link RerankService} 调用。模型自己的端点覆盖账号的端点。
+     * 解析指定种类的模型：对话模型经 {@link #resolve(String)}，Embedding 与 rerank 由 {@link VectorModelService} 调用。
+     * 模型自己的端点覆盖账号的端点。
      *
      * @param modelId 模型 ID
      * @param kind 调用方要求的种类
