@@ -180,7 +180,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 开工：2026-11-08，基线 `scripts/dev/verify.sh` 通过；kind 集群 `meridian` 已存在。
 
 - [x] 1. engine：`sandbox` 档文件系统装配（`KubernetesFilesystemSpec` 加受保护路径与 `large_tool_results/` 路由，关闭投影，拒绝 harness 自建沙箱）；每轮注入外部 `SandboxContext`（`SingleStartSandbox`）
-- [ ] 2. runtime `sandbox` 上下文：`SandboxService` 获取（预热池认领、状态与 Pod IP 落库、`sandbox_last_used_at`）、`SandboxStatePort`、`meridian_sandbox_claim_seconds`
+- [ ] 2. runtime `sandbox` 上下文（代码已提交，待集成测试）：`SandboxService` 获取（预热池认领、状态与 Pod IP 落库、`sandbox_last_used_at`）、`SandboxStatePort`、`meridian_sandbox_claim_seconds`
 - [ ] 3. 空闲回收：`infra.system` 扫描仓储、行锁内判定无活动轮次、快照、删除、清 Pod IP、下一轮从快照恢复、恢复后清理旧快照（D35）；竞争测试
 - [ ] 4. `bash` 工具：命令前缀规则、复合命令逐段匹配、输出截断、超时；只在 `sandbox` 档注册（已完成，`BashToolScenarioTest`）；内容级"记住此决定"（D21，待做）
 - [ ] 5. 产物 `outputs/` 每轮同步到 `rt/outputs/{tenant}/{project}/{session}/`；技能资源投影 `/workspace/.meridian/skills/` 与哈希校验；删除会话的沙箱部分

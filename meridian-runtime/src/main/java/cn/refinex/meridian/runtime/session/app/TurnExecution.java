@@ -4,6 +4,7 @@ import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.LeaseLostException;
+import cn.refinex.meridian.engine.spi.driver.SandboxHandle;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.engine.ThreadRef;
 import cn.refinex.meridian.engine.spi.engine.ToolRetry;
@@ -11,6 +12,7 @@ import cn.refinex.meridian.engine.spi.engine.input.RecoveryNote;
 import cn.refinex.meridian.engine.spi.engine.input.RecoveryNote.Outcome;
 import cn.refinex.meridian.engine.spi.engine.input.RecoveryNote.RecoveredToolCall;
 import cn.refinex.meridian.engine.spi.engine.input.TurnInput;
+import cn.refinex.meridian.engine.spi.error.RetryableTurnException;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.engine.spi.event.SessionEvent;
 import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
@@ -20,6 +22,7 @@ import cn.refinex.meridian.runtime.dispatch.app.LeaseListener;
 import cn.refinex.meridian.runtime.dispatch.domain.ClaimedTurn;
 import cn.refinex.meridian.runtime.dispatch.domain.LeaseLoss;
 import cn.refinex.meridian.runtime.dispatch.domain.RequeueReason;
+import cn.refinex.meridian.runtime.sandbox.app.SandboxService;
 import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
 import cn.refinex.meridian.runtime.stream.domain.AppendResult;
 import cn.refinex.meridian.runtime.stream.domain.EventBatch;
@@ -65,6 +68,7 @@ public final class TurnExecution {
     private final ApprovalAudit audit;
     private final EventStreamPublisher publisher;
     private final TurnMetrics metrics;
+    private final SandboxService sandboxes;
     private final Clock clock;
     private final Sinks.One<String> abandon = Sinks.one();
     private final AtomicReference<String> abandonCause = new AtomicReference<>();
@@ -82,7 +86,9 @@ public final class TurnExecution {
             ApprovalAudit audit,
             EventStreamPublisher publisher,
             TurnMetrics metrics,
+            SandboxService sandboxes,
             Clock clock) {
+        this.sandboxes = sandboxes;
         this.lease = lease;
         this.turn = lease.turn();
         this.preparer = preparer;
@@ -163,22 +169,65 @@ public final class TurnExecution {
             }
             case Prepared.Ready ready -> {
                 agentVersionId = ready.agentVersionId();
-                yield retried(ready)
-                        .flatMapMany(input -> engine.runTurn(ready.context(), input))
-                        .concatMap(event -> handle(ready, event))
-                        .singleOrEmpty()
-                        .switchIfEmpty(Mono.error(() -> new IllegalStateException("内核的事件流没有终态事件：" + turn.turnId())));
+                yield prepareSandbox(ready)
+                        .flatMap(sandbox -> sandbox.failure() != null
+                                ? rescheduleBeforeEngine(ready, sandbox.failure())
+                                : runEngine(ready, sandbox.handle()));
             }
         };
     }
 
-    private Mono<TurnResult> handle(Prepared.Ready ready, EngineEvent event) {
+    private Mono<TurnResult> runEngine(Prepared.Ready ready, SandboxHandle sandbox) {
+        return retried(ready)
+                .flatMapMany(input -> engine.runTurn(ready.context(), input))
+                .concatMap(event -> handle(ready, sandbox, event))
+                .singleOrEmpty()
+                .switchIfEmpty(Mono.error(() -> new IllegalStateException("内核的事件流没有终态事件：" + turn.turnId())));
+    }
+
+    /**
+     * {@code sandbox} 档：调用内核之前准备会话沙箱（架构设计「会话沙箱」"获取"）。沙箱基础设施暂时不可用时不调用内核，本轮以
+     * {@code session.error(retryable)} 加 {@code status_rescheduled(retryable_error)} 置回队列，与内核遇到可重试错误时相同。
+     */
+    private Mono<SandboxPreparation> prepareSandbox(Prepared.Ready ready) {
+        if (sandboxes == null) {
+            return Mono.just(new SandboxPreparation(null, null));
+        }
+        return Blocking.call(() -> new SandboxPreparation(
+                        sandboxes.prepare(ready.context()).orElse(null), null))
+                .onErrorResume(RetryableTurnException.class, error -> {
+                    log.warn(
+                            "会话沙箱暂时不可用，本轮置回队列 turnId={} code={}",
+                            turn.turnId(),
+                            error.errorCode().code(),
+                            error);
+                    return Mono.just(new SandboxPreparation(null, error));
+                });
+    }
+
+    private Mono<TurnResult> rescheduleBeforeEngine(Prepared.Ready ready, RetryableTurnException error) {
+        String message = error.detail() == null || error.detail().isBlank()
+                ? error.errorCode().title()
+                : error.detail();
+        return Flux.<EngineEvent>just(
+                        new SessionEvent.Error(error.errorCode().code(), message, SessionEvent.RetryStatus.RETRYABLE),
+                        new SessionEvent.StatusRescheduled(SessionEvent.RescheduleReason.RETRYABLE_ERROR))
+                .concatMap(event -> handle(ready, null, event))
+                .singleOrEmpty();
+    }
+
+    private Mono<TurnResult> handle(Prepared.Ready ready, SandboxHandle sandbox, EngineEvent event) {
         if (engineStarted.compareAndSet(false, true)) {
             deliverPendingInterrupt();
         }
         if (isTerminal(event)) {
-            return Blocking.call(() -> finisher.finish(
-                    turn, ready.agentVersionId(), ready.context().platform().interaction(), (SessionEvent) event));
+            // 先收尾会话沙箱（产物同步、计量），再结束轮次：status_idle 发出时产物已在对象存储中
+            Mono<Void> sandboxDone = sandbox == null
+                    ? Mono.empty()
+                    : Blocking.run(() -> sandboxes.afterTurn(
+                            ready.context(), sandbox, !(event instanceof SessionEvent.StatusRescheduled)));
+            return sandboxDone.then(Blocking.call(() -> finisher.finish(
+                    turn, ready.agentVersionId(), ready.context().platform().interaction(), (SessionEvent) event)));
         }
         if (!event.type().isPersisted()) {
             // 只订阅不等待，与提交后发布的持久化事件在同一连接上按订阅顺序写入
@@ -289,6 +338,14 @@ public final class TurnExecution {
         }
         return null;
     }
+
+    /**
+     * 准备会话沙箱的结果。
+     *
+     * @param handle 本轮的会话沙箱；{@code none} 档或失败时为 null
+     * @param failure 可重试的失败；成功时为 null
+     */
+    private record SandboxPreparation(SandboxHandle handle, RetryableTurnException failure) {}
 
     /** 续租结果的回调：在续租任务的虚拟线程上执行，只做不阻塞的操作。 */
     private final class Listener implements LeaseListener {

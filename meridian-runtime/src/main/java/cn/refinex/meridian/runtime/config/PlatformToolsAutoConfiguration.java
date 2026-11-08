@@ -4,6 +4,9 @@ import cn.refinex.meridian.engine.agentscope.assembly.SkillRepositoryProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.WorkspaceFilesystemProvider;
 import cn.refinex.meridian.engine.agentscope.fs.PlatformWorkspace;
+import cn.refinex.meridian.engine.agentscope.sandbox.SandboxDriverSettings;
+import cn.refinex.meridian.engine.agentscope.sandbox.TurnSandboxes;
+import cn.refinex.meridian.engine.agentscope.tools.BashTool;
 import cn.refinex.meridian.engine.agentscope.tools.KnowledgeSearchTool;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformToolProvider;
@@ -19,6 +22,7 @@ import cn.refinex.meridian.engine.spi.port.WebFetchPort;
 import cn.refinex.meridian.engine.spi.port.WebSearchPort;
 import cn.refinex.meridian.engine.spi.port.WorkspaceStorePort;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
+import cn.refinex.meridian.runtime.sandbox.app.SandboxProperties;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
 import cn.refinex.meridian.runtime.tooling.app.TenantWebSearch;
 import cn.refinex.meridian.runtime.tooling.app.UnconfiguredKnowledgeSearch;
@@ -52,6 +56,7 @@ public class PlatformToolsAutoConfiguration {
      * @param webSearch 联网搜索
      * @param knowledge 知识库检索
      * @param secrets 凭据解析，MCP 请求头用
+     * @param sandbox 沙箱配置，{@code bash} 的超时（T12a：{@code bash} 只在 sandbox 档注册）
      * @return 工具提供者
      */
     @Bean
@@ -62,8 +67,12 @@ public class PlatformToolsAutoConfiguration {
             WebFetchPort webFetch,
             WebSearchPort webSearch,
             KnowledgeSearchPort knowledge,
-            SecretResolver secrets) {
+            SecretResolver secrets,
+            SandboxProperties sandbox) {
         return PlatformToolProvider.withFileTools(new PlatformTool.ToolServices(ledger, blobs))
+                .with(
+                        PlatformToolNames.BASH,
+                        BashTool.factory(new BashTool.Settings(sandbox.bashDefaultTimeout(), sandbox.bashMaxTimeout())))
                 .with(PlatformToolNames.WEB_FETCH, services -> new WebFetchTool(services, webFetch))
                 .with(PlatformToolNames.WEB_SEARCH, services -> new WebSearchTool(services, webSearch))
                 .with(
@@ -109,12 +118,14 @@ public class PlatformToolsAutoConfiguration {
     }
 
     /**
-     * {@code none} 档的工作区文件系统（{@code sandbox} 档由 T12a 提供）。
+     * 工作区文件系统：{@code none} 档是平台存储；{@code sandbox} 档（T12a）是会话沙箱，受保护路径与 {@code large_tool_results/}
+     * 路由到平台存储，沙箱集群没有配置时 {@code sandbox} 档的智能体装配失败。
      *
      * @param store 工作区存储
      * @param configs 配置端口，读取技能内容
      * @param localWorkspaceRoot 平台控制的本机工作区根目录（登记事项 D05），默认在系统临时目录下；平台不在其中写入，目录可以
      *     不存在
+     * @param sandbox 沙箱配置
      * @return 文件系统提供者
      */
     @Bean
@@ -123,8 +134,14 @@ public class PlatformToolsAutoConfiguration {
             WorkspaceStorePort store,
             AgentConfigPort configs,
             @Value("${meridian.runtime.workspace.local-root:${java.io.tmpdir}/meridian/agent-workspace}")
-                    Path localWorkspaceRoot) {
-        return new PlatformWorkspace(store, configs, localWorkspaceRoot);
+                    Path localWorkspaceRoot,
+            SandboxProperties sandbox) {
+        SandboxDriverSettings settings = SandboxConfiguration.driverSettings(sandbox);
+        return new PlatformWorkspace(
+                store,
+                configs,
+                localWorkspaceRoot,
+                sandbox.enabled() ? () -> TurnSandboxes.filesystemSpec(settings) : null);
     }
 
     /**

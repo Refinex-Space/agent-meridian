@@ -9,6 +9,7 @@ import cn.refinex.meridian.engine.agentscope.assembly.ToolPolicy;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.WorkspaceFilesystemProvider;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
+import cn.refinex.meridian.engine.agentscope.sandbox.TurnSandboxes;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
 import cn.refinex.meridian.engine.agentscope.turn.AgentScopeEngine;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
@@ -20,6 +21,7 @@ import cn.refinex.meridian.engine.spi.port.LeaseRegistry;
 import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchWakeups;
 import cn.refinex.meridian.runtime.dispatch.app.TurnClaimer;
+import cn.refinex.meridian.runtime.sandbox.app.SandboxService;
 import cn.refinex.meridian.runtime.session.app.TurnFinisher;
 import cn.refinex.meridian.runtime.session.app.TurnMetrics;
 import cn.refinex.meridian.runtime.session.app.TurnPreparer;
@@ -28,6 +30,7 @@ import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
 import cn.refinex.meridian.runtime.session.app.WorkerProperties;
 import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
 import java.time.Clock;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -141,6 +144,7 @@ public class EngineAutoConfiguration {
      * @param leases 本节点持有的租约
      * @param blobs 大对象存储
      * @param clock 时钟，平台上下文消息中的当前时间
+     * @param sandboxes 每轮的会话沙箱；没有配置沙箱集群（{@code meridian.runtime.sandbox.enabled=false}）时不存在
      * @return 内核
      */
     @Bean
@@ -149,8 +153,9 @@ public class EngineAutoConfiguration {
             AgentConfigPort configs,
             LeaseRegistry leases,
             BlobStorePort blobs,
-            Clock clock) {
-        return new AgentScopeEngine(instances, configs, leases, blobs, clock);
+            Clock clock,
+            ObjectProvider<TurnSandboxes> sandboxes) {
+        return new AgentScopeEngine(instances, configs, leases, blobs, clock, sandboxes.getIfAvailable());
     }
 
     /**
@@ -163,6 +168,7 @@ public class EngineAutoConfiguration {
      * @param audit 事件写入与权限判定审计
      * @param publisher 实时扇出
      * @param metrics 指标
+     * @param sandboxes 会话沙箱服务
      * @param clock 时钟
      * @return Worker
      */
@@ -175,8 +181,9 @@ public class EngineAutoConfiguration {
             ApprovalAudit audit,
             EventStreamPublisher publisher,
             TurnMetrics metrics,
+            SandboxService sandboxes,
             Clock clock) {
-        return new TurnWorker(claimer, preparer, finisher, engine, audit, publisher, metrics, clock);
+        return new TurnWorker(claimer, preparer, finisher, engine, audit, publisher, metrics, sandboxes, clock);
     }
 
     /**
