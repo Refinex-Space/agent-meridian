@@ -4,6 +4,7 @@ import cn.refinex.meridian.engine.agentscope.assembly.AgentAssembler;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
 import cn.refinex.meridian.engine.agentscope.assembly.ModelFactory;
 import cn.refinex.meridian.engine.agentscope.assembly.SkillRepositoryProvider;
+import cn.refinex.meridian.engine.agentscope.assembly.ToolPolicy;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.WorkspaceFilesystemProvider;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
@@ -26,20 +27,29 @@ import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
 import cn.refinex.meridian.runtime.session.app.WorkerProperties;
 import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
 import java.time.Clock;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 
 /**
  * 装配 {@code meridian-engine-agentscope} 的内核与 Worker 的后台循环（架构设计「引擎装配」「一轮执行的生命周期」）。
  *
  * <p>内核需要四个提供者：模型工厂（T09a 的 {@code RoutedModel}）、工具（T10a 起）、文件系统（T10a、T12a）、技能仓库（T10a）。
- * 它们都存在时才装配内核与 Worker，所以写成自动配置（在用户配置之后求值 {@code @ConditionalOnBean}）：T06 时生产环境还没有这些
- * 提供者，runtime 照常启动、不认领轮次；测试与后续任务提供它们后即生效（ADR-0028）。
+ * 它们都存在时才装配内核与 Worker，所以写成自动配置（在用户配置之后求值 {@code @ConditionalOnBean}）。T10a 起四个提供者都有
+ * 生产实现（{@code ModelFactoryAutoConfiguration}、{@code PlatformToolsAutoConfiguration}），生产环境装配内核并认领轮次；
+ * {@code meridian.runtime.worker.enabled=false} 时不装配（只提供 API 的节点、只测 API 的集成测试）。装配后跑一次 Toolkit 自检，
+ * 违反时启动失败（登记事项 D02）。
  *
  * <p>runtime 只在本包引用 {@code meridian-engine-agentscope} 的装配入口（ArchUnit 规则 2）。
  */
 @AutoConfiguration
+@ConditionalOnProperty(
+        prefix = "meridian.runtime.worker",
+        name = "enabled",
+        havingValue = "true",
+        matchIfMissing = true)
 @ConditionalOnBean({
     ModelFactory.class,
     ToolProvider.class,
@@ -94,6 +104,18 @@ public class EngineAutoConfiguration {
             WorkspaceFilesystemProvider filesystems,
             SkillRepositoryProvider skills) {
         return new AgentAssembler(models, stateStore, middlewares, tools, filesystems, skills);
+    }
+
+    /**
+     * 启动自检（登记事项 D02）：用探测对象（全部平台工具、计划模式）走一遍装配，Toolkit 中出现白名单外的非 {@code ToolBase}
+     * 工具时抛出异常，容器启动失败。
+     *
+     * @param assembler 装配器
+     * @return 在全部单例创建之后执行的自检
+     */
+    @Bean
+    public SmartInitializingSingleton toolkitSelfCheck(AgentAssembler assembler) {
+        return () -> assembler.selfCheck(ToolPolicy.probe());
     }
 
     /**

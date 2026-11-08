@@ -177,13 +177,13 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 T10a 平台工具基类、文件工具、工作区存储与技能（开工基线：修复 `AgentScopeEngineShutdownTest` 的下线竞态后 `verify.sh` 通过）
 
-- [ ] 1. `PlatformTool` 基类：副作用等级、`matchRule` 规则语法、账本（幂等键、结果引用 D14）、指标、span、审计；启动自检（非 `ToolBase` 白名单，D02）——内核部分完成（`tools.PlatformTool`、`assembly.ToolPolicy`、`AgentAssembler.selfCheck`），指标与审计在 runtime 账本实现中，待 7
+- [x] 1. `PlatformTool` 基类：副作用等级、`matchRule` 规则语法、账本（幂等键、结果引用 D14）、指标、span、审计；启动自检（非 `ToolBase` 白名单，D02）
 - [x] 2. 六个文件工具（路径 glob 规则、先读后改、输出上限与分段读取提示、内容级建议规则 D21）
-- [ ] 3. 工作区存储：`rt.workspace_entries` 迁移、`WorkspaceStorePort` 实现（64 KB 内联、对象存储）、`MeridianBaseStore`（`putIfVersion`、分页 `search`）、命名空间取自 `PlatformContext`
-- [ ] 4. （内核部分完成：`fs.PlatformWorkspace`、`ProtectedContent`）`ReadOnlyFilesystem` 与受保护路径内容（`AGENTS.md`、`skills/`、`subagents/`、`tools.json`、`MEMORY.md`）、`none` 档 `CompositeFilesystem` 装配、本机工作区根（D05）
+- [x] 3. 工作区存储：`rt.workspace_entries` 迁移、`WorkspaceStorePort` 实现（64 KB 内联、对象存储）、`MeridianBaseStore`（`putIfVersion`、分页 `search`）、命名空间取自 `PlatformContext`
+- [x] 4. `ReadOnlyFilesystem` 与受保护路径内容（`AGENTS.md`、`skills/`、`subagents/`、`tools.json`、`MEMORY.md`）、`none` 档 `CompositeFilesystem` 装配、本机工作区根（D05）
 - [x] 5. `MeridianSkillRepository`（`dev-config/skills/`）：技能清单进提示词、`load_skill_through_path` 加载正文
 - [x] 6. `PolicyMiddleware`（工具策略拒绝规则 + 非 ToolBase 守卫，ADR-0034 待写）
-- [ ] 7. runtime 生产装配（工具、文件系统、技能仓库三个提供者）与集成测试：A02 路径规则、A03 P4 `none` 档、A04 账本
+- [ ] 7. （代码与测试已写，`FileToolsWorkerIT` 通过；待全量 IT）runtime 生产装配（工具、文件系统、技能仓库三个提供者）与集成测试：A02 路径规则、A03 P4 `none` 档、A04 账本
 - [ ] 8. P4、P6 报告；模块 `CLAUDE.md`、架构设计与 ADR；`acceptance.json`；收尾 `verify.sh`
 
 ## 控制台设计轨道

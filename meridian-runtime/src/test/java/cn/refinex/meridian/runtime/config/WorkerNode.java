@@ -1,12 +1,18 @@
 package cn.refinex.meridian.runtime.config;
 
+import cn.refinex.meridian.engine.agentscope.assembly.AgentAssembler;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentProfile;
+import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
+import cn.refinex.meridian.engine.agentscope.fs.PlatformWorkspace;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.RecordingMiddlewareProvider;
+import cn.refinex.meridian.engine.agentscope.testkit.assembly.RecordingModelFactory;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.StaticToolProvider;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestAssembly;
+import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
+import cn.refinex.meridian.engine.agentscope.tools.PlatformToolProvider;
 import cn.refinex.meridian.engine.agentscope.turn.AgentScopeEngine;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
@@ -42,6 +48,8 @@ import cn.refinex.meridian.runtime.support.RuntimeTestRedis;
 import cn.refinex.meridian.runtime.support.TestNode;
 import cn.refinex.meridian.runtime.tooling.app.DatabaseToolLedger;
 import cn.refinex.meridian.runtime.tooling.infra.ToolInvocationRepository;
+import cn.refinex.meridian.runtime.workspace.app.DatabaseWorkspaceStore;
+import cn.refinex.meridian.runtime.workspace.infra.system.WorkspaceEntryRepository;
 import io.agentscope.core.middleware.MiddlewareBase;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.AgentTool;
@@ -105,6 +113,8 @@ record WorkerNode(
      * @param states 包装状态端口（例如记录被拒绝的写入）；不包装时为恒等函数
      * @param dataSource 本节点的数据源（例如可以模拟数据库不可用的 {@code FailingDataSource}）
      * @param extraTools 不记账的其他测试工具（例如实现了 {@code matchRule} 的路径工具）
+     * @param platform 是否用生产的平台工具（文件工具）、工作区（{@code PlatformWorkspace} 加 {@code DatabaseWorkspaceStore}）
+     *     与技能仓库装配（T10a）；否则文件系统与技能仓库是内存替身
      */
     record Spec(
             String nodeId,
@@ -116,7 +126,8 @@ record WorkerNode(
             WorkerProperties properties,
             UnaryOperator<AgentStateRepository> states,
             DataSource dataSource,
-            List<AgentTool> extraTools) {}
+            List<AgentTool> extraTools,
+            boolean platform) {}
 
     /**
      * 一个记账工具的定义。
@@ -134,7 +145,12 @@ record WorkerNode(
         DatabaseInbox inbox = new DatabaseInbox(
                 new InboxRepository(dataSource), node.events(), transactions, node.nodeId(), spec.clock());
         DatabaseToolLedger ledger = new DatabaseToolLedger(
-                new ToolInvocationRepository(dataSource), transactions, node.nodeId(), spec.clock());
+                new ToolInvocationRepository(dataSource),
+                transactions,
+                new OutboxWriter(dataSource, "rt", spec.clock()),
+                node.meters(),
+                node.nodeId(),
+                spec.clock());
         BlobStorePort blobs = new ObjectStoreBlobStore(RuntimeTestObjectStore.get());
 
         Map<String, LedgerTool> tools = new LinkedHashMap<>();
@@ -145,16 +161,44 @@ record WorkerNode(
         List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(
                         node.registry(), inbox, spec.properties().batchCheckpoint())
                 .middlewares(spec.profile()));
-        TestAssembly assembly = TestAssembly.builder(spec.model())
-                .stateStore(new FencedAgentStateStore(states, node.registry()))
-                .middlewares(new RecordingMiddlewareProvider(middlewares, middlewares))
-                .tools(new StaticToolProvider(List.of(), allTools(tools, spec.extraTools())))
-                .build();
-        AgentScopeEngine engine = new AgentScopeEngine(
-                new AgentInstanceCache(assembly.assembler()),
-                new ProvidedAgentConfigPort(spec.agents()),
-                node.registry(),
-                blobs);
+        ProvidedAgentConfigPort configs = new ProvidedAgentConfigPort(spec.agents());
+        AgentAssembler assembler;
+        if (spec.platform()) {
+            // 生产的平台工具、工作区与技能仓库（T10a）：文件进 rt.workspace_entries 与 MinIO
+            PlatformWorkspace workspace = new PlatformWorkspace(
+                    new DatabaseWorkspaceStore(
+                            new WorkspaceEntryRepository(dataSource),
+                            RuntimeTestObjectStore.get(),
+                            transactions,
+                            spec.clock()),
+                    configs,
+                    WorkerFixture.LOCAL_WORKSPACE_ROOT);
+            ToolProvider platformTools =
+                    PlatformToolProvider.withFileTools(new PlatformTool.ToolServices(ledger, blobs));
+            List<AgentTool> testTools = allTools(tools, spec.extraTools());
+            ToolProvider combined = profile -> {
+                List<AgentTool> all =
+                        new ArrayList<>(platformTools.tools(profile).tools());
+                all.addAll(testTools);
+                return ToolProvider.ToolBundle.of(all);
+            };
+            assembler = new AgentAssembler(
+                    new RecordingModelFactory(spec.model()),
+                    new FencedAgentStateStore(states, node.registry()),
+                    new RecordingMiddlewareProvider(middlewares, middlewares),
+                    combined,
+                    workspace,
+                    workspace);
+        } else {
+            assembler = TestAssembly.builder(spec.model())
+                    .stateStore(new FencedAgentStateStore(states, node.registry()))
+                    .middlewares(new RecordingMiddlewareProvider(middlewares, middlewares))
+                    .tools(new StaticToolProvider(List.of(), allTools(tools, spec.extraTools())))
+                    .build()
+                    .assembler();
+        }
+        AgentScopeEngine engine =
+                new AgentScopeEngine(new AgentInstanceCache(assembler), configs, node.registry(), blobs);
 
         PendingActionRepository pendingActions = new PendingActionRepository(dataSource);
         PermissionRuleRepository rules = new PermissionRuleRepository(dataSource);

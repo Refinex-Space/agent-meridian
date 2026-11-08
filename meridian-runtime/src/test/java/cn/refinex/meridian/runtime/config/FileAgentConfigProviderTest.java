@@ -8,6 +8,7 @@ import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.PermissionBehavior;
 import cn.refinex.meridian.engine.spi.spec.PermissionMode;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
+import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -74,11 +75,43 @@ class FileAgentConfigProviderTest {
     }
 
     @Test
+    void skillsAreReadFromVersionDirectoriesWithTheNameFromTheFrontmatter() throws IOException {
+        Path skills = directory.resolve("skills");
+        Path v2 = Files.createDirectories(
+                skills.resolve("skl_report").resolve("v2").resolve("templates"));
+        Files.writeString(v2.getParent().resolve("SKILL.md"), """
+                ---
+                name: report-writer
+                description: "写报告: 按模板"
+                ---
+                # 正文
+                """);
+        Files.writeString(v2.resolve("outline.md"), "1. 进展");
+        FileAgentConfigProvider provider = new FileAgentConfigProvider(directory, skills);
+
+        SkillDefinition skill = provider.skill("skl_report", 2);
+
+        assertThat(skill.name()).isEqualTo("report-writer");
+        assertThat(skill.version()).isEqualTo(2);
+        assertThat(skill.files()).containsOnlyKeys("SKILL.md", "templates/outline.md");
+        assertThat(skill.files().get("templates/outline.md")).isEqualTo("1. 进展");
+        assertThatThrownBy(() -> provider.skill("skl_report", 1))
+                .isInstanceOf(NotFoundException.class)
+                .satisfies(e ->
+                        assertThat(((NotFoundException) e).errorCode().code()).isEqualTo("skill.not_found"));
+    }
+
+    @Test
     void theCheckedInDevelopmentConfigurationParses() {
-        // 测试的工作目录是模块目录，仓库根目录的 dev-config 在上一级
+        // 测试的工作目录是模块目录，仓库根目录的 dev-config 在上一级；技能目录默认为同级的 skills
         FileAgentConfigProvider provider = new FileAgentConfigProvider(Path.of("..", "dev-config", "agents"));
 
-        assertThat(provider.agentVersion("agv_dev_assistant_1").maxIters()).isEqualTo(50);
+        ResolvedAgentSpec assistant = provider.agentVersion("agv_dev_assistant_1");
+        assertThat(assistant.maxIters()).isEqualTo(50);
         assertThat(provider.environment("env_dev_none", 1).tier()).isEqualTo(EnvironmentSpec.Tier.NONE);
+        assertThat(assistant.skills())
+                .allSatisfy(ref -> assertThat(
+                                provider.skill(ref.skillId(), ref.version()).name())
+                        .isEqualTo(ref.name()));
     }
 }

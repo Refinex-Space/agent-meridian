@@ -12,14 +12,17 @@ import cn.refinex.meridian.engine.spi.event.BlobRef;
 import cn.refinex.meridian.engine.spi.port.ToolLedgerPort.InvocationStart;
 import cn.refinex.meridian.engine.spi.port.ToolLedgerPort.Status;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
+import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.dispatch.app.ClaimResult;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseHandle;
+import cn.refinex.meridian.runtime.support.DbAssertions;
 import cn.refinex.meridian.runtime.support.RuntimeTestDatabase;
 import cn.refinex.meridian.runtime.support.TestNode;
 import cn.refinex.meridian.runtime.support.TestSessions;
 import cn.refinex.meridian.runtime.support.TestSessions.TestSession;
 import cn.refinex.meridian.runtime.tooling.domain.ToolInvocation;
 import cn.refinex.meridian.runtime.tooling.infra.ToolInvocationRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -32,6 +35,7 @@ import reactor.core.publisher.Mono;
 class DatabaseToolLedgerIT {
 
     private final MutableClock clock = MutableClock.at(Instant.parse("2100-01-01T00:00:00Z"));
+    private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     private TestSession session;
     private TestNode node;
     private DatabaseToolLedger ledger;
@@ -45,6 +49,8 @@ class DatabaseToolLedgerIT {
         ledger = new DatabaseToolLedger(
                 new ToolInvocationRepository(RuntimeTestDatabase.dataSource()),
                 RuntimeTestDatabase.transactions(),
+                new OutboxWriter(RuntimeTestDatabase.dataSource(), "rt", clock),
+                meters,
                 node.nodeId(),
                 clock);
         node.enqueuer().enqueue(session.turn("用工具"));
@@ -72,6 +78,40 @@ class DatabaseToolLedgerIT {
         assertThat(done.inputJson()).contains("\"text\": \"x\"");
         assertThat(done.finishedAt()).isNotNull();
         assertThat(invocations.get(1).status()).as("还在执行的调用恢复时视为状态未知").isEqualTo(Status.RUNNING);
+    }
+
+    @Test
+    void finishingASideEffectingCallWritesAnAuditRecordAndEveryCallIsCounted() {
+        String write = block(
+                ledger.recordStart(start("call_w", SideEffect.IDEMPOTENT, session.sessionId() + ":call_w")),
+                lease.epoch());
+        String read = block(
+                ledger.recordStart(start("call_r", SideEffect.NONE, session.sessionId() + ":call_r")), lease.epoch());
+        block(ledger.recordFinish(write, Status.SUCCEEDED, null), lease.epoch());
+        block(ledger.recordFinish(read, Status.FAILED, null), lease.epoch());
+
+        List<Map<String, Object>> audits = DbAssertions.rows(
+                "SELECT payload::text AS payload FROM rt.outbox WHERE topic = 'audit' AND payload ->> 'action' = 'tool.executed'"
+                        + " AND payload ->> 'session_id' = ?",
+                session.sessionId());
+        assertThat(audits)
+                .as("只有有副作用的调用写审计")
+                .singleElement()
+                .satisfies(row -> assertThat((String) row.get("payload"))
+                        .contains("\"tool_use_id\": \"call_w\"")
+                        .contains("\"side_effect\": \"idempotent\"")
+                        .contains("\"status\": \"succeeded\"")
+                        .contains("\"idempotency_key\": \"" + session.sessionId() + ":call_w\""));
+        assertThat(meters.get("meridian.tool.calls")
+                        .tags("tool", "tool", "state", "succeeded")
+                        .counter()
+                        .count())
+                .isEqualTo(1.0);
+        assertThat(meters.get("meridian.tool.calls")
+                        .tags("tool", "tool", "state", "failed")
+                        .counter()
+                        .count())
+                .isEqualTo(1.0);
     }
 
     @Test

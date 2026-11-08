@@ -103,23 +103,48 @@ public class ToolInvocationRepository extends TenantScopedRepository {
      * @param status 结束状态
      * @param resultRef 结果引用；可为空
      * @param now 当前时间
-     * @return 更新成功时为 true；记录不存在、不属于该轮次或已经结束时为 false
+     * @return 结束的记录（指标与审计用）；记录不存在、不属于该轮次或已经结束时为空
      */
-    public boolean finish(String id, String turnId, Status status, BlobRef resultRef, Instant now) {
+    public Optional<Finished> finish(String id, String turnId, Status status, BlobRef resultRef, Instant now) {
         return sql("""
-                                UPDATE rt.tool_invocations
-                                   SET status = :status, result_ref = :result_ref, finished_at = :now
-                                 WHERE tenant_id = :tenant_id AND project_id = :project_id AND id = :id
-                                   AND turn_id = :turn_id AND status = 'running'
-                                """)
-                        .param("status", value(status))
-                        .param("result_ref", JdbcValues.jsonbOf(resultRef))
-                        .param("now", now)
-                        .param("id", id)
-                        .param("turn_id", turnId)
-                        .update()
-                == 1;
+                        UPDATE rt.tool_invocations
+                           SET status = :status, result_ref = :result_ref, finished_at = :now
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND id = :id
+                           AND turn_id = :turn_id AND status = 'running'
+                        RETURNING session_id, thread_id, tool_use_id, tool_name, side_effect, idempotency_key
+                        """)
+                .param("status", value(status))
+                .param("result_ref", JdbcValues.jsonbOf(resultRef))
+                .param("now", now)
+                .param("id", id)
+                .param("turn_id", turnId)
+                .query((rs, row) -> new Finished(
+                        rs.getString("session_id"),
+                        rs.getString("thread_id"),
+                        rs.getString("tool_use_id"),
+                        rs.getString("tool_name"),
+                        sideEffect(rs.getString("side_effect")),
+                        rs.getString("idempotency_key")))
+                .optional();
     }
+
+    /**
+     * 刚结束的一条账本记录。
+     *
+     * @param sessionId 会话 ID
+     * @param threadId 线程 ID
+     * @param toolUseId 工具调用 ID
+     * @param toolName 工具名
+     * @param sideEffect 副作用等级
+     * @param idempotencyKey 幂等键；可为空
+     */
+    public record Finished(
+            String sessionId,
+            String threadId,
+            String toolUseId,
+            String toolName,
+            SideEffect sideEffect,
+            String idempotencyKey) {}
 
     /**
      * 读取一轮的全部账本记录（含各次执行），按开始时间排列。

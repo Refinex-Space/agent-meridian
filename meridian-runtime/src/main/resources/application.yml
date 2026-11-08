@@ -23,6 +23,8 @@ meridian:
       poll-interval: 1s
       default-tenant-max-running: 20
     worker:
+      # 关闭时不装配内核与 Worker，节点只提供 API（EngineAutoConfiguration）
+      enabled: true
       # 默认值的来源见 WorkerProperties：并发上限、下线等待（架构设计「崩溃恢复」）、待处理动作截止时长（「待处理动作」）
       max-concurrent-turns: 300
       shutdown-timeout: 60s
@@ -35,6 +37,9 @@ meridian:
       ping-interval: 15s
       max-connection-duration: 60m
       poll-interval: 100ms
+    workspace:
+      # 平台控制的本机工作区根目录（登记事项 D05）：harness 的本机回退读取落在这里，平台不在其中写入
+      local-root: ${java.io.tmpdir}/meridian/agent-workspace
     dev-agent-config:
       # 开发配置目录（FileAgentConfigProvider），相对于工作目录；T15b 起智能体配置改由 control-plane 下发
       directory: dev-config/agents

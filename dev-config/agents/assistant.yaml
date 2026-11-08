@@ -8,13 +8,22 @@ model:
   # 模型目录的模型 ID，见 dev-config/providers/dashscope.yaml（T09a 的 RoutedModel 经它解析供应商与凭据）
   model_id: mdl_dev_default
 system_prompt: 你是企业内的通用助手，回答简洁、准确。
-tools: []
+# 平台文件工具（T10a）：读类工具放行，写类工具默认需要确认（DEFAULT 模式下没有命中 allow 的调用都要确认）
+tools: [read_file, list_files, glob_files, grep_files, write_file, edit_file]
 mcp_servers: []
-skills: []
+# 技能内容在 dev-config/skills/<skill_id>/v<version>/（FileAgentConfigProvider）
+skills:
+  - skill_id: skl_dev_weekly_report
+    version: 1
+    name: weekly-report
 subagents: []
 permissions:
   mode: default
-  rules: []
+  rules:
+    - {tool_name: read_file, behavior: allow, layer: agent_version}
+    - {tool_name: list_files, behavior: allow, layer: agent_version}
+    - {tool_name: glob_files, behavior: allow, layer: agent_version}
+    - {tool_name: grep_files, behavior: allow, layer: agent_version}
 compaction:
   reserved_tokens: 20000
 plan_mode: false

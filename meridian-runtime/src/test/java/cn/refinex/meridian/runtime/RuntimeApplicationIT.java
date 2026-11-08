@@ -2,6 +2,11 @@ package cn.refinex.meridian.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
+import cn.refinex.meridian.engine.agentscope.assembly.WorkspaceFilesystemProvider;
+import cn.refinex.meridian.engine.agentscope.fs.PlatformWorkspace;
+import cn.refinex.meridian.engine.agentscope.tools.PlatformToolProvider;
+import cn.refinex.meridian.engine.agentscope.turn.AgentScopeEngine;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
@@ -9,20 +14,26 @@ import cn.refinex.meridian.engine.spi.port.EventSinkPort;
 import cn.refinex.meridian.engine.spi.port.InboxPort;
 import cn.refinex.meridian.engine.spi.port.LeaseRegistry;
 import cn.refinex.meridian.engine.spi.port.ToolLedgerPort;
+import cn.refinex.meridian.engine.spi.port.WorkspaceStorePort;
 import cn.refinex.meridian.persistence.jdbc.PeriodicJob;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.delivery.app.DatabaseInbox;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
 import cn.refinex.meridian.runtime.dispatch.app.NodeLeaseRegistry;
 import cn.refinex.meridian.runtime.dispatch.domain.NodeId;
+import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
 import cn.refinex.meridian.runtime.session.infra.system.JdbcAgentStateRepository;
 import cn.refinex.meridian.runtime.stream.app.DatabaseEventSink;
 import cn.refinex.meridian.runtime.stream.app.ObjectStoreBlobStore;
 import cn.refinex.meridian.runtime.support.DbAssertions;
 import cn.refinex.meridian.runtime.tooling.app.DatabaseToolLedger;
+import cn.refinex.meridian.runtime.workspace.app.DatabaseWorkspaceStore;
 import cn.refinex.meridian.testsupport.SpringContainerProperties;
+import io.agentscope.core.shutdown.GracefulShutdownManager;
 import java.time.Duration;
 import java.util.Map;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -59,6 +70,25 @@ class RuntimeApplicationIT {
 
     @Autowired
     private ApplicationContext context;
+
+    @Autowired
+    private TurnWorkerLifecycle lifecycle;
+
+    /** 生产装配的 Worker：全部用例结束后停止，并复位 AgentScope 的 JVM 级优雅停机（停止会触发它）。 */
+    private static TurnWorkerLifecycle worker;
+
+    @BeforeEach
+    void captureWorker() {
+        worker = lifecycle;
+    }
+
+    @AfterAll
+    static void stopWorker() {
+        if (worker != null) {
+            worker.stop();
+        }
+        GracefulShutdownManager.getInstance().resetForTesting();
+    }
 
     @Test
     void healthAndProbesAreUpWithDatabaseAndRedis() {
@@ -98,9 +128,12 @@ class RuntimeApplicationIT {
         assertThat(context.getBean(BlobStorePort.class)).isInstanceOf(ObjectStoreBlobStore.class);
         assertThat(context.getBean(ToolLedgerPort.class)).isInstanceOf(DatabaseToolLedger.class);
         assertThat(context.getBean(InboxPort.class)).isInstanceOf(DatabaseInbox.class);
-        assertThat(context.getBeansOfType(AgentEngine.class))
-                .as("没有模型、工具等提供者（T09a、T10a 交付）时不装配内核与 Worker，应用照常启动")
-                .isEmpty();
+        assertThat(context.getBean(AgentEngine.class))
+                .as("T10a 起模型、工具、文件系统、技能仓库四个提供者都有生产实现，生产装配内核（Toolkit 自检已通过）")
+                .isInstanceOf(AgentScopeEngine.class);
+        assertThat(context.getBean(ToolProvider.class)).isInstanceOf(PlatformToolProvider.class);
+        assertThat(context.getBean(WorkspaceFilesystemProvider.class)).isInstanceOf(PlatformWorkspace.class);
+        assertThat(context.getBean(WorkspaceStorePort.class)).isInstanceOf(DatabaseWorkspaceStore.class);
     }
 
     @Test

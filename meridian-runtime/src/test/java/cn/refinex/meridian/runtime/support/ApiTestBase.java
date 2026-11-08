@@ -11,7 +11,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /**
- * 公开 API 集成测试的公共容器：完整的 runtime（不装配内核，轮次只入队不执行），随机端口，三个开发期 API Key
+ * 公开 API 集成测试的公共容器：完整的 runtime（{@code meridian.runtime.worker.enabled=false}，不装配内核，轮次只入队不执行），随机端口，三个开发期 API Key
  * （{@link ApiTestKeys}）。子类不加 {@code @DirtiesContext}，配置相同的测试类共用一个容器。
  */
 @SpringBootTest(classes = RuntimeApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -33,6 +33,7 @@ public abstract class ApiTestBase {
         SpringContainerProperties.redis(registry);
         SpringContainerProperties.minio(registry);
         ApiTestKeys.register(registry);
+        registry.add("meridian.runtime.worker.enabled", () -> "false");
     }
 
     /**

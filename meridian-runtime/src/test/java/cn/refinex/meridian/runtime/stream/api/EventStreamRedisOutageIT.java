@@ -63,6 +63,8 @@ class EventStreamRedisOutageIT {
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         ApiTestKeys.register(registry);
+        // 只测 SSE：不装配内核，Redis 中断期间没有 Worker 写事件
+        registry.add("meridian.runtime.worker.enabled", () -> "false");
     }
 
     @AfterAll

@@ -52,6 +52,7 @@ import cn.refinex.meridian.runtime.support.TestSessions;
 import cn.refinex.meridian.runtime.support.TestSessions.TestSession;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.AgentTool;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -85,6 +86,10 @@ final class WorkerFixture {
                     new PermissionRule(LOOKUP, null, PermissionBehavior.ALLOW, PolicyLayer.AGENT_VERSION),
                     new PermissionRule(WRITE, null, PermissionBehavior.ALLOW, PolicyLayer.AGENT_VERSION)));
 
+    /** 平台工作区模式下的本机工作区根目录：P4 断言会话之后它仍然不存在（平台不在本机写入）。 */
+    static final Path LOCAL_WORKSPACE_ROOT =
+            Path.of(System.getProperty("java.io.tmpdir"), "meridian-it-agent-workspace");
+
     final MutableClock clock = MutableClock.at(Instant.parse("2100-01-01T00:00:00Z"));
     final ScriptedModel model;
     final Model agentModel;
@@ -96,6 +101,9 @@ final class WorkerFixture {
 
     /** 创建节点前加入的其他测试工具（每个节点共用同一个实例）。 */
     final List<AgentTool> extraTools = new ArrayList<>();
+
+    /** 创建节点前设置：用生产的平台工具、工作区与技能仓库装配（T10a）。 */
+    boolean platform;
 
     WorkerFixture(ScriptedModel model) {
         this(model, UnaryOperator.identity());
@@ -153,7 +161,8 @@ final class WorkerFixture {
                 properties,
                 states,
                 dataSource,
-                List.copyOf(extraTools)));
+                List.copyOf(extraTools),
+                platform));
     }
 
     static WorkerProperties withoutCheckpoint() {

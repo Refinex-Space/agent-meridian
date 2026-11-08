@@ -1,10 +1,16 @@
 package cn.refinex.meridian.engine.agentscope.assembly;
 
 import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
+import cn.refinex.meridian.engine.spi.spec.CompactionSpec;
+import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
+import cn.refinex.meridian.engine.spi.spec.KnowledgeSpec;
+import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import cn.refinex.meridian.engine.spi.spec.PermissionBehavior;
+import cn.refinex.meridian.engine.spi.spec.PermissionPolicy;
 import cn.refinex.meridian.engine.spi.spec.PermissionRule;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import cn.refinex.meridian.engine.spi.spec.PolicyLayer;
+import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.ToolBase;
 import io.agentscope.core.tool.Toolkit;
@@ -37,6 +43,32 @@ public final class ToolPolicy {
     public static final Set<String> NON_TOOLBASE_ALLOWED = Set.of(SkillLoadTool.TOOL_NAME);
 
     private ToolPolicy() {}
+
+    /**
+     * 启动自检用的探测对象：启用全部平台工具与计划模式、{@code none} 档，让装配注册尽可能多的工具。
+     *
+     * @return 探测对象
+     */
+    public static AgentProfile probe() {
+        ResolvedAgentSpec spec = new ResolvedAgentSpec(
+                "agt_self_check",
+                "agv_self_check",
+                "self-check",
+                ModelSpec.of("mdl_self_check"),
+                "self-check",
+                PlatformToolNames.ALL,
+                List.of(),
+                List.of(),
+                List.of(),
+                PermissionPolicy.empty(),
+                CompactionSpec.defaults(),
+                true,
+                KnowledgeSpec.none(),
+                ResolvedAgentSpec.DEFAULT_MAX_ITERS,
+                false);
+        return AgentProfile.main(
+                spec, new EnvironmentSpec("env_self_check", 1, EnvironmentSpec.Tier.NONE, null, List.of()));
+    }
 
     /**
      * 检查 Toolkit。
