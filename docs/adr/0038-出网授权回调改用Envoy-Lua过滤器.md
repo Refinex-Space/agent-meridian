@@ -2,9 +2,9 @@
 
 | 项 | 内容 |
 |---|---|
-| 状态 | 提议 |
+| 状态 | 已采纳 |
 | 日期 | 2026-11-08 |
-| 决策人 | T12b 执行会话提议，待用户确认 |
+| 决策人 | T12b 执行会话提议，用户于 2026-11-08 采纳 |
 | 影响的架构设计章节 | 「技术基线」中"沙箱出网代理"一行（立项时锁定）；「沙箱出网」第 3 条的实现方式 |
 
 ## 背景
@@ -36,7 +36,7 @@ T12b 在本机 kind 集群用 Envoy v1.40.2（`envoyproxy/envoy:distroless-v1.40
 
 ## 决策
 
-提议采用 A：组件仍是 Envoy，回调的目标、时机与语义（每个 HTTP 或 CONNECT 请求带源 IP 调 `/internal/v1/egress:authorize`，结果由 runtime 决定）与架构设计一致，只是回调由 Lua 过滤器而不是 `ext_authz` 过滤器发出。它是唯一在实测中让 CONNECT 被正确授权、又不给 runtime 增加协议与依赖的方案。
+采用 A：组件仍是 Envoy，回调的目标、时机与语义（每个 HTTP 或 CONNECT 请求带源 IP 调 `/internal/v1/egress:authorize`，结果由 runtime 决定）与架构设计一致，只是回调由 Lua 过滤器而不是 `ext_authz` 过滤器发出。它是唯一在实测中让 CONNECT 被正确授权、又不给 runtime 增加协议与依赖的方案。
 
 ## 影响
 

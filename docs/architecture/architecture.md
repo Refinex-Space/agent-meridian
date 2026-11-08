@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.13 |
+| 版本 | v1.14 |
 | 日期 | 2026-11-08 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -68,7 +68,7 @@ AgentMeridian（简称 Meridian）是部署在企业内的通用智能体平台�
 | 对象存储 | S3 兼容（MinIO、OSS、COS） | — |
 | 数据库迁移 | Flyway | 随 Boot |
 | 沙箱 | kubernetes-sigs/agent-sandbox + gVisor（RuntimeClass），经 AgentScope Kubernetes 沙箱扩展接入 | agent-sandbox v1.0.10 |
-| 沙箱出网代理 | Envoy（`ext_authz` 回调 runtime 做域名授权） | 立项时锁定 |
+| 沙箱出网代理 | Envoy（Lua 过滤器回调 runtime 做域名授权，ADR-0038） | Envoy v1.40 |
 | 文档解析 | Apache Tika、PDFBox、POI；复杂 PDF 用 Python 服务（Docling、MinerU） | — |
 | 可观测 | OpenTelemetry、Langfuse（自托管）、Prometheus、Grafana、Loki | — |
 | 身份 | OIDC（Keycloak 或企业 IdP） | — |
@@ -935,7 +935,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 
 1. NetworkPolicy 默认拒绝沙箱的所有出网，只允许访问 Envoy 出网代理。不走代理的连接会被直接拦截。
 2. 沙箱模板里的 `HTTP_PROXY`、`HTTPS_PROXY` 固定指向代理。预热池中的 Pod 是提前创建的，无法按会话注入令牌，所以代理按源 Pod IP 鉴权。
-3. Envoy 对每个 CONNECT 或 HTTP 请求，带上源 IP 调用 runtime 的 `/internal/v1/egress:authorize`。runtime 用 `sessions.sandbox_pod_ip` 找到会话和环境，按环境的白名单判定目标域名，结果缓存 30 秒。沙箱删除时清空该会话的 Pod IP。
+3. Envoy 对每个 CONNECT 或 HTTP 请求，带上源 IP 调用 runtime 的 `/internal/v1/egress:authorize`。runtime 用 `sessions.sandbox_pod_ip` 找到会话和环境，按环境的白名单判定目标域名，结果缓存 30 秒。沙箱删除时清空该会话的 Pod IP。回调由 Envoy 内置的 Lua 过滤器发出（ADR-0038）：`ext_authz` 的 HTTP 服务模式把客户端的方法带进检查请求，CONNECT 的检查本身成了 CONNECT，授权不了 HTTPS。HTTP 与 CONNECT 走同一段脚本，源 IP 取 TCP 对端地址，检查请求由脚本从头构造（沙箱的请求头不会到达 runtime），响应不是 200、超时或出错一律拒绝。
 4. HTTPS 走 CONNECT 隧道，代理不终止 TLS。
 
 ## 知识库架构
@@ -1434,6 +1434,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.12 | 2026-11-08 | T11：端口表增加 `SnapshotStorePort`；会话沙箱的驱动行为与连接方式；沙箱 Pod 的落地细则（sandbox-router、`Unmanaged` 网络策略、工作区符号链接、进程数上限）；镜像接口的完整清单（ADR-0036） |
 | v1.11 | 2026-11-08 | T10b：系统提示词的落点（`sysPrompt` 三层、关闭 `WorkspaceContextMiddleware`、时间以 `<platform_context>` 消息注入、工具 schema 按键排序）；`AgentConfigPort` 读取租户提示词；来源标签格式与转义；`web_fetch` 的 SSRF 实现、`web_search` 的两个后端、`knowledge_search` 的入参、MCP 客户端的构建与凭据注入（ADR-0035） |
 | v1.13 | 2026-11-08 | T12a：会话沙箱的获取、注入、回收与快照保留、产物同步、技能投影的细则；`sandbox` 档平台工具的文件系统（路径翻译与沙箱绑定）；`bash` 的复合命令规则、超时、输出上限与审计，"记住此决定"对 `bash` 记命令原文；`sessions` 的沙箱列与 `sandbox_outputs`；沙箱 vCPU 秒的计量；`ToolLedgerPort`、`SandboxDriver` 加方法（ADR-0037） |
+| v1.14 | 2026-11-08 | T12b：沙箱出网的授权回调改用 Envoy 的 Lua 过滤器，技术基线一行随之修改（ADR-0038） |
 
 ## 待决问题
 
