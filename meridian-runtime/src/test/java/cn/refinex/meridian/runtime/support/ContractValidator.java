@@ -16,7 +16,8 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 契约测试的校验器：按 {@code meridian-api} 发布的 {@code openapi/meridian-v1.yaml} 校验请求、响应与 SSE 帧（ADR-0029）。
+ * 契约测试的校验器：按 {@code meridian-api} 发布的 {@code openapi/meridian-v1.yaml} 校验请求、响应与 SSE 帧（ADR-0029），
+ * 内部接口按 {@code openapi/meridian-internal-v1.yaml} 校验（T09b）。
  * 校验库默认严格：未声明的字段、缺少的必填字段、类型与枚举不符都是错误。
  *
  * <p>记录被校验过的操作（{@code METHOD 路径模板}），{@code SessionApiContractIT} 据此断言每个端点都经过了校验。
@@ -37,6 +38,11 @@ public final class ContractValidator {
             .build();
 
     private static final OpenAPI API = parse();
+
+    private static final String INTERNAL_SPEC = "openapi/meridian-internal-v1.yaml";
+
+    private static final OpenApiInteractionValidator INTERNAL =
+            OpenApiInteractionValidator.createForSpecificationUrl(INTERNAL_SPEC).build();
 
     private static final SchemaValidator SCHEMAS = new SchemaValidator(API, new MessageResolver());
 
@@ -93,6 +99,35 @@ public final class ContractValidator {
         ValidationReport report = SCHEMAS.validate(envelope, schema, "sse.data");
         if (report.hasErrors()) {
             throw new AssertionError("SSE 帧不符合规范：" + report.getMessages() + "\n" + envelope);
+        }
+    }
+
+    /**
+     * 按名称校验一段 JSON 是否符合公开规范中的某个 schema，例如流式对话补全的每个 {@code ChatCompletionChunk}。
+     *
+     * @param json JSON 文本
+     * @param schemaName {@code components/schemas} 中的名称
+     * @throws AssertionError 不符合规范时
+     */
+    public static void validateSchema(String json, String schemaName) {
+        Schema<?> schema = API.getComponents().getSchemas().get(schemaName);
+        ValidationReport report = SCHEMAS.validate(json, schema, schemaName);
+        if (report.hasErrors()) {
+            throw new AssertionError(schemaName + " 不符合规范：" + report.getMessages() + "\n" + json);
+        }
+    }
+
+    /**
+     * 按内部接口规范校验一次交互。
+     *
+     * @param request 请求
+     * @param response 响应
+     * @throws AssertionError 不符合规范时
+     */
+    public static void validateInternal(Request request, Response response) {
+        ValidationReport report = INTERNAL.validate(request, response);
+        if (report.hasErrors()) {
+            throw new AssertionError("内部接口不符合规范：" + report.getMessages());
         }
     }
 

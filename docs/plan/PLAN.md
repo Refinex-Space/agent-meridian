@@ -181,8 +181,8 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 - [x] 1. `ModelInvoker` 实现（engine-agentscope，复用 `RoutedModel`）与 runtime 装配
 - [x] 2. 规范：`meridian-v1.yaml` 增加 `/v1/chat/completions`、`/v1/embeddings`；新文件 `meridian-internal-v1.yaml`（`/internal/v1/embeddings`、`/internal/v1/rerank`）
-- [ ] 3. runtime 直通接口 `/v1/chat/completions`（流式与非流式、`usage`、`models:invoke`）（A01）
-- [ ] 4. Embedding 与 rerank 客户端（平台自己的 HTTP 客户端，计量），`/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank`，开发期静态服务凭据（A02）
+- [x] 3. runtime 直通接口 `/v1/chat/completions`（流式与非流式、`usage`、`models:invoke`）（A01）
+- [x] 4. Embedding 与 rerank 客户端（平台自己的 HTTP 客户端，计量），`/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank`，开发期静态服务凭据（A02）
 - [x] 5. `ScriptedOpenAiServer`（test-support）、YAML 脚本与内置脚本、`scripts/dev/scripted-model.sh`、`dev-config/providers/scripted.yaml`（只在 dev、test）
 - [x] 6. 契约测试：runtime 的真实 OpenAI 兼容客户端对脚本服务
 - [ ] 7. 经 HTTP 启动的 runtime 以 `scripted` 供应商跑通带工具调用的会话，重复一致（A03）

@@ -1,6 +1,7 @@
 package cn.refinex.meridian.runtime.modelrouting.api;
 
 import cn.refinex.meridian.api.model.ChatCompletionChunk;
+import cn.refinex.meridian.api.model.ChatCompletionChunkChoice;
 import cn.refinex.meridian.api.model.CreateChatCompletionRequest;
 import cn.refinex.meridian.api.model.CreateEmbeddingRequest;
 import cn.refinex.meridian.api.model.Embedding;
@@ -24,12 +25,15 @@ import cn.refinex.meridian.runtime.web.IdempotentRequests;
 import cn.refinex.meridian.security.apikey.ApiKeyAuthorization;
 import cn.refinex.meridian.security.apikey.ApiKeyScope;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -53,12 +57,15 @@ import tools.jackson.databind.json.JsonMapper;
 @RestController
 public class ModelsApiController implements ModelsApi {
 
+    private static final Logger log = LoggerFactory.getLogger(ModelsApiController.class);
+
     /** SSE 的结束标记（OpenAI 兼容）。 */
     static final String DONE = "[DONE]";
 
-    /** 流式块的编码：没有值的字段不输出，与 OpenAI 的增量格式一致。 */
+    /** 流式块的编码：没有值的字段不输出，与 OpenAI 的增量格式一致；{@code finish_reason} 例外，OpenAI 在每个增量里都给出（可为 null）。 */
     private static final JsonMapper CHUNK_JSON = JsonMappers.builder()
             .changeDefaultPropertyInclusion(inclusion -> inclusion.withValueInclusion(JsonInclude.Include.NON_NULL))
+            .addMixIn(ChatCompletionChunkChoice.class, FinishReasonAlways.class)
             .build();
 
     private final ModelInvoker invoker;
@@ -161,7 +168,8 @@ public class ModelsApiController implements ModelsApi {
                                 ? Flux.<Flux<ChatChunk>>error(first.getThrowable())
                                 : Flux.just(chunks),
                         false)
-                .next()
+                // single 等外层（Flux.just）自然完成，不发取消；next 会取消外层，switchOnFirst 随之取消供应商的流
+                .single()
                 .map(chunks -> ResponseEntity.ok()
                         .contentType(MediaType.TEXT_EVENT_STREAM)
                         .header(HttpHeaders.CACHE_CONTROL, "no-cache")
@@ -243,5 +251,13 @@ public class ModelsApiController implements ModelsApi {
             buffer.putFloat(value);
         }
         return Base64.getEncoder().encodeToString(buffer.array());
+    }
+
+    /** {@link ChatCompletionChunkChoice} 的 mixin：{@code finish_reason} 为 null 时也输出。 */
+    private abstract static class FinishReasonAlways {
+
+        @JsonInclude(JsonInclude.Include.ALWAYS)
+        @JsonProperty("finish_reason")
+        abstract String getFinishReason();
     }
 }

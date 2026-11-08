@@ -101,7 +101,25 @@ class SessionApiContractIT extends ApiTestBase {
                         .text("code"))
                 .isEqualTo("thread.not_found");
 
+        // 模型直通：本容器没有登记模型，响应是规范中的 404；成功路径的契约在 ModelEndpointsIT
+        assertThat(api.call(
+                                "POST /v1/chat/completions",
+                                HttpMethod.POST,
+                                "/v1/chat/completions",
+                                "{\"model\": \"mdl_absent\", \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]}",
+                                null)
+                        .text("code"))
+                .isEqualTo("model.not_found");
+        assertThat(api.call(
+                                "POST /v1/embeddings",
+                                HttpMethod.POST,
+                                "/v1/embeddings",
+                                "{\"model\": \"mdl_absent\", \"input\": \"你好\"}",
+                                null)
+                        .text("code"))
+                .isEqualTo("model.not_found");
+
         assertThat(ContractValidator.validatedOperations()).containsAll(ContractValidator.allOperations());
-        assertThat(ContractValidator.allOperations()).hasSize(12);
+        assertThat(ContractValidator.allOperations()).hasSize(14);
     }
 }
