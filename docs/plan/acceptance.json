@@ -510,78 +510,78 @@
       "id": "T08-A01",
       "task": "T08",
       "description": "投递表的每个格子都有通过的测试。验证：测试名与表格的对照清单。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "DeliveryMatrixIT 14 个用例全部通过（scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS））。对照：queue×空闲 queue_idle_startsAMessagesTurnRightAway；queue×运行中 queue_running_mergesIntoTheNextTurnWhenThisTurnEnds；queue×等待回应 queue_awaitingAction_staysInTheInboxUntilTheResumptionTurnEnds；steer×空闲 steer_idle_behavesLikeQueue；steer×运行中 steer_running_isInjectedBeforeTheNextReasoningAndRecordsTheConsumingEpoch、steer_running_turnEndsBeforeInjection_isDowngradedToQueue；steer×等待回应 steer_awaitingAction_isDowngradedToQueue；interrupt×空闲 interrupt_idle_hasNoEffect；interrupt×运行中 interrupt_running_takesEffectAtTheNextCheckpointThroughTheNodeChannel、interrupt_running_whenTheNotificationIsLost_isPickedUpByTheNextRenewal（排队中另有 interrupt_queued_cancelsTheTurnAndLaterMessagesFormTheNextTurn）；interrupt×等待回应 interrupt_awaitingAction_deniesEveryActionAndRunsOneResumptionTurnThenStops；删除×运行中 delete_running_cancelsTheCurrentTurn；删除×等待回应 delete_awaitingAction_cancelsTheTurnAndVoidsItsActions；删除×空闲为表中的「—」"
     },
     {
       "id": "T08-A02",
       "task": "T08",
       "description": "steer 在当前轮下一次推理前被注入并记录 `consumed_epoch`；注入前本轮结束时降级为 queue。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "DeliveryMatrixIT.steer_running_isInjectedBeforeTheNextReasoningAndRecordsTheConsumingEpoch：第二次推理（工具结果之后）的输入最后一条是 steer，inbox 行 consumed_turn_id=本轮、consumed_epoch=1，写 session.message_consumed，不生成下一轮；steer_running_turnEndsBeforeInjection_isDowngradedToQueue：本轮在注入前以 interrupted 结束，steer 合并进下一轮（consumed_epoch 为空）并被执行。scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS） 中通过"
     },
     {
       "id": "T08-A03",
       "task": "T08",
       "description": "中断在 Pub/Sub 正常时于一个检查点内生效；Pub/Sub 丢失时于 10 秒内生效；`queued` 轮次被中断后为 `cancelled`。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "DeliveryMatrixIT：interrupt_running_takesEffectAtTheNextCheckpointThroughTheNodeChannel 没有续租任务，只靠 node:{lease_owner} 频道送达，轮次 interrupted、后续写入工具未执行、耗时 <10 秒；interrupt_running_whenTheNotificationIsLost_isPickedUpByTheNextRenewal 不订阅频道，下一次续租（renewInterval=10s）读到中断请求后以 interrupted 结束；interrupt_queued_cancelsTheTurnAndLaterMessagesFormTheNextTurn 排队轮次为 cancelled、stop_reason=interrupted。scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS） 中通过"
     },
     {
       "id": "T08-A04",
       "task": "T08",
       "description": "审批：ask 产生 `tool_confirmation` 待处理动作；批准后工具执行，拒绝后智能体收到拒绝结果并继续；超时视为拒绝。验证：集成测试（测试工具实现 `matchRule`）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ApprovalFlowIT：askCreatesAToolConfirmationAndApprovalRunsTheTool（ask→tool_confirmation，批准后执行、permission=approved）、approvalWithAnUpdatedInputRunsTheToolWithTheNewInput、denialGivesTheAgentADeniedResultAndTheAgentContinues（模型收到 DENIED 与理由并继续）、anUnansweredConfirmationTimesOutAsADenial（30 分钟后超时扫描视为拒绝，只处理一次）；内容级规则由实现 matchRule 的测试工具 PathRuleTool 验证（PermissionRewriteIT.attendedSessionWaitsForApprovalOnAnExplicitAskRule、contentRulesMatchThroughMatchRuleAndPlatformSafetyRulesWin）。scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS） 中通过"
     },
     {
       "id": "T08-A05",
       "task": "T08",
       "description": "同批既有待确认调用又有自定义工具时，两类恢复轮按先确认、后工具结果的顺序生成，没有消息被丢弃。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ApprovalFlowIT.confirmationsComeBeforeCustomToolResultsAndNoMessageIsLost：同一批写入工具（ask）与自定义工具，轮次类型依次为 messages、confirmations、custom_tool_results、messages，等待回应期间到达的消息在最后一轮被执行；ResumptionPlannerTest.confirmationsComeFirstAndCustomToolResultsWaitForTheNextSuspension 覆盖同一动作集中两类并存的生成顺序。scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS） 中通过"
     },
     {
       "id": "T08-A06",
       "task": "T08",
       "description": "P15：存在显式 ask 规则时，`unattended` 会话与子线程都不会停在等待审批；`unattended` 会话无法进入计划模式。验证：测试；报告 `docs/poc/P15-权限改写.md`。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "PermissionRewriteIT：unattendedSessionDoesNotStopOnAnExplicitAskRule、subagentThreadDoesNotStopOnAnExplicitAskRule（子线程策略由 PermissionSynthesizer.subagents 合成后驱动真实内核）均得到 DENIED 并以 end_turn 结束、无待处理动作；unattendedSessionCannotEnterPlanMode；unattendedSessionAutoDeniesASafetyAskAndResumesWithoutPendingActions；PermissionSynthesizerTest 10 个用例。报告 docs/poc/P15-权限改写.md（通过）。scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS） 中通过"
     },
     {
       "id": "T08-A07",
       "task": "T08",
       "description": "\"记住此决定\"的会话级与项目级规则在后续轮次中生效。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ApprovalFlowIT.rememberSessionLetsLaterTurnsOfTheSameSessionRunTheToolWithoutAsking（会话级规则写入 rt.permission_rules，后续轮次不再确认，同项目的另一会话仍需确认）、rememberProjectLetsOtherSessionsOfTheProjectRunTheToolWithoutAsking（项目级规则经 PolicyStorePort 写入，同项目的另一会话直接执行）。scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS） 中通过"
     },
     {
       "id": "T08-A08",
       "task": "T08",
       "description": "自定义工具：非法名称与保留名称在创建会话时被拒绝；合法工具挂起、回传、续跑成功。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "CustomToolDeclarationIT：非法名称（LookupOrder、1lookup、lookup-order、65 个字符）400 request.validation_failed；保留名称（bash、read_file、spawn_subagent、plan_enter、load_skill_through_path、wait_async_results、mcp__crm__query）400，字段 custom_tools；合法名称 201。ApprovalFlowIT.customToolSuspendsTheTurnAndResumesWithTheReturnedResult（agent.custom_tool_use、custom_tool_result 动作、回传后模型收到结果并以 end_turn 结束）、anUnansweredCustomToolTimesOutWithATimeoutError。scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS） 中通过"
     },
     {
       "id": "T08-A09",
       "task": "T08",
       "description": "权限判定与待处理动作回应产生审计 outbox 记录。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ApprovalFlowIT.permissionDecisionsAndResponsesAreAudited：rt.outbox 主题 audit 中有 permission.decided（ask、allowed、approved）与 pending_action.concluded（origin=caller、outcome=approved、remember_scope=session、decided_by=key_test）；PermissionRewriteIT 的自动拒绝写 permission.decided(denied, source=unattended)；TurnWorkerIT 断言放行的调用写 permission.decided。scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS） 中通过"
     },
     {
       "id": "T08-A10",
       "task": "T08",
       "description": "用 `SteerMiddleware` 重跑 P10 的强杀场景：被失败执行消费的 steer 被重新投递，不丢失；补全 `docs/poc/P10-恢复语义.md`。验证：故障注入测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "SteerRecoveryIT（故障注入）：SteerMiddleware 在第二次推理前真实注入 steer（consumed_epoch=1）后，第二批工具执行中强杀；关闭 checkpoint 时重放输入、steer 重新投递并由恢复的执行再次注入（consumed_epoch=2），模型输入与最终状态中各一条；开启 checkpoint 时 steer 已在 checkpoint 中，RecoveryOnly，不重新投递、只出现一次。TurnRecoveryIT 强杀用例同样由 SteerMiddleware 注入重新投递的 steer。报告 docs/poc/P10-恢复语义.md 已补全。scripts/dev/verify.sh（2026-11-08，BUILD SUCCESS） 中通过"
     },
     {
       "id": "T08-A11",
       "task": "T08",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh 输出 BUILD SUCCESS 与 check-pom-versions: OK（2026-11-08 00:32）；runtime 单元测试 137 个、集成测试 154 个、架构测试 12 个，全部 0 失败"
     },
     {
       "id": "T09a-A01",

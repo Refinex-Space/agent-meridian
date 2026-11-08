@@ -66,7 +66,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T05 | [运行时数据层与调度租约](tasks/T05-runtime-data-and-dispatch.md) | 1 | T04 | xhigh | 大 | P2 | 已完成 | c1fd533 |
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 已完成 | c6ca61a |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 已完成 | 708f7ca |
-| T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 进行中 | — |
+| T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 已完成 | f75bc4f |
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 未开始 | — |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 未开始 | — |
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 未开始 | — |
@@ -175,16 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-**T08 消息投递、待处理动作与权限合成**（开工基线：`scripts/dev/verify.sh` 通过，提交 8257c24）
-
-- [x] 1. 权限合成：`PermissionSynthesizer`（五层、模式收紧、unattended 与子线程改写、`plan_enter` deny、子智能体策略）、平台安全规则、`PolicyStorePort` 与 `rt` 表实现、接入 `TurnPreparer`（A06 的单测部分）
-- [x] 2. 投递：中断（`interrupt_requested_at`、`node:{lease_owner}` 频道、续租兜底、`queued` → `cancelled`）、`awaiting_action` 下 steer 降级与中断拒绝全部动作、`SteerMiddleware`（A01、A02、A03）
-- [x] 3. 待处理动作：回应标记、恢复轮生成（先确认后工具结果、`recovery_confirmation` 的 retry/skip 与 D13）、超时调度（`SKIP LOCKED`）、unattended 兜底自动拒绝（A04、A05）
-- [x] 4. "记住此决定"会话级与项目级（A07）
-- [x] 5. 自定义工具：名称与保留名校验、挂起回传续跑（A08）
-- [x] 6. 审计 outbox：权限判定与动作回应（A09）
-- [x] 7. P15 报告、P10 steer 重跑与报告补全（A06、A10）
-- [ ] 8. 收尾：`verify.sh`（A11）、模块 CLAUDE.md、P6/P15 状态、验收记录、看板与会话日志
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -241,14 +232,16 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D10 | T05 | ADR-0027 的锁顺序要求同一事务里先入队、再写事件；API 发送 `user.message` 时，轮次输入与收件箱需要事件 ID，`SessionEventWriter` 目前自己生成事件 ID，需改为允许调用方先生成、随批次传入 | T07（已落地：`SessionEventWriter.append(batch, eventIds)`，`EventIntake` 先生成事件 ID） |
 | D11 | T05 | PostgreSQL 的 jsonb 拒绝字符串中的 `\u0000`：`agent_states.state`、`session_events.data` 都是 jsonb，模型输出或工具结果含 NUL 字符时写入会失败（状态保存失败、事件写不进）。需要在写入前统一处理（例如替换为 U+FFFD）并加测试 | T06（已落地：`JdbcValues.jsonb` 统一替换，`JdbcValuesTest`、`SessionEventWriterIT`） |
 | D12 | T06 | 消息入箱与轮次结束必须按线程串行，否则消息会留在收件箱没有轮次处理：T07 写 `user.message` 的事务要先取 `ThreadLockRepository.lock(thread_id)`（`pg_advisory_xact_lock`），再入队或写收件箱，再写事件（ADR-0028 第 8 条） | T07（已落地：`EventIntake`、归档与删除的事务先取主线程咨询锁，`SessionApiIT`） |
-| D13 | T06 | `recovery_confirmation` 的 `payload.recovery_mode = replay_input` 时状态里没有本轮的输入，回应后只生成 `RecoveryOnly` 轮会丢掉用户消息；需重放原轮的 `turn_inputs`（附恢复说明）。架构设计「待处理动作」写的是"一律生成 `RecoveryOnly` 轮"，T08 落地时按决策分级处理 | T08 |
+| D13 | T06 | `recovery_confirmation` 的 `payload.recovery_mode = replay_input` 时状态里没有本轮的输入，回应后只生成 `RecoveryOnly` 轮会丢掉用户消息；需重放原轮的 `turn_inputs`（附恢复说明）。架构设计「待处理动作」写的是"一律生成 `RecoveryOnly` 轮"，T08 落地时按决策分级处理 | T08（已落地：`replay_input` 时恢复轮重放原轮输入并附说明，ADR-0031 第 8 条，`RecoveryConfirmationIT`） |
 | D14 | T06 | 恢复说明的结果摘要先取已持久化的工具结果事件，强杀发生在结果事件写库之前时只能取账本的 `result_ref`；平台工具基类在 `recordFinish` 时应写入结果引用（至少 `non_idempotent` 工具） | T10a |
 | D15 | T06 | 节点下线最长等待 60 秒（`meridian.runtime.worker.shutdown-timeout`，AgentScope 在 45 秒时强制中断），Pod 的 `terminationGracePeriodSeconds` 必须大于它 | T28 |
-| D16 | T07 | 回应事件（`user.tool_confirmation`、`user.custom_tool_result`、`user.recovery_confirmation`）与 `user.interrupt` 只校验并持久化：动作没有标为已回应（T08 之前同一动作可被再次回应，列表仍显示 pending），中断没有写 `interrupt_requested_at`；见 `EventIntake` 的 `TODO(T08)` | T08 |
+| D16 | T07 | 回应事件（`user.tool_confirmation`、`user.custom_tool_result`、`user.recovery_confirmation`）与 `user.interrupt` 只校验并持久化：动作没有标为已回应（T08 之前同一动作可被再次回应，列表仍显示 pending），中断没有写 `interrupt_requested_at`；见 `EventIntake` 的 `TODO(T08)` | T08（已落地：回应标为已回应并在全部回应后生成恢复轮，中断按线程状态处理，`DeliveryMatrixIT`、`ApprovalFlowIT`） |
 | D17 | T07 | `traceparent` 只在响应中回显并写入请求日志的 MDC（`trace_id`），没有传到轮次执行：Worker 的 `turn` span 不是调用方追踪的子 span（ADR-0030 第 7 条） | T27 |
 | D18 | T07 | `FileAgentConfigProvider` 不按项目隔离：任何项目的 API Key 都能用开发配置中的智能体与环境创建会话；`AgentConfigProvider` 新增的 `currentAgentVersion`、`currentEnvironment` 同样需要按项目解析 | T15b |
 | D19 | T07 | SSE 读取 Redis Stream 用每节点一个 100 毫秒间隔的不阻塞 `XREAD` 轮询（ADR-0030 第 4 条），实时延迟上限与单节点 Redis 负载需要在容量验证中核对 | R1（P7） |
 | D20 | T07 | Hibernate Validator 第一次校验失败时在 Netty 事件循环上读取消息资源包（每个进程一次，测试中由 BlockHound 放行）；需要时可在启动时预热 | T27 |
+| D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a（文件工具）、T12a（bash） |
+| D22 | T08 | 租户与项目策略的开发实现在 `rt.permission_rules`，租户层没有写入接口；项目级"记住此决定"写入 runtime。平台安全规则使权限上下文永远不平凡，`DEFAULT` 模式下没有命中 allow 的工具都要确认：智能体版本的默认配置要显式放行工具（`unattended` 会话中的 `BYPASS` 智能体同样变为 `DONT_ASK`） | T15b |
 
 ## 技术债
 
@@ -309,6 +302,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：12 项通过，0 项阻塞
 - 决策：ADR-0029 OpenAPI 生成链与 3.1 写作约束（openapi-generator 7.26.0、判别器分支平铺加 const、openapi-diff 的 3.1 缺口与补充检查）；ADR-0030 会话 API 与 SSE 的补充约定（删除返回 202、归档条件、批量事件、SSE 读取方式与线程流的位置判断、幂等指纹、开发期认证）；架构设计升至 v1.6
 - 遗留：登记事项 D16 回应与中断的语义（T08）、D17 `traceparent` 传播（T27）、D18 智能体配置按项目隔离（T15b）、D19 SSE 轮询的容量核对（R1）、D20 校验资源包预热（T27）
+
+### 2026-11-08 T08 已完成（提交 f75bc4f）
+- 交付：runtime `approval`（`PermissionSynthesizer` 五层合成与 unattended、子线程改写，`PlatformSafetyRules`，`PolicyStorePort` 与 `rt.permission_rules` 开发实现，`PendingActionResolver` 结论、"记住此决定"与恢复轮，`ResumptionPlanner`，`PendingActionTimeouts` 超时扫描，`ApprovalAudit`）；`delivery.app.EventIntake` 按线程状态处理 queue、steer、中断与回应；`dispatch.app.NodeChannel`/`NodeChannelListener`（`node:{lease_owner}` 立即续租）；内核 `SteerMiddleware`、`InterruptCheckpointMiddleware`、`AgentEngine.retryToolCall`/`reservedToolNames`、`TurnContext.interruptRequested`；迁移 `V0004`；创建会话校验保留工具名；testkit `PathRuleTool`；集成测试 `DeliveryMatrixIT`、`ApprovalFlowIT`、`PermissionRewriteIT`、`RecoveryConfirmationIT`、`SteerRecoveryIT`、`CustomToolDeclarationIT`；P6（审批部分）、P10 补全、P15 报告
+- 验收：11 项通过，0 项阻塞
+- 决策：ADR-0031（合成的并集与排序、平台安全规则、平凡权限上下文与自定义工具放行、子线程 allow 子集、中断与"带中断请求的恢复轮"、结论与恢复轮、`replay_input` 重放原轮输入、无人值守自动拒绝以 `tools_denied` 结束、超时扫描、审计格式）；架构设计升至 v1.7
+- 遗留：登记事项 D21 内容级"记住此决定"（T10a、T12a）、D22 策略迁到 control-plane 与默认智能体需显式放行工具（T15b）；T06、T07 中按占位行为写的 4 处断言改为 T08 语义（`TurnRecoveryIT`、`WorkerLeaseFencingIT`、`TurnWorkerIT`、`SessionApiIT`）
 
 ## 计划变更记录
 
