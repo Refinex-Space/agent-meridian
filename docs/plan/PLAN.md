@@ -69,7 +69,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 已完成 | f75bc4f |
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 已完成 | 5e8b21a |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 已完成 | 003dbfc |
-| T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 进行中 | — |
+| T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 已完成 | b724148 |
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 未开始 | — |
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 未开始 | — |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 未开始 | — |
@@ -175,16 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T10a 平台工具基类、文件工具、工作区存储与技能（开工基线：修复 `AgentScopeEngineShutdownTest` 的下线竞态后 `verify.sh` 通过）
-
-- [x] 1. `PlatformTool` 基类：副作用等级、`matchRule` 规则语法、账本（幂等键、结果引用 D14）、指标、span、审计；启动自检（非 `ToolBase` 白名单，D02）
-- [x] 2. 六个文件工具（路径 glob 规则、先读后改、输出上限与分段读取提示、内容级建议规则 D21）
-- [x] 3. 工作区存储：`rt.workspace_entries` 迁移、`WorkspaceStorePort` 实现（64 KB 内联、对象存储）、`MeridianBaseStore`（`putIfVersion`、分页 `search`）、命名空间取自 `PlatformContext`
-- [x] 4. `ReadOnlyFilesystem` 与受保护路径内容（`AGENTS.md`、`skills/`、`subagents/`、`tools.json`、`MEMORY.md`）、`none` 档 `CompositeFilesystem` 装配、本机工作区根（D05）
-- [x] 5. `MeridianSkillRepository`（`dev-config/skills/`）：技能清单进提示词、`load_skill_through_path` 加载正文
-- [x] 6. `PolicyMiddleware`（工具策略拒绝规则 + 非 ToolBase 守卫，ADR-0034 待写）
-- [ ] 7. （代码与测试已写，`FileToolsWorkerIT` 通过；待全量 IT）runtime 生产装配（工具、文件系统、技能仓库三个提供者）与集成测试：A02 路径规则、A03 P4 `none` 档、A04 账本
-- [ ] 8. P4、P6 报告；模块 `CLAUDE.md`、架构设计与 ADR；`acceptance.json`；收尾 `verify.sh`
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -230,10 +221,10 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | 编号 | 发现于 | 内容 | 建议处理 |
 |---|---|---|---|
 | D01 | T01 | 架构规则未落地：`JdbcClient` 与 `JdbcTemplate` 只能被 `TenantScopedRepository`、`SystemRepository` 的子类依赖；`SystemRepository` 的子类只在 `..infra.system..` 且带 `@CrossTenant`；`..api..` 不依赖 `SystemRepository` 的子类。基类尚不存在，说明写在 `meridian-arch-tests` 的 `ArchitectureRulesTest` 类注释中 | T02（已落地：`ArchitectureRulesTest` 规则 8 至 11） |
-| D02 | T01 | 架构规则未落地：平台工具继承 `ToolBase`（经 `PlatformTool`）；运行时 Toolkit 中的非 `ToolBase` 工具必须在白名单内（启动自检） | T10a |
+| D02 | T01 | 架构规则未落地：平台工具继承 `ToolBase`（经 `PlatformTool`）；运行时 Toolkit 中的非 `ToolBase` 工具必须在白名单内（启动自检） | T10a（已落地：ArchUnit 规则 13；`ToolPolicy.verify` 每次装配检查，`EngineAutoConfiguration` 启动时探测装配一次，`ToolkitSelfCheckStartupIT`） |
 | D03 | T01 | Spring Boot 4.1.2 BOM 把 fabric8 `kubernetes-httpclient-vertx`（Vert.x 4.5.28）下的 Netty 从 4.1.135 提升到 4.2.19；Vert.x 4.5 基于 Netty 4.1 构建，需要在真实调用中确认兼容，不兼容时按决策分级处理。详见 `docs/poc/P01-运行基线.md` | T03（已验证：fabric8 Vert.x 客户端在 Netty 4.2.19 上对本地 WebFlux 服务的真实 HTTP 请求正常）、T11（对 Kubernetes API 的调用） |
 | D04 | T02 | outbox 发布到 Redis Stream（`usage`、`audit`）时不裁剪，条目在确认后仍留在 Stream 中；消费者确认后需按已确认的最小 ID 执行 `XTRIM MINID` 或定期裁剪，避免 Redis 内存增长 | T16 |
-| D05 | T03 | `HarnessAgent` 不设置 `workspace(...)` 时，本机工作区根取 `${user.dir}/.agentscope/workspace`：harness 会把其中的 `skills/` 作为第 3 层技能读取，`MarketplaceStager` 会在其中暂存技能资源。平台要求技能只来自平台技能仓库、会话数据不落本机磁盘，装配文件系统与技能仓库时需要确定一个平台控制的本机工作区根目录（或证明无写入）。详见 `docs/poc/P01-运行基线.md` | T10a |
+| D05 | T03 | `HarnessAgent` 不设置 `workspace(...)` 时，本机工作区根取 `${user.dir}/.agentscope/workspace`：harness 会把其中的 `skills/` 作为第 3 层技能读取，`MarketplaceStager` 会在其中暂存技能资源。平台要求技能只来自平台技能仓库、会话数据不落本机磁盘，装配文件系统与技能仓库时需要确定一个平台控制的本机工作区根目录（或证明无写入）。详见 `docs/poc/P01-运行基线.md` | T10a（已落地：`workspace(...)` 设为平台控制、不写入的本机目录；技能仓库继承 `WorkspaceSkillRepository` 不被暂存；P4 测试断言本机无写入，ADR-0034） |
 | D06 | T03 | JDK 25 把 `System.loadLibrary` 列为受限方法，reactor-netty 加载 Netty 本地传输库时告警"将来会被阻止"；runtime 的集成测试已加 `--enable-native-access=ALL-UNNAMED`，生产与本地启动的 JVM 参数同样需要。详见 `docs/poc/P01-运行基线.md` | T28 |
 | D07 | T04 | `user.message` 中的文件引用（`MessageContent.FileRef`、按文件 ID 引用的图片）暂时翻译为文本占位 `[文件 fil_… 名称 (类型)]`，见 `TurnInputTranslator` 中的 `TODO(T17b)`；轮次开始时把文件放进工作区后改为工作区路径 | T17b |
 | D08 | T04 | `PlatformContextMiddleware` 只在组装下游的同步阶段写 MDC（`tenant_id`、`session_id`、`turn_id`），跨线程的响应式链路没有 MDC；日志要求每行带 `trace_id`、`span_id`、`tenant_id`、`session_id`，需要 Reactor 自动上下文传播加 MDC 访问器的整体方案 | T27 |
@@ -242,14 +233,14 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D11 | T05 | PostgreSQL 的 jsonb 拒绝字符串中的 `\u0000`：`agent_states.state`、`session_events.data` 都是 jsonb，模型输出或工具结果含 NUL 字符时写入会失败（状态保存失败、事件写不进）。需要在写入前统一处理（例如替换为 U+FFFD）并加测试 | T06（已落地：`JdbcValues.jsonb` 统一替换，`JdbcValuesTest`、`SessionEventWriterIT`） |
 | D12 | T06 | 消息入箱与轮次结束必须按线程串行，否则消息会留在收件箱没有轮次处理：T07 写 `user.message` 的事务要先取 `ThreadLockRepository.lock(thread_id)`（`pg_advisory_xact_lock`），再入队或写收件箱，再写事件（ADR-0028 第 8 条） | T07（已落地：`EventIntake`、归档与删除的事务先取主线程咨询锁，`SessionApiIT`） |
 | D13 | T06 | `recovery_confirmation` 的 `payload.recovery_mode = replay_input` 时状态里没有本轮的输入，回应后只生成 `RecoveryOnly` 轮会丢掉用户消息；需重放原轮的 `turn_inputs`（附恢复说明）。架构设计「待处理动作」写的是"一律生成 `RecoveryOnly` 轮"，T08 落地时按决策分级处理 | T08（已落地：`replay_input` 时恢复轮重放原轮输入并附说明，ADR-0031 第 8 条，`RecoveryConfirmationIT`） |
-| D14 | T06 | 恢复说明的结果摘要先取已持久化的工具结果事件，强杀发生在结果事件写库之前时只能取账本的 `result_ref`；平台工具基类在 `recordFinish` 时应写入结果引用（至少 `non_idempotent` 工具） | T10a |
+| D14 | T06 | 恢复说明的结果摘要先取已持久化的工具结果事件，强杀发生在结果事件写库之前时只能取账本的 `result_ref`；平台工具基类在 `recordFinish` 时应写入结果引用（至少 `non_idempotent` 工具） | T10a（已落地：`PlatformTool` 把 `non_idempotent` 工具的结果写入对象存储、引用进账本，`PlatformToolLedgerTest`） |
 | D15 | T06 | 节点下线最长等待 60 秒（`meridian.runtime.worker.shutdown-timeout`，AgentScope 在 45 秒时强制中断），Pod 的 `terminationGracePeriodSeconds` 必须大于它 | T28 |
 | D16 | T07 | 回应事件（`user.tool_confirmation`、`user.custom_tool_result`、`user.recovery_confirmation`）与 `user.interrupt` 只校验并持久化：动作没有标为已回应（T08 之前同一动作可被再次回应，列表仍显示 pending），中断没有写 `interrupt_requested_at`；见 `EventIntake` 的 `TODO(T08)` | T08（已落地：回应标为已回应并在全部回应后生成恢复轮，中断按线程状态处理，`DeliveryMatrixIT`、`ApprovalFlowIT`） |
 | D17 | T07 | `traceparent` 只在响应中回显并写入请求日志的 MDC（`trace_id`），没有传到轮次执行：Worker 的 `turn` span 不是调用方追踪的子 span（ADR-0030 第 7 条） | T27 |
 | D18 | T07 | `FileAgentConfigProvider` 不按项目隔离：任何项目的 API Key 都能用开发配置中的智能体与环境创建会话；`AgentConfigProvider` 新增的 `currentAgentVersion`、`currentEnvironment` 同样需要按项目解析 | T15b |
 | D19 | T07 | SSE 读取 Redis Stream 用每节点一个 100 毫秒间隔的不阻塞 `XREAD` 轮询（ADR-0030 第 4 条），实时延迟上限与单节点 Redis 负载需要在容量验证中核对 | R1（P7） |
 | D20 | T07 | Hibernate Validator 第一次校验失败时在 Netty 事件循环上读取消息资源包（每个进程一次，测试中由 BlockHound 放行）；需要时可在启动时预热 | T27 |
-| D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a（文件工具）、T12a（bash） |
+| D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a 部分完成：`PlatformTool.generateSuggestions` 给出内容级建议（文件工具为路径）；内核随动作带出、runtime 按它保存待 T12a 与 `bash` 一起做 |
 | D22 | T08 | 租户与项目策略的开发实现在 `rt.permission_rules`，租户层没有写入接口；项目级"记住此决定"写入 runtime。平台安全规则使权限上下文永远不平凡，`DEFAULT` 模式下没有命中 allow 的工具都要确认：智能体版本的默认配置要显式放行工具（`unattended` 会话中的 `BYPASS` 智能体同样变为 `DONT_ASK`） | T15b |
 | D23 | T09a | 开发期的模型目录（`dev-config/providers`）与凭据解析（`EnvironmentSecretResolver`）不按项目授权：任何项目的智能体都能使用目录中的模型；`ModelGateway.resolve` 的"未授权给该项目"由 control-plane 的目录实现 | T15a |
 | D24 | T09a | 预算以 token（输入加输出）计，Redis 计数不分周期；软阈值告警、按价格表换算金额、预扣记录过期（1 小时）后未结算部分的修正、四级计数与账本的每小时对账都未实现（ADR-0032 第 6 条） | T16 |
@@ -257,6 +248,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D26 | T09b | `/v1/chat/completions` 只支持文本消息与函数工具（ADR-0033）：`content` 为内容块数组、`tool_choice`、`top_p`、`stop`、`n`、`response_format` 等字段返回 400；OpenAI SDK 的常用参数需要按业务方反馈补齐（与 `/v1/responses` 一起评估） | T17b |
 | D27 | T09b | Embedding 与 rerank 只接入了 OpenAI 兼容格式（rerank 为 DashScope 的 `compatible-api/v1/reranks`）的供应商，`ProviderVectorClient` 不区分供应商类型；其他格式（DashScope 原生 rerank、Cohere 等）需要按供应商类型扩展 | T15a |
 | D28 | T09b | 用量记录新增 `kind`：`embedding_tokens`、`rerank_tokens`（用途 `embedding`、`rerank`，只有输入 token），control-plane 的消费者与价格表要按 `kind` 计价 | T16 |
+| D29 | T10a | harness 的 `WorkspaceContextMiddleware` 把受保护路径 `AGENTS.md`（智能体层的系统提示词）注入系统提示词的 `<agents_context>`，与装配时的 `sysPrompt` 重复，每次请求多一份提示词 | T10b（提示词分层：智能体层只经一处进入） |
+| D30 | T10a | 工作区（`rt.workspace_entries` 与对象存储 `rt/{tenant}/{session}/workspace/`）要在删除会话时按命名空间前缀与对象前缀清除；目前没有会话数据的清除作业 | T17a |
+| D31 | T10a | `RemoteFilesystem` 的 `ls`、`glob`、`grep` 每次逐页读出整个会话命名空间（大文件也从对象存储读出），会话文件多时延迟与对象存储读取量上升；可在 `WorkspaceStorePort` 增加按前缀只读元数据的查询，或启用 `WorkspaceIndex` | R1（P7 容量验证时评估） |
 
 ## 技术债
 
@@ -335,6 +329,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：6 项通过，0 项阻塞
 - 决策：ADR-0033（一个操作两种响应与多类型字段的生成方式、流式先等第一个信号、请求严格与错误格式、非对话模型的计量与拆批、内部接口的租户与服务凭据、脚本服务的无状态选择与断流实现）；架构设计升至 v1.9
 - 遗留：登记事项 D26 直通接口支持的 OpenAI 字段（T17b）、D27 Embedding 与 rerank 的供应商类型（T15a）、D28 用量记录的新 `kind`（T16）
+
+### 2026-11-08 T10a 已完成（提交 b724148）
+- 交付：engine-agentscope 的 `tools`（`PlatformTool` 基类：规则内容语法 `RuleSyntax`、`matchRule` 与带内容的 `generateSuggestions`、账本与幂等键、`non_idempotent` 结果引用；六个文件工具与先读后改、输出截断、`grep_files` 按拒绝规则过滤；`PlatformToolProvider`）、`fs`（`MeridianBaseStore`、`ReadOnlyFilesystem`、`ProtectedContent`、`MeridianSkillRepository`、`PlatformWorkspace`、`WorkspaceNamespaces`）、`assembly.ToolPolicy`（装配与启动自检、策略拒绝规则）、`PolicyMiddleware`；common 的 `PlatformContext.endUserId`；engine-spi 的 `SkillDefinition`、`AgentConfigPort.skill`、`ResolvedAgentSpec.grants`；runtime 的 `workspace`（`DatabaseWorkspaceStore`、迁移 `V0005`）、`PlatformToolsAutoConfiguration`、`meridian.runtime.worker.enabled`、账本的 `meridian.tool.calls` 与审计 `tool.executed`；开发配置的文件工具与示例技能；ArchUnit 规则 13；测试 `FileToolScenarioTest`、`SkillScenarioTest`、`PlatformToolLedgerTest`、`PolicyMiddlewareScenarioTest`、`ToolPolicyTest`、`RuleSyntaxTest`、`FileToolsWorkerIT`、`DatabaseWorkspaceStoreIT`、`ToolkitSelfCheckStartupIT`；P4（`none` 档）、P6（文件工具部分）报告
+- 验收：6 项通过，0 项阻塞
+- 决策：ADR-0034（`PlatformContext` 带终端用户；`wait_async_results` 在 2.0.4 中是 `ToolBase`、`onActing` 中间件的事件不发布，工具集外的工具由策略拒绝规则经权限引擎拒绝；技能仓库继承 `WorkspaceSkillRepository` 避免本机暂存；先读后改的读取状态随工具结果元数据持久化；工作区存储细则；本机工作区根；Worker 开关）；架构设计升至 v1.10；开工时修复 `AgentScopeEngineShutdownTest` 的下线竞态
+- 遗留：登记事项 D21 内容级"记住此决定"的带出与保存（T12a）、D29 `AGENTS.md` 与 `sysPrompt` 重复（T10b）、D30 删除会话时清除工作区（T17a）、D31 工作区列举读出整个命名空间（R1）
 
 ## 计划变更记录
 
