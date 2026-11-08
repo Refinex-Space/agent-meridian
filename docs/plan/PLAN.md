@@ -182,7 +182,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 3. `CompactionGuardMiddleware` 内外两层与压缩配置、`agent.context_compacted` 事件、P13 顺序实测（引擎层场景与对照实验已通过）
 - [x] 4. 上下文构成摘要（`span.model_request_start`）与三个指标
 - [x] 5. 集成测试：A01 模拟供应商、A02 限流、A03 预算、A04 压缩计量、A05 P13、A06 用量、A07 指标与摘要（`RoutedModelProviderIT`、`ModelRoutingWorkerIT`、`ModelBudgetSettlementIT`、`CompactionGuardScenarioTest`）
-- [ ] 6. 真实模型测试 `*LiveIT`（A08）
+- [x] 6. 真实模型测试 `*LiveIT`（A08）：`ModelLiveIT` 3 项通过（工具调用轮次、流式、真实压缩）
 - [ ] 7. 收尾：文档（CLAUDE.md、P13 报告、ADR、架构）、`verify.sh`（A09）、验收记录
 
 ## 控制台设计轨道

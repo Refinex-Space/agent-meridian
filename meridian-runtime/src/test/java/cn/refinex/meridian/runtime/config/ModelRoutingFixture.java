@@ -9,6 +9,7 @@ import cn.refinex.meridian.engine.agentscope.model.ProviderClients;
 import cn.refinex.meridian.engine.agentscope.model.ProviderHttpTransport;
 import cn.refinex.meridian.engine.agentscope.model.RoutedModel;
 import cn.refinex.meridian.engine.agentscope.model.RoutedModelFactory;
+import cn.refinex.meridian.engine.spi.port.SecretResolver;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.modelrouting.app.ModelMetrics;
@@ -55,6 +56,7 @@ final class ModelRoutingFixture implements AutoCloseable {
     final RoutingModelGateway gateway;
     final ProviderHttpTransport transport = new ProviderHttpTransport(Clock.systemUTC());
 
+    private final String secretRef;
     private final Path providers;
     private final Path budgets;
     private final String baseUrl;
@@ -62,6 +64,15 @@ final class ModelRoutingFixture implements AutoCloseable {
     private String accountRateLimit = "";
 
     ModelRoutingFixture(Path directory, String baseUrl) {
+        this(
+                directory,
+                baseUrl,
+                SECRET_REF,
+                new EnvironmentSecretResolver(name -> SECRET_REF.equals(name) ? SECRET_VALUE : null));
+    }
+
+    private ModelRoutingFixture(Path directory, String baseUrl, String secretRef, SecretResolver secrets) {
+        this.secretRef = secretRef;
         this.providers = directory.resolve("providers");
         this.budgets = directory.resolve("budgets");
         this.baseUrl = baseUrl;
@@ -74,7 +85,7 @@ final class ModelRoutingFixture implements AutoCloseable {
         this.gateway = new RoutingModelGateway(
                 new FileModelCatalog(providers),
                 new FileBudgetLimits(budgets),
-                new EnvironmentSecretResolver(name -> SECRET_REF.equals(name) ? SECRET_VALUE : null),
+                secrets,
                 new RedisRateLimiter(RuntimeTestRedis.template()),
                 ledger,
                 new UsageRecorder(
@@ -84,6 +95,20 @@ final class ModelRoutingFixture implements AutoCloseable {
                 ModelRoutingProperties.defaults(),
                 Clock.systemUTC());
         writeProviders();
+    }
+
+    /**
+     * 连真实 DashScope 兼容端点的夹具：凭据引用 {@code DASHSCOPE_API_KEY}，从进程环境变量读取（测试规范「真实模型测试」）。
+     *
+     * @param directory 临时目录
+     * @return 夹具
+     */
+    static ModelRoutingFixture live(Path directory) {
+        return new ModelRoutingFixture(
+                directory,
+                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "DASHSCOPE_API_KEY",
+                new EnvironmentSecretResolver());
     }
 
     /**
@@ -235,7 +260,7 @@ final class ModelRoutingFixture implements AutoCloseable {
                 secret_ref: %s
                 %smodels:
                 %s""".formatted(
-                        accountId, baseUrl, SECRET_REF, accountRateLimit, models));
+                        accountId, baseUrl, secretRef, accountRateLimit, models));
     }
 
     private static void write(Path file, String content) {
