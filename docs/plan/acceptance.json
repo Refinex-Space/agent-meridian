@@ -895,29 +895,29 @@
       "id": "T12b-A01",
       "task": "T12b",
       "description": "P14 的四条全部满足。验证：kind 中的实测输出；报告 `docs/poc/P14-出网控制.md`。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -Pkind -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=EgressProxyKindIT` → Tests run: 1, Failures: 0（2026-11-08，kind 集群 meridian，宿主拓扑）。沙箱内：allowed-echo 明文 `200 allowed-echo`、CONNECT `200/200 allowed-echo`；denied-echo 明文 `403`、CONNECT `403/000`；`--noproxy` 直连服务与 Pod IP 均 `000`，DNS 可解析；删除沙箱后同 IP（10.244.27.149）的新 Pod 在最后一次放行后 4.6 秒就绪、访问 allowed-echo 得 `403`（unknown_source），IP 记到另一会话后按其白名单判定。runtime 不可达时代理拒绝（手工）。报告 docs/poc/P14-出网控制.md"
     },
     {
       "id": "T12b-A02",
       "task": "T12b",
       "description": "Pod IP 被清空后，30 秒缓存内的授权也立即失效。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-runtime -am verify -Dit.test=SandboxEgressRevocationIT,EgressAuthorizerIT` → 4 + 9 个用例通过：经 SandboxService 回收、删除、重新连接换 IP 后，执行节点立即 `unknown_source`、另一节点经 Pub/Sub egress:revoke 在 5 秒内拒绝（不推进 30 秒计时器）；错过回收广播的节点在新会话认领同一 IP 时淘汰旧授权；未广播时 30 秒过期（可控计时器）。全量 verify.sh 中同样通过"
     },
     {
       "id": "T12b-A03",
       "task": "T12b",
       "description": "Helm chart 中 Envoy 与 NetworkPolicy 可以按 values 在\"runtime 在宿主\"与\"runtime 在集群内\"两种拓扑间切换；`helm lint` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`helm lint deploy/helm/meridian-sandbox` 与 `-f values-kind.yaml` 均 `1 chart(s) linted, 0 chart(s) failed`；`egressProxy.authz.topology=cluster` 渲染 Envoy 上游 `meridian-runtime.meridian.svc.cluster.local:8080`、网络策略按命名空间与 Pod 标签放行，`host` 渲染 `host.docker.internal:18080`（只取 IPv4）、网络策略按 `192.168.65.254/32` 放行，非法取值渲染失败；两种拓扑的 Envoy 配置 `envoy --mode validate` 均 OK；kind 中以 host 拓扑部署并通过 P14"
     },
     {
       "id": "T12b-A04",
       "task": "T12b",
       "description": "`scripts/dev/verify.sh` 通过；`-Pkind` 的测试在本机通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`scripts/dev/verify.sh` exit=0（BUILD SUCCESS；runtime 319 个单元测试、239 个集成测试，架构测试 13，sandbox-runtime 23 passed）；`./mvnw -Pkind -pl meridian-engine-agentscope-test -am verify` BUILD SUCCESS（KubernetesSandboxDriverKindIT 4、SandboxPoolMeasurementKindIT 4）；`./mvnw -Pkind -pl meridian-runtime -am verify -Dtest=NONE` BUILD SUCCESS（EgressProxyKindIT 1、SandboxSessionKindIT 5，沙箱网络策略收紧后仍通过）"
     },
     {
       "id": "T13-A01",
