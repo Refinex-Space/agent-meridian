@@ -5,6 +5,7 @@ import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.common.json.JsonMappers;
 import cn.refinex.meridian.engine.spi.engine.RecoveryOrigin;
+import cn.refinex.meridian.engine.spi.engine.ToolRetry;
 import cn.refinex.meridian.engine.spi.engine.TurnContext;
 import cn.refinex.meridian.engine.spi.engine.input.InboundMessage;
 import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
@@ -19,6 +20,7 @@ import cn.refinex.meridian.engine.spi.port.ToolLedgerPort.Status;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.runtime.approval.app.PermissionPolicies;
 import cn.refinex.meridian.runtime.approval.app.PermissionPolicies.TurnPermissions;
+import cn.refinex.meridian.runtime.approval.infra.PendingActionRepository;
 import cn.refinex.meridian.runtime.delivery.app.DatabaseInbox;
 import cn.refinex.meridian.runtime.dispatch.app.TurnClaimer;
 import cn.refinex.meridian.runtime.dispatch.domain.ClaimedTurn;
@@ -81,6 +83,7 @@ public class TurnPreparer {
     private final TurnFinisher finisher;
     private final TurnMetrics metrics;
     private final PermissionPolicies permissions;
+    private final PendingActionRepository pendingActions;
     private final TransactionTemplate transactions;
 
     /**
@@ -97,6 +100,7 @@ public class TurnPreparer {
      * @param finisher 收尾用例，恢复判定直接结束本次执行时使用
      * @param metrics 指标
      * @param permissions 权限合成
+     * @param pendingActions 待处理动作仓储，读取恢复轮要重试的调用
      * @param transactions 事务模板（传播行为 REQUIRED）
      */
     public TurnPreparer(
@@ -111,6 +115,7 @@ public class TurnPreparer {
             TurnFinisher finisher,
             TurnMetrics metrics,
             PermissionPolicies permissions,
+            PendingActionRepository pendingActions,
             TransactionTemplate transactions) {
         this.claimer = claimer;
         this.sessions = sessions;
@@ -123,6 +128,7 @@ public class TurnPreparer {
         this.finisher = finisher;
         this.metrics = metrics;
         this.permissions = permissions;
+        this.pendingActions = pendingActions;
         this.transactions = transactions;
     }
 
@@ -193,7 +199,8 @@ public class TurnPreparer {
         if (appended instanceof AppendResult.LeaseLost) {
             return new Prepared.Done(new TurnResult.Abandoned(turn.turnId(), "开始执行时租约已失去"), session.agentVersionId());
         }
-        TurnPermissions synthesized = permissions.forTurn(session.id(), session.interaction(), spec);
+        TurnPermissions synthesized =
+                permissions.forTurn(session.id(), session.interaction(), spec, session.customTools());
         TurnContext context = new TurnContext(
                 platformContext(turn, session),
                 session.endUserId(),
@@ -203,8 +210,26 @@ public class TurnPreparer {
                 synthesized.main(),
                 synthesized.subagents(),
                 session.customTools(),
-                origin);
-        return new Prepared.Ready(context, input, session.agentVersionId());
+                origin,
+                turn.interruptRequestedAt() != null);
+        return new Prepared.Ready(context, input, session.agentVersionId(), retries(turn));
+    }
+
+    /**
+     * 恢复确认选择 {@code retry} 的调用，只在恢复轮第一次执行时返回：重试已发起后再被恢复认领时，账本里有它的记录，按崩溃恢复的
+     * 规则处理（成功的写进恢复说明，状态未知的 {@code non_idempotent} 调用再次请求确认），不自动再执行。
+     */
+    private List<ToolRetry> retries(ClaimedTurn turn) {
+        if (turn.isRecovery()) {
+            return List.of();
+        }
+        return pendingActions.listRetriesConsumedBy(turn.turnId()).stream()
+                .map(action -> new ToolRetry(
+                        action.action().toolUseId(),
+                        action.action().toolName(),
+                        action.action().input(),
+                        action.idempotencyKey()))
+                .toList();
     }
 
     private RecoverySnapshot snapshot(ClaimedTurn turn, TurnInput stored) {

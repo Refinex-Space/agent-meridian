@@ -80,9 +80,9 @@ public class TurnQueueRepository extends SystemRepository {
     public boolean insertQueued(String turnId, NewTurn turn, Instant now) {
         return jdbc().sql("""
                                 INSERT INTO rt.turns (id, tenant_id, project_id, session_id, thread_id, kind, status,
-                                                      priority, not_before, created_at, updated_at)
+                                                      priority, not_before, interrupt_requested_at, created_at, updated_at)
                                 VALUES (:id, :tenant_id, :project_id, :session_id, :thread_id, :kind, 'queued',
-                                        :priority, :now, :now, :now)
+                                        :priority, :now, CASE WHEN :interrupted THEN :now END, :now, :now)
                                 ON CONFLICT (thread_id) WHERE status IN %s DO NOTHING
                                 """.formatted(ACTIVE_STATUSES))
                         .param("id", turnId)
@@ -92,6 +92,7 @@ public class TurnQueueRepository extends SystemRepository {
                         .param("thread_id", turn.threadId())
                         .param("kind", turn.input().kind())
                         .param("priority", turn.priority())
+                        .param("interrupted", turn.interruptRequested())
                         .param("now", JdbcValues.timestamptz(now))
                         .update()
                 == 1;
@@ -209,6 +210,23 @@ public class TurnQueueRepository extends SystemRepository {
     }
 
     /**
+     * 读取轮次的类型与完整输入。
+     *
+     * @param turnId 轮次 ID
+     * @return 类型与输入 JSON；轮次不存在时为空
+     */
+    public Optional<StoredInput> findStoredInput(String turnId) {
+        return jdbc().sql("""
+                        SELECT t.kind, i.payload::text AS payload
+                          FROM rt.turns t JOIN rt.turn_inputs i ON i.turn_id = t.id
+                         WHERE t.id = :turn_id
+                        """)
+                .param("turn_id", turnId)
+                .query((rs, row) -> new StoredInput(rs.getString("kind"), rs.getString("payload")))
+                .optional();
+    }
+
+    /**
      * 统计等待认领的轮次数（指标 {@code meridian.dispatch.queue.depth}），走部分索引 {@code turns_queued_idx}。
      *
      * @return {@code status='queued'} 的轮次数
@@ -227,4 +245,12 @@ public class TurnQueueRepository extends SystemRepository {
      * @param threadId 线程 ID
      */
     public record Candidate(String turnId, String tenantId, String threadId) {}
+
+    /**
+     * 轮次的类型与输入。
+     *
+     * @param kind 轮次类型
+     * @param payload 输入 JSON
+     */
+    public record StoredInput(String kind, String payload) {}
 }

@@ -13,7 +13,8 @@ public interface InboxPort {
 
     /**
      * 原子地取出线程中 {@code delivery=steer} 的待投递消息，并标记为已消费：记录 {@code consumed_turn_id}
-     * 与 {@code consumed_epoch}，写入带租约条件。崩溃恢复时，{@code consumed_epoch} 等于失败 epoch 的消息会被重新投递。
+     * 与 {@code consumed_epoch}，同一事务中写入 {@code session.message_consumed} 事件，写入带租约条件。崩溃恢复时，
+     * {@code consumed_epoch} 等于失败 epoch 的消息会被重新投递。
      *
      * @param thread 线程
      * @param turnId 消费它们的轮次 ID

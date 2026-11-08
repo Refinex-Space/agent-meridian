@@ -47,6 +47,7 @@ class DatabaseInboxIT {
         session = TestSessions.create(clock);
         inbox = new DatabaseInbox(
                 new InboxRepository(RuntimeTestDatabase.dataSource()),
+                node.events(),
                 RuntimeTestDatabase.transactions(),
                 node.nodeId(),
                 clock);

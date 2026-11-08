@@ -130,6 +130,19 @@ public class TurnClaimer {
         return EngineJson.readInput(turn.kind(), payload);
     }
 
+    /**
+     * 按轮次 ID 读取轮次的输入，生成恢复轮时读取等待回应的那一轮的输入。
+     *
+     * @param turnId 轮次 ID
+     * @return 输入
+     * @throws IllegalStateException 轮次或其输入不存在时
+     */
+    public TurnInput input(String turnId) {
+        TurnQueueRepository.StoredInput stored =
+                queue.findStoredInput(turnId).orElseThrow(() -> new IllegalStateException("轮次没有输入：" + turnId));
+        return EngineJson.readInput(stored.kind(), stored.payload());
+    }
+
     private void cancel(LeaseHandle handle) {
         if (handle != null) {
             registry.cancel(handle);

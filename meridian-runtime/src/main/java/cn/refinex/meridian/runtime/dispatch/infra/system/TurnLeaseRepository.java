@@ -190,14 +190,90 @@ public class TurnLeaseRepository extends SystemRepository {
      */
     public List<ActiveTurn> lockActive(String sessionId) {
         return jdbc().sql("""
-                        SELECT id, tenant_id, status FROM rt.turns
+                        SELECT id, tenant_id, status, lease_owner, kind FROM rt.turns
                          WHERE session_id = :session_id AND status IN ('queued', 'running', 'awaiting_action')
                            FOR UPDATE
                         """)
                 .param("session_id", sessionId)
-                .query((rs, row) ->
-                        new ActiveTurn(rs.getString("id"), rs.getString("tenant_id"), rs.getString("status")))
+                .query(TurnLeaseRepository::mapActive)
                 .list();
+    }
+
+    /**
+     * 锁定并读取线程的未结束轮次（每个线程最多一个）。锁住后认领与回收会跳过它，执行方带租约的写入要等本事务提交；API 据此
+     * 决定消息与中断如何投递（架构设计「消息投递」）。
+     *
+     * @param threadId 线程 ID
+     * @return 未结束的轮次；线程空闲时为空
+     */
+    public Optional<ActiveTurn> lockActiveOnThread(String threadId) {
+        return jdbc().sql("""
+                        SELECT id, tenant_id, status, lease_owner, kind FROM rt.turns
+                         WHERE thread_id = :thread_id AND status IN ('queued', 'running', 'awaiting_action')
+                           FOR UPDATE
+                        """)
+                .param("thread_id", threadId)
+                .query(TurnLeaseRepository::mapActive)
+                .optional();
+    }
+
+    /**
+     * 记录轮次的中断请求；已有中断请求时保留最早的时间。执行中的轮次由持有租约的节点在续租时读到；排队中的恢复轮在被认领时读到，
+     * 把结论写进上下文后停止。
+     *
+     * @param turnId 轮次 ID
+     * @param now 当前时间
+     * @return 轮次仍在排队或执行时为 true
+     */
+    public boolean requestInterrupt(String turnId, Instant now) {
+        return jdbc().sql("""
+                                UPDATE rt.turns
+                                   SET interrupt_requested_at = COALESCE(interrupt_requested_at, :now), updated_at = :now
+                                 WHERE id = :turn_id AND status IN ('queued', 'running')
+                                """)
+                        .param("now", JdbcValues.timestamptz(now))
+                        .param("turn_id", turnId)
+                        .update()
+                == 1;
+    }
+
+    /**
+     * 取消一个还在排队的轮次（排队时收到 {@code user.interrupt}，架构设计「消息投递」），停止原因记为 {@code interrupted}。
+     * 排队的轮次不占租户并发名额。
+     *
+     * @param turnId 轮次 ID
+     * @param now 当前时间
+     * @return 轮次仍在排队时为 true
+     */
+    public boolean cancelQueued(String turnId, Instant now) {
+        return jdbc().sql("""
+                                UPDATE rt.turns
+                                   SET status = 'cancelled', stop_reason = 'interrupted', interrupt_requested_at = :now,
+                                       finished_at = :now, updated_at = :now
+                                 WHERE id = :turn_id AND status = 'queued'
+                                """)
+                        .param("now", JdbcValues.timestamptz(now))
+                        .param("turn_id", turnId)
+                        .update()
+                == 1;
+    }
+
+    /**
+     * 等待回应的轮次在全部待处理动作都有了结论、恢复轮已生成时结束为 {@code completed}（架构设计「待处理动作」）。
+     *
+     * @param turnId 轮次 ID
+     * @param now 当前时间
+     * @return 轮次仍在等待回应时为 true
+     */
+    public boolean completeAwaiting(String turnId, Instant now) {
+        return jdbc().sql("""
+                                UPDATE rt.turns SET status = 'completed', updated_at = :now
+                                 WHERE id = :turn_id AND status = 'awaiting_action'
+                                """)
+                        .param("now", JdbcValues.timestamptz(now))
+                        .param("turn_id", turnId)
+                        .update()
+                == 1;
     }
 
     /**
@@ -211,7 +287,7 @@ public class TurnLeaseRepository extends SystemRepository {
     public List<ActiveTurn> cancelActive(String sessionId, Instant now) {
         return jdbc().sql("""
                         WITH active AS (
-                            SELECT id, status FROM rt.turns
+                            SELECT id, status, lease_owner, kind FROM rt.turns
                              WHERE session_id = :session_id AND status IN ('queued', 'running', 'awaiting_action')
                                FOR UPDATE
                         )
@@ -219,13 +295,26 @@ public class TurnLeaseRepository extends SystemRepository {
                            SET status = 'cancelled', lease_expires_at = NULL, finished_at = :now, updated_at = :now
                           FROM active a
                          WHERE t.id = a.id
-                        RETURNING t.id, t.tenant_id, a.status AS previous_status
+                        RETURNING t.id, t.tenant_id, a.status AS previous_status, a.lease_owner, a.kind
                         """)
                 .param("session_id", sessionId)
                 .param("now", JdbcValues.timestamptz(now))
-                .query((rs, row) ->
-                        new ActiveTurn(rs.getString("id"), rs.getString("tenant_id"), rs.getString("previous_status")))
+                .query((rs, row) -> new ActiveTurn(
+                        rs.getString("id"),
+                        rs.getString("tenant_id"),
+                        rs.getString("previous_status"),
+                        rs.getString("lease_owner"),
+                        rs.getString("kind")))
                 .list();
+    }
+
+    private static ActiveTurn mapActive(ResultSet rs, int row) throws SQLException {
+        return new ActiveTurn(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("status"),
+                rs.getString("lease_owner"),
+                rs.getString("kind"));
     }
 
     private static ReleasedTurn mapReleased(ResultSet rs, int row) throws SQLException {
@@ -272,8 +361,10 @@ public class TurnLeaseRepository extends SystemRepository {
      * @param turnId 轮次 ID
      * @param tenantId 租户 ID，用于释放并发名额
      * @param status 状态：{@code queued}、{@code running} 或 {@code awaiting_action}；取消结果中为取消前的状态
+     * @param leaseOwner 持有（或最近一次持有）租约的节点；从未被认领时为空
+     * @param kind 轮次类型：{@code messages}、{@code confirmations}、{@code custom_tool_results}、{@code recovery}
      */
-    public record ActiveTurn(String turnId, String tenantId, String status) {
+    public record ActiveTurn(String turnId, String tenantId, String status, String leaseOwner, String kind) {
 
         /**
          * 是否正在执行（占用租户并发名额）。
@@ -282,6 +373,33 @@ public class TurnLeaseRepository extends SystemRepository {
          */
         public boolean running() {
             return "running".equals(status);
+        }
+
+        /**
+         * 是否为普通消息轮（{@code kind=messages}），而不是回应待处理动作或崩溃恢复生成的恢复轮。
+         *
+         * @return 是消息轮时为 true
+         */
+        public boolean messages() {
+            return "messages".equals(kind);
+        }
+
+        /**
+         * 是否还在排队。
+         *
+         * @return 状态为 queued 时为 true
+         */
+        public boolean queued() {
+            return "queued".equals(status);
+        }
+
+        /**
+         * 是否在等待调用方回应。
+         *
+         * @return 状态为 awaiting_action 时为 true
+         */
+        public boolean awaitingAction() {
+            return "awaiting_action".equals(status);
         }
     }
 }

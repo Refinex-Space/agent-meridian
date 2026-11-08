@@ -1,8 +1,11 @@
 package cn.refinex.meridian.runtime.config;
 
+import cn.refinex.meridian.common.context.Interaction;
+import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.id.IdPrefix;
 import cn.refinex.meridian.common.id.Ids;
+import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.common.time.MutableClock;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestSpecs;
 import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
@@ -13,23 +16,43 @@ import cn.refinex.meridian.engine.spi.event.EventType;
 import cn.refinex.meridian.engine.spi.event.UserEvent;
 import cn.refinex.meridian.engine.spi.event.UserEvent.Delivery;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
+import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
+import cn.refinex.meridian.engine.spi.spec.PermissionBehavior;
+import cn.refinex.meridian.engine.spi.spec.PermissionMode;
+import cn.refinex.meridian.engine.spi.spec.PermissionPolicy;
+import cn.refinex.meridian.engine.spi.spec.PermissionRule;
+import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
+import cn.refinex.meridian.engine.spi.spec.PolicyLayer;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
+import cn.refinex.meridian.runtime.approval.app.PendingActionTimeouts;
+import cn.refinex.meridian.runtime.approval.domain.PendingActionStatus;
+import cn.refinex.meridian.runtime.approval.domain.StoredPendingAction;
+import cn.refinex.meridian.runtime.approval.infra.PendingActionRepository;
+import cn.refinex.meridian.runtime.approval.infra.system.PendingActionTimeoutRepository;
 import cn.refinex.meridian.runtime.delivery.domain.InboxEntry;
 import cn.refinex.meridian.runtime.dispatch.app.EnqueueResult;
+import cn.refinex.meridian.runtime.dispatch.app.NodeChannel;
 import cn.refinex.meridian.runtime.dispatch.domain.NewTurn;
+import cn.refinex.meridian.runtime.session.app.SessionService;
 import cn.refinex.meridian.runtime.session.app.WorkerProperties;
+import cn.refinex.meridian.runtime.session.infra.SessionRepository;
+import cn.refinex.meridian.runtime.session.infra.ThreadRepository;
+import cn.refinex.meridian.runtime.session.infra.system.ThreadLockRepository;
 import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
 import cn.refinex.meridian.runtime.stream.domain.AppendResult;
 import cn.refinex.meridian.runtime.stream.domain.EventBatch;
 import cn.refinex.meridian.runtime.stream.domain.StoredEvent;
+import cn.refinex.meridian.runtime.support.DbAssertions;
 import cn.refinex.meridian.runtime.support.RuntimeTestDatabase;
 import cn.refinex.meridian.runtime.support.RuntimeTestRedis;
 import cn.refinex.meridian.runtime.support.TestSessions;
 import cn.refinex.meridian.runtime.support.TestSessions.TestSession;
+import io.agentscope.core.tool.AgentTool;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,17 +73,42 @@ final class WorkerFixture {
 
     static final String WRITE = "write_record";
 
+    /**
+     * 夹具智能体的权限：放行两个记账工具。每轮合成的权限总带着平台安全规则，AgentScope 不再走"平凡权限上下文一律放行"的
+     * 旧路径（T08），DEFAULT 模式下没有命中 allow 的调用都需要确认，所以智能体要显式放行它的工具。
+     */
+    static final PermissionPolicy LEDGER_TOOLS_ALLOWED = new PermissionPolicy(
+            PermissionMode.DEFAULT,
+            List.of(
+                    new PermissionRule(LOOKUP, null, PermissionBehavior.ALLOW, PolicyLayer.AGENT_VERSION),
+                    new PermissionRule(WRITE, null, PermissionBehavior.ALLOW, PolicyLayer.AGENT_VERSION)));
+
     final MutableClock clock = MutableClock.at(Instant.parse("2100-01-01T00:00:00Z"));
     final ScriptedModel model;
     final TestAgents agents = new TestAgents();
-    final ResolvedAgentSpec spec = TestSpecs.agent().build();
+    final ResolvedAgentSpec spec;
     final EnvironmentSpec environment = TestSpecs.noneEnvironment();
     final LedgerTool.Calls lookupCalls = new LedgerTool.Calls();
     final LedgerTool.Calls writeCalls = new LedgerTool.Calls();
 
+    /** 创建节点前加入的其他测试工具（每个节点共用同一个实例）。 */
+    final List<AgentTool> extraTools = new ArrayList<>();
+
     WorkerFixture(ScriptedModel model) {
+        this(model, UnaryOperator.identity());
+    }
+
+    /**
+     * 创建夹具，按需调整智能体配置（默认放行两个记账工具）。
+     *
+     * @param model 模型脚本
+     * @param agent 调整智能体配置
+     */
+    WorkerFixture(ScriptedModel model, UnaryOperator<TestSpecs.AgentSpecBuilder> agent) {
         RuntimeTestDatabase.truncate();
         this.model = model;
+        this.spec =
+                agent.apply(TestSpecs.agent().permissions(LEDGER_TOOLS_ALLOWED)).build();
         agents.register(spec).register(environment);
     }
 
@@ -80,8 +128,8 @@ final class WorkerFixture {
         Map<String, WorkerNode.ToolSpec> tools = new LinkedHashMap<>();
         tools.put(LOOKUP, new WorkerNode.ToolSpec(SideEffect.IDEMPOTENT, lookupCalls));
         tools.put(WRITE, new WorkerNode.ToolSpec(SideEffect.NON_IDEMPOTENT, writeCalls));
-        return WorkerNode.create(
-                new WorkerNode.Spec(nodeId, clock, model, agents, tools, properties, states, dataSource));
+        return WorkerNode.create(new WorkerNode.Spec(
+                nodeId, clock, model, agents, tools, properties, states, dataSource, List.copyOf(extraTools)));
     }
 
     static WorkerProperties withoutCheckpoint() {
@@ -92,6 +140,99 @@ final class WorkerFixture {
 
     TestSession session() {
         return TestSessions.create(clock, spec.agentVersionId(), environment.environmentId(), environment.revision());
+    }
+
+    /** 只放行查询工具：写入工具在 DEFAULT 模式下默认需要确认，用来制造"等待回应"。 */
+    static TestSpecs.AgentSpecBuilder lookupOnlyAllowed(TestSpecs.AgentSpecBuilder agent) {
+        return agent.permissions(new PermissionPolicy(
+                PermissionMode.DEFAULT,
+                List.of(new PermissionRule(LOOKUP, null, PermissionBehavior.ALLOW, PolicyLayer.AGENT_VERSION))));
+    }
+
+    /** 会话用例（创建、删除、归档），与生产相同的依赖，内核未装配时的保留工具名。 */
+    SessionService sessions(WorkerNode node) {
+        DataSource dataSource = RuntimeTestDatabase.dataSource();
+        return new SessionService(
+                new SessionRepository(dataSource),
+                new ThreadRepository(dataSource),
+                new ThreadLockRepository(dataSource),
+                new PendingActionRepository(dataSource),
+                node.node().transitions(),
+                new NodeChannel(RuntimeTestRedis.reactiveMessaging()),
+                node.node().events(),
+                agents,
+                (agent, environment) -> PlatformToolNames.ALL,
+                RuntimeTestDatabase.transactions(),
+                clock);
+    }
+
+    /** 待处理动作的超时扫描（与生产相同的依赖）。 */
+    PendingActionTimeouts timeouts(WorkerNode node) {
+        DataSource dataSource = RuntimeTestDatabase.dataSource();
+        return new PendingActionTimeouts(
+                new PendingActionTimeoutRepository(dataSource),
+                new PendingActionRepository(dataSource),
+                new ThreadLockRepository(dataSource),
+                node.resolver(),
+                RuntimeTestDatabase.transactions(),
+                clock);
+    }
+
+    /** 同一项目中的另一个会话。 */
+    TestSession anotherSession(TestSession sameProject) {
+        return TestSessions.another(
+                sameProject, clock, spec.agentVersionId(), environment.environmentId(), environment.revision());
+    }
+
+    /** 指定值守方式与自定义工具的会话。 */
+    TestSession session(Interaction interaction, List<CustomToolDeclaration> customTools) {
+        return TestSessions.create(
+                clock,
+                spec.agentVersionId(),
+                environment.environmentId(),
+                environment.revision(),
+                interaction,
+                customTools);
+    }
+
+    /**
+     * 经发送事件的用例（与 API 相同的投递、中断与回应语义）发送一批用户事件，调用方是会话所在项目的 API Key。
+     *
+     * @return 持久化后的事件
+     */
+    List<StoredEvent> post(WorkerNode via, TestSession session, UserEvent... events) {
+        PlatformContext context = PlatformContext.builder()
+                .tenantId(session.tenantId())
+                .projectId(session.projectId())
+                .apiKeyId("key_test")
+                .build();
+        return PlatformContexts.call(context, () -> via.intake().send(session.sessionId(), List.of(events)));
+    }
+
+    /** 一条文本用户消息。 */
+    static UserEvent.Message message(String text, Delivery delivery) {
+        return new UserEvent.Message(List.of(new MessageContent.Text(text)), delivery);
+    }
+
+    /** 读取会话中的待处理动作（全部状态），按创建顺序。 */
+    List<StoredPendingAction> actions(TestSession session) {
+        return PlatformContexts.call(session.context(), () -> {
+            PendingActionRepository repository = new PendingActionRepository(RuntimeTestDatabase.dataSource());
+            List<StoredPendingAction> all = new ArrayList<>();
+            for (PendingActionStatus status : PendingActionStatus.values()) {
+                all.addAll(repository.page(session.sessionId(), status, PageRequest.first(100)));
+            }
+            all.sort(java.util.Comparator.comparing(StoredPendingAction::id));
+            return all;
+        });
+    }
+
+    /** 线程上最新一轮的 ID 与状态（按创建时间）。 */
+    static Map<String, Object> latestTurn(TestSession session) {
+        return DbAssertions.row(
+                "SELECT id, kind, status, stop_reason, interrupt_requested_at FROM rt.turns WHERE thread_id = ? "
+                        + "ORDER BY created_at DESC, id DESC LIMIT 1",
+                session.mainThreadId());
     }
 
     /**

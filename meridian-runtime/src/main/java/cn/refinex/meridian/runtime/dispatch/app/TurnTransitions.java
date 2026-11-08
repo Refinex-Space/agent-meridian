@@ -162,6 +162,47 @@ public class TurnTransitions {
     }
 
     /**
+     * 锁定线程的未结束轮次（见 {@link TurnLeaseRepository#lockActiveOnThread}）。必须在调用方的事务中调用。
+     *
+     * @param threadId 线程 ID
+     * @return 未结束的轮次；线程空闲时为空
+     */
+    public Optional<ActiveTurn> lockActiveOnThread(String threadId) {
+        return leases.lockActiveOnThread(threadId);
+    }
+
+    /**
+     * 记录轮次的中断请求（{@code turns.interrupt_requested_at}）：执行中的轮次由持有租约的节点在续租时读到，排队中的恢复轮在
+     * 认领时读到（架构设计「消息投递」）。必须在调用方的事务中调用，轮次已由 {@link #lockActiveOnThread} 锁住。
+     *
+     * @param turnId 轮次 ID
+     * @return 轮次仍在排队或执行时为 true
+     */
+    public boolean requestInterrupt(String turnId) {
+        return leases.requestInterrupt(turnId, clock.instant());
+    }
+
+    /**
+     * 取消排队中的轮次（排队时收到中断）。必须在调用方的事务中调用，轮次已由 {@link #lockActiveOnThread} 锁住。
+     *
+     * @param turnId 轮次 ID
+     * @return 轮次仍在排队时为 true
+     */
+    public boolean cancelQueued(String turnId) {
+        return leases.cancelQueued(turnId, clock.instant());
+    }
+
+    /**
+     * 等待回应的轮次结束为 {@code completed}：它的全部待处理动作都有了结论，恢复轮随后入队。必须在调用方的事务中调用。
+     *
+     * @param turnId 轮次 ID
+     * @return 轮次仍在等待回应时为 true
+     */
+    public boolean completeAwaiting(String turnId) {
+        return leases.completeAwaiting(turnId, clock.instant());
+    }
+
+    /**
      * 取消会话的全部未结束轮次，执行中的轮次释放租户并发名额（会话归档与删除，架构设计「状态机」）。事务传播为 REQUIRED，
      * 与调用方随后写入的 {@code session.status_terminated} 一起提交。
      *

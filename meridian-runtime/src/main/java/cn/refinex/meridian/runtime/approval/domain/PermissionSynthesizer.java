@@ -34,6 +34,10 @@ import java.util.Objects;
  * 工具属于子智能体工具集的 allow，子智能体配置自带的 allow 只在被父智能体的 allow 覆盖（同一工具，父规则不带内容或内容相同）时
  * 保留；父智能体与子智能体配置中的 deny 全部生效。
  *
+ * <p>会话声明的自定义工具由业务方执行，声明本身就是业务方的授权：每个自定义工具在会话层有一条整工具 allow
+ * （{@link #customToolRules}），上层的 deny、ask 仍然优先。没有它时，平台安全规则让权限上下文不再"平凡"，DEFAULT 模式下
+ * 自定义工具会先要求确认，而不是挂起等待业务方的结果（2.0.4 对平凡的权限上下文不走权限引擎）。
+ *
  * <p>工具自检返回的安全类 ask（例如危险路径）不受规则改写影响，兜底见 {@code approval} 的自动拒绝。线程安全：无状态。
  */
 public final class PermissionSynthesizer {
@@ -107,6 +111,18 @@ public final class PermissionSynthesizer {
             }
         }
         return new PermissionPolicy(PermissionMode.DONT_ASK, distinct(rules));
+    }
+
+    /**
+     * 会话声明的自定义工具在会话层的放行规则（见类注释）。
+     *
+     * @param customToolNames 自定义工具名
+     * @return 每个工具一条整工具 allow，层为 {@link PolicyLayer#SESSION}
+     */
+    public static List<PermissionRule> customToolRules(List<String> customToolNames) {
+        return customToolNames.stream()
+                .map(name -> new PermissionRule(name, null, PermissionBehavior.ALLOW, PolicyLayer.SESSION))
+                .toList();
     }
 
     /** 五层规则按层从高到低合并，每条规则带上所属层。 */

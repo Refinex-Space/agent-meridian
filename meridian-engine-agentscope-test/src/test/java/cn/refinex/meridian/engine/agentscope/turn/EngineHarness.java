@@ -15,6 +15,7 @@ import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryAgentConfig;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryAgentStateRepository;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryBlobStore;
+import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryInbox;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryLeaseRegistry;
 import cn.refinex.meridian.engine.spi.engine.TurnContext;
 import cn.refinex.meridian.engine.spi.engine.input.InboundMessage;
@@ -48,6 +49,7 @@ final class EngineHarness {
 
     final ScriptedModel model;
     final InMemoryLeaseRegistry leases = new InMemoryLeaseRegistry();
+    final InMemoryInbox inbox = new InMemoryInbox();
     final InMemoryAgentStateRepository states = new InMemoryAgentStateRepository();
     final InMemoryBlobStore blobs = new InMemoryBlobStore();
     final InMemoryAgentConfig configs = new InMemoryAgentConfig();
@@ -59,7 +61,8 @@ final class EngineHarness {
             ScriptedModel model, ResolvedAgentSpec spec, List<AgentTool> tools, List<MiddlewareBase> extraMiddlewares) {
         this.model = model;
         this.spec = spec;
-        List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(leases).middlewares(null));
+        List<MiddlewareBase> middlewares =
+                new ArrayList<>(new PlatformMiddlewareProvider(leases, inbox).middlewares(null));
         middlewares.addAll(extraMiddlewares);
         TestAssembly assembly = TestAssembly.builder(model)
                 .stateStore(new FencedAgentStateStore(states, leases))

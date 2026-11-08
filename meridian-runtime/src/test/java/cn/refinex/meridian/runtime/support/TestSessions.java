@@ -8,6 +8,7 @@ import cn.refinex.meridian.common.id.Ids;
 import cn.refinex.meridian.engine.spi.engine.input.InboundMessage;
 import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
 import cn.refinex.meridian.engine.spi.engine.input.TurnInput;
+import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import cn.refinex.meridian.runtime.dispatch.domain.NewTurn;
 import cn.refinex.meridian.runtime.session.domain.NewSession;
 import cn.refinex.meridian.runtime.session.domain.NewThread;
@@ -58,18 +59,108 @@ public final class TestSessions {
 
     private static TestSession create(
             String tenantId, Clock clock, String agentVersionId, String environmentId, long environmentRevision) {
-        TestSession session = new TestSession(
-                tenantId, Ids.newId(IdPrefix.PROJECT), Ids.newId(IdPrefix.SESSION), Ids.newId(IdPrefix.THREAD));
+        return create(
+                tenantId, clock, agentVersionId, environmentId, environmentRevision, Interaction.ATTENDED, List.of());
+    }
+
+    /**
+     * 在新租户、新项目下创建一个指定值守方式与自定义工具的会话（T08：无人值守、自定义工具）。
+     *
+     * @param clock 时钟
+     * @param agentVersionId 智能体版本 ID
+     * @param environmentId 环境 ID
+     * @param environmentRevision 环境修订号
+     * @param interaction 值守方式
+     * @param customTools 会话声明的自定义工具
+     * @return 会话
+     */
+    public static TestSession create(
+            Clock clock,
+            String agentVersionId,
+            String environmentId,
+            long environmentRevision,
+            Interaction interaction,
+            List<CustomToolDeclaration> customTools) {
+        return create(
+                Ids.newId(IdPrefix.TENANT),
+                clock,
+                agentVersionId,
+                environmentId,
+                environmentRevision,
+                interaction,
+                customTools);
+    }
+
+    /**
+     * 在已有会话所在的租户与项目下再创建一个会话（T08：项目级"记住此决定"对同项目的其他会话生效）。
+     *
+     * @param sameProject 已有会话
+     * @param clock 时钟
+     * @param agentVersionId 智能体版本 ID
+     * @param environmentId 环境 ID
+     * @param environmentRevision 环境修订号
+     * @return 新会话
+     */
+    public static TestSession another(
+            TestSession sameProject,
+            Clock clock,
+            String agentVersionId,
+            String environmentId,
+            long environmentRevision) {
+        return insert(
+                new TestSession(
+                        sameProject.tenantId(),
+                        sameProject.projectId(),
+                        Ids.newId(IdPrefix.SESSION),
+                        Ids.newId(IdPrefix.THREAD)),
+                clock,
+                agentVersionId,
+                environmentId,
+                environmentRevision,
+                Interaction.ATTENDED,
+                List.of());
+    }
+
+    private static TestSession create(
+            String tenantId,
+            Clock clock,
+            String agentVersionId,
+            String environmentId,
+            long environmentRevision,
+            Interaction interaction,
+            List<CustomToolDeclaration> customTools) {
+        return insert(
+                new TestSession(
+                        tenantId, Ids.newId(IdPrefix.PROJECT), Ids.newId(IdPrefix.SESSION), Ids.newId(IdPrefix.THREAD)),
+                clock,
+                agentVersionId,
+                environmentId,
+                environmentRevision,
+                interaction,
+                customTools);
+    }
+
+    private static TestSession insert(
+            TestSession session,
+            Clock clock,
+            String agentVersionId,
+            String environmentId,
+            long environmentRevision,
+            Interaction interaction,
+            List<CustomToolDeclaration> customTools) {
         PlatformContexts.run(session.context(), () -> {
             new SessionRepository(RuntimeTestDatabase.dataSource())
                     .insert(
-                            NewSession.of(
+                            new NewSession(
                                     session.sessionId(),
                                     agentVersionId,
                                     environmentId,
                                     environmentRevision,
                                     "u_1024",
-                                    Interaction.ATTENDED),
+                                    interaction,
+                                    null,
+                                    null,
+                                    customTools),
                             clock.instant());
             new ThreadRepository(RuntimeTestDatabase.dataSource())
                     .insert(NewThread.main(session.mainThreadId(), session.sessionId(), "assistant"), clock.instant());

@@ -110,10 +110,12 @@ class TurnWorkerIT {
         assertThat(DbAssertions.list("SELECT status FROM rt.sessions WHERE id = ?", String.class, session.sessionId()))
                 .containsExactly("idle");
         assertThat(DbAssertions.list(
-                        "SELECT payload->>'action' FROM rt.outbox WHERE topic = 'audit' AND payload->>'turn_id' = ?",
+                        "SELECT payload->>'action' FROM rt.outbox WHERE topic = 'audit' AND payload->>'turn_id' = ?"
+                                + " ORDER BY id",
                         String.class,
                         turnId))
-                .containsExactly("turn.finished");
+                .as("工具调用的权限判定（T08）与轮次结束")
+                .containsExactly("permission.decided", "turn.finished");
         assertThat(node.node().registry().heldThreadIds())
                 .as("finally 中释放了本节点的条目")
                 .isEmpty();

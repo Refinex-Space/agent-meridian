@@ -36,4 +36,18 @@ public class ThreadLockRepository extends SystemRepository {
                 .query((rs, row) -> 1)
                 .single();
     }
+
+    /**
+     * 尝试在当前事务中锁住线程，不等待。持有其他行锁的后台作业（例如待处理动作的超时扫描）用它，避免与"先取咨询锁、再锁行"的
+     * 事务形成死锁。必须在事务中调用。
+     *
+     * @param threadId 线程 ID
+     * @return 拿到锁时为 true；其他事务正持有时为 false
+     */
+    public boolean tryLock(String threadId) {
+        return Boolean.TRUE.equals(jdbc().sql("SELECT pg_try_advisory_xact_lock(hashtextextended(:thread_id, 0))")
+                .param("thread_id", threadId)
+                .query(Boolean.class)
+                .single());
+    }
 }

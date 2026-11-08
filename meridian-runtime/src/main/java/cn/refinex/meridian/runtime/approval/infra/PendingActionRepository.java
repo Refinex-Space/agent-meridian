@@ -2,18 +2,25 @@ package cn.refinex.meridian.runtime.approval.infra;
 
 import cn.refinex.meridian.common.json.JsonMappers;
 import cn.refinex.meridian.common.page.PageRequest;
+import cn.refinex.meridian.engine.spi.engine.RecoveryOrigin;
+import cn.refinex.meridian.engine.spi.engine.input.RecoveryNote;
 import cn.refinex.meridian.engine.spi.event.PendingAction;
+import cn.refinex.meridian.engine.spi.event.UserEvent.RecoveryDecision;
 import cn.refinex.meridian.persistence.jdbc.JdbcValues;
 import cn.refinex.meridian.persistence.tenant.TenantScope;
 import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
+import cn.refinex.meridian.runtime.approval.domain.ActionConclusion;
 import cn.refinex.meridian.runtime.approval.domain.PendingActionStatus;
+import cn.refinex.meridian.runtime.approval.domain.ResolvableAction;
 import cn.refinex.meridian.runtime.approval.domain.StoredPendingAction;
+import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.stereotype.Repository;
@@ -147,6 +154,169 @@ public class PendingActionRepository extends TenantScopedRepository {
                          WHERE tenant_id = :tenant_id AND project_id = :project_id AND session_id = :session_id
                            AND status = 'pending'
                         """).param("now", now).param("session_id", sessionId).update();
+    }
+
+    /**
+     * 写入一个已有结论的动作：无人值守会话自动拒绝的确认类调用，或已经回应过、由平台直接交出的自定义工具结果（架构设计
+     * 「待处理动作」）。
+     *
+     * @param sessionId 会话 ID
+     * @param turnId 产生动作的轮次
+     * @param threadId 产生动作的线程
+     * @param action 动作，必须已设置截止时间
+     * @param extra 按动作类型附加到 {@code payload} 的字段；可为空映射
+     * @param conclusion 结论
+     * @param decidedBy 做出决定的主体；可为空
+     * @param now 当前时间
+     */
+    public void insertConcluded(
+            String sessionId,
+            String turnId,
+            String threadId,
+            PendingAction action,
+            Map<String, Object> extra,
+            ActionConclusion conclusion,
+            String decidedBy,
+            Instant now) {
+        insert(sessionId, turnId, threadId, action, extra, now);
+        conclude(action.id(), PendingActionStatus.RESOLVED, conclusion, decidedBy, now);
+    }
+
+    /**
+     * 锁定并读取一轮的全部动作及其结论，按创建顺序（ID 为 ULID）。生成恢复轮时调用，同一轮的并发回应因此串行。
+     *
+     * @param turnId 产生动作的轮次
+     * @return 动作
+     */
+    public List<ResolvableAction> lockByTurn(String turnId) {
+        return sql("SELECT " + COLUMNS + ", " + """
+                               response::text AS response, consumed_turn_id
+                          FROM rt.pending_actions
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND turn_id = :turn_id
+                         ORDER BY id
+                           FOR UPDATE
+                        """)
+                .param("turn_id", turnId)
+                .query(PendingActionRepository::mapResolvable)
+                .list();
+    }
+
+    /**
+     * 读取线程中已回应、尚未交出的自定义工具结论（按工具调用 ID），确认轮再次停在 {@code TOOL_SUSPENDED} 时由平台直接交出。
+     *
+     * @param threadId 线程 ID
+     * @param toolUseIds 工具调用 ID
+     * @return 工具调用 ID → 结论
+     */
+    public Map<String, ActionConclusion> findUnconsumedCustomResults(String threadId, Collection<String> toolUseIds) {
+        if (toolUseIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, ActionConclusion> found = new LinkedHashMap<>();
+        sql("""
+                        SELECT payload ->> 'tool_use_id' AS tool_use_id, response::text AS response
+                          FROM rt.pending_actions
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND thread_id = :thread_id
+                           AND type = 'custom_tool_result' AND consumed_turn_id IS NULL AND response IS NOT NULL
+                           AND payload ->> 'tool_use_id' = ANY (:tool_use_ids)
+                         ORDER BY id
+                        """)
+                .param("thread_id", threadId)
+                .param("tool_use_ids", JdbcValues.textArray(List.copyOf(toolUseIds)))
+                .query((rs, row) -> Map.entry(
+                        rs.getString("tool_use_id"), EngineJson.read(rs.getString("response"), ActionConclusion.class)))
+                .list()
+                .forEach(entry -> found.putIfAbsent(entry.getKey(), entry.getValue()));
+        return found;
+    }
+
+    /**
+     * 记录一个仍在等待的动作的结论：调用方的回应（{@code resolved}）、超时（{@code expired}）、中断或自动拒绝（{@code resolved}）。
+     *
+     * @param actionId 动作 ID
+     * @param status 新状态，{@code resolved} 或 {@code expired}
+     * @param conclusion 结论
+     * @param decidedBy 做出决定的主体；平台生成的结论为空
+     * @param now 当前时间
+     * @return 动作仍在等待时为 true
+     */
+    public boolean conclude(
+            String actionId, PendingActionStatus status, ActionConclusion conclusion, String decidedBy, Instant now) {
+        return sql("""
+                                UPDATE rt.pending_actions
+                                   SET status = :status, response = :response, decided_by = :decided_by,
+                                       remember_scope = :remember_scope, resolved_at = :now
+                                 WHERE tenant_id = :tenant_id AND project_id = :project_id AND id = :id
+                                   AND status = 'pending'
+                                """)
+                        .param("status", status.value())
+                        .param("response", JdbcValues.jsonb(EngineJson.write(conclusion)))
+                        .param("decided_by", decidedBy)
+                        .param(
+                                "remember_scope",
+                                conclusion.remember() == null
+                                        ? null
+                                        : conclusion.remember().value())
+                        .param("now", now)
+                        .param("id", actionId)
+                        .update()
+                == 1;
+    }
+
+    /**
+     * 记录动作的结论已交给哪一个恢复轮。
+     *
+     * @param actionIds 动作 ID
+     * @param turnId 恢复轮 ID
+     */
+    public void markConsumed(Collection<String> actionIds, String turnId) {
+        if (actionIds.isEmpty()) {
+            return;
+        }
+        sql("""
+                        UPDATE rt.pending_actions SET consumed_turn_id = :turn_id
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND id = ANY (:ids)
+                        """)
+                .param("turn_id", turnId)
+                .param("ids", JdbcValues.textArray(List.copyOf(actionIds)))
+                .update();
+    }
+
+    /**
+     * 读取被某个恢复轮消费、选择了重试的恢复确认，轮次开始时平台据此用原幂等键重新执行（架构设计「待处理动作」）。
+     *
+     * @param turnId 恢复轮 ID
+     * @return 动作，按创建顺序
+     */
+    public List<ResolvableAction> listRetriesConsumedBy(String turnId) {
+        return sql("SELECT " + COLUMNS + ", " + """
+                               response::text AS response, consumed_turn_id
+                          FROM rt.pending_actions
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND consumed_turn_id = :turn_id
+                           AND type = 'recovery_confirmation'
+                         ORDER BY id
+                        """)
+                .param("turn_id", turnId)
+                .query(PendingActionRepository::mapResolvable)
+                .list()
+                .stream()
+                .filter(a -> a.conclusion() != null && a.conclusion().decision() == RecoveryDecision.RETRY)
+                .toList();
+    }
+
+    private static ResolvableAction mapResolvable(ResultSet rs, int row) throws SQLException {
+        StoredPendingAction action = map(rs, row);
+        Map<String, Object> payload = JsonMappers.lenient().readValue(rs.getString("payload"), PAYLOAD);
+        String response = rs.getString("response");
+        Object note = payload.get("recovery_note");
+        Object mode = payload.get("recovery_mode");
+        return new ResolvableAction(
+                action,
+                response == null ? null : EngineJson.read(response, ActionConclusion.class),
+                rs.getString("consumed_turn_id"),
+                (String) payload.get("idempotency_key"),
+                note == null ? null : EngineJson.convert(note, RecoveryNote.class),
+                mode == null ? null : RecoveryOrigin.Mode.valueOf(((String) mode).toUpperCase(Locale.ROOT)));
     }
 
     private static StoredPendingAction map(ResultSet rs, int row) throws SQLException {

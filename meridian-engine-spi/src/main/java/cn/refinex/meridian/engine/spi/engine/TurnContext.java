@@ -26,6 +26,9 @@ import java.util.Objects;
  *     {@code DONT_ASK} 模式、ask 改写为 deny、allow 是父智能体 allow 的子集；可为空映射
  * @param customTools 本会话声明的自定义工具，每轮注入；可为空列表
  * @param recovery 恢复说明的来源；可为空，表示不是恢复轮
+ * @param interruptRequested 认领时本轮已有中断请求（{@code turns.interrupt_requested_at} 不为空）：等待回应时被中断而生成的
+ *     恢复轮，或中断请求之后被恢复认领的轮次。内核先把本轮的输入（回应的结论、恢复说明）写进上下文，在第一次推理前按用户中断
+ *     结束本轮（{@code stop_reason=interrupted}），见架构设计「消息投递」
  */
 public record TurnContext(
         PlatformContext platform,
@@ -36,7 +39,8 @@ public record TurnContext(
         PermissionPolicy permissions,
         Map<String, PermissionPolicy> subagentPolicies,
         List<CustomToolDeclaration> customTools,
-        RecoveryOrigin recovery) {
+        RecoveryOrigin recovery,
+        boolean interruptRequested) {
 
     /**
      * 创建一轮的上下文。
@@ -62,6 +66,42 @@ public record TurnContext(
         }
         subagentPolicies = subagentPolicies == null ? Map.of() : Map.copyOf(subagentPolicies);
         customTools = customTools == null ? List.of() : List.copyOf(customTools);
+    }
+
+    /**
+     * 创建没有中断请求的一轮的上下文。
+     *
+     * @param platform 平台上下文
+     * @param endUserId 终端用户 ID；可为空
+     * @param agentVersionId 智能体版本 ID
+     * @param environmentId 环境 ID
+     * @param environmentRevision 环境修订号
+     * @param permissions 主线程的权限策略
+     * @param subagentPolicies 子智能体的权限策略；可为空
+     * @param customTools 自定义工具；可为空
+     * @param recovery 恢复说明的来源；可为空
+     */
+    public TurnContext(
+            PlatformContext platform,
+            String endUserId,
+            String agentVersionId,
+            String environmentId,
+            long environmentRevision,
+            PermissionPolicy permissions,
+            Map<String, PermissionPolicy> subagentPolicies,
+            List<CustomToolDeclaration> customTools,
+            RecoveryOrigin recovery) {
+        this(
+                platform,
+                endUserId,
+                agentVersionId,
+                environmentId,
+                environmentRevision,
+                permissions,
+                subagentPolicies,
+                customTools,
+                recovery,
+                false);
     }
 
     /**

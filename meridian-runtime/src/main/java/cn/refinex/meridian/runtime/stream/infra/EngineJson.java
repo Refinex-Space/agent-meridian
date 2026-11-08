@@ -115,6 +115,28 @@ public final class EngineJson {
     }
 
     /**
+     * 按同样的约定把值写成 JSON，用于待处理动作的结论、恢复说明等随事件与输入一起存储的值。
+     *
+     * @param value 值
+     * @return JSON 文本
+     */
+    public static String write(Object value) {
+        return MAPPER.writeValueAsString(value);
+    }
+
+    /**
+     * 按同样的约定解析 {@link #write(Object)} 写出的 JSON。
+     *
+     * @param json JSON 文本
+     * @param type 目标类型
+     * @param <T> 目标类型
+     * @return 值
+     */
+    public static <T> T read(String json, Class<T> type) {
+        return MAPPER.readValue(json, type);
+    }
+
+    /**
      * 把已解析的树结构（例如 YAML 读出的映射）按同样的约定转换为 engine-spi 的类型，开发配置用它读取智能体版本与环境。
      *
      * @param tree 映射、列表与标量组成的树

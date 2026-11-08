@@ -13,7 +13,9 @@ import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.port.AgentConfigPort;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
+import cn.refinex.meridian.engine.spi.port.InboxPort;
 import cn.refinex.meridian.engine.spi.port.LeaseRegistry;
+import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchWakeups;
 import cn.refinex.meridian.runtime.dispatch.app.TurnClaimer;
 import cn.refinex.meridian.runtime.session.app.TurnFinisher;
@@ -23,7 +25,6 @@ import cn.refinex.meridian.runtime.session.app.TurnWorker;
 import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
 import cn.refinex.meridian.runtime.session.app.WorkerProperties;
 import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
-import cn.refinex.meridian.runtime.stream.app.SessionEventWriter;
 import java.time.Clock;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -51,12 +52,14 @@ public class EngineAutoConfiguration {
      * 平台中间件，批次级 checkpoint 按 {@code meridian.runtime.worker.batch-checkpoint}（默认开启）。
      *
      * @param leases 本节点持有的租约
+     * @param inbox 收件箱，steer 中间件使用
      * @param properties 执行配置
      * @return 中间件提供者
      */
     @Bean
-    public PlatformMiddlewareProvider platformMiddlewareProvider(LeaseRegistry leases, WorkerProperties properties) {
-        return new PlatformMiddlewareProvider(leases, properties.batchCheckpoint());
+    public PlatformMiddlewareProvider platformMiddlewareProvider(
+            LeaseRegistry leases, InboxPort inbox, WorkerProperties properties) {
+        return new PlatformMiddlewareProvider(leases, inbox, properties.batchCheckpoint());
     }
 
     /**
@@ -126,7 +129,7 @@ public class EngineAutoConfiguration {
      * @param preparer 准备用例
      * @param finisher 收尾用例
      * @param engine 内核
-     * @param events 事件写入入口
+     * @param audit 事件写入与权限判定审计
      * @param publisher 实时扇出
      * @param metrics 指标
      * @param clock 时钟
@@ -138,11 +141,11 @@ public class EngineAutoConfiguration {
             TurnPreparer preparer,
             TurnFinisher finisher,
             AgentEngine engine,
-            SessionEventWriter events,
+            ApprovalAudit audit,
             EventStreamPublisher publisher,
             TurnMetrics metrics,
             Clock clock) {
-        return new TurnWorker(claimer, preparer, finisher, engine, events, publisher, metrics, clock);
+        return new TurnWorker(claimer, preparer, finisher, engine, audit, publisher, metrics, clock);
     }
 
     /**

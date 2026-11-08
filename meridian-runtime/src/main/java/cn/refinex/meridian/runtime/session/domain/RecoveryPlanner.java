@@ -63,10 +63,10 @@ public final class RecoveryPlanner {
         List<ToolCallRecord> unknownNonIdempotent = calls.stream()
                 .filter(call -> call.status() == Status.RUNNING && call.sideEffect() == SideEffect.NON_IDEMPOTENT)
                 .toList();
-        if (!unknownNonIdempotent.isEmpty()) {
-            return new RecoveryDecision.AwaitConfirmation(origin, redeliverSteer, unknownNonIdempotent);
-        }
         RecoveryNote note = note(snapshot.input().recovery(), calls);
+        if (!unknownNonIdempotent.isEmpty()) {
+            return new RecoveryDecision.AwaitConfirmation(origin, redeliverSteer, unknownNonIdempotent, note);
+        }
         TurnInput input =
                 mode == Mode.RESUME_SAVED_STATE ? new TurnInput.RecoveryOnly(note) : withNote(snapshot.input(), note);
         return new RecoveryDecision.Resume(origin, redeliverSteer, input);

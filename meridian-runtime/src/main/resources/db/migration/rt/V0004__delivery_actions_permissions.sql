@@ -10,8 +10,10 @@ COMMENT ON COLUMN pending_actions.consumed_turn_id IS '把结论交给智能体�
 COMMENT ON COLUMN pending_actions.status IS 'pending 等待回应，resolved 已回应（含平台自动拒绝），expired 已超时（结论按动作类型生成）或随会话终止作废（结论为空）';
 
 -- 已回应、尚未交出的自定义工具结果，按线程与工具调用查找
-CREATE INDEX pending_actions_unconsumed_idx ON pending_actions (thread_id, tool_use_id)
+CREATE INDEX pending_actions_unconsumed_idx ON pending_actions (thread_id, (payload ->> 'tool_use_id'))
     WHERE consumed_turn_id IS NULL AND response IS NOT NULL;
+-- 恢复轮开始时读取它交出的、选择了重试的恢复确认
+CREATE INDEX pending_actions_consumed_idx ON pending_actions (consumed_turn_id) WHERE consumed_turn_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------------------------
 -- 权限规则（开发实现）：租户策略、项目策略与"记住此决定"写入的项目级、会话级规则。T15b 起租户与项目策略由 control-plane

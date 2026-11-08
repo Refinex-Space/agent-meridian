@@ -18,6 +18,7 @@ import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.engine.spi.event.EventType;
 import cn.refinex.meridian.engine.spi.event.SessionEvent;
 import cn.refinex.meridian.engine.spi.event.SessionEvent.RescheduleReason;
+import cn.refinex.meridian.engine.spi.event.SessionEvent.RetryStatus;
 import cn.refinex.meridian.engine.spi.event.StopReason;
 import cn.refinex.meridian.engine.spi.event.UserEvent.Delivery;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
@@ -83,14 +84,19 @@ class WorkerLeaseFencingIT {
         stale.assertEverythingRejected(events);
         assertThat(stale.nodeA
                         .finisher()
-                        .finish(stale.turn, "agv_test", new SessionEvent.StatusIdle(StopReason.INTERRUPTED)))
+                        .finish(
+                                stale.turn,
+                                "agv_test",
+                                Interaction.ATTENDED,
+                                new SessionEvent.StatusIdle(StopReason.INTERRUPTED)))
                 .isInstanceOf(TurnResult.Abandoned.class);
         stale.assertDatabaseUnchanged();
     }
 
     @Test
     void errorPathOfAStaleExecutionWritesNothing() throws Exception {
-        // 关闭批次 checkpoint：保存来自 AgentScope 出错时的 saveStateAfterCallFailure
+        // 关闭批次 checkpoint：保存来自 AgentScope 出错时的 saveStateAfterCallFailure。T08 起旧执行在下一次推理前就被
+        // SteerMiddleware 的带租约消费拒绝（数据库中的租约条件），调用以 LeaseLostException 失败，同样走出错时的保存路径
         Stale stale = Stale.start(
                 ScriptedModel.builder()
                         .respond(r -> r.toolCall("call_1", LOOKUP, Map.of("text", "a")))
@@ -98,11 +104,11 @@ class WorkerLeaseFencingIT {
                         .build(),
                 WorkerFixture.withoutCheckpoint());
 
-        List<EngineEvent> events = stale.finish();
-
-        assertThat(events).contains(new SessionEvent.StatusIdle(StopReason.ERROR));
-        assertThat(events).anyMatch(SessionEvent.Error.class::isInstance);
-        stale.assertEverythingRejected(events);
+        assertThatThrownBy(stale::finish)
+                .as("内核发现租约丢失时不输出任何事件，以 LeaseLostException 结束（ADR-0026）")
+                .hasRootCauseInstanceOf(LeaseLostException.class);
+        stale.assertEverythingRejected(
+                List.of(new SessionEvent.Error("provider.error", "供应商故障", RetryStatus.TERMINAL)));
         stale.assertDatabaseUnchanged();
     }
 

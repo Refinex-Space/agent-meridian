@@ -1,11 +1,15 @@
 package cn.refinex.meridian.runtime.approval.app;
 
 import cn.refinex.meridian.common.context.Interaction;
+import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import cn.refinex.meridian.engine.spi.spec.PermissionPolicy;
+import cn.refinex.meridian.engine.spi.spec.PermissionRule;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.runtime.approval.domain.PermissionLayers;
 import cn.refinex.meridian.runtime.approval.domain.PermissionSynthesizer;
 import cn.refinex.meridian.runtime.approval.infra.PermissionRuleRepository;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
@@ -39,15 +43,19 @@ public class PermissionPolicies {
      * @param sessionId 会话 ID
      * @param interaction 会话的值守方式
      * @param spec 会话绑定的智能体版本配置
+     * @param customTools 会话声明的自定义工具，在会话层放行
      * @return 合成结果
      */
-    public TurnPermissions forTurn(String sessionId, Interaction interaction, ResolvedAgentSpec spec) {
+    public TurnPermissions forTurn(
+            String sessionId,
+            Interaction interaction,
+            ResolvedAgentSpec spec,
+            List<CustomToolDeclaration> customTools) {
+        List<PermissionRule> sessionRules = new ArrayList<>(rules.listSession(sessionId));
+        sessionRules.addAll(PermissionSynthesizer.customToolRules(
+                customTools.stream().map(CustomToolDeclaration::name).toList()));
         PermissionLayers layers = new PermissionLayers(
-                store.tenantRules(),
-                store.projectRules(),
-                spec.permissions(),
-                rules.listSession(sessionId),
-                interaction);
+                store.tenantRules(), store.projectRules(), spec.permissions(), sessionRules, interaction);
         return new TurnPermissions(
                 PermissionSynthesizer.mainThread(layers), PermissionSynthesizer.subagents(layers, spec.subagents()));
     }

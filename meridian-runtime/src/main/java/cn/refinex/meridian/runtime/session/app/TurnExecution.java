@@ -6,24 +6,33 @@ import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.LeaseLostException;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.engine.ThreadRef;
+import cn.refinex.meridian.engine.spi.engine.ToolRetry;
+import cn.refinex.meridian.engine.spi.engine.input.RecoveryNote;
+import cn.refinex.meridian.engine.spi.engine.input.RecoveryNote.Outcome;
+import cn.refinex.meridian.engine.spi.engine.input.RecoveryNote.RecoveredToolCall;
+import cn.refinex.meridian.engine.spi.engine.input.TurnInput;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.engine.spi.event.SessionEvent;
+import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
+import cn.refinex.meridian.runtime.approval.domain.ResumptionPlanner;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseHandle;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseListener;
 import cn.refinex.meridian.runtime.dispatch.domain.ClaimedTurn;
 import cn.refinex.meridian.runtime.dispatch.domain.LeaseLoss;
 import cn.refinex.meridian.runtime.dispatch.domain.RequeueReason;
 import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
-import cn.refinex.meridian.runtime.stream.app.SessionEventWriter;
 import cn.refinex.meridian.runtime.stream.domain.AppendResult;
 import cn.refinex.meridian.runtime.stream.domain.EventBatch;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
@@ -53,7 +62,7 @@ public final class TurnExecution {
     private final TurnPreparer preparer;
     private final TurnFinisher finisher;
     private final AgentEngine engine;
-    private final SessionEventWriter events;
+    private final ApprovalAudit audit;
     private final EventStreamPublisher publisher;
     private final TurnMetrics metrics;
     private final Clock clock;
@@ -70,7 +79,7 @@ public final class TurnExecution {
             TurnPreparer preparer,
             TurnFinisher finisher,
             AgentEngine engine,
-            SessionEventWriter events,
+            ApprovalAudit audit,
             EventStreamPublisher publisher,
             TurnMetrics metrics,
             Clock clock) {
@@ -79,7 +88,7 @@ public final class TurnExecution {
         this.preparer = preparer;
         this.finisher = finisher;
         this.engine = engine;
-        this.events = events;
+        this.audit = audit;
         this.publisher = publisher;
         this.metrics = metrics;
         this.clock = clock;
@@ -146,7 +155,8 @@ public final class TurnExecution {
             }
             case Prepared.Ready ready -> {
                 agentVersionId = ready.agentVersionId();
-                yield engine.runTurn(ready.context(), ready.input())
+                yield retried(ready)
+                        .flatMapMany(input -> engine.runTurn(ready.context(), input))
                         .concatMap(event -> handle(ready, event))
                         .singleOrEmpty()
                         .switchIfEmpty(Mono.error(() -> new IllegalStateException("内核的事件流没有终态事件：" + turn.turnId())));
@@ -159,7 +169,8 @@ public final class TurnExecution {
             deliverPendingInterrupt();
         }
         if (isTerminal(event)) {
-            return Blocking.call(() -> finisher.finish(turn, ready.agentVersionId(), (SessionEvent) event));
+            return Blocking.call(() -> finisher.finish(
+                    turn, ready.agentVersionId(), ready.context().platform().interaction(), (SessionEvent) event));
         }
         if (!event.type().isPersisted()) {
             // 只订阅不等待，与提交后发布的持久化事件在同一连接上按订阅顺序写入
@@ -169,10 +180,44 @@ public final class TurnExecution {
             return Mono.empty();
         }
         EventBatch batch = EventBatch.leased(turn.sessionId(), turn.threadId(), turn.turnId(), turn.epoch(), event);
-        return Blocking.call(() -> events.append(batch))
+        return Blocking.call(() -> audit.append(batch))
                 .flatMap(result -> result instanceof AppendResult.LeaseLost
                         ? Mono.error(new LeaseLostException("写入事件时租约已失去：" + turn.turnId() + " epoch " + turn.epoch()))
                         : Mono.empty());
+    }
+
+    /**
+     * 恢复确认选择 {@code retry} 的调用：平台用原幂等键依次重新执行，把结果摘要写进恢复说明中对应的 {@code RETRIED} 条目
+     * （架构设计「待处理动作」）。没有要重试的调用时原样返回输入。
+     */
+    private Mono<TurnInput> retried(Prepared.Ready ready) {
+        if (ready.retries().isEmpty() || ready.input().recovery() == null) {
+            return Mono.just(ready.input());
+        }
+        return Flux.fromIterable(ready.retries())
+                .concatMap(retry -> engine.retryToolCall(ready.context(), retry)
+                        .map(result -> Map.entry(retry.toolUseId(), summary(result))))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue)
+                .map(summaries -> {
+                    log.info("恢复确认的重试已执行 turnId={} calls={}", turn.turnId(), summaries.size());
+                    List<RecoveredToolCall> calls = ready.input().recovery().toolCalls().stream()
+                            .map(call -> call.outcome() == Outcome.RETRIED && summaries.containsKey(call.toolUseId())
+                                    ? new RecoveredToolCall(
+                                            call.toolUseId(),
+                                            call.toolName(),
+                                            Outcome.RETRIED,
+                                            summaries.get(call.toolUseId()))
+                                    : call)
+                            .toList();
+                    return ResumptionPlanner.withNote(ready.input(), new RecoveryNote(calls));
+                });
+    }
+
+    private static String summary(ToolRetry.Result result) {
+        String text = result.succeeded() ? result.text() : "重新执行失败：" + result.text();
+        return text.length() <= TurnPreparer.SUMMARY_MAX_CHARS
+                ? text
+                : text.substring(0, TurnPreparer.SUMMARY_MAX_CHARS) + "…";
     }
 
     private void abandon(String cause) {

@@ -3,14 +3,17 @@ package cn.refinex.meridian.engine.agentscope.turn;
 import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
+import cn.refinex.meridian.common.error.LeaseLostException;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentHandle;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
 import cn.refinex.meridian.engine.agentscope.events.TurnEventMapper;
 import cn.refinex.meridian.engine.agentscope.middleware.BatchCheckpoint;
+import cn.refinex.meridian.engine.agentscope.middleware.PendingInterrupt;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformStopRequest;
 import cn.refinex.meridian.engine.agentscope.middleware.RecoveryNoteSlot;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.engine.ThreadRef;
+import cn.refinex.meridian.engine.spi.engine.ToolRetry;
 import cn.refinex.meridian.engine.spi.engine.TurnContext;
 import cn.refinex.meridian.engine.spi.engine.input.TurnInput;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
@@ -24,15 +27,23 @@ import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentStartEvent;
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolResultState;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.shutdown.GracefulShutdownConfig;
 import io.agentscope.core.shutdown.GracefulShutdownManager;
 import io.agentscope.core.shutdown.PartialReasoningPolicy;
+import io.agentscope.core.tool.AgentTool;
+import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.ToolRequestConfig;
+import io.agentscope.core.util.JsonUtils;
 import io.agentscope.harness.agent.HarnessAgent;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -72,6 +83,10 @@ public final class AgentScopeEngine implements AgentEngine {
 
     /** AgentScope 优雅停机的强制中断超时。架构设计「崩溃恢复」规定 45 秒；AgentScope 默认不超时。 */
     static final Duration SHUTDOWN_INTERRUPT_TIMEOUT = Duration.ofSeconds(45);
+
+    /** 重新执行工具时视为失败的结果状态。 */
+    private static final Set<ToolResultState> FAILED_STATES =
+            Set.of(ToolResultState.ERROR, ToolResultState.DENIED, ToolResultState.INTERRUPTED);
 
     private final AgentInstanceCache instances;
     private final AgentConfigPort configs;
@@ -132,6 +147,76 @@ public final class AgentScopeEngine implements AgentEngine {
         turn.interrupt();
         log.info("已向本节点的执行发出中断 sessionId={} threadId={}", thread.sessionId(), thread.threadId());
         return true;
+    }
+
+    @Override
+    public Mono<ToolRetry.Result> retryToolCall(TurnContext ctx, ToolRetry retry) {
+        Objects.requireNonNull(ctx, "ctx");
+        Objects.requireNonNull(retry, "retry");
+        return Mono.zip(
+                        configs.agentVersion(ctx.agentVersionId()),
+                        configs.environment(ctx.environmentId(), ctx.environmentRevision()))
+                .flatMap(specs -> Mono.usingWhen(
+                        Blocking.call(() -> instances.acquire(specs.getT1(), specs.getT2())),
+                        handle -> callTool(ctx, retry, handle),
+                        handle -> Mono.fromRunnable(() -> instances.release(handle))))
+                .onErrorResume(error -> !(error instanceof LeaseLostException), error -> {
+                    log.warn("重新执行工具调用失败 toolUseId={} tool={}", retry.toolUseId(), retry.toolName(), error);
+                    return Mono.just(new ToolRetry.Result(false, "重新执行失败：" + error.getMessage()));
+                })
+                .contextWrite(PlatformContexts.write(ctx.platform()));
+    }
+
+    @Override
+    public Mono<Set<String>> reservedToolNames(String agentVersionId, String environmentId, long environmentRevision) {
+        return Mono.zip(configs.agentVersion(agentVersionId), configs.environment(environmentId, environmentRevision))
+                .flatMap(specs -> Blocking.call(() -> {
+                    AgentHandle handle = instances.acquire(specs.getT1(), specs.getT2());
+                    try {
+                        return handle.assembled().reservedToolNames();
+                    } finally {
+                        instances.release(handle);
+                    }
+                }));
+    }
+
+    /** 在智能体实例的 Toolkit 中找到工具并直接调用，不经模型与权限引擎（调用已由人确认重试）。 */
+    private Mono<ToolRetry.Result> callTool(TurnContext ctx, ToolRetry retry, AgentHandle handle) {
+        AgentTool tool = handle.agent().getToolkit().getTool(retry.toolName());
+        if (tool == null) {
+            return Mono.just(new ToolRetry.Result(false, "工具已不存在：" + retry.toolName()));
+        }
+        PlatformContext platform = ctx.platform();
+        RuntimeContext runtime = RuntimeContext.builder()
+                .sessionId(platform.threadId())
+                .userId(AgentScopeIdentity.userId(platform.projectId(), ctx.endUserId()))
+                .put(PlatformContext.class, platform)
+                .put(ToolRetryContext.class, new ToolRetryContext(retry.idempotencyKey()))
+                .build();
+        ToolUseBlock call = new ToolUseBlock(
+                retry.toolUseId(),
+                retry.toolName(),
+                retry.input(),
+                JsonUtils.getJsonCodec().toJson(retry.input()),
+                null);
+        ToolCallParam param = ToolCallParam.builder()
+                .toolUseBlock(call)
+                .input(retry.input())
+                .agent(handle.agent().getDelegate())
+                .runtimeContext(runtime)
+                .build();
+        // 工具直接返回的结果状态默认为 RUNNING（由 2.0.4 的 ToolExecutor 定稿），只有明确的错误、拒绝、中断算失败
+        return tool.callAsync(param)
+                .map(result -> new ToolRetry.Result(!FAILED_STATES.contains(result.getState()), textOf(result)));
+    }
+
+    private static String textOf(ToolResultBlock result) {
+        return result.getOutput() == null
+                ? ""
+                : result.getOutput().stream()
+                        .filter(TextBlock.class::isInstance)
+                        .map(block -> ((TextBlock) block).getText())
+                        .collect(Collectors.joining("\n"));
     }
 
     @Override
@@ -274,6 +359,10 @@ public final class AgentScopeEngine implements AgentEngine {
             if (input.recovery() != null) {
                 // 恢复说明由 RecoveryNoteMiddleware 在第一次推理前注入，不走调用入参（架构设计「崩溃恢复」）
                 builder.put(RecoveryNoteSlot.class, new RecoveryNoteSlot(input.recovery()));
+            }
+            if (ctx.interruptRequested()) {
+                // 认领时已有中断请求：输入写进上下文后，在第一次推理前按用户中断结束（InterruptCheckpointMiddleware）
+                builder.put(PendingInterrupt.class, new PendingInterrupt());
             }
             ToolRequestConfig customTools = TurnInputTranslator.toolRequestConfig(ctx.customTools());
             if (customTools != null) {

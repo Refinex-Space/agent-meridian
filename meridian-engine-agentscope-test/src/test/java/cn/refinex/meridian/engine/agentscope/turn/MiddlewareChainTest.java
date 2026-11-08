@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cn.refinex.meridian.engine.agentscope.assembly.AgentHandle;
 import cn.refinex.meridian.engine.agentscope.middleware.BatchCheckpointMiddleware;
+import cn.refinex.meridian.engine.agentscope.middleware.InterruptCheckpointMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.LeaseGuardMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformContextMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformTracingMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.RecoveryNoteMiddleware;
+import cn.refinex.meridian.engine.agentscope.middleware.SteerMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.ToolSpanMiddleware;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestSpecs;
 import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
@@ -56,16 +58,18 @@ class MiddlewareChainTest {
             assertThat(chain.getFirst())
                     .as("AgentScope 在构造时把优雅停机中间件放在最外层，不参与排序")
                     .isInstanceOf(GracefulShutdownMiddleware.class);
-            assertThat(chain.subList(1, 7))
+            assertThat(chain.subList(1, 9))
                     .extracting(m -> m.getClass().getSimpleName())
                     .containsExactly(
                             PlatformContextMiddleware.class.getSimpleName(),
                             PlatformTracingMiddleware.class.getSimpleName(),
                             LeaseGuardMiddleware.class.getSimpleName(),
                             RecoveryNoteMiddleware.class.getSimpleName(),
+                            InterruptCheckpointMiddleware.class.getSimpleName(),
+                            SteerMiddleware.class.getSimpleName(),
                             BatchCheckpointMiddleware.class.getSimpleName(),
                             ToolSpanMiddleware.class.getSimpleName());
-            assertThat(chain.subList(7, chain.size()))
+            assertThat(chain.subList(9, chain.size()))
                     .as("harness 自带的中间件都是默认 order 1，位于平台中间件之内")
                     .allSatisfy(m -> assertThat(m.order()).isEqualTo(1));
         } finally {

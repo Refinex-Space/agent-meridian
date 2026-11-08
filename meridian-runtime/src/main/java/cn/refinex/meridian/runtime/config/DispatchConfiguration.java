@@ -4,6 +4,8 @@ import cn.refinex.meridian.persistence.jdbc.PeriodicJob;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseReaper;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseRenewer;
+import cn.refinex.meridian.runtime.dispatch.app.NodeChannel;
+import cn.refinex.meridian.runtime.dispatch.app.NodeChannelListener;
 import cn.refinex.meridian.runtime.dispatch.app.QueueDepthGauge;
 import cn.refinex.meridian.runtime.dispatch.domain.NodeId;
 import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
@@ -66,6 +68,19 @@ public class DispatchConfiguration {
     public PeriodicJob leaseReaperJob(LeaseReaper reaper, DispatchProperties properties) {
         return new PeriodicJob(
                 "lease-reaper", properties.reapInterval(), reaper::reapExpired, TurnWorkerLifecycle.LEASE_JOBS_PHASE);
+    }
+
+    /**
+     * 订阅本节点的频道 {@code node:{node_id}}：收到通知立即对该线程续租，加速中断与会话删除的送达（架构设计「消息投递」）。
+     *
+     * @param channel 节点频道
+     * @param renewer 续租用例
+     * @param nodeId 本节点 ID
+     * @return 订阅组件
+     */
+    @Bean
+    public NodeChannelListener nodeChannelListener(NodeChannel channel, LeaseRenewer renewer, NodeId nodeId) {
+        return new NodeChannelListener(channel, renewer, nodeId, TurnWorkerLifecycle.LEASE_JOBS_PHASE);
     }
 
     /**

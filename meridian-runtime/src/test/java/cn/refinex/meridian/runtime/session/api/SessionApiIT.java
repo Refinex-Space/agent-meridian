@@ -134,14 +134,23 @@ class SessionApiIT extends ApiTestBase {
         assertThat(batch.body().get("data"))
                 .extracting(e -> e.get("seq").asLong())
                 .containsExactly(2L, 3L, 4L);
+        // T08：排队中的消息轮被中断时取消，本批的两条消息（中断之后的按 queue）合成下一轮
         assertThat(DbAssertions.list(
-                        "SELECT delivery FROM rt.inbox_messages WHERE session_id = ? ORDER BY created_at, id",
+                        "SELECT status FROM rt.turns WHERE session_id = ? ORDER BY created_at, id",
                         String.class,
                         sessionId))
-                .as("跟在中断后面的消息降级为 queue")
-                .containsExactly("steer", "queue");
-        assertThat(DbAssertions.list("SELECT count(*) FROM rt.turns WHERE session_id = ?", Long.class, sessionId))
-                .containsExactly(1L);
+                .containsExactly("cancelled", "queued");
+        assertThat(DbAssertions.list(
+                        "SELECT i.payload::text FROM rt.turns t JOIN rt.turn_inputs i ON i.turn_id = t.id "
+                                + "WHERE t.session_id = ? AND t.status = 'queued'",
+                        String.class,
+                        sessionId))
+                .singleElement()
+                .satisfies(payload -> assertThat(payload).containsSubsequence("插一句", "中断后的"));
+        assertThat(DbAssertions.list(
+                        "SELECT delivery FROM rt.inbox_messages WHERE session_id = ?", String.class, sessionId))
+                .as("线程空闲后直接入队，不经收件箱")
+                .isEmpty();
     }
 
     @Test
@@ -308,12 +317,8 @@ class SessionApiIT extends ApiTestBase {
         assertThat(result.status()).isEqualTo(202);
         assertThat(result.body().get("data").get(0).get("data").get("error").asBoolean())
                 .isFalse();
-        assertThat(api.listPendingActions(sessionId, null).body().get("data"))
-                .singleElement()
-                .satisfies(action -> assertThat(action.get("type").asString()).isEqualTo("custom_tool_result"));
-
-        DbAssertions.update(
-                "UPDATE rt.pending_actions SET status = 'resolved', resolved_at = now() WHERE id = ?", customAction);
+        // T08：回应后动作标为已回应，不再出现在等待列表中，同一动作不能再次回应
+        assertThat(api.listPendingActions(sessionId, null).body().get("data")).isEmpty();
         assertProblem(
                 api.sendEvents(
                         sessionId,

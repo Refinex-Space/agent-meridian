@@ -65,8 +65,7 @@ class TurnRecoveryIT {
     void killedProcessReplaysTheFullInputOnceAndRedeliversTheConsumedSteer() throws Exception {
         WorkerFixture fixture = new WorkerFixture(ScriptedModel.builder()
                 .respond(r -> r.toolCall("call_1", LOOKUP, Map.of("text", "a")))
-                .respond(r -> r.text("恢复后完成"))
-                .respond(r -> r.text("处理了 steer"))
+                .respond(r -> r.text("恢复后完成，也看了 b"))
                 .build());
         WorkerNode nodeA = fixture.node("node-a");
         WorkerNode nodeB = fixture.node("node-b");
@@ -92,23 +91,27 @@ class TurnRecoveryIT {
             assertThat(countUserText(replayed, USER_TEXT))
                     .as("重放完整输入，用户消息只出现一次")
                     .isEqualTo(1);
-            assertThat(replayed.getLast().getTextContent())
+            assertThat(replayed.get(replayed.size() - 2).getTextContent())
                     .startsWith("[平台恢复说明]")
                     .contains(LOOKUP + "（call_1）：状态未知");
+            // T08 起 SteerMiddleware 生效：被失败那次执行消费的 steer 已重新投递，在恢复轮第一次推理前注入（排在恢复说明之后）
+            assertThat(replayed.getLast().getTextContent()).isEqualTo("顺便看看 b");
             assertThat(DbAssertions.turn(turnId))
                     .containsEntry("recovery_attempt", 1)
                     .containsEntry("lease_epoch", 2L);
             assertThat(meter(nodeB, "meridian.turn.recoveries", "mode", "replay"))
                     .isEqualTo(1.0);
 
-            // 被失败那次执行消费的 steer 已重新投递：本轮在注入前结束，它降级为 queue 成为下一轮
-            TurnResult next = nodeB.claimAndRun();
-            assertThat(next).isInstanceOf(TurnResult.Finished.class);
-            assertThat(fixture.model.request(2).lastUserText()).isEqualTo("顺便看看 b");
+            // 重新投递的 steer 由恢复的这次执行（epoch 2）消费，不丢失，也不再生成下一轮
+            assertThat(DbAssertions.row(
+                            "SELECT consumed_turn_id, consumed_epoch FROM rt.inbox_messages WHERE event_id = ?", steer))
+                    .containsEntry("consumed_turn_id", turnId)
+                    .containsEntry("consumed_epoch", 2L);
             assertThat(DbAssertions.list(
-                            "SELECT consumed_turn_id FROM rt.inbox_messages WHERE event_id = ?", String.class, steer))
-                    .containsExactly(next.turnId());
+                            "SELECT count(*) FROM rt.turns WHERE thread_id = ?", Long.class, session.mainThreadId()))
+                    .containsExactly(1L);
             assertThat(countInState(session, USER_TEXT)).as("状态里的用户消息也只有一条").isEqualTo(1);
+            assertThat(countInState(session, "顺便看看 b")).as("steer 随恢复的执行进入状态").isEqualTo(1);
         } finally {
             fixture.lookupCalls.open();
         }

@@ -41,8 +41,10 @@ public sealed interface RecoveryDecision {
      * @param origin 恢复来源，回应后生成恢复轮时使用
      * @param redeliverSteer 是否重新投递 steer
      * @param unknownCalls 需要确认的调用，至少一个
+     * @param note 此刻的完整恢复说明（已成功与状态未知的调用），随动作保存，回应后生成恢复轮时在它上面标出重试或跳过
      */
-    record AwaitConfirmation(RecoveryOrigin origin, boolean redeliverSteer, List<ToolCallRecord> unknownCalls)
+    record AwaitConfirmation(
+            RecoveryOrigin origin, boolean redeliverSteer, List<ToolCallRecord> unknownCalls, RecoveryNote note)
             implements RecoveryDecision {
 
         /**
@@ -52,6 +54,7 @@ public sealed interface RecoveryDecision {
          */
         public AwaitConfirmation {
             Objects.requireNonNull(origin, "origin");
+            Objects.requireNonNull(note, "note");
             unknownCalls = List.copyOf(unknownCalls);
             if (unknownCalls.isEmpty()) {
                 throw new IllegalArgumentException("至少要有一个需要确认的调用");

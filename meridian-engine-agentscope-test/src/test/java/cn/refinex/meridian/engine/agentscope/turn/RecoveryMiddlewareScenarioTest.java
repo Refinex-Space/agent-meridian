@@ -8,6 +8,7 @@ import cn.refinex.meridian.engine.agentscope.middleware.BatchCheckpointMiddlewar
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
 import cn.refinex.meridian.engine.agentscope.middleware.RecoveryNoteMiddleware;
 import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
+import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryInbox;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryLeaseRegistry;
 import cn.refinex.meridian.engine.agentscope.testkit.tool.RecordingTool;
 import cn.refinex.meridian.engine.spi.engine.TurnContext;
@@ -119,10 +120,10 @@ class RecoveryMiddlewareScenarioTest {
     void batchCheckpointCanBeTurnedOff() {
         InMemoryLeaseRegistry leases = new InMemoryLeaseRegistry();
 
-        assertThat(new PlatformMiddlewareProvider(leases).middlewares(null))
+        assertThat(new PlatformMiddlewareProvider(leases, new InMemoryInbox()).middlewares(null))
                 .hasAtLeastOneElementOfType(BatchCheckpointMiddleware.class)
                 .hasAtLeastOneElementOfType(RecoveryNoteMiddleware.class);
-        assertThat(new PlatformMiddlewareProvider(leases, false).middlewares(null))
+        assertThat(new PlatformMiddlewareProvider(leases, new InMemoryInbox(), false).middlewares(null))
                 .noneMatch(BatchCheckpointMiddleware.class::isInstance)
                 .hasAtLeastOneElementOfType(RecoveryNoteMiddleware.class);
     }

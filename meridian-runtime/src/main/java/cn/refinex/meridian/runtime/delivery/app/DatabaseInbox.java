@@ -5,12 +5,16 @@ import cn.refinex.meridian.common.error.LeaseLostException;
 import cn.refinex.meridian.engine.spi.engine.ThreadRef;
 import cn.refinex.meridian.engine.spi.engine.input.InboundMessage;
 import cn.refinex.meridian.engine.spi.event.EventType;
+import cn.refinex.meridian.engine.spi.event.SessionEvent;
 import cn.refinex.meridian.engine.spi.event.UserEvent;
 import cn.refinex.meridian.engine.spi.port.InboxPort;
 import cn.refinex.meridian.runtime.delivery.domain.InboxEntry;
 import cn.refinex.meridian.runtime.delivery.domain.TakenMessage;
 import cn.refinex.meridian.runtime.delivery.infra.InboxRepository;
 import cn.refinex.meridian.runtime.dispatch.domain.NodeId;
+import cn.refinex.meridian.runtime.stream.app.SessionEventWriter;
+import cn.refinex.meridian.runtime.stream.domain.EventBatch;
+import cn.refinex.meridian.runtime.stream.domain.WriteFence;
 import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import java.time.Clock;
 import java.util.List;
@@ -25,8 +29,8 @@ import reactor.core.publisher.Mono;
  * 「崩溃恢复」）。
  *
  * <ul>
- *   <li>{@link #consumeSteer}：{@code SteerMiddleware}（T08）在每次推理前调用，取出 steer 消息并记录 {@code consumed_turn_id}、
- *       {@code consumed_epoch}，写入带租约条件。
+ *   <li>{@link #consumeSteer}：{@code SteerMiddleware} 在每次推理前调用，取出 steer 消息并记录 {@code consumed_turn_id}、
+ *       {@code consumed_epoch}，同一事务中写 {@code session.message_consumed}，写入带租约条件。
  *   <li>{@link #takePending}：轮次以空闲结束时，把待投递的消息合并成下一轮的输入，在 Worker 的结束事务中调用。
  *   <li>{@link #redeliverSteer}：恢复认领时，失败那次执行的内容没有保存，被它消费的 steer 恢复为待投递。
  * </ul>
@@ -41,6 +45,7 @@ public class DatabaseInbox implements InboxPort {
     private static final Logger log = LoggerFactory.getLogger(DatabaseInbox.class);
 
     private final InboxRepository repository;
+    private final SessionEventWriter events;
     private final TransactionTemplate transactions;
     private final NodeId nodeId;
     private final Clock clock;
@@ -49,12 +54,19 @@ public class DatabaseInbox implements InboxPort {
      * 创建收件箱。
      *
      * @param repository 收件箱仓储
+     * @param events 事件写入入口，写 {@code session.message_consumed}
      * @param transactions 事务模板（传播行为 REQUIRED）
      * @param nodeId 本节点 ID，租约条件中的 {@code lease_owner}
      * @param clock 时钟
      */
-    public DatabaseInbox(InboxRepository repository, TransactionTemplate transactions, NodeId nodeId, Clock clock) {
+    public DatabaseInbox(
+            InboxRepository repository,
+            SessionEventWriter events,
+            TransactionTemplate transactions,
+            NodeId nodeId,
+            Clock clock) {
         this.repository = repository;
+        this.events = events;
         this.transactions = transactions;
         this.nodeId = nodeId;
         this.clock = clock;
@@ -66,7 +78,20 @@ public class DatabaseInbox implements InboxPort {
             if (!repository.lockLease(turnId, nodeId.value(), epoch)) {
                 throw new LeaseLostException("轮次 " + turnId + " 在本节点的租约不是 epoch " + epoch + "，拒绝消费 steer 消息");
             }
-            return toMessages(repository.consumeSteer(thread.threadId(), turnId, epoch, clock.instant()));
+            List<InboundMessage> messages =
+                    toMessages(repository.consumeSteer(thread.threadId(), turnId, epoch, clock.instant()));
+            if (!messages.isEmpty()) {
+                // 轮次行已在本事务中以 FOR SHARE 锁住，事件不再附加租约条件
+                events.append(new EventBatch(
+                        thread.sessionId(),
+                        thread.threadId(),
+                        turnId,
+                        WriteFence.none(),
+                        List.of(new SessionEvent.MessageConsumed(
+                                messages.stream().map(InboundMessage::eventId).toList()))));
+                log.debug("steer 消息已注入 turnId={} epoch={} count={}", turnId, epoch, messages.size());
+            }
+            return messages;
         }));
     }
 

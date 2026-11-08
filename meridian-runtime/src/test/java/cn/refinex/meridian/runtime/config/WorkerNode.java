@@ -12,14 +12,19 @@ import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
+import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
+import cn.refinex.meridian.runtime.approval.app.PendingActionResolver;
 import cn.refinex.meridian.runtime.approval.app.PermissionPolicies;
 import cn.refinex.meridian.runtime.approval.infra.DatabasePolicyStore;
 import cn.refinex.meridian.runtime.approval.infra.PendingActionRepository;
 import cn.refinex.meridian.runtime.approval.infra.PermissionRuleRepository;
 import cn.refinex.meridian.runtime.delivery.app.DatabaseInbox;
+import cn.refinex.meridian.runtime.delivery.app.EventIntake;
 import cn.refinex.meridian.runtime.delivery.infra.InboxRepository;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchWakeups;
+import cn.refinex.meridian.runtime.dispatch.app.NodeChannel;
+import cn.refinex.meridian.runtime.dispatch.app.NodeChannelListener;
 import cn.refinex.meridian.runtime.session.app.TurnExecution;
 import cn.refinex.meridian.runtime.session.app.TurnFinisher;
 import cn.refinex.meridian.runtime.session.app.TurnMetrics;
@@ -29,6 +34,7 @@ import cn.refinex.meridian.runtime.session.app.TurnWorker;
 import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
 import cn.refinex.meridian.runtime.session.app.WorkerProperties;
 import cn.refinex.meridian.runtime.session.infra.SessionRepository;
+import cn.refinex.meridian.runtime.session.infra.ThreadRepository;
 import cn.refinex.meridian.runtime.session.infra.system.ThreadLockRepository;
 import cn.refinex.meridian.runtime.stream.app.ObjectStoreBlobStore;
 import cn.refinex.meridian.runtime.support.RuntimeTestObjectStore;
@@ -64,6 +70,9 @@ import reactor.core.scheduler.Schedulers;
  * @param tools 本节点的记账工具：工具名 → 实例
  * @param states 本节点状态存储使用的状态端口（可能被测试包装）
  * @param properties 执行配置
+ * @param intake 发送事件的用例（模拟 API：投递、中断、回应与恢复轮）
+ * @param resolver 待处理动作的结论与恢复轮
+ * @param channelListener 本节点频道 {@code node:{node_id}} 的订阅，测试负责启停
  */
 record WorkerNode(
         TestNode node,
@@ -74,7 +83,10 @@ record WorkerNode(
         TurnFinisher finisher,
         Map<String, LedgerTool> tools,
         AgentStateRepository states,
-        WorkerProperties properties) {
+        WorkerProperties properties,
+        EventIntake intake,
+        PendingActionResolver resolver,
+        NodeChannelListener channelListener) {
 
     /** 等待一次执行结束的上限。 */
     static final Duration RUN_TIMEOUT = Duration.ofSeconds(30);
@@ -90,6 +102,7 @@ record WorkerNode(
      * @param properties 执行配置
      * @param states 包装状态端口（例如记录被拒绝的写入）；不包装时为恒等函数
      * @param dataSource 本节点的数据源（例如可以模拟数据库不可用的 {@code FailingDataSource}）
+     * @param extraTools 不记账的其他测试工具（例如实现了 {@code matchRule} 的路径工具）
      */
     record Spec(
             String nodeId,
@@ -99,7 +112,8 @@ record WorkerNode(
             Map<String, ToolSpec> tools,
             WorkerProperties properties,
             UnaryOperator<AgentStateRepository> states,
-            DataSource dataSource) {}
+            DataSource dataSource,
+            List<AgentTool> extraTools) {}
 
     /**
      * 一个记账工具的定义。
@@ -114,8 +128,8 @@ record WorkerNode(
         TransactionTemplate transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         TestNode node = TestNode.create(spec.nodeId(), spec.clock(), DispatchProperties.defaults(), dataSource);
         TurnMetrics metrics = new TurnMetrics(node.meters());
-        DatabaseInbox inbox =
-                new DatabaseInbox(new InboxRepository(dataSource), transactions, node.nodeId(), spec.clock());
+        DatabaseInbox inbox = new DatabaseInbox(
+                new InboxRepository(dataSource), node.events(), transactions, node.nodeId(), spec.clock());
         DatabaseToolLedger ledger = new DatabaseToolLedger(
                 new ToolInvocationRepository(dataSource), transactions, node.nodeId(), spec.clock());
         BlobStorePort blobs = new ObjectStoreBlobStore(RuntimeTestObjectStore.get());
@@ -126,12 +140,12 @@ record WorkerNode(
                         tools.put(name, new LedgerTool(name, tool.sideEffect(), ledger, blobs, tool.calls())));
         AgentStateRepository states = spec.states().apply(node.states());
         List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(
-                        node.registry(), spec.properties().batchCheckpoint())
+                        node.registry(), inbox, spec.properties().batchCheckpoint())
                 .middlewares(null));
         TestAssembly assembly = TestAssembly.builder(spec.model())
                 .stateStore(new FencedAgentStateStore(states, node.registry()))
                 .middlewares(new RecordingMiddlewareProvider(middlewares, middlewares))
-                .tools(new StaticToolProvider(List.of(), new ArrayList<AgentTool>(tools.values())))
+                .tools(new StaticToolProvider(List.of(), allTools(tools, spec.extraTools())))
                 .build();
         AgentScopeEngine engine = new AgentScopeEngine(
                 new AgentInstanceCache(assembly.assembler()),
@@ -139,12 +153,27 @@ record WorkerNode(
                 node.registry(),
                 blobs);
 
+        PendingActionRepository pendingActions = new PendingActionRepository(dataSource);
+        PermissionRuleRepository rules = new PermissionRuleRepository(dataSource);
+        ApprovalAudit approvalAudit = new ApprovalAudit(
+                node.events(), new OutboxWriter(dataSource, "rt", spec.clock()), transactions, spec.clock());
+        PendingActionResolver resolver = new PendingActionResolver(
+                pendingActions,
+                rules,
+                new DatabasePolicyStore(rules, spec.clock()),
+                node.transitions(),
+                node.enqueuer(),
+                node.claimer(),
+                approvalAudit,
+                spec.clock());
         TurnFinisher finisher = new TurnFinisher(
                 node.transitions(),
                 node.enqueuer(),
                 node.events(),
                 inbox,
-                new PendingActionRepository(dataSource),
+                pendingActions,
+                resolver,
+                approvalAudit,
                 new ThreadLockRepository(dataSource),
                 new OutboxWriter(dataSource, "rt", spec.clock()),
                 transactions,
@@ -164,10 +193,42 @@ record WorkerNode(
                 finisher,
                 metrics,
                 permissions(dataSource, spec.clock()),
+                pendingActions,
                 transactions);
         TurnWorker worker = new TurnWorker(
-                node.claimer(), preparer, finisher, engine, node.events(), node.publisher(), metrics, spec.clock());
-        return new WorkerNode(node, engine, worker, inbox, ledger, finisher, tools, states, spec.properties());
+                node.claimer(), preparer, finisher, engine, approvalAudit, node.publisher(), metrics, spec.clock());
+        NodeChannel channel = new NodeChannel(RuntimeTestRedis.reactiveMessaging());
+        EventIntake intake = new EventIntake(
+                new SessionRepository(dataSource),
+                new ThreadRepository(dataSource),
+                new ThreadLockRepository(dataSource),
+                pendingActions,
+                node.enqueuer(),
+                node.transitions(),
+                inbox,
+                resolver,
+                channel,
+                node.events(),
+                transactions);
+        return new WorkerNode(
+                node,
+                engine,
+                worker,
+                inbox,
+                ledger,
+                finisher,
+                tools,
+                states,
+                spec.properties(),
+                intake,
+                resolver,
+                new NodeChannelListener(channel, node.renewer(), node.nodeId(), 0));
+    }
+
+    private static List<AgentTool> allTools(Map<String, LedgerTool> ledgerTools, List<AgentTool> extraTools) {
+        List<AgentTool> all = new ArrayList<>(ledgerTools.values());
+        all.addAll(extraTools);
+        return all;
     }
 
     /** 权限合成：开发实现的策略存储与会话级规则都在 {@code rt.permission_rules}。 */

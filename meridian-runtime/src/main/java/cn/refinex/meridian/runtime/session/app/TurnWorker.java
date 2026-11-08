@@ -1,10 +1,10 @@
 package cn.refinex.meridian.runtime.session.app;
 
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
+import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
 import cn.refinex.meridian.runtime.dispatch.app.ClaimResult;
 import cn.refinex.meridian.runtime.dispatch.app.TurnClaimer;
 import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
-import cn.refinex.meridian.runtime.stream.app.SessionEventWriter;
 import java.time.Clock;
 import java.util.Optional;
 
@@ -26,7 +26,7 @@ public final class TurnWorker {
     private final TurnPreparer preparer;
     private final TurnFinisher finisher;
     private final AgentEngine engine;
-    private final SessionEventWriter events;
+    private final ApprovalAudit audit;
     private final EventStreamPublisher publisher;
     private final TurnMetrics metrics;
     private final Clock clock;
@@ -38,7 +38,7 @@ public final class TurnWorker {
      * @param preparer 准备用例
      * @param finisher 收尾用例
      * @param engine 智能体内核
-     * @param events 事件写入入口
+     * @param audit 事件写入与权限判定审计
      * @param publisher 只在流上的事件的发布
      * @param metrics 指标
      * @param clock 时钟
@@ -48,7 +48,7 @@ public final class TurnWorker {
             TurnPreparer preparer,
             TurnFinisher finisher,
             AgentEngine engine,
-            SessionEventWriter events,
+            ApprovalAudit audit,
             EventStreamPublisher publisher,
             TurnMetrics metrics,
             Clock clock) {
@@ -56,7 +56,7 @@ public final class TurnWorker {
         this.preparer = preparer;
         this.finisher = finisher;
         this.engine = engine;
-        this.events = events;
+        this.audit = audit;
         this.publisher = publisher;
         this.metrics = metrics;
         this.clock = clock;
@@ -73,7 +73,7 @@ public final class TurnWorker {
                 case ClaimResult.Claimed claimed -> {
                     metrics.claimed(claimed.lease().turn());
                     return Optional.of(new TurnExecution(
-                            claimed.lease(), preparer, finisher, engine, events, publisher, metrics, clock));
+                            claimed.lease(), preparer, finisher, engine, audit, publisher, metrics, clock));
                 }
                 case ClaimResult.NoneAvailable _ -> {
                     return Optional.empty();

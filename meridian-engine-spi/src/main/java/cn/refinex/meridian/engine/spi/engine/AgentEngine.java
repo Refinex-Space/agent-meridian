@@ -3,6 +3,7 @@ package cn.refinex.meridian.engine.spi.engine;
 import cn.refinex.meridian.engine.spi.engine.input.TurnInput;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import java.time.Duration;
+import java.util.Set;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -36,6 +37,27 @@ public interface AgentEngine {
      * @return 本节点上有该线程的执行并已发出中断时为 true
      */
     boolean interrupt(ThreadRef thread);
+
+    /**
+     * 恢复确认选择 {@code retry} 时，在平台 Java 侧用原幂等键重新执行一个状态未知的工具调用，不经模型（架构设计「待处理动作」）。
+     * 结果由调用方写进恢复说明。调用方在持有本轮租约时调用，工具的账本写入使用 {@code ctx} 中的租约 epoch。
+     *
+     * @param ctx 执行重试的这一轮的上下文
+     * @param retry 要重新执行的调用
+     * @return 执行结果；工具失败时 {@link ToolRetry.Result#succeeded()} 为 false，不以错误结束
+     */
+    Mono<ToolRetry.Result> retryToolCall(TurnContext ctx, ToolRetry retry);
+
+    /**
+     * 业务方声明的自定义工具不能使用的名字（架构设计「平台工具」中的保留工具名）：智能体装配后 Toolkit 中的全部工具名、全部平台
+     * 工具名与 harness 仍然注册的工具名。另有 {@code mcp__} 前缀，调用方自行检查。
+     *
+     * @param agentVersionId 智能体版本 ID
+     * @param environmentId 环境 ID
+     * @param environmentRevision 环境修订号
+     * @return 保留工具名
+     */
+    Mono<Set<String>> reservedToolNames(String agentVersionId, String environmentId, long environmentRevision);
 
     /**
      * 节点下线：以 SYSTEM 来源中断全部执行并等待状态保存，最长等待 timeout（架构设计「崩溃恢复」中的"节点优雅下线"）。

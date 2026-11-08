@@ -68,6 +68,18 @@ public class LeaseRenewer {
         }
     }
 
+    /**
+     * 立即为一个线程续租一次，收到节点频道的通知时调用（{@link NodeChannelListener}）：读出中断请求，或发现租约已失去。本节点没有
+     * 该线程的有效租约时什么都不做。
+     *
+     * @param threadId 线程 ID
+     */
+    public void renewThread(String threadId) {
+        registry.handle(threadId)
+                .filter(handle -> handle.isActive() && !handle.isLost())
+                .ifPresent(this::renew);
+    }
+
     private void renew(LeaseHandle handle) {
         ClaimedTurn turn = handle.turn();
         Instant now = clock.instant();

@@ -13,8 +13,10 @@ import cn.refinex.meridian.common.page.PageResult;
 import cn.refinex.meridian.engine.spi.event.SessionEvent;
 import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
+import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.runtime.approval.infra.PendingActionRepository;
+import cn.refinex.meridian.runtime.dispatch.app.NodeChannel;
 import cn.refinex.meridian.runtime.dispatch.app.TurnTransitions;
 import cn.refinex.meridian.runtime.dispatch.infra.system.TurnLeaseRepository.ActiveTurn;
 import cn.refinex.meridian.runtime.session.domain.NewSession;
@@ -59,8 +61,10 @@ public class SessionService {
     private final ThreadLockRepository threadLocks;
     private final PendingActionRepository pendingActions;
     private final TurnTransitions transitions;
+    private final NodeChannel nodeChannel;
     private final SessionEventWriter events;
     private final AgentConfigProvider agentConfigs;
+    private final ReservedToolNames reservedToolNames;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
@@ -72,8 +76,10 @@ public class SessionService {
      * @param threadLocks 线程咨询锁
      * @param pendingActions 待处理动作仓储
      * @param transitions 轮次迁移，终止时取消未结束的轮次
+     * @param nodeChannel 节点频道，取消执行中的轮次后通知持有租约的节点立即放弃
      * @param events 事件写入入口
      * @param agentConfigs 智能体与环境配置，创建会话时解析并固化版本
+     * @param reservedToolNames 保留工具名，校验自定义工具声明
      * @param transactions 事务模板（传播行为 REQUIRED）
      * @param clock 时钟
      */
@@ -83,8 +89,10 @@ public class SessionService {
             ThreadLockRepository threadLocks,
             PendingActionRepository pendingActions,
             TurnTransitions transitions,
+            NodeChannel nodeChannel,
             SessionEventWriter events,
             AgentConfigProvider agentConfigs,
+            ReservedToolNames reservedToolNames,
             TransactionTemplate transactions,
             Clock clock) {
         this.sessions = sessions;
@@ -92,8 +100,10 @@ public class SessionService {
         this.threadLocks = threadLocks;
         this.pendingActions = pendingActions;
         this.transitions = transitions;
+        this.nodeChannel = nodeChannel;
         this.events = events;
         this.agentConfigs = agentConfigs;
+        this.reservedToolNames = reservedToolNames;
         this.transactions = transactions;
         this.clock = clock;
     }
@@ -113,6 +123,9 @@ public class SessionService {
                 ? agentConfigs.agentVersion(command.agent())
                 : agentConfigs.currentAgentVersion(command.agent());
         EnvironmentSpec environment = agentConfigs.currentEnvironment(command.environmentId());
+        if (!command.customTools().isEmpty()) {
+            rejectReservedNames(command.customTools(), reservedToolNames.of(agent, environment));
+        }
         String sessionId = Ids.newId(IdPrefix.SESSION);
         NewSession session = new NewSession(
                 sessionId,
@@ -230,7 +243,7 @@ public class SessionService {
             }
             lockMainThread(sessionId);
             if (session.isTerminated()) {
-                transitions.cancelActive(sessionId);
+                cancelActive(sessionId);
                 pendingActions.expirePending(sessionId, clock.instant());
             } else {
                 terminate(sessionId, SessionEvent.TerminationReason.DELETED);
@@ -294,7 +307,7 @@ public class SessionService {
     }
 
     private void terminate(String sessionId, SessionEvent.TerminationReason reason) {
-        transitions.cancelActive(sessionId);
+        cancelActive(sessionId);
         pendingActions.expirePending(sessionId, clock.instant());
         events.append(EventBatch.unfenced(sessionId, null, List.of(new SessionEvent.StatusTerminated(reason))));
     }
@@ -325,6 +338,35 @@ public class SessionService {
                         "自定义工具重名：" + tool.name(),
                         List.of(new FieldViolation("custom_tools", "工具名重复：" + tool.name())));
             }
+        }
+    }
+
+    /**
+     * 取消会话的全部未结束轮次；执行中的轮次在提交后通知持有租约的节点，它立即续租、发现租约已失去并放弃本轮（架构设计「消息投递」
+     * 中"删除会话：取消当前轮"），通知丢失时由续租兜底。
+     */
+    private void cancelActive(String sessionId) {
+        String mainThreadId = mainThread(sessionId).id();
+        for (ActiveTurn turn : transitions.cancelActive(sessionId)) {
+            if (turn.running()) {
+                nodeChannel.notifyAfterCommit(turn.leaseOwner(), mainThreadId);
+            }
+        }
+    }
+
+    /**
+     * 自定义工具不能与保留工具名重名，也不能以 {@code mcp__} 开头（架构设计「待处理动作」中的"自定义工具"）。
+     *
+     * @throws ValidationException 有冲突时，列出每个冲突的名字
+     */
+    private static void rejectReservedNames(List<CustomToolDeclaration> tools, Set<String> reserved) {
+        List<FieldViolation> violations = tools.stream()
+                .map(CustomToolDeclaration::name)
+                .filter(name -> reserved.contains(name) || PlatformToolNames.isMcpTool(name))
+                .map(name -> new FieldViolation("custom_tools", "工具名与平台保留的工具名冲突：" + name))
+                .toList();
+        if (!violations.isEmpty()) {
+            throw new ValidationException(CommonErrorCode.VALIDATION_FAILED, "自定义工具名与平台保留的工具名冲突", violations);
         }
     }
 

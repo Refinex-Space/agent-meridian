@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
  *   <li>{@code RecoveryOnly}：没有入参，恢复说明由 {@code RecoveryNoteMiddleware} 在推理前注入（T06）。
  * </ul>
  */
-final class TurnInputTranslator {
+public final class TurnInputTranslator {
 
     private TurnInputTranslator() {}
 
@@ -139,7 +139,13 @@ final class TurnInputTranslator {
                 .build();
     }
 
-    static ContentBlock contentBlock(MessageContent content) {
+    /**
+     * 把平台的内容块翻译为 AgentScope 的内容块，用户消息、steer 消息与自定义工具结果共用。
+     *
+     * @param content 平台内容块
+     * @return AgentScope 内容块
+     */
+    public static ContentBlock contentBlock(MessageContent content) {
         return switch (content) {
             case MessageContent.Text text ->
                 TextBlock.builder().text(text.text()).build();
