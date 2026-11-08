@@ -2,6 +2,7 @@ package cn.refinex.meridian.runtime.modelrouting.infra;
 
 import cn.refinex.meridian.common.json.JsonMappers;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelRoute;
+import cn.refinex.meridian.runtime.modelrouting.domain.RerankScore;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -240,14 +241,6 @@ public final class ProviderVectorClient implements AutoCloseable {
      * @param promptTokens 供应商报告的输入 token；没有报告时为空
      */
     public record RerankResult(List<RerankScore> scores, Integer promptTokens) {}
-
-    /**
-     * 一条候选文本的得分。
-     *
-     * @param index 在请求中的序号
-     * @param score 相关度
-     */
-    public record RerankScore(int index, double score) {}
 
     /**
      * 一次供应商调用的失败。

@@ -13,6 +13,7 @@ import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelRoute;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.UsageSource;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelKind;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelRoutingErrorCode;
+import cn.refinex.meridian.runtime.modelrouting.domain.RerankScore;
 import cn.refinex.meridian.runtime.modelrouting.domain.TextTokens;
 import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient;
 import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient.EmbeddingResult;
@@ -243,5 +244,5 @@ public class VectorModelService {
      * @param scores 得分，从高到低
      * @param inputTokens 输入 token（供应商报告的，没有报告时为估算）
      */
-    public record Reranked(List<ProviderVectorClient.RerankScore> scores, int inputTokens) {}
+    public record Reranked(List<RerankScore> scores, int inputTokens) {}
 }

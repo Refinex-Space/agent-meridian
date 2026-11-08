@@ -208,7 +208,7 @@ class ScriptedModelSessionIT {
 
             assertThat(types).contains("session.status_idle:interrupted");
             assertThat(Duration.ofNanos(System.nanoTime() - start))
-                    .as("脚本完整输出约 13 秒，中断后提前结束")
+                    .as("脚本完整输出约 11 秒，中断后提前结束")
                     .isLessThan(Duration.ofSeconds(10));
         } finally {
             session.close();

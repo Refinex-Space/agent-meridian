@@ -1,5 +1,5 @@
 name: long-stream
-description: 长时间流式：约 12 秒逐块输出（60 块，每块间隔 200 毫秒），用于测试 steer 与中断的时序。
+description: 长时间流式：约 11 秒逐块输出（57 块，每块间隔 200 毫秒），用于测试 steer 与中断的时序。
 steps:
   - text: >-
       这是一段很长的流式回答，用来给调用方留出发送 steer 消息或中断的时间。
