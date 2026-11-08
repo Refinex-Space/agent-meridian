@@ -70,7 +70,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 已完成 | 5e8b21a |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 已完成 | 003dbfc |
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 已完成 | b724148 |
-| T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 未开始 | — |
+| T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 进行中 | — |
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 未开始 | — |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 未开始 | — |
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 未开始 | — |
@@ -175,7 +175,16 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T10b Web 工具、知识检索工具、MCP 客户端与提示词分层（开工基线：`verify.sh` 通过）
+
+- [ ] 1. 来源标签（格式、转义）与平台基础提示词；系统提示词四层组装（关闭 `WorkspaceContextMiddleware`，D29）、租户层来源、日期以消息注入
+- [ ] 2. `web_fetch`（SSRF 防护：IP 分类、DNS 解析后校验、逐跳重定向、5 MB 上限、HTML 转 Markdown、域名规则）
+- [ ] 3. `web_search`（`WebSearchPort`，SearXNG 与商业 API 适配器，按租户切换，WireMock 测试）
+- [ ] 4. `knowledge_search`（`KnowledgeSearchPort`，未配置实现返回错误结果，场景测试）
+- [ ] 5. MCP 客户端（`McpClientBuilder`、传输先于定制器、协议版本、凭据按请求注入、`mcp__{server}__{tool}`、随实例关闭）与进程内 MCP 服务集成测试
+- [ ] 6. P8 预验证：Boot 4.1 Servlet 注册 `HttpServletStreamableServerTransportProvider`，平台客户端调通；`docs/poc/P08-MCP-Server.md`
+- [ ] 7. runtime 生产装配（工具、端口实现、租户配置的文件实现）；前缀稳定性测试（两会话首条用户消息之前逐字节相同）
+- [ ] 8. 模块 `CLAUDE.md`、架构设计与 ADR、`docs/poc/README.md`；`acceptance.json`；收尾 `verify.sh`
 
 ## 控制台设计轨道
 
