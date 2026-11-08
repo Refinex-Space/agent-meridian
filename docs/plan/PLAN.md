@@ -177,7 +177,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 **T08 消息投递、待处理动作与权限合成**（开工基线：`scripts/dev/verify.sh` 通过，提交 8257c24）
 
-- [ ] 1. 权限合成：`PermissionSynthesizer`（五层、模式收紧、unattended 与子线程改写、`plan_enter` deny、子智能体策略）、平台安全规则、`PolicyStorePort` 与 `rt` 表实现、接入 `TurnPreparer`（A06 的单测部分）
+- [x] 1. 权限合成：`PermissionSynthesizer`（五层、模式收紧、unattended 与子线程改写、`plan_enter` deny、子智能体策略）、平台安全规则、`PolicyStorePort` 与 `rt` 表实现、接入 `TurnPreparer`（A06 的单测部分）
 - [ ] 2. 投递：中断（`interrupt_requested_at`、`node:{lease_owner}` 频道、续租兜底、`queued` → `cancelled`）、`awaiting_action` 下 steer 降级与中断拒绝全部动作、`SteerMiddleware`（A01、A02、A03）
 - [ ] 3. 待处理动作：回应标记、恢复轮生成（先确认后工具结果、`recovery_confirmation` 的 retry/skip 与 D13）、超时调度（`SKIP LOCKED`）、unattended 兜底自动拒绝（A04、A05）
 - [ ] 4. "记住此决定"会话级与项目级（A07）

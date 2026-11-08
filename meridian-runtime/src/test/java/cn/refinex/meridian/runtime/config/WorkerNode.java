@@ -12,7 +12,10 @@ import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
+import cn.refinex.meridian.runtime.approval.app.PermissionPolicies;
+import cn.refinex.meridian.runtime.approval.infra.DatabasePolicyStore;
 import cn.refinex.meridian.runtime.approval.infra.PendingActionRepository;
+import cn.refinex.meridian.runtime.approval.infra.PermissionRuleRepository;
 import cn.refinex.meridian.runtime.delivery.app.DatabaseInbox;
 import cn.refinex.meridian.runtime.delivery.infra.InboxRepository;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
@@ -160,10 +163,17 @@ record WorkerNode(
                 blobs,
                 finisher,
                 metrics,
+                permissions(dataSource, spec.clock()),
                 transactions);
         TurnWorker worker = new TurnWorker(
                 node.claimer(), preparer, finisher, engine, node.events(), node.publisher(), metrics, spec.clock());
         return new WorkerNode(node, engine, worker, inbox, ledger, finisher, tools, states, spec.properties());
+    }
+
+    /** 权限合成：开发实现的策略存储与会话级规则都在 {@code rt.permission_rules}。 */
+    static PermissionPolicies permissions(DataSource dataSource, Clock clock) {
+        PermissionRuleRepository rules = new PermissionRuleRepository(dataSource);
+        return new PermissionPolicies(new DatabasePolicyStore(rules, clock), rules);
     }
 
     /**

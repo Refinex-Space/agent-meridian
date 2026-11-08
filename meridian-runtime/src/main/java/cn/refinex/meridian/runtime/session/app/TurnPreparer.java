@@ -17,6 +17,8 @@ import cn.refinex.meridian.engine.spi.event.SessionEvent;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
 import cn.refinex.meridian.engine.spi.port.ToolLedgerPort.Status;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
+import cn.refinex.meridian.runtime.approval.app.PermissionPolicies;
+import cn.refinex.meridian.runtime.approval.app.PermissionPolicies.TurnPermissions;
 import cn.refinex.meridian.runtime.delivery.app.DatabaseInbox;
 import cn.refinex.meridian.runtime.dispatch.app.TurnClaimer;
 import cn.refinex.meridian.runtime.dispatch.domain.ClaimedTurn;
@@ -78,6 +80,7 @@ public class TurnPreparer {
     private final BlobStorePort blobs;
     private final TurnFinisher finisher;
     private final TurnMetrics metrics;
+    private final PermissionPolicies permissions;
     private final TransactionTemplate transactions;
 
     /**
@@ -93,6 +96,7 @@ public class TurnPreparer {
      * @param blobs 大对象存储，读取放在对象存储中的工具结果
      * @param finisher 收尾用例，恢复判定直接结束本次执行时使用
      * @param metrics 指标
+     * @param permissions 权限合成
      * @param transactions 事务模板（传播行为 REQUIRED）
      */
     public TurnPreparer(
@@ -106,6 +110,7 @@ public class TurnPreparer {
             BlobStorePort blobs,
             TurnFinisher finisher,
             TurnMetrics metrics,
+            PermissionPolicies permissions,
             TransactionTemplate transactions) {
         this.claimer = claimer;
         this.sessions = sessions;
@@ -117,6 +122,7 @@ public class TurnPreparer {
         this.blobs = blobs;
         this.finisher = finisher;
         this.metrics = metrics;
+        this.permissions = permissions;
         this.transactions = transactions;
     }
 
@@ -187,15 +193,15 @@ public class TurnPreparer {
         if (appended instanceof AppendResult.LeaseLost) {
             return new Prepared.Done(new TurnResult.Abandoned(turn.turnId(), "开始执行时租约已失去"), session.agentVersionId());
         }
+        TurnPermissions synthesized = permissions.forTurn(session.id(), session.interaction(), spec);
         TurnContext context = new TurnContext(
                 platformContext(turn, session),
                 session.endUserId(),
                 session.agentVersionId(),
                 session.environmentId(),
                 session.environmentRevision(),
-                // TODO(T08): 改为五层规则合成后的策略（PermissionSynthesizer），子智能体的策略同样在那里合成
-                spec.permissions(),
-                Map.of(),
+                synthesized.main(),
+                synthesized.subagents(),
                 session.customTools(),
                 origin);
         return new Prepared.Ready(context, input, session.agentVersionId());
