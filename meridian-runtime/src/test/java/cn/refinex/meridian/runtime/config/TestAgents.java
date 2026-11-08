@@ -5,6 +5,7 @@ import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
+import cn.refinex.meridian.runtime.session.app.TenantSettings;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,6 +16,7 @@ final class TestAgents implements AgentConfigProvider {
     private final Map<String, ResolvedAgentSpec> agents = new ConcurrentHashMap<>();
     private final Map<String, EnvironmentSpec> environments = new ConcurrentHashMap<>();
     private final Map<String, SkillDefinition> skills = new ConcurrentHashMap<>();
+    private final Map<String, TenantSettings> tenants = new ConcurrentHashMap<>();
 
     TestAgents register(ResolvedAgentSpec spec) {
         agents.put(spec.agentVersionId(), spec);
@@ -24,6 +26,16 @@ final class TestAgents implements AgentConfigProvider {
     TestAgents register(EnvironmentSpec environment) {
         environments.put(environment.environmentId() + "@" + environment.revision(), environment);
         return this;
+    }
+
+    TestAgents register(TenantSettings settings) {
+        tenants.put(settings.tenantId(), settings);
+        return this;
+    }
+
+    @Override
+    public TenantSettings tenantSettings(String tenantId) {
+        return tenants.getOrDefault(tenantId, TenantSettings.empty(tenantId));
     }
 
     TestAgents register(SkillDefinition skill) {

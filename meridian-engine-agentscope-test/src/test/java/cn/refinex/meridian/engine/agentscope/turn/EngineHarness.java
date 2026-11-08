@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cn.refinex.meridian.common.context.Interaction;
 import cn.refinex.meridian.common.context.PlatformContext;
+import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentAssembler;
+import cn.refinex.meridian.engine.agentscope.assembly.AgentHandle;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentProfile;
+import cn.refinex.meridian.engine.agentscope.assembly.TenantPromptProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.fs.PlatformWorkspace;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
@@ -41,7 +44,10 @@ import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import io.agentscope.core.middleware.MiddlewareBase;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.AgentTool;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +68,9 @@ final class EngineHarness {
     static final String SESSION = "ses_test";
     static final Duration TIMEOUT = Duration.ofSeconds(30);
 
+    /** 平台上下文消息中的当前时间，固定以便断言。 */
+    static final Instant NOW = Instant.parse("2026-11-08T08:30:00Z");
+
     final Model model;
     final InMemoryLeaseRegistry leases = new InMemoryLeaseRegistry();
     final InMemoryInbox inbox = new InMemoryInbox();
@@ -70,6 +79,7 @@ final class EngineHarness {
     final InMemoryAgentConfig configs = new InMemoryAgentConfig();
     final InMemoryToolLedger ledger = new InMemoryToolLedger();
     final InMemoryWorkspaceStore workspace = new InMemoryWorkspaceStore();
+    final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     final ResolvedAgentSpec spec;
     final AgentInstanceCache instances;
     final AgentScopeEngine engine;
@@ -124,17 +134,19 @@ final class EngineHarness {
                     new RecordingMiddlewareProvider(middlewares, middlewares),
                     combined,
                     platformWorkspace,
-                    platformWorkspace.skills());
+                    platformWorkspace.skills(),
+                    TenantPromptProvider.fromPort(configs));
         } else {
             assembler = TestAssembly.builder(model)
                     .stateStore(new FencedAgentStateStore(states, leases))
                     .middlewares(new RecordingMiddlewareProvider(middlewares, middlewares))
                     .tools(new StaticToolProvider(List.of(), tools))
+                    .tenantPrompts(TenantPromptProvider.fromPort(configs))
                     .build()
                     .assembler();
         }
         this.instances = new AgentInstanceCache(assembler);
-        this.engine = new AgentScopeEngine(instances, configs, leases, blobs);
+        this.engine = new AgentScopeEngine(instances, configs, leases, blobs, clock);
     }
 
     static EngineHarness create(ScriptedModel model, AgentTool... tools) {
@@ -205,6 +217,17 @@ final class EngineHarness {
     /**
      * 模拟 Worker 认领：在 {@code LeaseRegistry} 与"数据库"中登记线程的租约，返回本轮的上下文。
      */
+    /**
+     * 在本租户的 {@code PlatformContext} 下租用主智能体实例（装配读取租户提示词时需要它），用于直接检查装配结果的用例。
+     *
+     * @return 实例凭据，用完 {@code instances.release}
+     */
+    AgentHandle acquire() {
+        PlatformContext platform =
+                PlatformContext.builder().tenantId(TENANT).projectId(PROJECT).build();
+        return PlatformContexts.call(platform, () -> instances.acquire(spec, TestSpecs.noneEnvironment()));
+    }
+
     TurnContext claim(String threadId, String turnId, long epoch, PermissionPolicy permissions) {
         return claim(threadId, turnId, epoch, permissions, null, List.of());
     }

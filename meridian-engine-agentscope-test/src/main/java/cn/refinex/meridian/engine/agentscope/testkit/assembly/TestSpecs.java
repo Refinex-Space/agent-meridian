@@ -138,6 +138,17 @@ public final class TestSpecs {
         }
 
         /**
+         * 追加挂载的 MCP 服务。
+         *
+         * @param value MCP 服务配置
+         * @return 本构建器
+         */
+        public AgentSpecBuilder mcpServer(McpServerSpec value) {
+            mcpServers.add(value);
+            return this;
+        }
+
+        /**
          * 追加技能。
          *
          * @param value 技能引用

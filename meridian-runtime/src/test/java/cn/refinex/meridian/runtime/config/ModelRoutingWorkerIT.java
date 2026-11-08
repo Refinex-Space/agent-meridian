@@ -162,8 +162,9 @@ class ModelRoutingWorkerIT {
 
         List<StoredEvent> events = fixture.events(node, session);
         assertThat(ofType(events, EventType.AGENT_CONTEXT_COMPACTED))
+                .as("压缩前五条：两轮各一条平台上下文消息（当前时间）与用户消息、一条回答")
                 .singleElement()
-                .satisfies(e -> assertThat(e.data()).contains("\"messages_before\": 3"));
+                .satisfies(e -> assertThat(e.data()).contains("\"messages_before\": 5"));
         List<StoredEvent> starts = ofType(events, EventType.SPAN_MODEL_REQUEST_START);
         assertThat(starts)
                 .hasSize(2)

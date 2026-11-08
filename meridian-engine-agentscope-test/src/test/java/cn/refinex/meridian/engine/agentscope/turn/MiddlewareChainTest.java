@@ -15,7 +15,6 @@ import cn.refinex.meridian.engine.agentscope.middleware.PolicyMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.RecoveryNoteMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.SteerMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.ToolSpanMiddleware;
-import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestSpecs;
 import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
 import cn.refinex.meridian.engine.agentscope.testkit.tool.RecordingTool;
 import cn.refinex.meridian.engine.spi.engine.TurnContext;
@@ -51,7 +50,7 @@ class MiddlewareChainTest {
     @Test
     void platformMiddlewaresWrapTheHarnessMiddlewaresInOrderOfTheirOrderValues() {
         EngineHarness harness = EngineHarness.create(ScriptedModel.builder().build());
-        AgentHandle handle = harness.instances.acquire(harness.spec, TestSpecs.noneEnvironment());
+        AgentHandle handle = harness.acquire();
         try {
             List<MiddlewareBase> chain = handle.agent().getDelegate().getMiddlewares();
             List<String> names = chain.stream()
@@ -83,7 +82,6 @@ class MiddlewareChainTest {
                     .as("harness 自带的中间件按注册顺序")
                     .extracting(m -> m.getClass().getSimpleName())
                     .containsExactly(
-                            "WorkspaceContextMiddleware",
                             "AtPathExpansionMiddleware",
                             "CompactionMiddleware",
                             "ToolResultEvictionMiddleware",
@@ -100,7 +98,7 @@ class MiddlewareChainTest {
     @Test
     void compactionGuardLayersSandwichTheHarnessCompactionMiddleware() {
         EngineHarness harness = EngineHarness.create(ScriptedModel.builder().build());
-        AgentHandle handle = harness.instances.acquire(harness.spec, TestSpecs.noneEnvironment());
+        AgentHandle handle = harness.acquire();
         try {
             List<MiddlewareBase> chain = handle.agent().getDelegate().getMiddlewares();
             int outer = indexOf(chain, CompactionGuardMiddleware.class);
@@ -190,7 +188,7 @@ class MiddlewareChainTest {
     @Test
     void callsWithoutThePlatformEngineAreRejected() {
         EngineHarness harness = EngineHarness.create(ScriptedModel.builder().build());
-        AgentHandle handle = harness.instances.acquire(harness.spec, TestSpecs.noneEnvironment());
+        AgentHandle handle = harness.acquire();
         try {
             RuntimeContext bare = RuntimeContext.builder()
                     .sessionId("thr_bare")

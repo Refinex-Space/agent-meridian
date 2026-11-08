@@ -56,6 +56,7 @@ public final class AgentAssembler {
     private final ToolProvider toolProvider;
     private final WorkspaceFilesystemProvider filesystemProvider;
     private final SkillRepositoryProvider skillRepositoryProvider;
+    private final TenantPromptProvider tenantPromptProvider;
 
     /**
      * 创建装配器。
@@ -66,6 +67,7 @@ public final class AgentAssembler {
      * @param toolProvider 平台工具的提供者
      * @param filesystemProvider 工作区文件系统的提供者
      * @param skillRepositoryProvider 技能仓库的提供者
+     * @param tenantPromptProvider 系统提示词租户层的提供者
      */
     public AgentAssembler(
             ModelFactory modelFactory,
@@ -73,13 +75,15 @@ public final class AgentAssembler {
             MiddlewareProvider middlewareProvider,
             ToolProvider toolProvider,
             WorkspaceFilesystemProvider filesystemProvider,
-            SkillRepositoryProvider skillRepositoryProvider) {
+            SkillRepositoryProvider skillRepositoryProvider,
+            TenantPromptProvider tenantPromptProvider) {
         this.modelFactory = Objects.requireNonNull(modelFactory, "modelFactory");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
         this.middlewareProvider = Objects.requireNonNull(middlewareProvider, "middlewareProvider");
         this.toolProvider = Objects.requireNonNull(toolProvider, "toolProvider");
         this.filesystemProvider = Objects.requireNonNull(filesystemProvider, "filesystemProvider");
         this.skillRepositoryProvider = Objects.requireNonNull(skillRepositoryProvider, "skillRepositoryProvider");
+        this.tenantPromptProvider = Objects.requireNonNull(tenantPromptProvider, "tenantPromptProvider");
     }
 
     /**
@@ -89,18 +93,21 @@ public final class AgentAssembler {
      * @return 装配好的实例
      */
     public AssembledAgent assemble(AgentProfile profile) {
-        return assemble(profile, modelFactory.create(profile.key().agentVersionId(), profile.model()));
+        return assemble(
+                profile,
+                modelFactory.create(profile.key().agentVersionId(), profile.model()),
+                tenantPromptProvider.tenantPrompt(profile));
     }
 
     /**
      * 启动自检（登记事项 D02）：用探测对象走一遍完整装配并立即关闭，Toolkit 中出现白名单外的非 {@code ToolBase} 工具时抛出异常。
-     * 探测装配不经模型工厂，使用一个不能调用的占位模型，所以不需要模型目录中存在探测对象的模型。
+     * 探测装配不经模型工厂，使用一个不能调用的占位模型，所以不需要模型目录中存在探测对象的模型；探测时没有租户，不读租户提示词。
      *
      * @param probe 探测对象，通常启用全部平台工具与计划模式
      * @throws IllegalStateException 自检失败时
      */
     public void selfCheck(AgentProfile probe) {
-        AssembledAgent assembled = assemble(probe, new ProbeModel());
+        AssembledAgent assembled = assemble(probe, new ProbeModel(), "");
         try {
             assembled.close();
         } catch (Exception e) {
@@ -108,12 +115,12 @@ public final class AgentAssembler {
         }
     }
 
-    private AssembledAgent assemble(AgentProfile profile, Model model) {
+    private AssembledAgent assemble(AgentProfile profile, Model model, String tenantPrompt) {
         ToolProvider.ToolBundle tools = toolProvider.tools(profile);
         HarnessAgent agent;
         try {
             HarnessAgent.Builder builder = HarnessAgent.builder();
-            configure(builder, profile, model, tools.tools());
+            configure(builder, profile, model, tenantPrompt, tools.tools());
             agent = builder.build();
             // 自检：非 ToolBase 工具不进权限引擎，只允许 harness 的白名单工具（登记事项 D02）
             ToolPolicy.verify(agent.getToolkit());
@@ -135,8 +142,16 @@ public final class AgentAssembler {
     }
 
     /** 按「引擎装配」表配置 Builder，每一段对应表中的一行。 */
-    private void configure(HarnessAgent.Builder builder, AgentProfile profile, Model model, List<AgentTool> tools) {
-        builder.name(profile.name()).agentId(profile.key().agentId()).sysPrompt(profile.systemPrompt());
+    private void configure(
+            HarnessAgent.Builder builder,
+            AgentProfile profile,
+            Model model,
+            String tenantPrompt,
+            List<AgentTool> tools) {
+        // 系统提示词分层：平台基础提示词 → 租户 → 智能体，技能清单由 HarnessSkillMiddleware 追加在最后（ADR-0035）
+        builder.name(profile.name())
+                .agentId(profile.key().agentId())
+                .sysPrompt(PlatformPrompt.compose(tenantPrompt, profile.systemPrompt()));
         if (profile.isSubagent()) {
             builder.description(profile.subagent().description());
         }
@@ -174,7 +189,10 @@ public final class AgentAssembler {
                 .disableMemoryHooks()
                 .disableDefaultWorkspaceSkills()
                 .disableDynamicSkills()
-                .disableTranscript();
+                .disableTranscript()
+                // 工作区上下文中间件会把 AGENTS.md（智能体层提示词）再注入一次，并带上当天日期与本机路径，破坏提示词分层与缓存前缀
+                // （登记事项 D29，ADR-0035）；时间改由平台以消息注入
+                .disableWorkspaceContext();
 
         // messageBus 与 asyncToolRegistry：都用空实现，推理前不读工作区（ADR-0024）
         builder.messageBus(NoopMessageBus.INSTANCE).asyncToolRegistry(NoopAsyncToolRegistry.INSTANCE);

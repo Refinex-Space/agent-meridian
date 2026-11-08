@@ -69,9 +69,9 @@ class CompactionGuardScenarioTest {
         List<EngineEvent> second = harness.run(claim(harness, "trn_2", 2), userText(SECOND));
 
         assertThat(of(second, AgentOutputEvent.ContextCompacted.class))
-                .as("压缩前三条会话消息，压缩后为摘要加保留的两条")
-                .containsExactly(new AgentOutputEvent.ContextCompacted(3, 3));
-        assertThat(second.indexOf(new AgentOutputEvent.ContextCompacted(3, 3)))
+                .as("压缩前五条会话消息（两轮各一条平台上下文消息与用户消息、一条回答），压缩后为摘要加保留的三条")
+                .containsExactly(new AgentOutputEvent.ContextCompacted(5, 4));
+        assertThat(second.indexOf(new AgentOutputEvent.ContextCompacted(5, 4)))
                 .as("压缩事件在本次推理的模型请求之前")
                 .isLessThan(second.indexOf(
                         of(second, SpanEvent.ModelRequestStart.class).getFirst()));

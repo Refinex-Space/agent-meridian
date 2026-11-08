@@ -5,6 +5,7 @@ import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
+import cn.refinex.meridian.runtime.session.app.TenantSettings;
 import cn.refinex.meridian.runtime.session.domain.SessionErrorCode;
 import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import java.io.IOException;
@@ -35,6 +36,8 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  *       取当前版本时，同一智能体有多个版本则取 {@code agent_version_id} 最大的（平台的版本 ID 是 ULID，按发布时间有序）。
  *   <li>{@code kind: environment}：一个 {@link EnvironmentSpec}，按 {@code environment_id} 与 {@code revision} 查找；取当前修订时
  *       取 {@code revision} 最大的。
+ *   <li>{@code kind: tenant_settings}（T10b）：一个租户的设置，按 {@code tenant_id} 查找；{@code system_prompt} 是租户层提示词，
+ *       {@code web_search} 是联网搜索后端（{@code backend}、{@code base_url}、{@code secret_id}）。没有时租户设置为空。
  * </ul>
  * 技能（T10a）在同级的 {@code skills} 目录（默认 {@code dev-config/skills}），每个版本一个目录
  * {@code <skill_id>/v<version>/}：其中的 {@code SKILL.md} 是正文（frontmatter 的 {@code name}、{@code description} 是技能名与
@@ -52,6 +55,9 @@ public final class FileAgentConfigProvider implements AgentConfigProvider {
 
     /** 环境配置的 {@code kind}。 */
     static final String KIND_ENVIRONMENT = "environment";
+
+    /** 租户设置的 {@code kind}。 */
+    static final String KIND_TENANT_SETTINGS = "tenant_settings";
 
     /** 技能文件的大小上限，单位字节：开发配置中的技能是文本，过大的文件多半是放错了。 */
     static final long MAX_SKILL_FILE_BYTES = 1024 * 1024;
@@ -120,6 +126,13 @@ public final class FileAgentConfigProvider implements AgentConfigProvider {
                 .orElseThrow(
                         () -> new NotFoundException(SessionErrorCode.ENVIRONMENT_NOT_FOUND, "环境不存在：" + environmentId));
         return EngineJson.convert(document, EnvironmentSpec.class);
+    }
+
+    @Override
+    public TenantSettings tenantSettings(String tenantId) {
+        return find(KIND_TENANT_SETTINGS, doc -> tenantId.equals(doc.get("tenant_id")))
+                .map(doc -> EngineJson.convert(doc, TenantSettings.class))
+                .orElseGet(() -> TenantSettings.empty(tenantId));
     }
 
     @Override

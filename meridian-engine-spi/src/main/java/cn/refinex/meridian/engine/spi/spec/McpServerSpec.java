@@ -16,7 +16,8 @@ import java.util.regex.Pattern;
  * @param url 服务端点，必须是 http 或 https；必填
  * @param transport 传输方式；必填
  * @param headerSecretIds 需要注入的请求头：头名 → 凭据 ID（{@code sec_…}）；可为空映射
- * @param sideEffect 管理员注册时标注的副作用等级，作用于该服务的全部工具；必填
+ * @param sideEffect 管理员注册时标注的副作用等级，作用于该服务的全部工具；未标注（null）时按 {@code non_idempotent} 处理：
+ *     平台不知道外部工具有没有副作用，按最保守的等级记账、不重放
  * @param enabledTools 启用的工具名（不含前缀）；空集合表示启用该服务的全部工具
  */
 public record McpServerSpec(
@@ -42,13 +43,13 @@ public record McpServerSpec(
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(url, "url");
         Objects.requireNonNull(transport, "transport");
-        Objects.requireNonNull(sideEffect, "sideEffect");
         if (!NAME.matcher(name).matches()) {
             throw new IllegalArgumentException("MCP 服务名不合法：" + name);
         }
         if (!url.startsWith("https://") && !url.startsWith("http://")) {
             throw new IllegalArgumentException("MCP 服务端点必须是 http 或 https：" + mcpServerId);
         }
+        sideEffect = sideEffect == null ? SideEffect.NON_IDEMPOTENT : sideEffect;
         headerSecretIds = headerSecretIds == null ? Map.of() : Map.copyOf(headerSecretIds);
         enabledTools = enabledTools == null ? Set.of() : Set.copyOf(enabledTools);
     }

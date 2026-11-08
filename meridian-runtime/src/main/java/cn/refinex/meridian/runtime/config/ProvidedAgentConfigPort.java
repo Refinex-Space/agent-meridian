@@ -39,6 +39,11 @@ public final class ProvidedAgentConfigPort implements AgentConfigPort {
     }
 
     @Override
+    public Mono<String> tenantPrompt(String tenantId) {
+        return Blocking.call(() -> provider.tenantSettings(tenantId).systemPrompt());
+    }
+
+    @Override
     public Mono<SkillDefinition> skill(SkillRef ref) {
         return Blocking.call(() -> provider.skill(ref.skillId(), ref.version()));
     }

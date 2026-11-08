@@ -89,14 +89,14 @@ class AgentScopeEngineScenarioTest {
                 of(events, SpanEvent.ModelRequestStart.class).getFirst();
         String replyId = start.requestId();
         String blockId = replyId + ":text";
-        assertThat(start.context()).as("上下文构成：一条系统提示词、一条历史消息，其余为空").satisfies(context -> {
+        assertThat(start.context()).as("上下文构成：一条系统提示词、一条历史消息、一条平台上下文消息，其余为空").satisfies(context -> {
             assertThat(context.systemPrompt().count()).isEqualTo(1);
             assertThat(context.systemPrompt().tokens()).isPositive();
             assertThat(context.history().count()).isEqualTo(1);
             assertThat(context.history().tokens()).isGreaterThan(TokenEstimator.text("你好"));
             assertThat(context.skills()).isEqualTo(ContextComposition.Part.EMPTY);
             assertThat(context.toolResults()).isEqualTo(ContextComposition.Part.EMPTY);
-            assertThat(context.injected()).isEqualTo(ContextComposition.Part.EMPTY);
+            assertThat(context.injected().count()).as("平台上下文消息（当前时间）算平台注入").isEqualTo(1);
         });
         assertThat(events)
                 .containsExactly(

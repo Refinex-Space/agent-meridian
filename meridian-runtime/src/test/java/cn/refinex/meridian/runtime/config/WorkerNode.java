@@ -3,6 +3,7 @@ package cn.refinex.meridian.runtime.config;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentAssembler;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentProfile;
+import cn.refinex.meridian.engine.agentscope.assembly.TenantPromptProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.fs.PlatformWorkspace;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
@@ -188,17 +189,19 @@ record WorkerNode(
                     new RecordingMiddlewareProvider(middlewares, middlewares),
                     combined,
                     workspace,
-                    workspace.skills());
+                    workspace.skills(),
+                    TenantPromptProvider.fromPort(configs));
         } else {
             assembler = TestAssembly.builder(spec.model())
                     .stateStore(new FencedAgentStateStore(states, node.registry()))
                     .middlewares(new RecordingMiddlewareProvider(middlewares, middlewares))
                     .tools(new StaticToolProvider(List.of(), allTools(tools, spec.extraTools())))
+                    .tenantPrompts(TenantPromptProvider.fromPort(configs))
                     .build()
                     .assembler();
         }
         AgentScopeEngine engine =
-                new AgentScopeEngine(new AgentInstanceCache(assembler), configs, node.registry(), blobs);
+                new AgentScopeEngine(new AgentInstanceCache(assembler), configs, node.registry(), blobs, spec.clock());
 
         PendingActionRepository pendingActions = new PendingActionRepository(dataSource);
         PermissionRuleRepository rules = new PermissionRuleRepository(dataSource);

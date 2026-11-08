@@ -18,10 +18,12 @@ import io.agentscope.core.tool.ToolBase;
 import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.harness.agent.HarnessAgent;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -66,13 +68,38 @@ public abstract class PlatformTool extends ToolBase {
         super(ToolBase.builder()
                 .name(spec.name())
                 .description(spec.description())
-                .inputSchema(spec.inputSchema())
+                .inputSchema(canonical(spec.inputSchema()))
                 .readOnly(spec.sideEffect() == SideEffect.NONE)
                 .concurrencySafe(spec.concurrencySafe()));
         this.sideEffect = spec.sideEffect();
         this.ruleSyntax = spec.ruleSyntax();
         this.ledger = services.ledger();
         this.blobs = services.blobs();
+    }
+
+    /**
+     * 把入参 schema 规整为按键排序的不可变结构。{@code Map.of} 的迭代顺序每个 JVM 随机，工具定义随请求发给模型，键顺序不固定时
+     * 不同节点上同一智能体的请求前缀不同，命中不了供应商的提示词缓存（架构设计「上下文管理」，ADR-0035）。
+     *
+     * @param schema 入参 schema
+     * @return 键有序的副本；列表保持原顺序
+     */
+    static Map<String, Object> canonical(Map<String, ?> schema) {
+        Map<String, Object> sorted = new TreeMap<>();
+        schema.forEach((key, value) -> sorted.put(key, canonicalValue(value)));
+        return Collections.unmodifiableMap(sorted);
+    }
+
+    private static Object canonicalValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> copy = new TreeMap<>();
+            map.forEach((key, item) -> copy.put(String.valueOf(key), canonicalValue(item)));
+            return Collections.unmodifiableMap(copy);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(PlatformTool::canonicalValue).toList();
+        }
+        return value;
     }
 
     /**

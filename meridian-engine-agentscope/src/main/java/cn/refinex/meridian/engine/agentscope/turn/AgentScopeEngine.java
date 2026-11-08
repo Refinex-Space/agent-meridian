@@ -6,6 +6,7 @@ import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.LeaseLostException;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentHandle;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
+import cn.refinex.meridian.engine.agentscope.assembly.PlatformContextMessage;
 import cn.refinex.meridian.engine.agentscope.events.TurnEventMapper;
 import cn.refinex.meridian.engine.agentscope.middleware.BatchCheckpoint;
 import cn.refinex.meridian.engine.agentscope.middleware.PendingInterrupt;
@@ -39,7 +40,9 @@ import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.ToolRequestConfig;
 import io.agentscope.core.util.JsonUtils;
 import io.agentscope.harness.agent.HarnessAgent;
+import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -92,6 +95,7 @@ public final class AgentScopeEngine implements AgentEngine {
     private final AgentConfigPort configs;
     private final LeaseRegistry leases;
     private final BlobStorePort blobs;
+    private final Clock clock;
     private final Map<String, RunningTurn> running = new ConcurrentHashMap<>();
 
     /**
@@ -104,9 +108,15 @@ public final class AgentScopeEngine implements AgentEngine {
      * @param configs 智能体版本与环境配置
      * @param leases 本节点持有的租约，权限安装时在条目上做标记
      * @param blobs 大对象存储，超过 16 KB 的工具结果写入这里
+     * @param clock 时钟，平台上下文消息中的当前时间取自它
      */
     public AgentScopeEngine(
-            AgentInstanceCache instances, AgentConfigPort configs, LeaseRegistry leases, BlobStorePort blobs) {
+            AgentInstanceCache instances,
+            AgentConfigPort configs,
+            LeaseRegistry leases,
+            BlobStorePort blobs,
+            Clock clock) {
+        this.clock = Objects.requireNonNull(clock, "clock");
         this.instances = Objects.requireNonNull(instances, "instances");
         this.configs = Objects.requireNonNull(configs, "configs");
         this.leases = Objects.requireNonNull(leases, "leases");
@@ -268,11 +278,25 @@ public final class AgentScopeEngine implements AgentEngine {
 
     private Flux<EngineEvent> execute(RunningTurn turn) {
         TurnEventMapper mapper = new TurnEventMapper(turn.mappingSettings(), blobs);
-        List<Msg> messages = TurnInputTranslator.messages(turn.input());
+        List<Msg> messages = withPlatformContext(turn.input(), TurnInputTranslator.messages(turn.input()));
         return Flux.defer(() -> turn.agent().streamEvents(messages, turn.runtimeContext()))
                 .doOnNext(turn::observe)
                 .concatMap(mapper::map)
                 .concatWith(Mono.fromSupplier(mapper::complete));
+    }
+
+    /**
+     * 以新消息开始的轮次，在用户消息之前注入平台上下文（当前时间），时间不进系统提示词（ADR-0035）。审批结果、自定义工具结果与恢复轮
+     * 不注入：前两者不能与普通消息混在同一轮（架构设计「内核适配层」），恢复轮没有新的用户输入。
+     */
+    private List<Msg> withPlatformContext(TurnInput input, List<Msg> messages) {
+        if (!(input instanceof TurnInput.NewMessages)) {
+            return messages;
+        }
+        List<Msg> all = new ArrayList<>(messages.size() + 1);
+        all.add(PlatformContextMessage.of(clock.instant()));
+        all.addAll(messages);
+        return all;
     }
 
     private Mono<Void> end(TurnSlot slot) {

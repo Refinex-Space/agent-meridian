@@ -23,6 +23,7 @@ public final class InMemoryAgentConfig implements AgentConfigPort {
     private final Map<String, ResolvedAgentSpec> agents = new ConcurrentHashMap<>();
     private final Map<String, EnvironmentSpec> environments = new ConcurrentHashMap<>();
     private final Map<String, SkillDefinition> skills = new ConcurrentHashMap<>();
+    private final Map<String, String> tenantPrompts = new ConcurrentHashMap<>();
     private final AtomicInteger reads = new AtomicInteger();
 
     /**
@@ -56,6 +57,23 @@ public final class InMemoryAgentConfig implements AgentConfigPort {
     public InMemoryAgentConfig register(SkillDefinition skill) {
         skills.put(skill.skillId() + "@" + skill.version(), skill);
         return this;
+    }
+
+    /**
+     * 登记租户层的系统提示词。
+     *
+     * @param tenantId 租户 ID
+     * @param prompt 提示词
+     * @return 本对象
+     */
+    public InMemoryAgentConfig tenantPrompt(String tenantId, String prompt) {
+        tenantPrompts.put(tenantId, prompt);
+        return this;
+    }
+
+    @Override
+    public Mono<String> tenantPrompt(String tenantId) {
+        return Mono.fromSupplier(() -> tenantPrompts.getOrDefault(tenantId, ""));
     }
 
     @Override

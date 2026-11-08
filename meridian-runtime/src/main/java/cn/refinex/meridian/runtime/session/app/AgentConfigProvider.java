@@ -62,4 +62,12 @@ public interface AgentConfigProvider {
      * @throws cn.refinex.meridian.common.error.NotFoundException 不存在时
      */
     SkillDefinition skill(String skillId, int version);
+
+    /**
+     * 读取租户级设置：租户提示词与联网搜索后端（T10b，ADR-0035）。
+     *
+     * @param tenantId 租户 ID（{@code ten_…}）
+     * @return 租户设置；租户没有配置时为 {@link TenantSettings#empty}
+     */
+    TenantSettings tenantSettings(String tenantId);
 }

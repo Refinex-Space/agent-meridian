@@ -177,10 +177,10 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 T10b Web 工具、知识检索工具、MCP 客户端与提示词分层（开工基线：`verify.sh` 通过）
 
-- [ ] 1. 来源标签（格式、转义）与平台基础提示词；系统提示词四层组装（关闭 `WorkspaceContextMiddleware`，D29）、租户层来源、日期以消息注入
-- [ ] 2. `web_fetch`（SSRF 防护：IP 分类、DNS 解析后校验、逐跳重定向、5 MB 上限、HTML 转 Markdown、域名规则）
-- [ ] 3. `web_search`（`WebSearchPort`，SearXNG 与商业 API 适配器，按租户切换，WireMock 测试）
-- [ ] 4. `knowledge_search`（`KnowledgeSearchPort`，未配置实现返回错误结果，场景测试）
+- [x] 1. 来源标签（格式、转义）与平台基础提示词；系统提示词四层组装（关闭 `WorkspaceContextMiddleware`，D29）、租户层来源、日期以消息注入
+- [ ] 2. `web_fetch`（工具与场景测试已完成；runtime 端口实现待做：SSRF 防护：IP 分类、DNS 解析后校验、逐跳重定向、5 MB 上限、HTML 转 Markdown、域名规则）
+- [ ] 3. `web_search`（工具已完成；runtime 端口实现待做：`WebSearchPort`，SearXNG 与商业 API 适配器，按租户切换，WireMock 测试）
+- [x] 4. `knowledge_search`（`KnowledgeSearchPort`，未配置实现返回错误结果，场景测试）
 - [ ] 5. MCP 客户端（`McpClientBuilder`、传输先于定制器、协议版本、凭据按请求注入、`mcp__{server}__{tool}`、随实例关闭）与进程内 MCP 服务集成测试
 - [ ] 6. P8 预验证：Boot 4.1 Servlet 注册 `HttpServletStreamableServerTransportProvider`，平台客户端调通；`docs/poc/P08-MCP-Server.md`
 - [ ] 7. runtime 生产装配（工具、端口实现、租户配置的文件实现）；前缀稳定性测试（两会话首条用户消息之前逐字节相同）

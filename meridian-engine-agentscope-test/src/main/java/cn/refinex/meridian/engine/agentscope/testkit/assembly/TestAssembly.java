@@ -1,6 +1,7 @@
 package cn.refinex.meridian.engine.agentscope.testkit.assembly;
 
 import cn.refinex.meridian.engine.agentscope.assembly.AgentAssembler;
+import cn.refinex.meridian.engine.agentscope.assembly.TenantPromptProvider;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.state.InMemoryAgentStateStore;
@@ -54,6 +55,7 @@ public record TestAssembly(
         private StaticToolProvider tools = StaticToolProvider.always();
         private InMemoryWorkspaceFilesystems filesystems = new InMemoryWorkspaceFilesystems();
         private StaticSkillRepository skills = StaticSkillRepository.empty();
+        private TenantPromptProvider tenantPrompts = TenantPromptProvider.none();
 
         private Builder(RecordingModelFactory modelFactory) {
             this.modelFactory = modelFactory;
@@ -115,13 +117,24 @@ public record TestAssembly(
         }
 
         /**
+         * 指定租户提示词的提供者；默认没有租户层。
+         *
+         * @param value 提供者
+         * @return 本构建器
+         */
+        public Builder tenantPrompts(TenantPromptProvider value) {
+            this.tenantPrompts = Objects.requireNonNull(value);
+            return this;
+        }
+
+        /**
          * 组装。
          *
          * @return 装配器与替身
          */
         public TestAssembly build() {
-            AgentAssembler assembler =
-                    new AgentAssembler(modelFactory, stateStore, middlewares, tools, filesystems, skills);
+            AgentAssembler assembler = new AgentAssembler(
+                    modelFactory, stateStore, middlewares, tools, filesystems, skills, tenantPrompts);
             return new TestAssembly(assembler, modelFactory, stateStore, middlewares, tools, filesystems, skills);
         }
     }

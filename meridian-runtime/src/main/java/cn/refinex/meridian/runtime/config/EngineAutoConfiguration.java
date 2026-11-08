@@ -4,6 +4,7 @@ import cn.refinex.meridian.engine.agentscope.assembly.AgentAssembler;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
 import cn.refinex.meridian.engine.agentscope.assembly.ModelFactory;
 import cn.refinex.meridian.engine.agentscope.assembly.SkillRepositoryProvider;
+import cn.refinex.meridian.engine.agentscope.assembly.TenantPromptProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolPolicy;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.WorkspaceFilesystemProvider;
@@ -93,6 +94,7 @@ public class EngineAutoConfiguration {
      * @param tools 工具提供者
      * @param filesystems 文件系统提供者
      * @param skills 技能仓库提供者
+     * @param configs 配置端口，装配时读取租户提示词（ADR-0035）
      * @return 装配器
      */
     @Bean
@@ -102,8 +104,10 @@ public class EngineAutoConfiguration {
             PlatformMiddlewareProvider middlewares,
             ToolProvider tools,
             WorkspaceFilesystemProvider filesystems,
-            SkillRepositoryProvider skills) {
-        return new AgentAssembler(models, stateStore, middlewares, tools, filesystems, skills);
+            SkillRepositoryProvider skills,
+            AgentConfigPort configs) {
+        return new AgentAssembler(
+                models, stateStore, middlewares, tools, filesystems, skills, TenantPromptProvider.fromPort(configs));
     }
 
     /**
@@ -136,12 +140,17 @@ public class EngineAutoConfiguration {
      * @param configs 配置端口
      * @param leases 本节点持有的租约
      * @param blobs 大对象存储
+     * @param clock 时钟，平台上下文消息中的当前时间
      * @return 内核
      */
     @Bean
     public AgentScopeEngine agentEngine(
-            AgentInstanceCache instances, AgentConfigPort configs, LeaseRegistry leases, BlobStorePort blobs) {
-        return new AgentScopeEngine(instances, configs, leases, blobs);
+            AgentInstanceCache instances,
+            AgentConfigPort configs,
+            LeaseRegistry leases,
+            BlobStorePort blobs,
+            Clock clock) {
+        return new AgentScopeEngine(instances, configs, leases, blobs, clock);
     }
 
     /**

@@ -35,6 +35,7 @@ import io.agentscope.harness.agent.middleware.MemoryFlushMiddleware;
 import io.agentscope.harness.agent.middleware.MemoryMaintenanceMiddleware;
 import io.agentscope.harness.agent.middleware.ToolResultEvictionMiddleware;
 import io.agentscope.harness.agent.middleware.TranscriptMiddleware;
+import io.agentscope.harness.agent.middleware.WorkspaceContextMiddleware;
 import io.agentscope.harness.agent.skill.WorkspaceSkillRepository;
 import java.time.Duration;
 import java.util.List;
@@ -237,6 +238,36 @@ class AgentAssemblerTest {
     }
 
     @Test
+    void sysPrompt_layersPlatformBaseThenTenantThenAgent() {
+        HarnessAgent agent = assemble(
+                TestAssembly.builder(model)
+                        .tenantPrompts(profile -> "按公司的报销制度回答。")
+                        .build(),
+                TestSpecs.agent().build());
+
+        String prompt = agent.getDelegate().getSysPrompt();
+        assertThat(prompt).startsWith(PlatformPrompt.BASE.strip());
+        int tenant = prompt.indexOf(PlatformPrompt.TENANT_HEADING + "\n\n按公司的报销制度回答。");
+        int agentLayer = prompt.indexOf(PlatformPrompt.AGENT_HEADING + "\n\n"
+                + TestSpecs.agent().build().systemPrompt());
+        assertThat(tenant)
+                .as("租户层在平台基础提示词之后")
+                .isGreaterThan(PlatformPrompt.BASE.strip().length() - 1);
+        assertThat(agentLayer).as("智能体层在租户层之后").isGreaterThan(tenant);
+        assertThat(prompt).as("声明来源标签内的内容是数据").contains("<external_content").contains("untrusted data");
+    }
+
+    @Test
+    void disableWorkspaceContext_agentsMdAndDateAreNotInjectedIntoTheSystemPrompt() {
+        HarnessAgent agent =
+                assemble(TestAssembly.builder(model).build(), TestSpecs.agent().build());
+
+        assertThat(agent.getDelegate().getMiddlewares())
+                .as("工作区上下文中间件会重复注入 AGENTS.md 并带上日期（D29），装配时关闭")
+                .noneMatch(m -> m instanceof WorkspaceContextMiddleware);
+    }
+
+    @Test
     void disableMemoryHooksAndTranscriptAndTracing_noSuchMiddlewareInstalled() {
         HarnessAgent agent =
                 assemble(TestAssembly.builder(model).build(), TestSpecs.agent().build());
@@ -402,7 +433,9 @@ class AgentAssemblerTest {
         assertThat(sub.agent().getName()).isEqualTo("reader");
         assertThat(sub.agent().getModel()).isSameAs(subModel);
         assertThat(sub.agent().getMaxIters()).isEqualTo(7);
-        assertThat(sub.agent().getDelegate().getSysPrompt()).isEqualTo("你只负责阅读。");
+        assertThat(sub.agent().getDelegate().getSysPrompt())
+                .as("子智能体同样分层：平台基础提示词在前，子智能体的提示词作为智能体层")
+                .isEqualTo(PlatformPrompt.compose("", "你只负责阅读。"));
         assertThat(sub.agent().getToolkit().getToolNames())
                 .contains("read_file")
                 .doesNotContain("web_search", "spawn_subagent");

@@ -40,4 +40,14 @@ public interface AgentConfigPort {
      * @return 技能内容；不存在时以 {@code NotFoundException} 失败
      */
     Mono<SkillDefinition> skill(SkillRef ref);
+
+    /**
+     * 读取租户层的系统提示词，装配时放在平台基础提示词之后、智能体提示词之前（架构设计「上下文管理」中的提示词分层，ADR-0035）。
+     *
+     * <p>租户提示词进入装配后的实例并随实例缓存；T15b 起由 control-plane 下发，配置失效时要连同该租户的实例一起淘汰。
+     *
+     * @param tenantId 租户 ID（{@code ten_…}）
+     * @return 租户提示词；租户没有配置时为空字符串
+     */
+    Mono<String> tenantPrompt(String tenantId);
 }
