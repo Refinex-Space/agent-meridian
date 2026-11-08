@@ -43,7 +43,7 @@ public final class RecordingModelFactory implements ModelFactory {
     }
 
     @Override
-    public Model create(ModelSpec model) {
+    public Model create(String agentVersionId, ModelSpec model) {
         requested.add(model);
         return byModelId.getOrDefault(model.modelId(), defaultModel);
     }

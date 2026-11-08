@@ -38,6 +38,9 @@ public final class AgentAssembler {
     /** 卸载后留在上下文中的预览长度，单位字符。架构设计「上下文管理」规定 2000。 */
     static final int TOOL_RESULT_PREVIEW_CHARS = 2_000;
 
+    /** 按消息条数触发压缩的阈值；0 表示关闭，只按 token 阈值触发（架构设计「上下文管理」：阈值等于窗口减去 reserved）。 */
+    static final int COMPACTION_TRIGGER_MESSAGES = 0;
+
     /** 卸载目录，与 {@link WorkspaceFilesystemProvider#LARGE_TOOL_RESULTS_PREFIX} 是同一个路径。 */
     static final String TOOL_RESULT_EVICTION_PATH = "large_tool_results";
 
@@ -106,7 +109,7 @@ public final class AgentAssembler {
         }
 
         // model(Model)：平台的 RoutedModel，内含主模型与备用模型；不经 ModelRegistry
-        builder.model(modelFactory.create(profile.model()));
+        builder.model(modelFactory.create(profile.key().agentVersionId(), profile.model()));
         GenerateOptions generateOptions = generateOptions(profile.model());
         if (generateOptions != null) {
             builder.generateOptions(generateOptions);
@@ -146,9 +149,12 @@ public final class AgentAssembler {
         // skillRepository：平台技能仓库，按租户、项目、智能体解析
         builder.skillRepository(skillRepositoryProvider.repository(profile));
 
-        // compaction：一期没有长期记忆，压缩前不刷写记忆、不卸载原文
+        // compaction：阈值只按 token（窗口减 reserved，关掉 2.0.4 默认的 50 条消息触发）；摘要提示词由平台维护；
+        // 一期没有长期记忆，压缩前不刷写记忆、不卸载原文（架构设计「上下文管理」）
         builder.compaction(CompactionConfig.builder()
                 .reserved(profile.agent().compaction().reservedTokens())
+                .triggerMessages(COMPACTION_TRIGGER_MESSAGES)
+                .summaryPrompt(CompactionPrompt.SUMMARY)
                 .flushBeforeCompact(false)
                 .offloadBeforeCompact(false)
                 .build());

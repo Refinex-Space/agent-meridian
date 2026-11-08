@@ -63,6 +63,17 @@ public final class LeaseGuardMiddleware implements MiddlewareBase {
     }
 
     private void verify(RuntimeContext ctx) {
+        verify(leases, ctx);
+    }
+
+    /**
+     * 确认本节点仍持有调用上下文中线程的租约且 epoch 一致；{@link CompactionGuardMiddleware} 在压缩前复用。
+     *
+     * @param leases 本节点持有的租约
+     * @param ctx 调用上下文
+     * @throws LeaseLostException 没有带租约的上下文，或租约已不是本次执行的 epoch 时
+     */
+    static void verify(LeaseRegistry leases, RuntimeContext ctx) {
         PlatformContext platform = ctx == null ? null : ctx.get(PlatformContext.class);
         if (platform == null || platform.threadId() == null || platform.leaseEpoch() == null) {
             throw new LeaseLostException("调用没有带租约的 PlatformContext，拒绝继续执行");

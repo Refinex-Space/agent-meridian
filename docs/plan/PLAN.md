@@ -67,7 +67,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 已完成 | c6ca61a |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 已完成 | 708f7ca |
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 已完成 | f75bc4f |
-| T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 未开始 | — |
+| T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 进行中 | — |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 未开始 | — |
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 未开始 | — |
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 未开始 | — |
@@ -175,7 +175,15 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+### T09a 模型层：RoutedModel、限流、预算、计量与压缩守护
+
+- [x] 1. `RoutedModel` 与生产模型工厂（OpenAI 兼容；Anthropic、Gemini 扩展点）、重试与降级、`setContextWindowSize`
+- [ ] 2. runtime `modelrouting`：`ModelGateway` 实现、`dev-config/providers` 文件目录、`SecretResolver` 开发实现、令牌桶与预算 Lua、用量记录进 outbox `usage`
+- [x] 3. `CompactionGuardMiddleware` 内外两层与压缩配置、`agent.context_compacted` 事件、P13 顺序实测（引擎层场景与对照实验已通过）
+- [ ] 4. 上下文构成摘要（`span.model_request_start`）与三个指标
+- [ ] 5. 集成测试：A01 模拟供应商、A02 限流、A03 预算、A04 压缩计量、A05 P13、A06 用量、A07 指标与摘要
+- [ ] 6. 真实模型测试 `*LiveIT`（A08）
+- [ ] 7. 收尾：文档（CLAUDE.md、P13 报告、ADR、架构）、`verify.sh`（A09）、验收记录
 
 ## 控制台设计轨道
 

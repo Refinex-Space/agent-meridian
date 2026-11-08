@@ -106,6 +106,22 @@ public final class InMemoryAgentStateRepository implements AgentStateRepository 
     }
 
     /**
+     * 一条线程全部状态键的 JSON 原文，按键排序后拼接，用于断言状态中有没有某段内容（例如压缩摘要）。
+     *
+     * @param userId AgentScope 的 userId
+     * @param threadId 线程 ID
+     * @return 拼接后的 JSON 文本；没有状态时为空字符串
+     */
+    public synchronized String jsonOf(String userId, String threadId) {
+        return rows.entrySet().stream()
+                .filter(e -> e.getKey().userId().equals(userId)
+                        && e.getKey().threadId().equals(threadId))
+                .sorted(Map.Entry.comparingByKey(java.util.Comparator.comparing(StateKey::key)))
+                .map(e -> e.getValue().json)
+                .collect(Collectors.joining("\n"));
+    }
+
+    /**
      * 成功写入（含删除）的次数，用于断言"取消订阅后不再写入"。
      *
      * @return 次数

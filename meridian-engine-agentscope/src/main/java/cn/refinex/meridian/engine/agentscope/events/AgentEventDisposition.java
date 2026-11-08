@@ -22,7 +22,12 @@ public enum AgentEventDisposition {
     /** 不输出：平台已有对应事件（{@code session.status_running}、{@code user.*}），或信息已在其他事件中。 */
     IGNORED,
     /** 不输出，只记日志；子线程事件由 {@code SpawnSubagentTool} 经 {@code EventSinkPort} 写入（T13）。 */
-    LOGGED;
+    LOGGED,
+    /**
+     * 平台中间件以约定名字发出的自定义事件按名字映射为平台事件（{@code meridian.context_compacted} →
+     * {@code agent.context_compacted}），其余只记日志（ADR-0032）。
+     */
+    PLATFORM_CUSTOM;
 
     /**
      * 返回事件类型的处理方式。
@@ -48,7 +53,8 @@ public enum AgentEventDisposition {
             case TEXT_BLOCK_END, THINKING_BLOCK_END, DATA_BLOCK_END, TOOL_CALL_END, TOOL_RESULT_END -> ASSEMBLED;
             case REQUIRE_USER_CONFIRM, REQUIRE_EXTERNAL_EXECUTION -> PENDING_ACTION;
             case EXCEED_MAX_ITERS, REQUEST_STOP, AGENT_RESULT, AGENT_END -> TERMINAL;
-            case SUBAGENT_EXPOSED, HINT_BLOCK, CUSTOM -> LOGGED;
+            case SUBAGENT_EXPOSED, HINT_BLOCK -> LOGGED;
+            case CUSTOM -> PLATFORM_CUSTOM;
         };
     }
 }

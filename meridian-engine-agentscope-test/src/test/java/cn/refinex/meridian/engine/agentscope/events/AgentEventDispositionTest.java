@@ -4,6 +4,7 @@ import static cn.refinex.meridian.engine.agentscope.events.AgentEventDisposition
 import static cn.refinex.meridian.engine.agentscope.events.AgentEventDisposition.IGNORED;
 import static cn.refinex.meridian.engine.agentscope.events.AgentEventDisposition.LOGGED;
 import static cn.refinex.meridian.engine.agentscope.events.AgentEventDisposition.PENDING_ACTION;
+import static cn.refinex.meridian.engine.agentscope.events.AgentEventDisposition.PLATFORM_CUSTOM;
 import static cn.refinex.meridian.engine.agentscope.events.AgentEventDisposition.SPAN;
 import static cn.refinex.meridian.engine.agentscope.events.AgentEventDisposition.STREAM_ONLY;
 import static cn.refinex.meridian.engine.agentscope.events.AgentEventDisposition.TERMINAL;
@@ -52,7 +53,7 @@ class AgentEventDispositionTest {
             Map.entry(AgentEventType.EXTERNAL_EXECUTION_RESULT, IGNORED),
             Map.entry(AgentEventType.SUBAGENT_EXPOSED, LOGGED),
             Map.entry(AgentEventType.HINT_BLOCK, LOGGED),
-            Map.entry(AgentEventType.CUSTOM, LOGGED)));
+            Map.entry(AgentEventType.CUSTOM, PLATFORM_CUSTOM)));
 
     @Test
     void agentScope204HasExactly31EventTypes() {

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import cn.refinex.meridian.common.error.CommonErrorCode;
 import cn.refinex.meridian.common.error.LeaseLostException;
+import cn.refinex.meridian.engine.agentscope.middleware.CompactionGuardMiddleware;
+import cn.refinex.meridian.engine.agentscope.middleware.ContextCompositionMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformStopRequest;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryBlobStore;
 import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
@@ -13,6 +15,7 @@ import cn.refinex.meridian.engine.spi.error.RateLimitTimeoutException;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent.PermissionOutcome;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent.ToolResultState;
+import cn.refinex.meridian.engine.spi.event.ContextComposition;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.engine.spi.event.PendingAction;
 import cn.refinex.meridian.engine.spi.event.SessionEvent;
@@ -27,6 +30,7 @@ import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentResultEvent;
 import io.agentscope.core.event.AgentStartEvent;
+import io.agentscope.core.event.CustomEvent;
 import io.agentscope.core.event.ModelCallEndEvent;
 import io.agentscope.core.event.ModelCallStartEvent;
 import io.agentscope.core.event.RequireExternalExecutionEvent;
@@ -298,6 +302,44 @@ class TurnEventMapperTest {
                 new TextBlockDeltaEvent("r1", "text", "子线程").withSource("main/child"));
 
         assertThat(events).isEmpty();
+    }
+
+    @Test
+    void platformCustomEventsAreMappedByNameAndOthersAreIgnored() {
+        TurnEventMapper mapper = mapper(Set.of(), Set.of());
+
+        List<EngineEvent> events = map(
+                mapper,
+                new CustomEvent(
+                        CompactionGuardMiddleware.CONTEXT_COMPACTED_EVENT,
+                        Map.of(
+                                CompactionGuardMiddleware.MESSAGES_BEFORE,
+                                40,
+                                CompactionGuardMiddleware.MESSAGES_AFTER,
+                                6)),
+                new CustomEvent("other.event", Map.of("x", 1)));
+
+        assertThat(events).containsExactly(new AgentOutputEvent.ContextCompacted(40, 6));
+    }
+
+    @Test
+    void modelRequestStartCarriesTheContextCompositionAttachedByTheMiddleware() {
+        TurnEventMapper mapper = mapper(Set.of(), Set.of());
+        ContextComposition composition = new ContextComposition(
+                new ContextComposition.Part(1, 120),
+                new ContextComposition.Part(2, 60),
+                new ContextComposition.Part(4, 300),
+                new ContextComposition.Part(1, 80),
+                ContextComposition.Part.EMPTY);
+        ModelCallStartEvent withComposition = new ModelCallStartEvent("r1");
+        withComposition.withMetadataEntry(ContextCompositionMiddleware.METADATA_KEY, composition);
+
+        List<EngineEvent> events = map(mapper, withComposition, new ModelCallStartEvent("r2"));
+
+        assertThat(events)
+                .containsExactly(
+                        new SpanEvent.ModelRequestStart("r1", MODEL, composition),
+                        new SpanEvent.ModelRequestStart("r2", MODEL, null));
     }
 
     @Test

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cn.refinex.meridian.engine.agentscope.assembly.AgentHandle;
 import cn.refinex.meridian.engine.agentscope.middleware.BatchCheckpointMiddleware;
+import cn.refinex.meridian.engine.agentscope.middleware.CompactionGuardMiddleware;
+import cn.refinex.meridian.engine.agentscope.middleware.ContextCompositionMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.InterruptCheckpointMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.LeaseGuardMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformContextMiddleware;
@@ -20,6 +22,7 @@ import cn.refinex.meridian.engine.spi.spec.PermissionPolicy;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.middleware.MiddlewareBase;
 import io.agentscope.core.shutdown.GracefulShutdownMiddleware;
+import io.agentscope.harness.agent.middleware.CompactionMiddleware;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.sdk.testing.junit5.OpenTelemetryExtension;
 import io.opentelemetry.sdk.trace.data.SpanData;
@@ -58,23 +61,56 @@ class MiddlewareChainTest {
             assertThat(chain.getFirst())
                     .as("AgentScope 在构造时把优雅停机中间件放在最外层，不参与排序")
                     .isInstanceOf(GracefulShutdownMiddleware.class);
-            assertThat(chain.subList(1, 9))
-                    .extracting(m -> m.getClass().getSimpleName())
+            assertThat(chain.subList(1, 11))
+                    .extracting(m -> m.getClass().getName())
                     .containsExactly(
-                            PlatformContextMiddleware.class.getSimpleName(),
-                            PlatformTracingMiddleware.class.getSimpleName(),
-                            LeaseGuardMiddleware.class.getSimpleName(),
-                            RecoveryNoteMiddleware.class.getSimpleName(),
-                            InterruptCheckpointMiddleware.class.getSimpleName(),
-                            SteerMiddleware.class.getSimpleName(),
-                            BatchCheckpointMiddleware.class.getSimpleName(),
-                            ToolSpanMiddleware.class.getSimpleName());
-            assertThat(chain.subList(9, chain.size()))
+                            PlatformContextMiddleware.class.getName(),
+                            PlatformTracingMiddleware.class.getName(),
+                            LeaseGuardMiddleware.class.getName(),
+                            RecoveryNoteMiddleware.class.getName(),
+                            InterruptCheckpointMiddleware.class.getName(),
+                            SteerMiddleware.class.getName(),
+                            BatchCheckpointMiddleware.class.getName(),
+                            ToolSpanMiddleware.class.getName(),
+                            CompactionGuardMiddleware.class.getName(),
+                            ContextCompositionMiddleware.class.getName());
+            assertThat(chain.subList(11, chain.size() - 1))
                     .as("harness 自带的中间件都是默认 order 1，位于平台中间件之内")
                     .allSatisfy(m -> assertThat(m.order()).isEqualTo(1));
+            assertThat(chain.getLast())
+                    .as("压缩守护的内层（order 0）在全部 harness 中间件之内")
+                    .isInstanceOf(CompactionGuardMiddleware.Inner.class);
         } finally {
             harness.instances.release(handle);
         }
+    }
+
+    @Test
+    void compactionGuardLayersSandwichTheHarnessCompactionMiddleware() {
+        EngineHarness harness = EngineHarness.create(ScriptedModel.builder().build());
+        AgentHandle handle = harness.instances.acquire(harness.spec, TestSpecs.noneEnvironment());
+        try {
+            List<MiddlewareBase> chain = handle.agent().getDelegate().getMiddlewares();
+            int outer = indexOf(chain, CompactionGuardMiddleware.class);
+            int compaction = indexOf(chain, CompactionMiddleware.class);
+            int inner = indexOf(chain, CompactionGuardMiddleware.Inner.class);
+            log.info("P13 压缩守护：外层 {}、CompactionMiddleware {}、内层 {}（链中下标，外层在前）", outer, compaction, inner);
+
+            assertThat(compaction).as("harness 装配了 CompactionMiddleware").isNotNegative();
+            assertThat(outer).as("外层在 CompactionMiddleware 之外").isNotNegative().isLessThan(compaction);
+            assertThat(inner).as("内层在 CompactionMiddleware 之内").isGreaterThan(compaction);
+        } finally {
+            harness.instances.release(handle);
+        }
+    }
+
+    private static int indexOf(List<MiddlewareBase> chain, Class<?> type) {
+        for (int i = 0; i < chain.size(); i++) {
+            if (chain.get(i).getClass() == type) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @Test

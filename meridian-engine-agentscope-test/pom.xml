@@ -73,6 +73,7 @@
                                         <include>io.agentscope:agentscope-core</include>
                                         <include>io.agentscope:agentscope-harness</include>
                                         <include>io.agentscope:agentscope-extensions-sandbox-kubernetes</include>
+                                        <include>io.agentscope:agentscope-extensions-model-openai</include>
                                     </includes>
                                 </bannedDependencies>
                             </rules>

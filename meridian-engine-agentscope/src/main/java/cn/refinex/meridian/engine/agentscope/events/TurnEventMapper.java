@@ -5,6 +5,8 @@ import cn.refinex.meridian.common.error.LeaseLostException;
 import cn.refinex.meridian.common.error.MeridianException;
 import cn.refinex.meridian.common.id.IdPrefix;
 import cn.refinex.meridian.common.id.Ids;
+import cn.refinex.meridian.engine.agentscope.middleware.CompactionGuardMiddleware;
+import cn.refinex.meridian.engine.agentscope.middleware.ContextCompositionMiddleware;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformStopRequest;
 import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
 import cn.refinex.meridian.engine.spi.error.BudgetExceededException;
@@ -13,6 +15,7 @@ import cn.refinex.meridian.engine.spi.event.AgentOutputEvent;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent.PermissionOutcome;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent.ToolResultState;
 import cn.refinex.meridian.engine.spi.event.BlobRef;
+import cn.refinex.meridian.engine.spi.event.ContextComposition;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.engine.spi.event.PendingAction;
 import cn.refinex.meridian.engine.spi.event.SessionEvent;
@@ -27,6 +30,7 @@ import cn.refinex.meridian.engine.spi.port.BlobStorePort;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentResultEvent;
+import io.agentscope.core.event.CustomEvent;
 import io.agentscope.core.event.DataBlockDeltaEvent;
 import io.agentscope.core.event.DataBlockEndEvent;
 import io.agentscope.core.event.DataBlockStartEvent;
@@ -148,9 +152,11 @@ public final class TurnEventMapper {
                         result.getResult() == null ? null : result.getResult().getGenerateReason();
                 yield Flux.empty();
             }
-            case MODEL_CALL_START ->
-                Flux.just(new SpanEvent.ModelRequestStart(
-                        ((ModelCallStartEvent) event).getReplyId(), settings.modelId()));
+            case MODEL_CALL_START -> {
+                ModelCallStartEvent start = (ModelCallStartEvent) event;
+                yield Flux.just(
+                        new SpanEvent.ModelRequestStart(start.getReplyId(), settings.modelId(), composition(start)));
+            }
             case MODEL_CALL_END -> modelCallEnd((ModelCallEndEvent) event);
             case TEXT_BLOCK_START ->
                 startBlock(
@@ -249,7 +255,8 @@ public final class TurnEventMapper {
                 }
                 yield Flux.fromIterable(uses);
             }
-            case SUBAGENT_EXPOSED, HINT_BLOCK, CUSTOM -> {
+            case CUSTOM -> platformCustom((CustomEvent) event);
+            case SUBAGENT_EXPOSED, HINT_BLOCK -> {
                 log.debug("忽略不映射的事件 type={}", event.getType());
                 yield Flux.empty();
             }
@@ -329,6 +336,27 @@ public final class TurnEventMapper {
         return Flux.just(
                 new SessionEvent.Error(CommonErrorCode.INTERNAL.code(), INTERNAL_ERROR_MESSAGE, RetryStatus.TERMINAL),
                 new SessionEvent.StatusIdle(StopReason.ERROR));
+    }
+
+    /** 上下文构成摘要：{@code ContextCompositionMiddleware} 挂在模型调用开始事件元数据上的值；没有时为空。 */
+    private static ContextComposition composition(ModelCallStartEvent start) {
+        Map<String, Object> metadata = start.getMetadata();
+        return metadata != null
+                        && metadata.get(ContextCompositionMiddleware.METADATA_KEY) instanceof ContextComposition c
+                ? c
+                : null;
+    }
+
+    /** 平台中间件以约定名字发出的自定义事件按名字映射，其余只记日志（ADR-0032）。 */
+    private static Flux<EngineEvent> platformCustom(CustomEvent custom) {
+        if (CompactionGuardMiddleware.CONTEXT_COMPACTED_EVENT.equals(custom.getName())) {
+            Map<String, Object> value = custom.getValue();
+            return Flux.just(new AgentOutputEvent.ContextCompacted(
+                    ((Number) value.get(CompactionGuardMiddleware.MESSAGES_BEFORE)).intValue(),
+                    ((Number) value.get(CompactionGuardMiddleware.MESSAGES_AFTER)).intValue()));
+        }
+        log.debug("忽略不映射的自定义事件 name={}", custom.getName());
+        return Flux.empty();
     }
 
     private Flux<EngineEvent> modelCallEnd(ModelCallEndEvent end) {

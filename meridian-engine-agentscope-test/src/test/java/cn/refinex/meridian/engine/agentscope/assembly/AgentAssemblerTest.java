@@ -309,6 +309,14 @@ class AgentAssemblerTest {
         assertThat(config.isFlushBeforeCompact()).isFalse();
         assertThat(config.isOffloadBeforeCompact()).isFalse();
         assertThat(config.getReserved()).isEqualTo(32_000);
+        assertThat(config.getTriggerMessages())
+                .as("只按 token 阈值（窗口减 reserved）触发，不按条数")
+                .isZero();
+        assertThat(config.getTriggerTokens()).as("动态阈值").isZero();
+        assertThat(config.getSummaryPrompt()).as("摘要提示词由平台维护").isEqualTo(CompactionPrompt.SUMMARY);
+        assertThat(CompactionPrompt.SUMMARY)
+                .contains(CompactionPrompt.MESSAGES_PLACEHOLDER)
+                .contains("目标", "关键决定", "产物", "未完成事项", "下一步");
         assertThat(Reflection.field(hook, "model")).as("压缩器使用同一个 RoutedModel").isSameAs(model);
     }
 

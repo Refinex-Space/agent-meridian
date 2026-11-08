@@ -10,6 +10,7 @@ import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.CommonErrorCode;
 import cn.refinex.meridian.common.error.LeaseLostException;
+import cn.refinex.meridian.engine.agentscope.model.TokenEstimator;
 import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
 import cn.refinex.meridian.engine.agentscope.testkit.tool.RecordingTool;
 import cn.refinex.meridian.engine.spi.engine.ThreadRef;
@@ -23,6 +24,7 @@ import cn.refinex.meridian.engine.spi.error.RateLimitTimeoutException;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent.PermissionOutcome;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent.ToolResultState;
+import cn.refinex.meridian.engine.spi.event.ContextComposition;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.engine.spi.event.PendingAction;
 import cn.refinex.meridian.engine.spi.event.SessionEvent;
@@ -83,12 +85,22 @@ class AgentScopeEngineScenarioTest {
 
         List<EngineEvent> events = harness.run(ctx, userText("你好"));
 
-        String replyId =
-                of(events, SpanEvent.ModelRequestStart.class).getFirst().requestId();
+        SpanEvent.ModelRequestStart start =
+                of(events, SpanEvent.ModelRequestStart.class).getFirst();
+        String replyId = start.requestId();
         String blockId = replyId + ":text";
+        assertThat(start.context()).as("上下文构成：一条系统提示词、一条历史消息，其余为空").satisfies(context -> {
+            assertThat(context.systemPrompt().count()).isEqualTo(1);
+            assertThat(context.systemPrompt().tokens()).isPositive();
+            assertThat(context.history().count()).isEqualTo(1);
+            assertThat(context.history().tokens()).isGreaterThan(TokenEstimator.text("你好"));
+            assertThat(context.skills()).isEqualTo(ContextComposition.Part.EMPTY);
+            assertThat(context.toolResults()).isEqualTo(ContextComposition.Part.EMPTY);
+            assertThat(context.injected()).isEqualTo(ContextComposition.Part.EMPTY);
+        });
         assertThat(events)
                 .containsExactly(
-                        new SpanEvent.ModelRequestStart(replyId, "mdl_test"),
+                        new SpanEvent.ModelRequestStart(replyId, "mdl_test", start.context()),
                         new StreamEvent.EventStart(blockId, BlockKind.TEXT, null),
                         new StreamEvent.EventDelta(blockId, BlockKind.TEXT, "你好"),
                         new StreamEvent.EventDelta(blockId, BlockKind.TEXT, "，世"),

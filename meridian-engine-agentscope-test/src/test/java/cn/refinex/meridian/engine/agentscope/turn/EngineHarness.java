@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import cn.refinex.meridian.common.context.Interaction;
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
+import cn.refinex.meridian.engine.agentscope.assembly.AgentProfile;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.RecordingMiddlewareProvider;
@@ -28,11 +29,13 @@ import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.PermissionPolicy;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import io.agentscope.core.middleware.MiddlewareBase;
+import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.AgentTool;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import reactor.core.publisher.Flux;
 
@@ -47,7 +50,7 @@ final class EngineHarness {
     static final String SESSION = "ses_test";
     static final Duration TIMEOUT = Duration.ofSeconds(30);
 
-    final ScriptedModel model;
+    final Model model;
     final InMemoryLeaseRegistry leases = new InMemoryLeaseRegistry();
     final InMemoryInbox inbox = new InMemoryInbox();
     final InMemoryAgentStateRepository states = new InMemoryAgentStateRepository();
@@ -58,11 +61,16 @@ final class EngineHarness {
     final AgentScopeEngine engine;
 
     private EngineHarness(
-            ScriptedModel model, ResolvedAgentSpec spec, List<AgentTool> tools, List<MiddlewareBase> extraMiddlewares) {
+            Model model,
+            ResolvedAgentSpec spec,
+            List<AgentTool> tools,
+            List<MiddlewareBase> extraMiddlewares,
+            Predicate<MiddlewareBase> keep) {
         this.model = model;
         this.spec = spec;
-        List<MiddlewareBase> middlewares =
-                new ArrayList<>(new PlatformMiddlewareProvider(leases, inbox).middlewares(null));
+        List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(leases, inbox)
+                .middlewares(AgentProfile.main(spec, TestSpecs.noneEnvironment())));
+        middlewares.removeIf(keep.negate());
         middlewares.addAll(extraMiddlewares);
         TestAssembly assembly = TestAssembly.builder(model)
                 .stateStore(new FencedAgentStateStore(states, leases))
@@ -79,11 +87,18 @@ final class EngineHarness {
     }
 
     static EngineHarness create(
-            ScriptedModel model,
+            Model model,
             UnaryOperator<TestSpecs.AgentSpecBuilder> spec,
             List<MiddlewareBase> extraMiddlewares,
             AgentTool... tools) {
-        return new EngineHarness(model, spec.apply(TestSpecs.agent()).build(), List.of(tools), extraMiddlewares);
+        return new EngineHarness(
+                model, spec.apply(TestSpecs.agent()).build(), List.of(tools), extraMiddlewares, middleware -> true);
+    }
+
+    /** 对照实验用：只保留 {@code keep} 为真的平台中间件。 */
+    static EngineHarness createFiltered(
+            Model model, UnaryOperator<TestSpecs.AgentSpecBuilder> spec, Predicate<MiddlewareBase> keep) {
+        return new EngineHarness(model, spec.apply(TestSpecs.agent()).build(), List.of(), List.of(), keep);
     }
 
     /**
