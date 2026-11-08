@@ -73,7 +73,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 已完成 | 7e490f5 |
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 已完成 | bcd2246 |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 已完成 | b3bdef7 |
-| T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 进行中 | — |
+| T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 已完成 | 086b6f4 |
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 未开始 | — |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 未开始 | — |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 未开始 | — |
@@ -175,19 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T12b 沙箱出网控制（开工 2026-11-08，基线 `verify.sh` 通过）：
-
-- [x] 1. kind 上实测 Envoy 的 HTTP `ext_authz` 对普通代理请求与 CONNECT 的回调形态：检查请求沿用客户端的方法，CONNECT 的检查本身成了 CONNECT，授权不了 HTTPS；Lua 过滤器回调四种情况全部正确。写 ADR-0038（变更型），用户已于 2026-11-08 采纳，架构设计升至 v1.14
-- [x] 1b. kind 集群的 Pod 网段与 Docker Desktop 的宿主地址 `192.168.65.254` 重叠（Calico 对池内目的地址不做 NAT），Pod 访问不到 `host.docker.internal`：`kind-gvisor.sh` 改用 `10.244.0.0/16`（Calico IP 池同步设置）并重建集群，Pod 已能访问宿主
-- [x] 2. 内部接口规范 `/internal/v1/egress:authorize`（`meridian-internal-v1.yaml`：200 带会话，拒绝为 403 problem+json，`egress.*` 三个码）；`egress.api.EgressApiController`、`EgressErrorCode`、`EgressApiIT`
-- [x] 3. runtime `egress`：按 Pod IP 查会话与环境（`infra.system.SandboxAddressRepository`，迁移 `V0007` 的部分索引）、白名单判定（`EgressTarget`、`EgressAllowlist`）、30 秒缓存（`EgressGrants`，Caffeine）、Pod IP 变化时本节点立即淘汰并经 Pub/Sub `egress:revoke` 广播（`EgressRevocations`，`SandboxService` 的获取、回收、删除都调用）、指标 `meridian_egress_authorize_seconds` 与 `cache_gets_total{cache="egress_grants"}`。
-- [x] 4. 集成测试：Pod IP 清空后缓存内的授权立即失效（T12b-A02）：`SandboxEgressRevocationIT`（回收、删除、重新连接换 IP、错过广播的节点在同 IP 新认领时淘汰）、`EgressAuthorizerIT`
-- [x] 5. Helm chart：Envoy（HTTP 与 CONNECT、`ext_authz`、超时与连接上限写明理由）、NetworkPolicy（沙箱只到代理与 DNS），两种拓扑按 values 切换，`helm lint`（T12b-A03）
-  - [x] 5a. NetworkPolicy（沙箱只到代理与 DNS；代理只到 DNS、按拓扑的 runtime、排除私网的公网与列出的命名空间）、values 的两种拓扑与限额、`deploy/kind/egress-echo.yaml`（`deploy-sandbox.sh` 部署），`helm lint` 通过
-  - [x] 5b. Envoy 的 Deployment、Service 与配置（Lua 回调、CONNECT、动态转发代理、超时与连接上限、健康检查监听），`envoy --mode validate` 两种拓扑通过；`deploy-sandbox.sh` 建凭据 Secret
-- [x] 6. kind 实测 P14 四条（`allowed-echo`、`denied-echo`、新 Pod 不继承授权、直连被阻断）与 `-Pkind` 测试（T12b-A01）：`config.EgressProxyKindIT` 通过；runtime 未启动时代理拒绝（失败即拒绝）手工验证
-- [x] 7. 文档：ADR-0038（采纳）、ADR-0039（补充）、架构设计 v1.14、P14 报告、`docs/poc/README.md`、runtime 与根 `CLAUDE.md`、chart README；登记事项 D38–D40
-- [ ] 8. 收尾：`verify.sh`、`-Pkind`（T12b-A04）、`acceptance.json`、PLAN、报告
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -374,6 +362,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：8 项通过，0 项阻塞
 - 决策：ADR-0037（获取与回收都在会话行锁内、删除先于提交、每个会话至多一个快照；内核经 `SandboxStatePort` 读沙箱、拒绝自建沙箱的客户端；工具文件系统的路径翻译与沙箱绑定；bash 复合命令语义、超时与输出上限；沙箱命令审计走 `ToolLedgerPort`；技能摘要算法；产物镜像同步与 64 MB 上限；vCPU 秒分段计量与 `sandbox_vcpu_seconds`；认领指标只计预热池认领；bash 的"记住此决定"记命令原文）；架构设计升至 v1.13；登记事项 D35 回收部分落地
 - 遗留：登记事项 D21 内核带出建议规则（建议 T19b）、D35 删除会话时调用（T17a）、D37 无人管理的沙箱清理（T17a 或 T28）；kind 集群 `meridian` 保留给 T12b
+
+### 2026-11-08 T12b 已完成（提交 086b6f4）
+- 交付：runtime 的 `egress` 上下文（`domain`：`EgressTarget`、`EgressAllowlist`、`EgressDecision`、`EgressGrant`、`EgressErrorCode`；`app`：`EgressAuthorizer`（指标 `meridian.egress.authorize`）、`EgressGrants`（Caffeine 按源 IP 缓存 30 秒，命中率经 `CaffeineCacheMetrics`）、`EgressRevocations`（本节点淘汰，提交后经 Pub/Sub `egress:revoke` 广播）；`infra.system.SandboxAddressRepository`；`api.EgressApiController`）、迁移 `V0007`、`SandboxService` 在 Pod IP 变化时撤销授权；内部接口 `POST /internal/v1/egress:authorize`；chart 的出网代理（Envoy v1.40.2：Lua 回调、CONNECT 与动态转发代理、超时与连接上限、健康检查监听）、沙箱只到代理与 DNS 及代理自身的网络策略、`cluster`/`host` 两种拓扑、README；`deploy/kind/egress-echo.yaml`、`deploy-sandbox.sh` 建回调凭据 Secret；`kind-gvisor.sh` 的 Pod 网段改为 `10.244.0.0/16`（集群已重建）；开发配置 `env_dev_sandbox`；测试 `EgressTargetTest`、`EgressAllowlistTest`、`EgressAuthorizerIT`、`SandboxEgressRevocationIT`、`EgressApiIT`、kind 测试 `EgressProxyKindIT`；P14 报告
+- 验收：4 项通过，0 项阻塞
+- 决策：ADR-0038（变更型，用户采纳：`ext_authz` 的 HTTP 服务把客户端方法带进检查请求，授权不了 CONNECT，改用 Envoy Lua 过滤器回调）；ADR-0039（按 IP 找会话与两行同 IP 拒绝、白名单语法、缓存的跨节点失效、接口的 403 problem+json、网络策略、两种拓扑、kind 网段、回调凭据）；架构设计升至 v1.14
+- 遗留：登记事项 D38 代理的回调凭据（T14b）、D39 DNS 隧道（T37）、D40 代理的指标、排空与节点池容忍（T27、T28）；kind 集群 `meridian` 已按新网段重建并保留
 
 ## 计划变更记录
 
