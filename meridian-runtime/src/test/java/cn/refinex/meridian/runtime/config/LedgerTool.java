@@ -86,6 +86,11 @@ final class LedgerTool extends ToolBase {
             releases.forEach(CountDownLatch::countDown);
         }
 
+        /** 只放行最早一次关闭的闸门：卡在它上面的调用继续，之后关闭的闸门仍然关着。 */
+        void openOldest() {
+            releases.stream().filter(latch -> latch.getCount() > 0).findFirst().ifPresent(CountDownLatch::countDown);
+        }
+
         /** 等待有调用进入执行。 */
         void awaitEntered() throws InterruptedException {
             if (!entered.await(30, TimeUnit.SECONDS)) {
