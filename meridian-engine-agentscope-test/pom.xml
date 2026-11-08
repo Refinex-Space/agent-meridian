@@ -52,6 +52,15 @@
             <artifactId>opentelemetry-sdk-testing</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+          P8 预验证与 MCP 客户端的集成测试：进程内的 MCP 服务以 MCP SDK 0.17.2 的 Servlet 传输注册在 Spring Boot 4.1 的
+          Spring MVC 应用中（knowledge 服务在 T19 暴露 MCP Server 的方式），版本由 Spring Boot BOM 管理。只在测试中使用。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

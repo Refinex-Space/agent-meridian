@@ -30,6 +30,7 @@ import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryToolLedger;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryWorkspaceStore;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformToolProvider;
+import cn.refinex.meridian.engine.agentscope.tools.mcp.McpConnector;
 import cn.refinex.meridian.engine.spi.engine.TurnContext;
 import cn.refinex.meridian.engine.spi.engine.input.InboundMessage;
 import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
@@ -90,7 +91,7 @@ final class EngineHarness {
             List<AgentTool> tools,
             List<MiddlewareBase> extraMiddlewares,
             Predicate<MiddlewareBase> keep) {
-        this(model, spec, tools, extraMiddlewares, keep, false, List.of(), Map.of());
+        this(model, spec, tools, extraMiddlewares, keep, false, List.of(), Map.of(), null);
     }
 
     private EngineHarness(
@@ -101,7 +102,8 @@ final class EngineHarness {
             Predicate<MiddlewareBase> keep,
             boolean platform,
             List<SkillDefinition> skills,
-            Map<String, Function<PlatformTool.ToolServices, PlatformTool>> extraPlatformTools) {
+            Map<String, Function<PlatformTool.ToolServices, PlatformTool>> extraPlatformTools,
+            McpConnector mcp) {
         this.model = model;
         this.spec = spec;
         List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(leases, inbox)
@@ -121,12 +123,15 @@ final class EngineHarness {
                     extraPlatformTools.entrySet()) {
                 provider = provider.with(extra.getKey(), extra.getValue());
             }
+            if (mcp != null) {
+                provider = provider.withMcp(mcp);
+            }
             ToolProvider platformTools = provider;
             ToolProvider combined = profile -> {
-                List<AgentTool> all =
-                        new ArrayList<>(platformTools.tools(profile).tools());
+                ToolProvider.ToolBundle bundle = platformTools.tools(profile);
+                List<AgentTool> all = new ArrayList<>(bundle.tools());
                 all.addAll(tools);
-                return ToolProvider.ToolBundle.of(all);
+                return new ToolProvider.ToolBundle(all, bundle.resources());
             };
             assembler = new AgentAssembler(
                     new RecordingModelFactory(model),
@@ -205,7 +210,30 @@ final class EngineHarness {
                 middleware -> true,
                 true,
                 skills,
-                platformTools);
+                platformTools,
+                null);
+    }
+
+    /**
+     * 同 {@link #withPlatform(Model, UnaryOperator, List, AgentTool...)}，另登记 MCP 连接器：智能体挂载的 MCP 服务在装配时连接、
+     * 发现工具（T10b）。
+     *
+     * @param model 模型
+     * @param spec 智能体配置
+     * @param mcp MCP 连接器
+     * @return 组装
+     */
+    static EngineHarness withMcp(Model model, UnaryOperator<TestSpecs.AgentSpecBuilder> spec, McpConnector mcp) {
+        return new EngineHarness(
+                model,
+                spec.apply(TestSpecs.agent()).build(),
+                List.of(),
+                List.of(),
+                middleware -> true,
+                true,
+                List.of(),
+                Map.of(),
+                mcp);
     }
 
     /** 对照实验用：只保留 {@code keep} 为真的平台中间件。 */
