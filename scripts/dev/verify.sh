@@ -9,12 +9,14 @@ cd "${repo_root}"
 ./mvnw -B -ntp spotless:check verify
 scripts/ci/check-pom-versions.sh
 
-# sandbox-runtime（Python）：格式、静态检查、类型检查、单元测试
+# sandbox-runtime（Python）：格式、静态检查、类型检查、单元测试；内置技能的脚本（skills/builtin，在沙箱中运行）用同一套 Ruff 规则
 (
   cd sandbox-runtime
   uv sync --frozen --quiet
   uv run --frozen ruff format --check .
   uv run --frozen ruff check .
+  uv run --frozen ruff format --check --config pyproject.toml ../skills
+  uv run --frozen ruff check --config pyproject.toml ../skills
   uv run --frozen mypy
   uv run --frozen pytest -q -W error
 )
