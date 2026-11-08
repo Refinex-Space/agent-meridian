@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.6 |
-| 日期 | 2026-11-07 |
+| 版本 | v1.7 |
+| 日期 | 2026-11-08 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
 
@@ -238,7 +238,7 @@ agent-meridian/
 
 | 接口 | 用途 |
 |---|---|
-| `AgentEngine` | 执行一轮、中断、下线，见"内核适配层" |
+| `AgentEngine` | 执行一轮、中断、下线，见"内核适配层"；恢复确认选择 `retry` 时用原幂等键重新执行工具调用、读取装配后的保留工具名（ADR-0031） |
 | `SandboxDriver` | 沙箱的创建、恢复、快照、删除。入参和返回值是平台的 `SandboxHandle` 和序列化后的状态，内部使用 AgentScope Kubernetes 扩展的 `SandboxClient` |
 | `ModelInvoker` | OpenAI 兼容直通接口用的聊天调用，内部使用 `RoutedModel` |
 
@@ -363,7 +363,8 @@ erDiagram
 | `inbox_messages` | `id`、`session_id`、`thread_id`、`event_id`、`delivery`、`status`、`consumed_turn_id`、`consumed_epoch` | 待投递的用户消息；`consumed_epoch` 记录消费它的那次执行的 `lease_epoch` |
 | `agent_states` | `user_id`、`thread_id`、`state_key`、`state jsonb`、`version`、`content_epoch`、`content_turn_id` | 由平台的 `FencedAgentStateStore` 读写；`content_epoch` 与 `content_turn_id` 一起标识最近一次内容写入来自哪次执行，见"崩溃恢复"（ADR-0028） |
 | `tool_invocations` | `id`、`turn_id`、`thread_id`、`tool_use_id`、`tool_name`、`side_effect`、`idempotency_key`、`status`、`input jsonb`、`result_ref` | 工具账本 |
-| `pending_actions` | `id`、`turn_id`、`thread_id`、`type`、`payload jsonb`、`status`、`decided_by`、`remember_scope`、`expires_at` | 待处理动作 |
+| `pending_actions` | `id`、`turn_id`、`thread_id`、`type`、`payload jsonb`、`status`、`decided_by`、`remember_scope`、`expires_at`、`response jsonb`、`consumed_turn_id` | 待处理动作；`response` 是回应或超时、中断、自动拒绝给出的结论，`consumed_turn_id` 是交出结论的恢复轮（ADR-0031） |
+| `permission_rules` | `layer`（`tenant`、`project`、`session`）、`tool_name`、`rule_content`、`behavior`、`session_id`、`source_action_id` | 五层权限中的租户、项目、会话三层；项目级与会话级的"记住此决定"写在这里。T15b 起租户与项目策略由 control-plane 下发（ADR-0031） |
 | `workspace_entries` | `namespace text[]`、`key`、`version`、`size`、`inline_content`、`object_key` | `MeridianBaseStore` 的存储 |
 | `outbox` | `id`、`topic`、`payload`、`created_at`、`published_at` | 用量与审计的可靠投递 |
 
@@ -488,7 +489,8 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `PolicyMiddleware` | `onActing` | 纵深防御：工具必须在智能体允许的工具集内；非 `ToolBase` 工具只放行 `load_skill_through_path`，`wait_async_results` 直接返回合成的 DENIED 结果；子智能体拉起数量上限 |
 | `RecoveryNoteMiddleware` | `onReasoning` | 恢复轮的第一次推理前，把恢复说明追加到输入和 `AgentState` 上下文。恢复说明不走调用入参，因为 AgentScope 在停机中断后的下一次调用会丢弃全部入参 |
 | `BatchCheckpointMiddleware` | `onActing`、`onReasoning` | 每批工具执行完成后、下一次推理之前保存一次状态（批次级 checkpoint，P3），强杀后从最近的批次续跑；可配置关闭。`SteerMiddleware` 必须排在它之外（ADR-0028） |
-| `SteerMiddleware` | `onReasoning` | 读取本线程 `delivery=steer` 的待投递消息，追加到本次推理输入和 `AgentState` 上下文，记录 `consumed_turn_id` 和 `consumed_epoch` |
+| `InterruptCheckpointMiddleware` | `onReasoning` | 认领时已有中断请求的轮次（等待回应时被中断生成的恢复轮、中断后被恢复认领的轮次），在第一次推理前按用户中断结束：本轮的输入已写进上下文，不再调用模型。排在 `RecoveryNoteMiddleware` 之内、`SteerMiddleware` 之外（ADR-0031） |
+| `SteerMiddleware` | `onReasoning` | 读取本线程 `delivery=steer` 的待投递消息，追加到本次推理输入和 `AgentState` 上下文，记录 `consumed_turn_id` 和 `consumed_epoch`，同一事务写 `session.message_consumed`。只挂在主智能体上，排在 `BatchCheckpointMiddleware` 之外 |
 | `CompactionGuardMiddleware` | `onReasoning`，分内外两层，夹住 harness 的 `CompactionMiddleware` | 外层在压缩前预检预算、限流、租约，不满足就抛出平台异常；内层检查压缩结果，摘要以 `(Summarization failed` 开头时抛 `CompactionFailedException`，防止失败文本替换历史；新出现 `__compaction_summary__` 消息时发出压缩事件 |
 | `KnowledgePrefetchMiddleware` | `onAgent` | 智能体配置为"前置检索"时，用最后一条用户消息检索并注入 |
 | `ToolSpanMiddleware` | `onActing` | 每个工具调用单独建 span（AgentScope 一批工具只建一个 span） |
@@ -700,6 +702,13 @@ AgentScope 没有 ERROR 事件类型，错误以 `Flux.error` 结束事件流。
 
 AgentScope 只在三个检查点响应中断：每轮推理开始前、进入工具执行前、模型流的每个分块。正在执行的工具会执行完毕。随中断传入的消息会被 AgentScope 忽略，所以跟在 `user.interrupt` 后面的新消息一律按 queue 处理。
 
+落地约定（ADR-0031）：
+
+- 节点频道的消息是线程 ID，持有租约的节点收到后立即对该线程续租一次，从数据库读出中断请求或发现租约已失去。删除会话取消执行中的轮次后同样通知。
+- 中断按本批到达时主线程的状态处理。排队中的消息轮被取消时写 `session.status_idle(interrupted)`，收件箱中尚未投递的消息与之后的消息合成下一轮；排队中的恢复轮不取消，改为带着中断请求执行，否则状态里待确认的调用没有结论。
+- "运行一个恢复轮后停止"：恢复轮入队时写上 `interrupt_requested_at`，执行时由 `InterruptCheckpointMiddleware` 在第一次推理前结束，结论已写进上下文，`stop_reason=interrupted`。
+- 等待回应时到达的 steer 以 queue 写入收件箱。
+
 `spawn_subagent` 本身是一个工具，父线程被中断后它不会停。所以 `AgentEngine.interrupt` 先中断该轮登记的所有子线程（`interrupt(userId, childThreadId)`），再中断父线程。
 
 ### 待处理动作
@@ -714,13 +723,15 @@ AgentScope 只在三个检查点响应中断：每轮推理开始前、进入工
 一轮里所有待处理动作都有了回应（含超时），平台才生成恢复轮，输入只包含这些回应。恢复轮的类型按下面的规则确定：
 
 - 同一批里既有待确认的调用又有自定义工具时，先生成 `confirmations` 轮。它结束时如果仍停在 `TOOL_SUSPENDED`，再生成 `custom_tool_results` 轮。原因是 AgentScope 只要发现待确认调用，就走确认分支，同批的工具结果不会被处理。
-- `recovery_confirmation` 的回应一律生成 `RecoveryOnly` 轮。选 `retry` 时，平台在 Java 侧用原幂等键重新执行该工具调用，把结果写进恢复说明；选 `skip` 时，只在恢复说明里注明跳过。
+- `recovery_confirmation` 的回应生成只带恢复说明的恢复轮（`RecoveryOnly`）。选 `retry` 时，平台在 Java 侧用原幂等键重新执行该工具调用，把结果写进恢复说明；选 `skip` 时，只在恢复说明里注明跳过。例外是恢复方式为 `replay_input`（进程被强杀，状态里没有本轮的输入）：恢复轮重放原轮输入并附恢复说明，否则会丢掉用户消息。`retry` 在恢复轮第一次执行、调用内核之前进行（ADR-0031）。
+- 结论记在 `pending_actions.response`，交出结论的恢复轮记在 `consumed_turn_id`。同批中暂不交出的自定义工具结论，在确认轮再次停在 `TOOL_SUSPENDED` 时由平台直接交出。2.0.4 中待确认的调用会让整批工具都不执行，自定义工具在确认之后才挂起，所以实际总是先确认、后工具结果（ADR-0031）。
+- 超时由每个节点每 10 秒扫描一次，动作行以 `SKIP LOCKED` 锁住，同一动作只被处理一次（ADR-0031）。
 
-**无人值守会话。** `unattended` 会话在合成权限时已经把 ask 改写为 deny。如果仍然以 `PERMISSION_ASKING` 结束（例如工具自检返回安全类 ask），平台不产生待处理动作，而是对所有待确认调用自动生成拒绝结果，立即运行恢复轮。
+**无人值守会话。** `unattended` 会话在合成权限时已经把 ask 改写为 deny。如果仍然以 `PERMISSION_ASKING` 结束（例如工具自检返回安全类 ask），平台不产生待处理动作，而是对所有待确认调用自动生成拒绝结果，立即运行恢复轮：本轮以 `session.status_idle(tools_denied)` 结束，同一事务中入队 `confirmations` 恢复轮（ADR-0031）。
 
 **审批结果的传递。** 平台在 Java 侧构造 `ConfirmResult` 实例，放进输入消息元数据的 `Msg.METADATA_CONFIRM_RESULTS`。AgentScope 只认 `ConfirmResult` 实例，不认反序列化出来的 Map。
 
-**"记住此决定"。** `ConfirmResult.rules` 不会写回 AgentScope 状态。所以平台把它存为会话级或项目级权限规则，在之后每轮开始时注入，见"权限判定"。
+**"记住此决定"。** `ConfirmResult.rules` 不会写回 AgentScope 状态。所以平台把它存为会话级或项目级权限规则，在之后每轮开始时注入，见"权限判定"。记住的是整工具规则，批准记 allow、拒绝记 deny；项目级规则经 runtime 内部端口 `PolicyStorePort` 写入（ADR-0031）。
 
 **自定义工具。**
 
@@ -749,6 +760,12 @@ AgentScope 只在三个检查点响应中断：每轮推理开始前、进入工
 
 工具自检仍可能返回安全类 ask，这种情况的兜底处理见"待处理动作"和"子智能体"。
 
+合成的落地约定（ADR-0031）：
+
+- 合成结果是五层的并集，按层从高到低排列，相同的规则只保留层最高的一条；冲突按上面的原生顺序裁决，所以低层只能收紧，不能放开高层的 deny 与 ask。租户、项目、会话三层只有规则，不决定模式。
+- 平台安全规则：`write_file`、`edit_file` 对 `AGENTS.md`、`skills/**`、`subagents/**`、`tools.json`、`MEMORY.md` deny；`read_file`、`grep_files` 对凭据类文件（`**/.env`、`**/*.pem`、`**/*.key`、`**/id_rsa*`、`**/.ssh/**` 等）deny。路径 glob 相对工作区根，`**` 匹配零或多级目录。
+- 2.0.4 对"平凡"的权限上下文（`DEFAULT`、没有规则）不走权限引擎、一律放行。平台安全规则使上下文永远不平凡，`DEFAULT` 模式下没有命中 allow 的调用都要确认，智能体版本要显式放行它的工具。会话声明的自定义工具在会话层各有一条整工具 allow。
+
 ### 子智能体
 
 拉起子智能体靠平台工具 `spawn_subagent`，不使用 harness 的 `agent_spawn` 系列。原因有四个，都已在 v2.0.4 源码核实：
@@ -763,7 +780,7 @@ AgentScope 只在三个检查点响应中断：每轮推理开始前、进入工
 1. 参数为 `subagent`（名称）和 `task`（任务描述）。可用的子智能体来自智能体版本配置，每个子智能体有自己的模型、提示词、工具集，工具集必须是父智能体的子集。
 2. 工具创建子线程（`thr_…`，记录 `parent_tool_use_id`），发出 `session.thread_created`。用该线程 ID 作为 `sessionId`，用 `RuntimeContext.builder()` **从空白构建**子上下文，只放入派生的 `PlatformContext`（线程 ID 改为子线程）和会话沙箱的 `SandboxContext`。**禁止**用 `RuntimeContext.builder(parent)` 复制父上下文：它会把父线程的 `AgentState`、沙箱获取结果、文件系统、`ToolRequestConfig` 一并带过去。
 3. 子智能体的 `HarnessAgent` 由 `AgentAssembler` 按子智能体配置单独装配和缓存。它挂载的是平台为子智能体准备的中间件，不含 `SteerMiddleware` 和 `KnowledgePrefetchMiddleware`，也不能再拉起子智能体，嵌套深度固定为 1。
-4. 子智能体的权限按"权限判定"一节合成：`DONT_ASK` 模式，ask 规则改写为 deny，可用规则是父智能体 allow 规则的子集。子智能体如果仍以 `PERMISSION_ASKING` 或 `TOOL_SUSPENDED` 结束，`spawn_subagent` 把它转成一条拒绝结果返回父智能体，由父智能体决定下一步。
+4. 子智能体的权限按"权限判定"一节合成：`DONT_ASK` 模式，ask 规则改写为 deny，可用规则是父智能体 allow 规则的子集：继承父智能体中工具属于子智能体工具集的 allow，子智能体配置自带的 allow 只在被父智能体的 allow 覆盖时保留（ADR-0031）。子智能体如果仍以 `PERMISSION_ASKING` 或 `TOOL_SUSPENDED` 结束，`spawn_subagent` 把它转成一条拒绝结果返回父智能体，由父智能体决定下一步。
 5. 工具调用子智能体的 `streamEvents`，把事件经 `EventSinkPort` 写成子线程事件，带子线程的 `thread_id`，并把最终消息作为工具结果返回父智能体。
 6. 同步执行，超时取子智能体配置，上限 600 秒。超时后取消子智能体的订阅，返回超时结果。
 
@@ -1376,6 +1393,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.3 | 2026-11-07 | T04：可重试错误以 `session.status_rescheduled`（`retryable_error`）结束；租约丢失时内核不输出事件；事件映射中工具调用在模型调用结束时输出、工具结果块的 `event_start`、自定义工具与平台中间件停止原因的处理；包结构增加 `turn/`；`OtelTracingMiddleware` 由 `PlatformTracingMiddleware` 装配（ADR-0026） |
 | v1.4 | 2026-11-07 | T05：认领 SQL 的时间取注入的 `Clock` 并排除本节点仍在执行的线程；租约条件的加锁方式与锁顺序、续租失败阈值的起算点；新租户默认并发上限 20；会话状态随状态事件在同一事务中推进（ADR-0027） |
 | v1.5 | 2026-11-07 | T06：`agent_states` 增加 `content_turn_id`，崩溃恢复按本轮的内容写入判定并写明恢复认领与恢复次数用尽；批次级 checkpoint 通过 P3 并默认开启，平台中间件增加 `BatchCheckpointMiddleware`；结束轮次的事务顺序与线程咨询锁；指标增加 `meridian_event_publish_failures_total`（ADR-0028） |
+| v1.7 | 2026-11-08 | T08：权限合成的并集与排序、平台安全规则的内容、平凡权限上下文与自定义工具的放行、子线程 allow 的子集规则；中断经节点频道触发立即续租，排队轮次的取消与恢复轮的"带中断请求执行"，平台中间件增加 `InterruptCheckpointMiddleware`；`pending_actions` 增加 `response`、`consumed_turn_id`，新增 `permission_rules`；恢复确认在 `replay_input` 模式下重放原轮输入；无人值守会话的自动拒绝以 `tools_denied` 结束并入队恢复轮；`AgentEngine` 增加重试与保留工具名（ADR-0031） |
 | v1.6 | 2026-11-07 | T07：`sessions` 增加 `deleted_at`；会话的删除返回 202、归档只允许 `idle` 与 `requires_action`；SSE 第 1 步由每节点一个不阻塞的 `XREAD` 读取循环完成，去重与跳号按会话的全部序号判断，会话终止后关闭连接；OpenAPI 生成链与 3.1 写作约束（ADR-0029、ADR-0030） |
 
 ## 待决问题
