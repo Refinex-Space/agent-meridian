@@ -389,9 +389,9 @@ class ModelEndpointsIT extends ApiTestBase {
         String body = "{\"tenant_id\": \"" + tenant + "\", \"project_id\": \"prj_internal\", \"model\": \"" + EMBEDDING
                 + "\", \"input\": [\"切片一\", \"切片二\"], \"dimensions\": 4}";
 
-        Internal unauthenticated = internal("/internal/v1/embeddings", body, null);
-        Internal wrongCredential = internal("/internal/v1/embeddings", body, ApiTestKeys.KEY_A);
-        Internal accepted = internal("/internal/v1/embeddings", body, ApiTestKeys.SERVICE_CREDENTIAL);
+        InternalResponse unauthenticated = internal("/internal/v1/embeddings", body, null);
+        InternalResponse wrongCredential = internal("/internal/v1/embeddings", body, ApiTestKeys.KEY_A);
+        InternalResponse accepted = internal("/internal/v1/embeddings", body, ApiTestKeys.SERVICE_CREDENTIAL);
 
         assertThat(unauthenticated.status()).isEqualTo(401);
         assertThat(unauthenticated.body().get("code").asString()).isEqualTo("auth.unauthenticated");
@@ -413,7 +413,7 @@ class ModelEndpointsIT extends ApiTestBase {
     @Test
     void internalRerankOrdersDocumentsAndIsMetered() {
         String tenant = "ten_internal_" + System.nanoTime();
-        Internal response = internal(
+        InternalResponse response = internal(
                 "/internal/v1/rerank",
                 "{\"tenant_id\": \"" + tenant + "\", \"model\": \"" + RERANK + "\", \"query\": \"住宿标准\", \"top_n\": 2,"
                         + " \"documents\": [\"报销需要发票\", \"差旅住宿标准为每晚 500 元\", \"住宿需要提前预订\"]}",
@@ -483,31 +483,6 @@ class ModelEndpointsIT extends ApiTestBase {
                     response.build());
         }
         return new Stream(result.getStatus().value(), data, text);
-    }
-
-    private Internal internal(String path, String body, String credential) {
-        WebTestClient.RequestBodySpec spec = client().post().uri(path);
-        if (credential != null) {
-            spec.header(HttpHeaders.AUTHORIZATION, "Bearer " + credential);
-        }
-        EntityExchangeResult<byte[]> result = spec.contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body)
-                .exchange()
-                .expectBody(byte[].class)
-                .returnResult();
-        String text =
-                result.getResponseBody() == null ? "" : new String(result.getResponseBody(), StandardCharsets.UTF_8);
-        SimpleResponse.Builder response =
-                SimpleResponse.Builder.status(result.getStatus().value()).withBody(text);
-        result.getResponseHeaders().forEach(response::withHeader);
-        SimpleRequest.Builder request = new SimpleRequest.Builder(Request.Method.POST, path)
-                .withContentType(MediaType.APPLICATION_JSON_VALUE)
-                .withBody(body);
-        if (credential != null) {
-            request.withHeader(HttpHeaders.AUTHORIZATION, "Bearer " + credential);
-        }
-        ContractValidator.validateInternal(request.build(), response.build());
-        return new Internal(result.getStatus().value(), JsonMappers.lenient().readTree(text));
     }
 
     private WebTestClient client() {
@@ -607,7 +582,4 @@ class ModelEndpointsIT extends ApiTestBase {
             return JsonMappers.lenient().readTree(raw).get("code").asString();
         }
     }
-
-    /** 一次内部接口请求的结果。 */
-    private record Internal(int status, JsonNode body) {}
 }

@@ -72,9 +72,13 @@ egressProxy:
       port: 8080
       # host.docker.internal 在 Docker Desktop 中的地址，NetworkPolicy 的 ipBlock 按它放行
       cidr: 192.168.65.254/32
-    # 单次回调的超时：runtime 命中缓存时是亚毫秒级，未命中要查一次数据库与环境配置（几毫秒）；2 秒给宿主拓扑与 GC 停顿留余量。
-    # 超时与任何错误都拒绝本次出网（失败即拒绝），沙箱的客户端可以重试
-    timeout: 2s
+    # 单次回调的超时（毫秒）：runtime 命中缓存时是亚毫秒级，未命中要查一次数据库与环境配置（几毫秒）；2 秒给宿主拓扑与 GC 停顿留
+    # 余量。超时与任何错误都拒绝本次出网（失败即拒绝），沙箱的客户端可以重试
+    timeoutMs: 2000
+    # 回调 runtime 内部接口的服务凭据：Secret 名与键（chart 不创建它；本机 kind 由 scripts/dev/deploy-sandbox.sh 创建）
+    credentialSecret:
+      name: meridian-egress-proxy-credential
+      key: credential
 
   # 代理自身可以连接的目标网络（NetworkPolicy 的 ipBlock）：公网放行，私网、链路本地（含云元数据 169.254.169.254）、CGNAT 与回环
   # 一律排除，即使白名单里的域名被解析到内网地址也连不上（防 DNS 重绑定）。集群内要被放行的服务按命名空间另列。

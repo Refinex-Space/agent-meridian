@@ -1,0 +1,203 @@
+{{- /*
+出网代理的 Envoy 配置（架构设计「沙箱出网」，ADR-0038）：明文 HTTP 的转发代理与 CONNECT 隧道，动态转发代理按目标主机解析与连接。
+每个请求先经 Lua 过滤器回调 runtime 的 /internal/v1/egress:authorize（源 IP 取 TCP 对端地址、目标取 :authority），只有 200 放行，
+其他状态码、超时与错误一律 403（失败即拒绝）。代理不终止 TLS、不注入凭据（ADR-0017）。
+
+超时与连接上限的理由：
+- request_headers_timeout：读完请求头的上限，慢速请求头（slowloris）占不住连接。
+- stream_idle_timeout：流与 CONNECT 隧道无数据往来的上限；路由的 timeout 设为 0（不限总时长），pip、npm、git 的长下载
+  不会被总时长打断，沙箱命令本身有 600 秒的超时。
+- 回调超时 authz.timeoutMs：见 values.yaml。
+- 下游连接上限（overload manager）与动态转发集群的熔断阈值：一个沙箱打开大量连接时保护代理的内存与文件描述符；超过时新请求
+  得到 503，不影响已建立的连接。
+*/}}
+{{- if .Values.egressProxy.enabled }}
+{{- $p := .Values.egressProxy }}
+{{- $authz := $p.authz }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: meridian-egress-proxy
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+    {{- include "meridian-sandbox.egressProxySelector" . | nindent 4 }}
+data:
+  envoy.yaml: |
+    admin:
+      # 管理接口只在 Pod 内可达（kubectl port-forward 排障用），不对网络开放
+      address: { socket_address: { address: 127.0.0.1, port_value: 9901 } }
+    overload_manager:
+      resource_monitors:
+        - name: envoy.resource_monitors.global_downstream_max_connections
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.resource_monitors.downstream_connections.v3.DownstreamConnectionsConfig
+            max_active_downstream_connections: {{ $p.limits.maxDownstreamConnections }}
+    static_resources:
+      listeners:
+        - name: egress
+          address: { socket_address: { address: 0.0.0.0, port_value: {{ $p.port }} } }
+          filter_chains:
+            - filters:
+                - name: envoy.filters.network.http_connection_manager
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                    stat_prefix: egress
+                    request_headers_timeout: {{ $p.timeouts.requestHeaders }}
+                    stream_idle_timeout: {{ $p.timeouts.streamIdle }}
+                    # 不生成请求 ID、不加 x-envoy-* 头：转发给外部站点的请求里不带平台的内部信息
+                    generate_request_id: false
+                    upgrade_configs:
+                      - upgrade_type: CONNECT
+                    access_log:
+                      - name: envoy.access_loggers.stdout
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                          log_format:
+                            json_format:
+                              start_time: "%START_TIME%"
+                              source: "%DOWNSTREAM_DIRECT_REMOTE_ADDRESS_WITHOUT_PORT%"
+                              method: "%REQ(:METHOD)%"
+                              authority: "%REQ(:AUTHORITY)%"
+                              status: "%RESPONSE_CODE%"
+                              flags: "%RESPONSE_FLAGS%"
+                              upstream: "%UPSTREAM_HOST%"
+                              bytes_sent: "%BYTES_SENT%"
+                              bytes_received: "%BYTES_RECEIVED%"
+                              duration_ms: "%DURATION%"
+                    route_config:
+                      name: egress
+                      virtual_hosts:
+                        - name: egress
+                          domains: ["*"]
+                          routes:
+                            # HTTPS：CONNECT 隧道，代理只转发字节，不终止 TLS
+                            - match: { connect_matcher: {} }
+                              route:
+                                cluster: dynamic_forward_proxy
+                                timeout: 0s
+                                upgrade_configs:
+                                  - upgrade_type: CONNECT
+                                    connect_config: {}
+                            # 明文 HTTP：绝对 URI 形式的代理请求
+                            - match: { prefix: "/" }
+                              route:
+                                cluster: dynamic_forward_proxy
+                                timeout: 0s
+                    http_filters:
+                      - name: envoy.filters.http.lua
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                          default_source_code:
+                            inline_string: |
+                              -- 出网授权回调（ADR-0038）：每个 HTTP 或 CONNECT 请求调用一次 runtime，只有 200 放行。
+                              -- 检查请求从头构造，沙箱的请求头不会被转发给 runtime。
+                              local authorization = "Bearer " .. (os.getenv("MERIDIAN_EGRESS_AUTHZ_CREDENTIAL") or "")
+
+                              -- 目标来自沙箱：控制字符、引号与反斜杠一律转义为 \u00XX，保证请求体是合法的 JSON
+                              local function json_string(value)
+                                local escaped = string.gsub(value, '[%c"\\]', function(c)
+                                  return string.format("\\u%04x", string.byte(c))
+                                end)
+                                return '"' .. escaped .. '"'
+                              end
+
+                              function envoy_on_request(handle)
+                                local address = handle:streamInfo():downstreamDirectRemoteAddress()
+                                local source = string.match(address, "^%[?(.-)%]?:%d+$") or address
+                                local target = handle:headers():get(":authority") or ""
+                                local body = '{"source_ip":' .. json_string(source) .. ',"target":' .. json_string(target) .. '}'
+                                local ok, headers = pcall(handle.httpCall, handle, "meridian_runtime", {
+                                  [":method"] = "POST",
+                                  [":path"] = "/internal/v1/egress:authorize",
+                                  [":authority"] = "meridian-runtime",
+                                  ["content-type"] = "application/json",
+                                  ["authorization"] = authorization,
+                                }, body, {{ $authz.timeoutMs }})
+                                if not ok or headers == nil or headers[":status"] ~= "200" then
+                                  handle:respond(
+                                    { [":status"] = "403", ["content-type"] = "text/plain; charset=utf-8" },
+                                    "egress to " .. target .. " is not allowed for this sandbox\n")
+                                end
+                              end
+                      - name: envoy.filters.http.dynamic_forward_proxy
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
+                          dns_cache_config: { name: egress_dns, dns_lookup_family: V4_PREFERRED }
+                      - name: envoy.filters.http.router
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                          suppress_envoy_headers: true
+        - name: health
+          address: { socket_address: { address: 0.0.0.0, port_value: {{ $p.healthPort }} } }
+          filter_chains:
+            - filters:
+                - name: envoy.filters.network.http_connection_manager
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                    stat_prefix: health
+                    route_config:
+                      virtual_hosts:
+                        - name: health
+                          domains: ["*"]
+                          routes:
+                            - match: { prefix: "/" }
+                              direct_response: { status: 404 }
+                    http_filters:
+                      # 正常时 200，排空（/healthcheck/fail）时 503
+                      - name: envoy.filters.http.health_check
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.health_check.v3.HealthCheck
+                          pass_through_mode: false
+                          headers:
+                            - name: ":path"
+                              string_match: { exact: /ready }
+                      - name: envoy.filters.http.router
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      clusters:
+        - name: dynamic_forward_proxy
+          connect_timeout: {{ $p.timeouts.upstreamConnect }}
+          lb_policy: CLUSTER_PROVIDED
+          circuit_breakers:
+            thresholds:
+              - priority: DEFAULT
+                max_connections: {{ $p.limits.maxUpstreamConnections }}
+                max_pending_requests: {{ $p.limits.maxPendingRequests }}
+                max_requests: {{ $p.limits.maxRequests }}
+          cluster_type:
+            name: envoy.clusters.dynamic_forward_proxy
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.clusters.dynamic_forward_proxy.v3.ClusterConfig
+              dns_cache_config: { name: egress_dns, dns_lookup_family: V4_PREFERRED }
+        # 授权回调的上游 runtime：集群内经 Service，宿主经 host.docker.internal（只取 IPv4，与网络策略的 ipBlock 一致）
+        - name: meridian_runtime
+          type: STRICT_DNS
+          connect_timeout: 1s
+          {{- if eq $authz.topology "host" }}
+          dns_lookup_family: V4_ONLY
+          {{- else }}
+          dns_lookup_family: V4_PREFERRED
+          {{- end }}
+          circuit_breakers:
+            thresholds:
+              - priority: DEFAULT
+                max_connections: {{ $p.limits.maxRequests }}
+                max_pending_requests: {{ $p.limits.maxPendingRequests }}
+                max_requests: {{ $p.limits.maxRequests }}
+          load_assignment:
+            cluster_name: meridian_runtime
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          {{- if eq $authz.topology "host" }}
+                          address: {{ $authz.host.address }}
+                          port_value: {{ $authz.host.port }}
+                          {{- else if eq $authz.topology "cluster" }}
+                          address: {{ $authz.cluster.service }}
+                          port_value: {{ $authz.cluster.port }}
+                          {{- else }}
+                          {{- fail (printf "egressProxy.authz.topology 只能是 cluster 或 host：%s" $authz.topology) }}
+                          {{- end }}
+{{- end }}

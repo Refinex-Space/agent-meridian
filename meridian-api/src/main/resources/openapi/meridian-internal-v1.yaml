@@ -2,15 +2,16 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Internal API
   version: 1.0.0
-  summary: 平台服务之间调用 runtime 的内部接口：知识库写入与检索用的 Embedding 与 rerank。
+  summary: 平台服务之间调用 runtime 的内部接口：知识库写入与检索用的 Embedding 与 rerank，沙箱出网代理的授权回调。
   description: |
-    只供平台内部服务调用（knowledge 经 `meridian-model-client`），不对业务系统开放，不随公开 API 发布。
+    只供平台内部服务调用（knowledge 经 `meridian-model-client`，沙箱出网代理经 Envoy 的 Lua 过滤器），不对业务系统开放，
+    不随公开 API 发布。
 
     **认证。** 请求带 `Authorization: Bearer <服务凭据>`。正式实现是 control-plane 签发的服务 JWT（T14b）；在那之前
     只有 `dev`、`test` profile 接受开发期的静态服务凭据，其他 profile 一律拒绝。
 
-    **租户。** 内部调用代表某个租户与项目发起，请求体带 `tenant_id` 与 `project_id`，用量与预算按它们计入
-    （架构设计「计量与预算」）。
+    **租户。** 模型类的内部调用代表某个租户与项目发起，请求体带 `tenant_id` 与 `project_id`，用量与预算按它们计入
+    （架构设计「计量与预算」）。出网授权不带租户：runtime 按源 Pod IP 找到会话，租户与项目随之确定。
 
     **约定。** 字段名 snake_case；错误为 RFC 9457 `application/problem+json`，扩展字段 `code` 与 `request_id`，与公开 API 相同。
 servers:
@@ -21,6 +22,8 @@ security:
 tags:
   - name: InternalModels
     description: 知识库使用的 Embedding 与 rerank，与智能体共用平台的限流、预算与计量。
+  - name: InternalEgress
+    description: 沙箱出网代理的授权回调（架构设计「沙箱出网」，ADR-0038）。
 
 paths:
   /internal/v1/embeddings:
@@ -109,6 +112,47 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /internal/v1/egress:authorize:
+    post:
+      operationId: authorizeEgress
+      tags: [InternalEgress]
+      summary: 沙箱出网授权
+      description: |
+        出网代理对沙箱的每个明文 HTTP 请求与 CONNECT 隧道调用一次（架构设计「沙箱出网」第 3 条，ADR-0038）。runtime 按源 IP
+        在 `rt.sessions.sandbox_pod_ip` 中找到会话与环境，按环境的白名单判定目标主机：`*.` 开头的条目匹配任意层级的子域名，
+        其余条目逐字匹配；不限定端口。按源 IP 解析出的授权缓存 30 秒，会话的 Pod IP 被清空或改变时立即失效。
+
+        放行返回 200 与源 IP 所属的会话；拒绝返回 403，`code` 给出原因。代理只认 200，其他状态码、超时与错误一律拒绝本次出网。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EgressAuthorizeRequest'
+            example:
+              source_ip: 10.244.27.141
+              target: pypi.org:443
+      responses:
+        '200':
+          description: 放行。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressAuthorization'
+              example:
+                session_id: ses_01JC8Z6F9H7K1M3P5R7T9V1X3Z
+        '403':
+          $ref: '#/components/responses/EgressDenied'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ServiceAuth:
@@ -165,6 +209,17 @@ components:
             $ref: '#/components/schemas/Problem'
     ProviderError:
       description: '`model.provider_error`：供应商拒绝了请求。供应商暂时不可用为 503 `model.provider_unavailable`。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    EgressDenied:
+      description: |
+        拒绝出网：`egress.not_allowlisted` 目标不在会话环境的白名单内；`egress.unknown_source` 源 IP 不属于任何持有沙箱的会话
+        （沙箱已删除、预热池中尚未认领，或多个会话记录了同一 IP）；`egress.invalid_target` 目标不是合法的主机与端口。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -345,6 +400,30 @@ components:
           description: 相关度，越大越相关，取供应商的值。
           type: number
           format: double
+    EgressAuthorizeRequest:
+      description: 一次出网请求的授权询问。
+      type: object
+      additionalProperties: false
+      required: [source_ip, target]
+      properties:
+        source_ip:
+          description: 请求的源 IP（代理看到的 TCP 对端地址，即沙箱 Pod 的 IP）。
+          type: string
+          minLength: 1
+          maxLength: 45
+        target:
+          description: 目标：明文 HTTP 请求的 `:authority`（`host` 或 `host:port`），CONNECT 的 `host:port`；IPv6 带方括号。
+          type: string
+          minLength: 1
+          maxLength: 300
+    EgressAuthorization:
+      description: 放行的结论。
+      type: object
+      required: [session_id]
+      properties:
+        session_id:
+          description: 源 IP 所属的会话，供代理的访问日志关联。
+          type: string
     InternalUsage:
       description: 用量，所有供应商请求之和。
       type: object

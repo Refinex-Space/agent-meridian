@@ -1,0 +1,9 @@
+# 开发用的 sandbox 档环境（FileAgentConfigProvider）：small 规格的会话沙箱，出网只放行本机 kind 集群中 P14 的白名单内目标
+# （deploy/kind/egress-echo.yaml，T12b）。需要访问其他站点（例如 pypi.org）时在 egress_allowlist 中加入域名，*.example.com 匹配子域名。
+kind: environment
+environment_id: env_dev_sandbox
+revision: 1
+tier: sandbox
+size: small
+egress_allowlist:
+  - allowed-echo.meridian-egress-test.svc.cluster.local

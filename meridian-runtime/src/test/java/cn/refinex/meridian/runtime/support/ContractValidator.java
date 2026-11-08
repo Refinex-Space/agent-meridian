@@ -132,6 +132,21 @@ public final class ContractValidator {
     }
 
     /**
+     * 按内部接口规范只校验响应：请求本身故意不合法（缺少字段）时使用。
+     *
+     * @param path 请求路径
+     * @param method HTTP 方法
+     * @param response 响应
+     * @throws AssertionError 不符合规范时
+     */
+    public static void validateInternalResponse(String path, Request.Method method, Response response) {
+        ValidationReport report = INTERNAL.validateResponse(path, method, response);
+        if (report.hasErrors()) {
+            throw new AssertionError("内部接口的响应不符合规范：" + report.getMessages());
+        }
+    }
+
+    /**
      * 被校验过的操作。
      *
      * @return 操作集合

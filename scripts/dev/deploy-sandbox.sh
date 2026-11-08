@@ -29,10 +29,22 @@ $K create namespace "$NS" --dry-run=client -o yaml | $K apply -f - >/dev/null
 $K label namespace "$NS" --overwrite \
   pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/warn=restricted >/dev/null
 
+# 出网代理回调 runtime 内部接口的服务凭据：开发期与 knowledge 共用 MERIDIAN_DEV_SERVICE_CREDENTIAL（T14b 起改为服务 JWT）。
+# 与 run-runtime.sh 读同一个 env 文件；只在子 shell 中读取，经标准输入写进 Secret，不出现在命令行与输出中。
+ENV_FILE="$ROOT/deploy/compose/.env"
+[ -f "$ENV_FILE" ] || ENV_FILE="$ROOT/deploy/compose/.env.example"
+CREDENTIAL="$(set -a; . "$ENV_FILE"; printf '%s' "${MERIDIAN_DEV_SERVICE_CREDENTIAL:-}")"
+[ -n "$CREDENTIAL" ] || { echo "${ENV_FILE} 中没有 MERIDIAN_DEV_SERVICE_CREDENTIAL" >&2; exit 1; }
+echo "==> 出网代理的服务凭据（Secret meridian-egress-proxy-credential）"
+printf '%s' "$CREDENTIAL" | $K -n "$NS" create secret generic meridian-egress-proxy-credential \
+  --from-file=credential=/dev/stdin --dry-run=client -o yaml | $K apply -f - >/dev/null
+unset CREDENTIAL
+
 echo "==> 安装 chart meridian-sandbox"
 helm --kube-context "$CTX" upgrade --install meridian-sandbox "$ROOT/deploy/helm/meridian-sandbox" \
   -n "$NS" -f "$ROOT/deploy/helm/meridian-sandbox/values-kind.yaml" --set image.tag="$TAG" >/dev/null
 $K -n "$NS" rollout status deployment/sandbox-router --timeout=180s >/dev/null
+$K -n "$NS" rollout status deployment/meridian-egress-proxy --timeout=180s >/dev/null
 
 echo "==> P14 的白名单内外目标 allowed-echo、denied-echo"
 $K apply -f "$ROOT/deploy/kind/egress-echo.yaml" >/dev/null

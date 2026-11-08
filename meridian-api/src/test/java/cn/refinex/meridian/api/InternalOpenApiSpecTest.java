@@ -20,17 +20,17 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * 内部接口规范 {@code meridian-internal-v1.yaml} 的校验（T09b）：按 OpenAPI 3.1 解析无错误，端点与架构设计「知识库架构」引用的
- * 内部接口一致，全部要求服务凭据，写作约束与公开 API 相同。
+ * 内部接口规范 {@code meridian-internal-v1.yaml} 的校验（T09b、T12b）：按 OpenAPI 3.1 解析无错误，端点与架构设计「知识库架构」
+ * 「沙箱出网」引用的内部接口一致，全部要求服务凭据，写作约束与公开 API 相同。
  */
 class InternalOpenApiSpecTest {
 
     /** 规范在类路径中的位置。 */
     static final String SPEC = "openapi/meridian-internal-v1.yaml";
 
-    /** 架构设计「写入流程」「检索流程」中 knowledge 调用 runtime 的内部接口。 */
+    /** 架构设计「写入流程」「检索流程」中 knowledge 调用 runtime 的内部接口，以及「沙箱出网」中出网代理的授权回调（T12b）。 */
     private static final Set<String> EXPECTED_OPERATIONS =
-            Set.of("POST /internal/v1/embeddings", "POST /internal/v1/rerank");
+            Set.of("POST /internal/v1/embeddings", "POST /internal/v1/rerank", "POST /internal/v1/egress:authorize");
 
     private static final Pattern SNAKE_CASE = Pattern.compile("^[a-z][a-z0-9_]*$");
 

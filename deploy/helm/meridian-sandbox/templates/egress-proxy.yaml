@@ -1,0 +1,104 @@
+{{- /*
+出网代理（Envoy）的部署与服务（架构设计「沙箱出网」）。沙箱模板中的 HTTP_PROXY、HTTPS_PROXY 指向服务 meridian-egress-proxy；
+配置见 egress-proxy-config.yaml，回调 runtime 的服务凭据来自 values 中的 Secret（chart 不创建它）。
+以非 root、只读根文件系统、去掉全部 capabilities 运行，符合命名空间的 Pod Security restricted；不挂载 ServiceAccount 令牌。
+*/}}
+{{- if .Values.egressProxy.enabled }}
+{{- $p := .Values.egressProxy }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: meridian-egress-proxy
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meridian-egress-proxy
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+    {{- include "meridian-sandbox.egressProxySelector" . | nindent 4 }}
+spec:
+  replicas: {{ $p.replicas }}
+  selector:
+    matchLabels:
+      {{- include "meridian-sandbox.egressProxySelector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "meridian-sandbox.egressProxySelector" . | nindent 8 }}
+      annotations:
+        # 配置变化时滚动重建 Pod（Envoy 只在启动时读取静态配置）
+        checksum/config: {{ include (print $.Template.BasePath "/egress-proxy-config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: meridian-egress-proxy
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: envoy
+          image: {{ $p.image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - -c
+            - /etc/envoy/envoy.yaml
+            - --log-level
+            - {{ $p.logLevel }}
+            - --disable-hot-restart
+          env:
+            - name: MERIDIAN_EGRESS_AUTHZ_CREDENTIAL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $p.authz.credentialSecret.name }}
+                  key: {{ $p.authz.credentialSecret.key }}
+          ports:
+            - { name: proxy, containerPort: {{ $p.port }}, protocol: TCP }
+            - { name: health, containerPort: {{ $p.healthPort }}, protocol: TCP }
+          readinessProbe:
+            httpGet: { path: /ready, port: health }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /ready, port: health }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml $p.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: config, mountPath: /etc/envoy, readOnly: true }
+      volumes:
+        - name: config
+          configMap:
+            name: meridian-egress-proxy
+      terminationGracePeriodSeconds: 30
+---
+# 服务名与端口是沙箱模板中 HTTP_PROXY 的约定（values.egressProxy.url）
+apiVersion: v1
+kind: Service
+metadata:
+  name: meridian-egress-proxy
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+    {{- include "meridian-sandbox.egressProxySelector" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "meridian-sandbox.egressProxySelector" . | nindent 4 }}
+  ports:
+    - name: proxy
+      port: {{ $p.port }}
+      targetPort: proxy
+      protocol: TCP
+{{- end }}

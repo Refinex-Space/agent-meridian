@@ -33,6 +33,9 @@ egressProxy:
     limits: { cpu: "1", memory: 256Mi }
   authz:
     topology: host
+    # scripts/dev/run-runtime.sh --server.port=18080；EgressProxyKindIT 的 runtime 也监听这个端口
+    host:
+      port: 18080
   upstream:
     namespaces:
       - meridian-egress-test
