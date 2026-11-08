@@ -65,6 +65,12 @@ class AgentScopeEngineShutdownTest {
                 .shutdown(Duration.ofSeconds(20))
                 .doFinally(s -> shutdownDone.countDown())
                 .subscribe();
+        // shutdown 在虚拟线程上异步执行：确认已进入下线状态再放行工具，否则负载高时这一轮会在下线之前正常结束
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (GracefulShutdownManager.getInstance().isAcceptingRequests() && System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+        }
+        assertThat(GracefulShutdownManager.getInstance().isAcceptingRequests()).isFalse();
         slow.release.countDown();
 
         assertThat(done.await(30, TimeUnit.SECONDS)).isTrue();

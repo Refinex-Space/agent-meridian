@@ -69,7 +69,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 已完成 | f75bc4f |
 | T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 已完成 | 5e8b21a |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 已完成 | 003dbfc |
-| T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 未开始 | — |
+| T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 进行中 | — |
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 未开始 | — |
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 未开始 | — |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 未开始 | — |
@@ -175,7 +175,16 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T10a 平台工具基类、文件工具、工作区存储与技能（开工基线：修复 `AgentScopeEngineShutdownTest` 的下线竞态后 `verify.sh` 通过）
+
+- [ ] 1. `PlatformTool` 基类：副作用等级、`matchRule` 规则语法、账本（幂等键、结果引用 D14）、指标、span、审计；启动自检（非 `ToolBase` 白名单，D02）
+- [ ] 2. 六个文件工具（路径 glob 规则、先读后改、输出上限与分段读取提示、内容级建议规则 D21）
+- [ ] 3. 工作区存储：`rt.workspace_entries` 迁移、`WorkspaceStorePort` 实现（64 KB 内联、对象存储）、`MeridianBaseStore`（`putIfVersion`、分页 `search`）、命名空间取自 `PlatformContext`
+- [ ] 4. `ReadOnlyFilesystem` 与受保护路径内容（`AGENTS.md`、`skills/`、`subagents/`、`tools.json`、`MEMORY.md`）、`none` 档 `CompositeFilesystem` 装配、本机工作区根（D05）
+- [ ] 5. `MeridianSkillRepository`（`dev-config/skills/`）：技能清单进提示词、`load_skill_through_path` 加载正文
+- [ ] 6. `PolicyMiddleware`
+- [ ] 7. runtime 生产装配（工具、文件系统、技能仓库三个提供者）与集成测试：A02 路径规则、A03 P4 `none` 档、A04 账本
+- [ ] 8. P4、P6 报告；模块 `CLAUDE.md`、架构设计与 ADR；`acceptance.json`；收尾 `verify.sh`
 
 ## 控制台设计轨道
 
