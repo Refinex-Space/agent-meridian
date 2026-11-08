@@ -178,10 +178,10 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 ### T09a 模型层：RoutedModel、限流、预算、计量与压缩守护
 
 - [x] 1. `RoutedModel` 与生产模型工厂（OpenAI 兼容；Anthropic、Gemini 扩展点）、重试与降级、`setContextWindowSize`
-- [ ] 2. runtime `modelrouting`：`ModelGateway` 实现、`dev-config/providers` 文件目录、`SecretResolver` 开发实现、令牌桶与预算 Lua、用量记录进 outbox `usage`
+- [x] 2. runtime `modelrouting`：`ModelGateway` 实现、`dev-config/providers` 文件目录、`SecretResolver` 开发实现、令牌桶与预算 Lua、用量记录进 outbox `usage`
 - [x] 3. `CompactionGuardMiddleware` 内外两层与压缩配置、`agent.context_compacted` 事件、P13 顺序实测（引擎层场景与对照实验已通过）
-- [ ] 4. 上下文构成摘要（`span.model_request_start`）与三个指标
-- [ ] 5. 集成测试：A01 模拟供应商、A02 限流、A03 预算、A04 压缩计量、A05 P13、A06 用量、A07 指标与摘要
+- [x] 4. 上下文构成摘要（`span.model_request_start`）与三个指标
+- [x] 5. 集成测试：A01 模拟供应商、A02 限流、A03 预算、A04 压缩计量、A05 P13、A06 用量、A07 指标与摘要（`RoutedModelProviderIT`、`ModelRoutingWorkerIT`、`ModelBudgetSettlementIT`、`CompactionGuardScenarioTest`）
 - [ ] 6. 真实模型测试 `*LiveIT`（A08）
 - [ ] 7. 收尾：文档（CLAUDE.md、P13 报告、ADR、架构）、`verify.sh`（A09）、验收记录
 

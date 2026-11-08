@@ -1,12 +1,12 @@
 package cn.refinex.meridian.runtime.config;
 
 import cn.refinex.meridian.engine.agentscope.assembly.AgentInstanceCache;
+import cn.refinex.meridian.engine.agentscope.assembly.AgentProfile;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.RecordingMiddlewareProvider;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.StaticToolProvider;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestAssembly;
-import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
 import cn.refinex.meridian.engine.agentscope.turn.AgentScopeEngine;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
@@ -43,6 +43,7 @@ import cn.refinex.meridian.runtime.support.TestNode;
 import cn.refinex.meridian.runtime.tooling.app.DatabaseToolLedger;
 import cn.refinex.meridian.runtime.tooling.infra.ToolInvocationRepository;
 import io.agentscope.core.middleware.MiddlewareBase;
+import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.AgentTool;
 import java.time.Clock;
 import java.time.Duration;
@@ -97,6 +98,7 @@ record WorkerNode(
      * @param nodeId 节点 ID
      * @param clock 共享的时钟
      * @param model 共享的模型脚本
+     * @param profile 夹具智能体的装配对象，平台中间件按它创建（压缩守护的外层要知道压缩预留）
      * @param agents 共享的智能体配置
      * @param tools 记账工具：工具名 → (副作用等级, 跨节点共用的调用记录)
      * @param properties 执行配置
@@ -107,7 +109,8 @@ record WorkerNode(
     record Spec(
             String nodeId,
             Clock clock,
-            ScriptedModel model,
+            Model model,
+            AgentProfile profile,
             TestAgents agents,
             Map<String, ToolSpec> tools,
             WorkerProperties properties,
@@ -141,7 +144,7 @@ record WorkerNode(
         AgentStateRepository states = spec.states().apply(node.states());
         List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(
                         node.registry(), inbox, spec.properties().batchCheckpoint())
-                .middlewares(null));
+                .middlewares(spec.profile()));
         TestAssembly assembly = TestAssembly.builder(spec.model())
                 .stateStore(new FencedAgentStateStore(states, node.registry()))
                 .middlewares(new RecordingMiddlewareProvider(middlewares, middlewares))

@@ -7,6 +7,7 @@ import cn.refinex.meridian.common.id.IdPrefix;
 import cn.refinex.meridian.common.id.Ids;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.common.time.MutableClock;
+import cn.refinex.meridian.engine.agentscope.assembly.AgentProfile;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestSpecs;
 import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
 import cn.refinex.meridian.engine.spi.engine.input.InboundMessage;
@@ -49,6 +50,7 @@ import cn.refinex.meridian.runtime.support.RuntimeTestDatabase;
 import cn.refinex.meridian.runtime.support.RuntimeTestRedis;
 import cn.refinex.meridian.runtime.support.TestSessions;
 import cn.refinex.meridian.runtime.support.TestSessions.TestSession;
+import io.agentscope.core.model.Model;
 import io.agentscope.core.tool.AgentTool;
 import java.time.Duration;
 import java.time.Instant;
@@ -85,6 +87,7 @@ final class WorkerFixture {
 
     final MutableClock clock = MutableClock.at(Instant.parse("2100-01-01T00:00:00Z"));
     final ScriptedModel model;
+    final Model agentModel;
     final TestAgents agents = new TestAgents();
     final ResolvedAgentSpec spec;
     final EnvironmentSpec environment = TestSpecs.noneEnvironment();
@@ -105,8 +108,20 @@ final class WorkerFixture {
      * @param agent 调整智能体配置
      */
     WorkerFixture(ScriptedModel model, UnaryOperator<TestSpecs.AgentSpecBuilder> agent) {
+        this(model, agent, model);
+    }
+
+    /**
+     * 创建夹具，智能体使用另一个模型（例如以 {@code model} 为底层供应商的 {@code RoutedModel}，T09a）。
+     *
+     * @param model 模型脚本，测试读取它收到的请求
+     * @param agent 调整智能体配置
+     * @param agentModel 装配给智能体的模型
+     */
+    WorkerFixture(ScriptedModel model, UnaryOperator<TestSpecs.AgentSpecBuilder> agent, Model agentModel) {
         RuntimeTestDatabase.truncate();
         this.model = model;
+        this.agentModel = agentModel;
         this.spec =
                 agent.apply(TestSpecs.agent().permissions(LEDGER_TOOLS_ALLOWED)).build();
         agents.register(spec).register(environment);
@@ -129,7 +144,16 @@ final class WorkerFixture {
         tools.put(LOOKUP, new WorkerNode.ToolSpec(SideEffect.IDEMPOTENT, lookupCalls));
         tools.put(WRITE, new WorkerNode.ToolSpec(SideEffect.NON_IDEMPOTENT, writeCalls));
         return WorkerNode.create(new WorkerNode.Spec(
-                nodeId, clock, model, agents, tools, properties, states, dataSource, List.copyOf(extraTools)));
+                nodeId,
+                clock,
+                agentModel,
+                AgentProfile.main(spec, environment),
+                agents,
+                tools,
+                properties,
+                states,
+                dataSource,
+                List.copyOf(extraTools)));
     }
 
     static WorkerProperties withoutCheckpoint() {
