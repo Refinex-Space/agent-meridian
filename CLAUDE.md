@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-当前处于**M0 内核与运行时核心阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）；T03 定义了 `meridian-engine-spi` 的全部契约，实现了 `HarnessAgent` 装配与实例缓存、`ScriptedModel` 与内存端口夹具，P1 通过（ADR-0023、0024、0025）；T04 实现了 `AgentScopeEngine`（执行一轮、中断、下线）、事件映射、`FencedAgentStateStore` 与首批平台中间件（ADR-0026）；T05 建立了 runtime 应用骨架、`rt` 全部核心表、轮次调度与租约（认领、续租、回收、置回队列）、事件写入与 `LeaseRegistry`、`AgentStateRepository` 的数据库实现（ADR-0027）；T06 实现了轮次 Worker、事件扇出到 Redis Stream、收件箱与工具账本、崩溃恢复与优雅下线、批次级 checkpoint，P2、P3、P10 通过（ADR-0028）。T07 写出公开 API 规范 `meridian-v1.yaml`（OpenAPI 3.1，生成链与写作约束见 ADR-0029）并实现会话、事件、线程、待处理动作接口与 SSE 事件流，开发期 API Key 认证与契约测试（ADR-0030）。T08 实现消息投递（queue、steer、中断）、四种待处理动作与恢复轮、五层权限合成与两种改写、"记住此决定"、自定义工具校验与审计，P15 通过（ADR-0031）。T09a 实现 `RoutedModel` 与生产模型工厂（OpenAI 兼容，DashScope 走 `compatible-mode/v1`）、`ModelGateway`（Redis 令牌桶限流、四级预算预扣与结算、outbox `usage` 用量）、压缩守护与上下文构成，P13 通过（ADR-0032）。T09b 实现 OpenAI 兼容的模型直通接口（`/v1/chat/completions` 流式与非流式、`/v1/embeddings`）、知识库用的内部接口（`/internal/v1/embeddings`、`/internal/v1/rerank`，规范 `meridian-internal-v1.yaml`，开发期服务凭据）与脚本化模型服务 `ScriptedOpenAiServer`（ADR-0033）。T10a 实现平台工具基类 `PlatformTool` 与六个文件工具、`none` 档工作区（`rt.workspace_entries` 与对象存储）、受保护路径、平台技能仓库、工具策略与启动自检；内核的四个提供者都有了生产实现，生产环境装配内核并认领轮次（`meridian.runtime.worker.enabled=false` 时只提供 API）（ADR-0034）。T10b 实现系统提示词分层（平台基础提示词 → 租户 → 智能体 → 技能清单，时间以消息注入）与来源标签、带 SSRF 防护的 `web_fetch`、按租户选后端的 `web_search`（SearXNG、博查）、`knowledge_search`（T19 之前为未配置实现）、MCP 客户端（`mcp__{server}__{tool}`，凭据按请求注入），P8 预验证通过（ADR-0035）。T11 建立沙箱镜像 `sandbox-runtime/`（FastAPI 执行服务，接口与 AgentScope Kubernetes 扩展逐字段对齐）、agent-sandbox v1.0.10 控制器安装脚本与 Helm chart `meridian-sandbox`（三个规格的模板与预热池、sandbox-router、默认拒绝出网）、`KubernetesSandboxDriver` 与 `SingleStartSandbox`、对象存储快照（`SnapshotStorePort`），P5 通过（ADR-0036）。
+当前处于**M0 内核与运行时核心阶段**：T01 建立了 Maven 多模块骨架与质量门禁；T02 实现了 `meridian-common`、`meridian-persistence`、`meridian-security` 的 `web` 包、`meridian-test-support` 与本地基础设施（ADR-0020）；T03 定义了 `meridian-engine-spi` 的全部契约，实现了 `HarnessAgent` 装配与实例缓存、`ScriptedModel` 与内存端口夹具，P1 通过（ADR-0023、0024、0025）；T04 实现了 `AgentScopeEngine`（执行一轮、中断、下线）、事件映射、`FencedAgentStateStore` 与首批平台中间件（ADR-0026）；T05 建立了 runtime 应用骨架、`rt` 全部核心表、轮次调度与租约（认领、续租、回收、置回队列）、事件写入与 `LeaseRegistry`、`AgentStateRepository` 的数据库实现（ADR-0027）；T06 实现了轮次 Worker、事件扇出到 Redis Stream、收件箱与工具账本、崩溃恢复与优雅下线、批次级 checkpoint，P2、P3、P10 通过（ADR-0028）。T07 写出公开 API 规范 `meridian-v1.yaml`（OpenAPI 3.1，生成链与写作约束见 ADR-0029）并实现会话、事件、线程、待处理动作接口与 SSE 事件流，开发期 API Key 认证与契约测试（ADR-0030）。T08 实现消息投递（queue、steer、中断）、四种待处理动作与恢复轮、五层权限合成与两种改写、"记住此决定"、自定义工具校验与审计，P15 通过（ADR-0031）。T09a 实现 `RoutedModel` 与生产模型工厂（OpenAI 兼容，DashScope 走 `compatible-mode/v1`）、`ModelGateway`（Redis 令牌桶限流、四级预算预扣与结算、outbox `usage` 用量）、压缩守护与上下文构成，P13 通过（ADR-0032）。T09b 实现 OpenAI 兼容的模型直通接口（`/v1/chat/completions` 流式与非流式、`/v1/embeddings`）、知识库用的内部接口（`/internal/v1/embeddings`、`/internal/v1/rerank`，规范 `meridian-internal-v1.yaml`，开发期服务凭据）与脚本化模型服务 `ScriptedOpenAiServer`（ADR-0033）。T10a 实现平台工具基类 `PlatformTool` 与六个文件工具、`none` 档工作区（`rt.workspace_entries` 与对象存储）、受保护路径、平台技能仓库、工具策略与启动自检；内核的四个提供者都有了生产实现，生产环境装配内核并认领轮次（`meridian.runtime.worker.enabled=false` 时只提供 API）（ADR-0034）。T10b 实现系统提示词分层（平台基础提示词 → 租户 → 智能体 → 技能清单，时间以消息注入）与来源标签、带 SSRF 防护的 `web_fetch`、按租户选后端的 `web_search`（SearXNG、博查）、`knowledge_search`（T19 之前为未配置实现）、MCP 客户端（`mcp__{server}__{tool}`，凭据按请求注入），P8 预验证通过（ADR-0035）。T11 建立沙箱镜像 `sandbox-runtime/`（FastAPI 执行服务，接口与 AgentScope Kubernetes 扩展逐字段对齐）、agent-sandbox v1.0.10 控制器安装脚本与 Helm chart `meridian-sandbox`（三个规格的模板与预热池、sandbox-router、默认拒绝出网）、`KubernetesSandboxDriver` 与 `SingleStartSandbox`、对象存储快照（`SnapshotStorePort`），P5 通过（ADR-0036）。T12a 实现会话沙箱的生命周期（`SandboxService`：每轮开始前在会话行锁内获取并落库、内核以外部 `SandboxContext` 注入，空闲 10 分钟后快照回收、下一轮恢复，`outputs/` 同步到对象存储，技能资源投影到 `/workspace/.meridian/skills/`）、`bash` 工具（命令前缀规则逐段判定）、沙箱 vCPU 秒计量与沙箱命令审计、内置技能 `skills/builtin/docx`，P4、P6、P9 通过（ADR-0037）。
 
 ## 交付流程
 
@@ -32,7 +32,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 - 单个测试类：`./mvnw -pl <模块> -am test -Dtest=<类名> -Dsurefire.failIfNoSpecifiedTests=false`
 - 只跑集成测试（`*IT`）：`./mvnw -pl <模块> -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`；单个再加 `-Dit.test=<类名> -Dfailsafe.failIfNoSpecifiedTests=false`
 - 架构测试：`./mvnw -pl meridian-arch-tests -am verify`
-- kind 集群测试（只跑带 `kind` 标签的 `*KindIT`）：`./mvnw -Pkind -pl meridian-engine-agentscope-test -am verify`，前提是下面「环境脚本」中的 kind 集群与沙箱已部署
+- kind 集群测试（只跑带 `kind` 标签的 `*KindIT`）：`./mvnw -Pkind -pl meridian-engine-agentscope-test -am verify`（驱动），`./mvnw -Pkind -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`（会话沙箱端到端，另需 Docker），前提是下面「环境脚本」中的 kind 集群与沙箱已部署
 - 沙箱执行服务（Python）：`cd sandbox-runtime && uv run pytest -q`；镜像内测试 `docker build --target test sandbox-runtime`
 - 真实模型测试（只跑带 `live` 标签的 `*LiveIT`）：`./mvnw -Plive -pl <模块> -am verify`。前提：Docker 在运行、设置了 `DASHSCOPE_API_KEY`（没有时测试跳过）；模型取 `MERIDIAN_LIVE_CHAT_MODEL`（默认 `qwen-plus`）。现有用例：`./mvnw -Plive -pl meridian-runtime -am verify`（`ModelLiveIT`，约 8 次调用）
 - 格式化修复（Java 与 POM）：`./mvnw spotless:apply`
@@ -53,7 +53,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
   2. `scripts/dev/kind-verify.sh meridian`：验证 gVisor 生效、NetworkPolicy 被执行，输出 PASS。
   3. `scripts/dev/install-agent-sandbox.sh meridian`：安装 agent-sandbox v1.0.10 控制器与 CRD（校验清单摘要与镜像版本）。
   4. `scripts/dev/deploy-sandbox.sh meridian`：构建沙箱镜像、`kind load`、安装 chart（`values-kind.yaml`），等预热池就绪；改了镜像重跑它（会重建预热池中未认领的沙箱）。
-- `kind delete cluster --name meridian`：删除集群，释放内存（T12a、T12b 继续使用该集群）。
+- `kind delete cluster --name meridian`：删除集群，释放内存（T12b 继续使用该集群）。
 
 ## 本机环境
 
@@ -104,6 +104,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 - 限流、预算、计量、重试与降级在 `RoutedModel` 内完成；压缩器会吞掉模型异常，由 `CompactionGuardMiddleware` 兜住：`CompactionMiddleware` 在调用下游之前就把摘要写进状态，失败时内层先恢复上下文再抛异常（ADR-0032）。
 - 系统提示词只由 `PlatformPrompt.compose` 组装，装配时关闭 `WorkspaceContextMiddleware`；时间等动态内容只能以 `<platform_context>` 消息注入，否则同一智能体的请求前缀不同、命中不了提示词缓存。外部内容（网页、搜索、知识库、MCP）交给模型前用 `SourceTags.wrap` 包标签（ADR-0035）。
 - MCP 客户端用 `McpClientBuilder` 先选传输再设定制器，构建异步客户端；凭据只放进单次调用的 Reactor Context，同步客户端会丢掉它（ADR-0035）。
+- `sandbox` 档每轮必须把会话沙箱作为外部 `SandboxContext` 注入：缺少时 harness 会用装配时的默认上下文自建沙箱（平台用一律拒绝的 `PlatformManagedSandboxClient` 防止）；`SandboxBackedFilesystem` 没有本次调用的绑定时退回共享实例上最后绑定的沙箱，平台工具必须经 `SandboxWorkspaceFilesystem`（路径翻译到 `/workspace`、无绑定即拒绝）。权限引擎对 allow、ask、deny 都调同一个 `matchRule`，`bash` 复合命令的拒绝与询问"任一段命中"在 `BashTool.checkPermissions` 中补上（ADR-0037）。
 - `AgentEventType`（31 个）和 `GenerateReason` 的映射必须穷举，由单元测试保证。
 
 ## 测试

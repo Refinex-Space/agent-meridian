@@ -253,7 +253,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D18 | T07 | `FileAgentConfigProvider` 不按项目隔离：任何项目的 API Key 都能用开发配置中的智能体与环境创建会话；`AgentConfigProvider` 新增的 `currentAgentVersion`、`currentEnvironment` 同样需要按项目解析 | T15b |
 | D19 | T07 | SSE 读取 Redis Stream 用每节点一个 100 毫秒间隔的不阻塞 `XREAD` 轮询（ADR-0030 第 4 条），实时延迟上限与单节点 Redis 负载需要在容量验证中核对 | R1（P7） |
 | D20 | T07 | Hibernate Validator 第一次校验失败时在 Netty 事件循环上读取消息资源包（每个进程一次，测试中由 BlockHound 放行）；需要时可在启动时预热 | T27 |
-| D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a 部分完成：`PlatformTool.generateSuggestions` 给出内容级建议（文件工具为路径）；内核随动作带出、runtime 按它保存待 T12a 与 `bash` 一起做 |
+| D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a 部分完成：`PlatformTool.generateSuggestions` 给出内容级建议（文件工具为路径，`bash` 为每段的命令前缀）。T12a 部分完成：`bash` 改为记住这一条命令（规则内容为命令原文，ADR-0037），不再放行整个工具。剩余：内核随动作带出建议、runtime 按它保存，要给 `session.status_requires_action` 的动作与 `pending_actions` 加字段（公开事件载荷），建议 T19b（控制台待处理动作页展示建议规则）一并处理 |
 | D22 | T08 | 租户与项目策略的开发实现在 `rt.permission_rules`，租户层没有写入接口；项目级"记住此决定"写入 runtime。平台安全规则使权限上下文永远不平凡，`DEFAULT` 模式下没有命中 allow 的工具都要确认：智能体版本的默认配置要显式放行工具（`unattended` 会话中的 `BYPASS` 智能体同样变为 `DONT_ASK`） | T15b |
 | D23 | T09a | 开发期的模型目录（`dev-config/providers`）与凭据解析（`EnvironmentSecretResolver`）不按项目授权：任何项目的智能体都能使用目录中的模型；`ModelGateway.resolve` 的"未授权给该项目"由 control-plane 的目录实现 | T15a |
 | D24 | T09a | 预算以 token（输入加输出）计，Redis 计数不分周期；软阈值告警、按价格表换算金额、预扣记录过期（1 小时）后未结算部分的修正、四级计数与账本的每小时对账都未实现（ADR-0032 第 6 条） | T16 |
@@ -266,8 +266,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D31 | T10a | `RemoteFilesystem` 的 `ls`、`glob`、`grep` 每次逐页读出整个会话命名空间（大文件也从对象存储读出），会话文件多时延迟与对象存储读取量上升；可在 `WorkspaceStorePort` 增加按前缀只读元数据的查询，或启用 `WorkspaceIndex` | R1（P7 容量验证时评估） |
 | D32 | T10b | 租户提示词在装配时读取并随智能体实例缓存（键不含租户设置），租户设置变更后实例淘汰前不生效；MCP 端点允许内网地址，登记时应校验端点（拒绝链路本地与元数据地址）| T15b（配置失效时淘汰该租户的实例；控制面登记 MCP 服务时校验端点） |
 | D34 | T11 | sandbox-router 以 `--authz-mode=allow-all` 运行：能访问 router 的调用方可以操作沙箱命名空间中的任意沙箱，目前只靠 NetworkPolicy 把 router 的入网限制在 runtime 的命名空间；生产部署时评估 `scoped-token` 或 `tokenreview` | T28 |
-| D35 | T11 | 快照对象（`rt/snapshots/{tenant}/{project}/{session}/`）没有清除：从快照恢复后旧快照仍留在对象存储，删除会话时也要按前缀清除；`SnapshotStorePort` 目前没有删除方法 | T12a（恢复后清理旧快照）、T17a（删除会话时按前缀清除） |
+| D35 | T11 | 快照对象（`rt/snapshots/{tenant}/{project}/{session}/`）没有清除：从快照恢复后旧快照仍留在对象存储，删除会话时也要按前缀清除；`SnapshotStorePort` 目前没有删除方法 | T12a 已落地回收部分：每个会话至多保留一个快照，新快照提交后删除被取代的旧快照（恢复后保留用过的快照，作为沙箱意外消失时的恢复来源）；`SandboxService.deleteSessionSandbox` 按前缀清除快照与产物（runtime 直接用对象存储，端口不加删除方法，ADR-0037）。T17a：删除会话时调用它 |
 | D36 | T11 | 2.0.4 的扩展把快照归档整个读进内存（`byte[]`），100 MB 工作区的快照或恢复在 runtime 侧占用约同等大小的堆；runtime 的堆与并发回收数要按工作区上限估算 | R1（P7 容量） |
+| D37 | T12a | 无人管理的沙箱：获取沙箱的事务在认领之后失败时会删除新沙箱，但 runtime 进程在认领之后、提交之前崩溃时，带会话标签 `meridian.refinex.cn/session-id` 的 `SandboxClaim` 没有记进任何会话，一直占用资源；需要一个按标签比对 `rt.sessions.sandbox_state` 的清理作业（也覆盖已删除会话的残留） | T17a（会话删除与保留作业）或 T28（部署运维） |
 | D33 | T10b | `KnowledgePrefetchMiddleware` 前置检索注入的切片同样是外部内容，要用 `SourceTags`（`knowledge_search` 来源）包标签，并带 `ContextCompositionMiddleware` 的注入标记 | T19 |
 
 ## 技术债

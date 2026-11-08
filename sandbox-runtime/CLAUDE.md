@@ -15,12 +15,14 @@
 - `settings.py`：环境变量 `SANDBOX_BASE_DIR`、`SANDBOX_EXEC_TIMEOUT_SECONDS`、`SANDBOX_EXEC_OUTPUT_LIMIT_BYTES`（chart 设置）。
 - `entrypoint.sh`：`ulimit -u $SANDBOX_MAX_PROCESSES`、创建 `/var/lib/sandbox/workspace` 与 `/tmp` 下的 HOME 和缓存、启动 uvicorn。
 - `pyproject.toml`：依赖组 `dev`（测试与检查）、`toolchain`（只装进镜像的文档处理库）；版本以 `uv.lock` 为准。
+- 仓库根的 `skills/builtin/`（内置技能的脚本，在沙箱里运行）也用本目录的 Ruff 配置检查：`uv run ruff check --config pyproject.toml ../skills`（`verify.sh` 已接入）。
 
 ## 不变量
 
 - 接口与字段以 AgentScope 2.0.4 扩展的 `CommandExecutor`、`Filesystem`、`ExecutionResult`、`FileEntry` 为准，改接口先改 README 对照表并补接口测试（按扩展的 multipart 与百分号编码构造请求）。
 - 镜像以 uid 1000 运行，根文件系统只读：可写的只有 `/var/lib/sandbox`（`/workspace` 是指向其下 `workspace/` 的符号链接）与 `/tmp`。新增工具时缓存目录必须落在 `/tmp`。
 - 命令的非零退出码是业务结果，`/execute` 仍返回 200；只有请求本身无效才返回 4xx。
+- 平台依赖镜像中的这些命令（T12a，ADR-0037）：`bash` 工具用 coreutils 的 `timeout` 落实超时；驱动用 `python3` 列 `outputs/`、用 `find`、`sort -z`、`xargs`、`sha256sum`、`cut` 算技能目录摘要，用 `tar` 写入。换基础镜像时保留它们。
 
 ## 易错点
 
