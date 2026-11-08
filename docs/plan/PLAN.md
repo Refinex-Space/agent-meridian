@@ -73,7 +73,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 已完成 | 7e490f5 |
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 已完成 | bcd2246 |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 已完成 | b3bdef7 |
-| T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 未开始 | — |
+| T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 进行中 | — |
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 未开始 | — |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 未开始 | — |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 未开始 | — |
@@ -175,7 +175,16 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T12b 沙箱出网控制（开工 2026-11-08，基线 `verify.sh` 通过）：
+
+- [ ] 1. kind 上实测 Envoy 的 HTTP `ext_authz` 对普通代理请求与 CONNECT 的回调形态（方法、路径、源 IP、目标主机）
+- [ ] 2. 内部接口规范 `/internal/v1/egress:authorize`（`meridian-internal-v1.yaml`）
+- [ ] 3. runtime `egress`：按 Pod IP 查会话与环境（`infra.system`，`SystemRepository`）、白名单判定、30 秒缓存、Pod IP 清空时立即失效、指标 `meridian_egress_authorize_seconds` 与缓存命中率
+- [ ] 4. 集成测试：Pod IP 清空后缓存内的授权立即失效（T12b-A02）
+- [ ] 5. Helm chart：Envoy（HTTP 与 CONNECT、`ext_authz`、超时与连接上限写明理由）、NetworkPolicy（沙箱只到代理与 DNS），两种拓扑按 values 切换，`helm lint`（T12b-A03）
+- [ ] 6. kind 实测 P14 四条（`allowed-echo`、`denied-echo`、新 Pod 不继承授权、直连被阻断）与 `-Pkind` 测试（T12b-A01）
+- [ ] 7. 文档：ADR、架构设计、P14 报告、`docs/poc/README.md`、runtime `CLAUDE.md`、chart README
+- [ ] 8. 收尾：`verify.sh`、`-Pkind`（T12b-A04）、`acceptance.json`、PLAN、报告
 
 ## 控制台设计轨道
 
