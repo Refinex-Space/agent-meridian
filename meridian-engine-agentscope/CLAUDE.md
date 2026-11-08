@@ -16,7 +16,7 @@
 - `middleware`：`PlatformMiddlewareProvider` 交给装配器的平台中间件（参数：租约、收件箱、是否开启批次 checkpoint；子智能体不含 steer）；`PlatformStopRequest` 是平台中间件请求停止并记录原因的入口；`RecoveryNoteMiddleware`、`BatchCheckpointMiddleware`、`InterruptCheckpointMiddleware` 从 `RuntimeContext` 读取引擎放入的 `RecoveryNoteSlot`、`BatchCheckpoint`、`PendingInterrupt`；`SteerMiddleware` 经 `InboxPort` 取 steer（T08，ADR-0031）。
 - `turn.AgentScopeEngine` 另有 `retryToolCall`（恢复确认的重试，直接调 Toolkit 中的工具，原幂等键放在 `ToolRetryContext`）与 `reservedToolNames`。
 - `assembly.AgentAssembler`：`HarnessAgent.Builder` 的全部配置都在 `configure`，按「引擎装配」表逐段对应；`AgentInstanceCache` 对外 `acquire`/`acquireSubagent`/`release`；`AssembledAgent.reservedToolNames()` 供自定义工具校验；`CompactionPrompt` 是平台的摘要提示词。
-- `model`（T09a，ADR-0032）：`RoutedModel`（`doStream`：resolve → 限流 → 预扣 → 带重试的调用 → `usingWhen` 结算；降级在 `ProviderFailure` 之上决定）、`RoutedModelFactory`（装配时 `describe` 取上下文窗口）、`ProviderClients`（按账号加模型缓存不含凭据的客户端）、`OpenAiCompatibleClientFactory`、`ProviderHttpTransport`（记录 `Retry-After`）、`ProviderErrors`（可重试、拒绝、非供应商错误）、`TokenEstimator`、`CompactionWatch`（压缩期间的 Reactor Context 标记）。
+- `model`（T09a，ADR-0032）：`RoutedModel`（`doStream`：resolve → 限流 → 预扣 → 带重试的调用 → `usingWhen` 结算；降级在 `ProviderFailure` 之上决定）、`RoutedModelFactory`（装配时 `describe` 取上下文窗口）、`ProviderClients`（按账号加模型缓存不含凭据的客户端）、`OpenAiCompatibleClientFactory`、`ProviderHttpTransport`（记录 `Retry-After`）、`ProviderErrors`（可重试、拒绝、非供应商错误）、`TokenEstimator`、`CompactionWatch`（压缩期间的 Reactor Context 标记）。`RoutedModelInvoker`（T09b，ADR-0033）是 `ModelInvoker`：每次调用一个只含主模型的 `RoutedModel`，`ChunkTranslator` 把 2.0.4 的流式工具调用（首块带名字，后续片段名为 `__fragment__`、不带序号）归并到序号上。
 
 ## 中间件顺序（P13，T04 测得）
 
@@ -68,5 +68,5 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 ## 对外接口
 
 - 实现 `meridian-engine-spi` 的 `AgentEngine`（`turn.AgentScopeEngine`）；依赖端口 `AgentConfigPort`、`LeaseRegistry`、`AgentStateRepository`、`BlobStorePort`、`InboxPort`。
-- runtime 只能在 `config` 包引用本模块的装配入口：`AgentAssembler`、`AgentInstanceCache`、`AgentScopeEngine`、`FencedAgentStateStore`、`PlatformMiddlewareProvider`、`RoutedModelFactory`、`ProviderHttpTransport`、`OpenAiCompatibleClientFactory` 与提供者接口。依赖端口另有 `ModelGateway`（T09a）。
-- 生产实现的提供者：模型工厂已有（T09a，`ModelFactoryAutoConfiguration`），中间件 T04 起（T10a、T19 继续加入），工具 T10a、T10b、T12a、T13，文件系统 T10a、T12a，技能仓库 T10a。T09b 的 `ModelInvoker` 复用 `RoutedModel`。
+- runtime 只能在 `config` 包引用本模块的装配入口：`AgentAssembler`、`AgentInstanceCache`、`AgentScopeEngine`、`FencedAgentStateStore`、`PlatformMiddlewareProvider`、`RoutedModelFactory`、`RoutedModelInvoker`、`ProviderClients`、`ProviderHttpTransport`、`OpenAiCompatibleClientFactory` 与提供者接口。依赖端口另有 `ModelGateway`（T09a）。
+- 生产实现的提供者：模型工厂已有（T09a，`ModelFactoryAutoConfiguration`），中间件 T04 起（T10a、T19 继续加入），工具 T10a、T10b、T12a、T13，文件系统 T10a、T12a，技能仓库 T10a。`ModelInvoker` 由 `RoutedModelInvoker` 实现（T09b），runtime 在 `config` 装配。

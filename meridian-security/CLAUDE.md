@@ -1,6 +1,6 @@
 # meridian-security
 
-Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json 映射（`web`），API Key 认证、`PlatformContext` 填充与作用域检查（`apikey`，T07）。OIDC 与服务 JWT 由 T14b 加入。不访问数据库。
+Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json 映射（`web`），API Key 认证、`PlatformContext` 填充与作用域检查（`apikey`，T07），内部接口的服务凭据（`servicejwt`，T09b 只有开发期静态凭据）。OIDC 与服务 JWT 由 T14b 加入。不访问数据库。
 
 ## 命令
 
@@ -15,6 +15,7 @@ Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json �
 - `web.RequestIdMdcAccessor`：WebFlux 中把 Reactor Context 的 `request_id` 恢复到 MDC，需要 Reactor 自动上下文传播。
 - `web.TraceParentWebFilter`（WebFlux）：合法的 `traceparent` 原样返回，trace-id 进 MDC 的 `trace_id`；跨服务传播在 T27。
 - `web.SecurityWebAutoConfiguration`：按应用的 Web 栈装配。
+- `servicejwt`（T09b，ADR-0033）：`ServiceCredentialResolver` 是服务凭据的来源端口（T14b 用服务 JWT 实现）；`ServiceCredentialWebFilter` 校验 `/internal/` 下的请求并把 `ServicePrincipal` 写入交换属性（不写 `PlatformContext`）；`DevServiceCredentialResolver` 按 SHA-256 摘要常量时间比较；`ServiceCredentialAutoConfiguration` 选择解析器。
 - `apikey`：`ApiKeyResolver` 是 API Key 的来源端口（可阻塞，T14a 提供正式实现）；`ApiKeyAuthenticator` 解析 `Authorization: Bearer`；`ApiKeyWebFilter` 认证 `/v1/` 下的请求并写入 `PlatformContext` 与主体（交换属性）；`ApiKeyAuthorization.require` 检查作用域；`ApiKeyAutoConfiguration` 选择解析器。
 
 ## 不变量
@@ -23,6 +24,7 @@ Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json �
 - 5xx 的 detail 固定为不含内部信息的说明；框架异常的 detail 取错误码标题。
 - `spring-webmvc`、`spring-webflux`、servlet API、context-propagation 都是可选依赖，应用只带自己的 Web 栈。
 
+- 开发期服务凭据（`meridian.security.dev-service-credentials`）与开发期 API Key 一样只能在 `dev`、`test` 启用，其他 profile 启用则启动失败，没有来源时一律拒绝。
 - `DevApiKeyResolver` 只能在 `dev`、`test` profile 启用（`meridian.security.dev-api-keys.enabled`），其他 profile 下启用则启动失败；没有任何解析器时一律拒绝（ADR-0030）。只保存 API Key 的 SHA-256，不记录明文。
 
 ## 易错点
@@ -35,4 +37,4 @@ Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json �
 
 ## 对外接口
 
-三个应用通过自动配置获得请求 ID、problem+json 与 API Key 认证；业务代码只抛 `common.error` 中的异常，处理器调用 `ApiKeyAuthorization.require`。错误码 `auth.unauthenticated`、`auth.invalid_api_key`、`auth.insufficient_scope`。
+三个应用通过自动配置获得请求 ID、problem+json 与 API Key 认证；业务代码只抛 `common.error` 中的异常，处理器调用 `ApiKeyAuthorization.require`。错误码 `auth.unauthenticated`、`auth.invalid_api_key`、`auth.insufficient_scope`、`auth.invalid_service_credential`。

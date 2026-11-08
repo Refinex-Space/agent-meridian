@@ -70,7 +70,14 @@
 
 BlockHound 需要 JVM 参数 `-XX:+AllowRedefinitionToAddDeleteMethods -XX:+EnableDynamicAgentLoading`（`meridian-persistence` 的 Failsafe 已配置）。安装后在 Reactor 线程上写日志也会被拦截，断言与日志放在测试线程上做。
 
-## 前端测试
+## 脚本化模型服务
+
+`ScriptedModel` 只在测试的 classpath 上，起着的 runtime 只能接真实的供应商；端到端测试、控制台的 Playwright 用例、场景预演与 M1 验收默认用 `meridian-test-support` 的 `ScriptedOpenAiServer`（ADR-0033），只有 `live` 用例走 DashScope：
+
+- 它是 OpenAI 兼容的 HTTP 服务（对话补全的流式与非流式、确定的 Embedding、DashScope 格式的 rerank），runtime 把它当普通供应商调用，限流、预扣、计量都照常经过。
+- 测试中内嵌：`ScriptedOpenAiServer.builder().start()`，把 `baseUrl()` 写进临时的供应商目录（`meridian.runtime.model-routing.providers-directory`）；独立启动：`scripts/dev/scripted-model.sh`（默认端口 18090），`dev` profile 的 runtime 经 `dev-config/providers/scripted.yaml` 调用它（模型 `mdl_dev_scripted`）。
+- 用户消息以 `#script:<名称>` 开头选择脚本，没有标记时回显；内置脚本清单与 YAML 写法见 `meridian-test-support/CLAUDE.md`。新的端到端情形优先加脚本，不为它接真实模型。
+
 
 - **Vitest 加 Testing Library**：组件与 Hook 的行为测试。
 - **Storybook**：每个通用组件都有 story，覆盖所有状态（默认、悬停、聚焦、禁用、加载、空、错误）；启用无障碍检查插件。

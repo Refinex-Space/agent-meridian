@@ -1,6 +1,6 @@
 # meridian-runtime
 
-运行时应用（Spring WebFlux，schema `rt`）：公开 API（会话、事件、线程、待处理动作）与 SSE、会话与线程、事件与 seq、轮次调度与租约、带租约的智能体状态存储、Worker 执行智能体与崩溃恢复、消息投递与中断、待处理动作与恢复轮、权限合成、收件箱、工具账本、模型路由（限流、预算、计量）。不管理租户、凭据、模型目录（control-plane），不做知识库（knowledge）。
+运行时应用（Spring WebFlux，schema `rt`）：公开 API（会话、事件、线程、待处理动作、模型直通）与 SSE、内部接口（Embedding、rerank）、会话与线程、事件与 seq、轮次调度与租约、带租约的智能体状态存储、Worker 执行智能体与崩溃恢复、消息投递与中断、待处理动作与恢复轮、权限合成、收件箱、工具账本、模型路由（限流、预算、计量）。不管理租户、凭据、模型目录（control-plane），不做知识库（knowledge）。
 
 ## 命令
 
@@ -10,9 +10,10 @@
 - 本地启动：`scripts/dev/up.sh` 后运行 `scripts/dev/run-runtime.sh [--server.port=18080]`（`dev` profile，连 compose 的 PostgreSQL、Redis、MinIO，口令从 env 文件传入）。健康检查 `GET /actuator/health`，探针 `/actuator/health/liveness`、`/readiness`。
 - profile：`dev` 连本地 compose；`test` 由测试的 `@DynamicPropertySource` 注入连接（含 `SpringContainerProperties.minio`，对象存储是必需配置），节点 ID 固定为 `test-node`。
 - 迁移：`src/main/resources/db/migration/rt/`（`V0001` 核心表、`V0002` 状态的 `content_turn_id`、`V0003` 会话的 `deleted_at`、`V0004` 动作的结论与权限规则表）；已合入的迁移不改，修正写新迁移。
-- 公开 API 的接口从 `meridian-api` 的规范生成到 `target/generated-sources/openapi`（`runtime.openapi`），改规范后先编译；契约测试：`-Dit.test='*ContractIT,SessionApiIT,EventStream*IT'`。本地调用用 `.env` 的 `MERIDIAN_DEV_API_KEY`（`dev` profile 的 `DevApiKeyResolver`）。
+- 公开 API 的接口从 `meridian-api` 的规范生成到 `target/generated-sources/openapi`（`runtime.openapi`），内部接口生成到 `runtime.openapi.internal`，改规范后先编译；契约测试：`-Dit.test='*ContractIT,SessionApiIT,EventStream*IT,ModelEndpointsIT'`。本地调用用 `.env` 的 `MERIDIAN_DEV_API_KEY`（`dev` profile 的 `DevApiKeyResolver`，含 `models:invoke`），内部接口用 `MERIDIAN_DEV_SERVICE_CREDENTIAL`。
+- 不接真实模型跑会话：先 `scripts/dev/scripted-model.sh`，智能体配置引用 `mdl_dev_scripted`，用户消息以 `#script:<名称>` 选择脚本（`meridian-test-support/CLAUDE.md`）。
 - 开发配置：`dev-config/agents/*.yaml`（仓库根目录，`kind: agent_version | environment`），`meridian.runtime.dev-agent-config.directory` 可改；T15b 起智能体配置由 control-plane 下发。供应商与模型目录 `dev-config/providers/*.yaml`（`kind: provider_account`，内含 `models`，凭据只写环境变量名 `secret_ref`），预算限额 `dev-config/budgets/*.yaml`（`kind: budget`，`scope_id: "*"` 必须加引号，不存在时不限），前缀 `meridian.runtime.model-routing`；T15a、T16 起由 control-plane 下发。
-- 真实模型测试：`./mvnw -Plive -pl meridian-runtime -am verify`（只跑 `*LiveIT`，需要 Docker 与 `DASHSCOPE_API_KEY`，模型取 `MERIDIAN_LIVE_CHAT_MODEL`，默认 `qwen-plus`；没有密钥时跳过）。
+- 真实模型测试：`./mvnw -Plive -pl meridian-runtime -am verify`（只跑 `*LiveIT`：`ModelLiveIT` 约 8 次调用，`ModelEndpointsLiveIT` 3 次；需要 Docker 与 `DASHSCOPE_API_KEY`，模型取 `MERIDIAN_LIVE_CHAT_MODEL`、`MERIDIAN_LIVE_EMBEDDING_MODEL`、`MERIDIAN_LIVE_RERANK_MODEL`；没有密钥时跳过）。单个类加 `-Dit.test=<类名>`。
 
 ## 包地图
 
@@ -24,8 +25,9 @@
 - `approval`（T08，ADR-0031）：`domain.PermissionSynthesizer`（五层合成、两种改写、子智能体策略，纯函数）与 `PlatformSafetyRules`；`app.PermissionPolicies` 每轮读取规则并合成（`TurnPreparer` 调用）；`app.PolicyStorePort` 是租户与项目策略的内部端口，开发实现 `infra.DatabasePolicyStore`（`rt.permission_rules`）；`app.PendingActionResolver` 记录结论（回应、中断、超时）、"记住此决定"、按 `domain.ResumptionPlanner` 生成恢复轮；`app.PendingActionTimeouts` 超时扫描；`app.ApprovalAudit` 写 `permission.decided` 与 `pending_action.concluded`，Worker 的事件写入也经它。
 - 中断：`delivery.app.EventIntake` 按主线程的未结束轮次（`TurnTransitions.lockActiveOnThread`）处理；`dispatch.app.NodeChannel` 在提交后发布 `node:{lease_owner}`，`NodeChannelListener` 收到后 `LeaseRenewer.renewThread`。
 - `session.infra.system`：`JdbcAgentStateRepository`（`AgentStateRepository`，另有 `contentEpochOfTurn`）、`ThreadLockRepository`（线程咨询锁）。
-- `modelrouting`（T09a，ADR-0032）：`app.RoutingModelGateway` 是 `ModelGateway`（路由与凭据、限流等待与预检、四级预扣、结算先写 outbox `usage` 再修正 Redis）；`app.ModelCatalogPort`、`app.BudgetLimitPort` 是内部端口，开发实现 `infra.FileModelCatalog`、`infra.FileBudgetLimits`；`infra.RedisRateLimiter`、`infra.RedisBudgetLedger` 执行 Lua（`src/main/resources/cn/refinex/meridian/runtime/modelrouting/infra/*.lua`）；`app.ModelMetrics` 三个指标；`domain.ModelUsageMessage` 是用量消息格式。
-- `config`：`ModelRoutingConfiguration`（目录、限额、`EnvironmentSecretResolver` 只读 `*_API_KEY` 环境变量）、`ModelFactoryAutoConfiguration`（`RoutedModelFactory`，排在 `EngineAutoConfiguration` 之前，测试自己声明 `ModelFactory` 时不创建）；`WorkerConfiguration`（执行配置、`AgentConfigProvider` 的文件实现 `FileAgentConfigProvider`、`AgentConfigPort`、`BlobStorePort`、保留工具名 `ReservedToolNames`、待处理动作超时扫描任务）；`DispatchConfiguration` 另装配节点频道的订阅；`EngineAutoConfiguration` 是自动配置，模型工厂、工具、文件系统、技能仓库四个提供者都存在时才装配 `AgentScopeEngine` 与 Worker（T09a、T10a 之前生产环境不认领轮次）。
+- `modelrouting`（T09a，ADR-0032）：`app.RoutingModelGateway` 是 `ModelGateway`（路由与凭据、限流等待与预检、四级预扣、结算先写 outbox `usage` 再修正 Redis）；`app.ModelCatalogPort`、`app.BudgetLimitPort` 是内部端口，开发实现 `infra.FileModelCatalog`、`infra.FileBudgetLimits`；`infra.RedisRateLimiter`、`infra.RedisBudgetLedger` 执行 Lua（`src/main/resources/cn/refinex/meridian/runtime/modelrouting/infra/*.lua`）；`app.ModelMetrics` 三个指标；`domain.ModelUsageMessage` 是用量消息格式。T09b（ADR-0033）：`domain.ModelKind`（目录的 `kind`），`RoutingModelGateway.resolve(modelId, kind)` 校验种类、模型级 `base_url` 覆盖账号的；`app.VectorModelService` 是 Embedding（按 `max_batch_size` 拆批）与 rerank 的用例，每次供应商请求经网关限流、预扣、结算，重试同 `RoutedModel` 首包之前；`infra.ProviderVectorClient` 是平台自己的 HTTP 客户端（`/embeddings`、DashScope 兼容的 `/reranks`）。
+- `modelrouting.api`：`ModelsApiController`（`/v1/chat/completions` 经 `ModelInvoker`，`/v1/embeddings`）、`InternalModelsApiController`（`/internal/v1/embeddings`、`/internal/v1/rerank`，按请求体的 `tenant_id`、`project_id` 建 `PlatformContext`）；`ChatCompletionMapper` 做请求翻译、流式块（`ChunkWriter`）与非流式聚合（`Aggregate`）。
+- `config`：`ModelRoutingConfiguration`（目录、限额、`EnvironmentSecretResolver` 只读 `*_API_KEY` 环境变量）、`ModelFactoryAutoConfiguration`（`ProviderClients` 由 `RoutedModelFactory` 与直通的 `RoutedModelInvoker` 共享，排在 `EngineAutoConfiguration` 之前，测试自己声明 `ModelFactory` 时不创建模型工厂）；`WorkerConfiguration`（执行配置、`AgentConfigProvider` 的文件实现 `FileAgentConfigProvider`、`AgentConfigPort`、`BlobStorePort`、保留工具名 `ReservedToolNames`、待处理动作超时扫描任务）；`DispatchConfiguration` 另装配节点频道的订阅；`EngineAutoConfiguration` 是自动配置，模型工厂、工具、文件系统、技能仓库四个提供者都存在时才装配 `AgentScopeEngine` 与 Worker（T09a、T10a 之前生产环境不认领轮次）。
 - 公开 API：`session.api`（`SessionsApiController`、`ThreadsApiController`）、`stream.api.EventsApiController`、`approval.api.PendingActionsApiController` 实现生成的接口，只做作用域检查、decode → call → map；POST 经 `web.IdempotentRequests`。用例：`session.app.SessionService`（创建固化版本、归档与删除取消轮次并作废动作）、`delivery.app.EventIntake`（发送事件，组合规则在 `delivery.domain.EventAdmission`）、`stream.app.EventQueries`、`approval.app.PendingActionQueries`。
 - SSE：`stream.app.SessionStreamHub` 是本节点读取 `ev:{session_id}` 的唯一入口（一个不阻塞 `XREAD` 轮询全部被订阅的会话）；`EventStreamService` 按五步算法处理每个连接，范围由 `stream.domain.StreamFilter` 决定（ADR-0030）。
 - 结果类型都是 sealed：`EnqueueResult`、`ClaimResult`、`TransitionResult`、`AppendResult`、`TurnResult`、`RecoveryDecision`；租约条件不满足是结果，不是异常（端口按契约抛 `LeaseLostException`）。
@@ -42,9 +44,10 @@
 - 模型路由的 Redis 用阻塞的 `StringRedisTemplate` 经 `Blocking` 执行，不在 Netty 事件循环上发命令；限流与预算的时间取注入的 `Clock`。预算计数以 token 计，键带租户哈希标签 `budget:{租户}:…`，令牌桶键 `ratelimit:{供应商账号}:{模型}`。
 - 本模块的用例与仓储都是阻塞的：响应式代码一律经 `Blocking`；调度与端口实现的跨租户仓储继承 `SystemRepository` 并带 `@CrossTenant`，项目级仓储从 `PlatformContext` 取租户与项目。
 - 指标（`session.app.TurnMetrics`、`EventStreamService`）用 Micrometer 点分隔名，导出到 Prometheus 时变成「可观测性」表中的名字。
-- `/v1/` 下的请求都经 `ApiKeyWebFilter` 认证，Reactor Context 中有 `PlatformContext`；处理器先 `ApiKeyAuthorization.require` 再调用用例。会话不属于当前项目与不存在相同（404）：跨租户的仓储（事件、SSE）之前先经 `SessionService.get` 确认归属。
+- `/v1/` 下的请求都经 `ApiKeyWebFilter` 认证，Reactor Context 中有 `PlatformContext`；处理器先 `ApiKeyAuthorization.require` 再调用用例。`/internal/` 下的请求经 `ServiceCredentialWebFilter` 校验服务凭据，没有 `PlatformContext`，处理器按请求体建立。会话不属于当前项目与不存在相同（404）：跨租户的仓储（事件、SSE）之前先经 `SessionService.get` 确认归属。
 - 结束轮次、发送事件、归档、删除的事务都先取线程咨询锁（`ThreadLockRepository`），锁住之后再读会话状态；漏掉时消息会留在收件箱没有轮次处理（ADR-0028 第 8 条、ADR-0030）。先锁了行再要咨询锁的后台作业（超时扫描）只能 `tryLock`，否则与上面的事务死锁。
 - 恢复轮（回应、超时、中断、无人值守自动拒绝）都经 `PendingActionResolver` 在线程咨询锁下入队：等待回应的轮次先结束为 `completed`，再入队，部分唯一索引才放得下。带中断请求入队的轮次，`TurnContext.interruptRequested` 为真，内核在第一次推理前停止。
+- 流式对话补全先等第一个信号再提交响应（`switchOnFirst(…, false)` 加 `single()`；`next()` 会取消供应商的流）：首包之前的错误是 problem+json，之后是一条 `{"error"}` 块；流式块用 NON_NULL 序列化，`finish_reason` 例外（ADR-0033）。
 - 每轮合成的权限都带平台安全规则，AgentScope 不再走"平凡权限上下文一律放行"的路径：`DEFAULT` 模式下没有命中 allow 的工具调用都要确认，测试智能体要显式放行它的工具（`WorkerFixture.LEDGER_TOOLS_ALLOWED`）；会话声明的自定义工具在会话层自动放行。
 
 ## 故障注入测试的写法
@@ -53,6 +56,7 @@
 - 卡住执行：`LedgerTool` 记账并在执行中途等闸门（`fixture.lookupCalls.close()`/`open()`、`awaitEntered()`）；放行要在 `finally` 中。
 - 强杀：`execution.cancel(...)`（不收尾），时钟推进 31 秒，`WorkerFixture.reap(另一节点)` 重试回收直到成功（正在被写入的轮次行会被 `SKIP LOCKED` 跳过）。工具在接管之后再放行，它的结束记录写不进账本。
 - 中断：经 `fixture.post(node, session, new UserEvent.Interrupt())` 发送（与 API 相同的 `EventIntake`），再调 `renewer().renewAll()` 模拟续租周期，或 `node.channelListener().start()` 走节点频道。下线：`node.lifecycle().start()`/`stop()`。动用下线的类在 `@AfterEach` 调 `GracefulShutdownManager.getInstance().resetForTesting()`（JVM 单例）。
+- 起着的 runtime 跑真实装配的会话：`config.ScriptedModelSessionIT`（不声明 `ModelFactory`，生产的 `RoutedModelFactory` 调内嵌的 `ScriptedOpenAiServer`，临时目录写智能体与供应商配置，属性值用字符串）；模型接口经 HTTP：`modelrouting.api.ModelEndpointsIT`，流式块用 `ContractValidator.validateSchema`，内部接口用 `validateInternal`；契约：`config.ScriptedProviderContractIT`。
 - 模型层测试：`config.ModelRoutingFixture` 组装真实的 `RoutingModelGateway`（临时目录的目录与限额、Testcontainers 的 Redis 与 outbox），`routedModel(...)` 走平台 HTTP 传输或指定的底层客户端工厂，`live(dir)` 连 DashScope；Worker 层用 `new WorkerFixture(脚本, 配置, routedModel)` 让智能体装配 `RoutedModel`（底层供应商是脚本，`fixture.model` 仍可读请求）；模拟供应商用 `mockwebserver3`（`RoutedModelProviderIT`）。
 - T08 的流程测试经 `fixture.post` 发送消息与回应；`WorkerFixture::lookupOnlyAllowed` 让写入工具默认 ask 来制造等待回应；`fixture.extraTools` 加入 `PathRuleTool` 等不记账的工具；`fixture.timeouts(node)`、`fixture.sessions(node)` 是超时扫描与会话用例；只放行最早一次关闭的闸门用 `Calls.openOldest()`。
 - 启动了 `TurnWorkerLifecycle` 的测试若中途失败没有 `stop()`，它会继续认领后面测试的轮次，造成大量连锁失败：先看第一个失败。
@@ -74,5 +78,5 @@
 ## 对外接口
 
 - 实现 engine-spi 端口：`LeaseRegistry`、`AgentStateRepository`、`EventSinkPort`、`InboxPort`、`ToolLedgerPort`、`BlobStorePort`、`AgentConfigPort`；经 `AgentEngine` 使用内核。
-- 实现 engine-spi 端口 `ModelGateway`（`modelrouting`）与 `SecretResolver`（`config`，开发实现）。给 T09b：`ModelInvoker` 复用 `RoutedModel`，直通接口的上下文没有会话，预算只计租户、项目、API Key。给 T15a：替换 `ModelCatalogPort`、`SecretResolver` 的开发实现（目录不区分项目）。给 T16：用量消息格式见 `ModelUsageMessage`，Redis 计数键见 `RedisBudgetLedger`，限额来源换掉 `BudgetLimitPort` 的文件实现。
+- 实现 engine-spi 端口 `ModelGateway`（`modelrouting`）与 `SecretResolver`（`config`，开发实现）。给 T17b：`/v1/responses` 复用 `ModelInvoker` 与 `ChatCompletionMapper` 的思路。给 T18：knowledge 经 `meridian-model-client` 调 `/internal/v1/embeddings`（每次至多 64 条）与 `/internal/v1/rerank`，规范 `meridian-internal-v1.yaml`。给 T14b：内部接口的服务凭据换成服务 JWT（实现 `ServiceCredentialResolver`）。给 T15a：替换 `ModelCatalogPort`、`SecretResolver` 的开发实现（目录不区分项目）。给 T16：用量消息格式见 `ModelUsageMessage`（`kind` 有 `model_tokens`、`embedding_tokens`、`rerank_tokens`），Redis 计数键见 `RedisBudgetLedger`，限额来源换掉 `BudgetLimitPort` 的文件实现。
 - 公开 API：规范 `meridian-api/src/main/resources/openapi/meridian-v1.yaml` 中的会话、事件、线程、待处理动作与两个事件流。给 T10a：平台工具经 `ToolLedgerPort` 记账，结束时写入结果引用，重试时用 `ToolRetryContext` 的原幂等键。给 T13：`TurnContext.subagentPolicies` 已按子线程改写合成。给 T15b：`PolicyStorePort` 换成 control-plane 实现。给 T16：审计消息 `turn.finished`、`permission.decided`、`pending_action.concluded`。

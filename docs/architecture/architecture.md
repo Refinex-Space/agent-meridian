@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.8 |
+| 版本 | v1.9 |
 | 日期 | 2026-11-08 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -850,6 +850,11 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 - `RateLimitTimeoutException` 和可重试的供应商错误，产生 `session.error`（`retry_status=retryable`），平台按"置回队列的三种情况"重新排队。
 - `BudgetExceededException` 以 `budget_exceeded` 结束本轮。
 
+**直通接口、Embedding 与 rerank（ADR-0033）：**
+
+- `/v1/chat/completions` 经 `ModelInvoker`（`RoutedModelInvoker`，每次调用一个只含主模型的 `RoutedModel`），与智能体共用解析、限流、预扣、重试与结算；直通调用的 `PlatformContext` 没有会话，预算只计租户、项目、API Key。流式先等第一个信号再提交响应：首包之前的错误以对应状态码的 problem+json 返回，之后的错误以一条 `{"error": {...}}` 结束流。
+- `/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank` 经 runtime 的 `VectorModelService` 与平台自己的 HTTP 客户端（不用 AgentScope 的 RAG 组件），每次供应商请求同样经 `ModelGateway` 的路径限流、预扣、结算，重试规则与首包之前相同。模型目录区分种类（`chat`、`embedding`、`rerank`），种类与接口不符返回 400；模型可以有自己的端点（DashScope 的 rerank 在 `compatible-api/v1`）；Embedding 按模型的单次上限拆批。
+
 ## 工作区与沙箱
 
 ### 环境档位
@@ -961,7 +966,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 |---|---|
 | 业务系统 | `Authorization: Bearer mk_live_…`。只存 SHA-256 哈希；校验结果在各服务缓存 60 秒，吊销经 Pub/Sub 立即失效 |
 | 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目；服务端按该用户在项目中的角色授权 |
-| 服务之间 | control-plane 签发的服务 JWT（RS256，5 分钟有效，带 audience） |
+| 服务之间 | control-plane 签发的服务 JWT（RS256，5 分钟有效，带 audience），经 `security.servicejwt` 的 `ServiceCredentialResolver` 校验 `/internal/` 下的请求；T14b 之前只有 `dev`、`test` profile 接受开发期的静态服务凭据（ADR-0033） |
 | 外部 MCP 客户端 | API Key；MCP 规范的 OAuth 在二期支持 |
 
 ### 授权
@@ -1036,7 +1041,7 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 | 文件 | `POST /v1/files`、`GET /v1/files/{id}`、`GET /v1/files/{id}/content` | 是 |
 | 智能体（只读） | `GET /v1/agents`、`GET /v1/agents/{id}` | 是 |
 | 知识库 | `/v1/knowledge-bases`、`/documents`、`/search` | 是 |
-| 模型直通 | `POST /v1/chat/completions`、`POST /v1/responses`、`POST /v1/embeddings`（OpenAI 兼容） | 是 |
+| 模型直通 | `POST /v1/chat/completions`、`POST /v1/responses`、`POST /v1/embeddings`（OpenAI 兼容）。服务之间的内部接口（`/internal/v1/embeddings`、`/internal/v1/rerank` 等）另写 `meridian-internal-v1.yaml`，不随公开 API 发布（ADR-0033） | 是 |
 | 用量 | `GET /v1/usage` | 是 |
 | 会话分叉与回退 | `POST /v1/sessions/{id}:fork`、`POST /v1/sessions/{id}:rewind` | 二期 |
 | 管理类资源 | 智能体、环境、技能、MCP、凭据、预算等的写操作 | 控制台 API，一期只对控制台开放 |
@@ -1129,7 +1134,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 - **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天。
 - **账本**：每条记录带租户、项目、API Key、智能体版本、会话、线程、轮次、模型、价格表版本。价格表有版本，调价不影响历史记录。
 - **预算**：分租户、项目、API Key、会话四级，每级有软阈值（告警）和硬阈值（停止）。
-- **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。Redis 计数以 token（输入加输出）计，四级计数都记（没有限额的级别也记，供对账），键带租户哈希标签；用量记录经 outbox 的 `usage` 主题投递，输入、输出、缓存读、缓存写、推理 token 分别记，带调用用途（推理或压缩）。T16 之前限额来自开发配置，没有配置的级别不限（ADR-0032）。
+- **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。Redis 计数以 token（输入加输出）计，四级计数都记（没有限额的级别也记，供对账），键带租户哈希标签；用量记录经 outbox 的 `usage` 主题投递，输入、输出、缓存读、缓存写、推理 token 分别记，带调用用途（推理、压缩、Embedding、rerank）；Embedding 与 rerank 的记录种类分别为 `embedding_tokens`、`rerank_tokens`（ADR-0033）。T16 之前限额来自开发配置，没有配置的级别不限（ADR-0032）。
 - **对账**：Redis 中的预算计数每小时与账本对账一次，以账本为准。
 
 ## 可观测性
@@ -1239,6 +1244,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 | 单元 | JUnit 5、AssertJ、Mockito、Reactor `StepVerifier` | `domain` 包行覆盖率 80% 以上 |
 | 映射穷举 | JUnit 5 | 遍历 `AgentEventType.values()`、`GenerateReason.values()`，每个值都有映射 |
 | 智能体行为 | `ScriptedModel`（在 `meridian-engine-agentscope-test`，实现 `Model`，按脚本返回文本和工具调用） | 每项 Harness 能力至少一个场景：压缩、计划模式、审批、自定义工具、子智能体、中断、steer、恢复 |
+| 端到端 | `ScriptedOpenAiServer`（在 `meridian-test-support`，OpenAI 兼容的脚本化模型服务，可内嵌或用 `scripts/dev/scripted-model.sh` 独立启动） | 起着的 runtime 把它当普通供应商调用；控制台的 Playwright 用例、场景预演、M1 验收默认用它，只有 `live` 用例走真实模型（ADR-0033） |
 | 集成 | Testcontainers（PostgreSQL、Redis、MinIO） | 调度、租约、fencing、回收、outbox、SSE 补发都有集成测试 |
 | 契约 | OpenAPI 校验与 openapi-diff | 响应必须符合规范；CI 拦截破坏性变更 |
 | 故障 | 进程强杀、Redis 断连、数据库切主 | 崩溃续跑；事件不丢、不重 |
@@ -1402,6 +1408,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.7 | 2026-11-08 | T08：权限合成的并集与排序、平台安全规则的内容、平凡权限上下文与自定义工具的放行、子线程 allow 的子集规则；中断经节点频道触发立即续租，排队轮次的取消与恢复轮的"带中断请求执行"，平台中间件增加 `InterruptCheckpointMiddleware`；`pending_actions` 增加 `response`、`consumed_turn_id`，新增 `permission_rules`；恢复确认在 `replay_input` 模式下重放原轮输入；无人值守会话的自动拒绝以 `tools_denied` 结束并入队恢复轮；`AgentEngine` 增加重试与保留工具名（ADR-0031） |
 | v1.6 | 2026-11-07 | T07：`sessions` 增加 `deleted_at`；会话的删除返回 202、归档只允许 `idle` 与 `requires_action`；SSE 第 1 步由每节点一个不阻塞的 `XREAD` 读取循环完成，去重与跳号按会话的全部序号判断，会话终止后关闭连接；OpenAPI 生成链与 3.1 写作约束（ADR-0029、ADR-0030） |
 | v1.8 | 2026-11-08 | T09a：模型调用的重试与降级细则、结算方式、平台 HTTP 传输与供应商扩展点；压缩只按 token 阈值触发、平台摘要提示词；`CompactionGuardMiddleware` 的顺序与失败恢复、新增 `ContextCompositionMiddleware`，`span.model_request_start` 带上下文构成；事件映射中 `CUSTOM` 的平台事件；预算以 token 计与用量记录格式（ADR-0032） |
+| v1.9 | 2026-11-08 | T09b：模型直通接口的流式与错误约定、Embedding 与 rerank 的计量与拆批、模型目录的种类与模型级端点；内部接口规范与开发期服务凭据；测试策略增加脚本化模型服务（ADR-0033） |
 
 ## 待决问题
 
