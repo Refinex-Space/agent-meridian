@@ -587,64 +587,64 @@
       "id": "T09a-A01",
       "task": "T09a",
       "description": "首包前的 5xx 重试后切到备用模型；首包后错误不切换；预算与限流异常不触发重试与切换。验证：用模拟供应商的集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=RoutedModelProviderIT -Dfailsafe.failIfNoSpecifiedTests=false → Tests run: 6, Failures: 0（MockWebServer + 真实 OpenAIChatModel 与 RoutingModelGateway：503/502/500 三次打到主模型后第 4 次切到备用模型，用量记录 fallback=true；首包后断流 ProviderUnavailableException、请求数 1；429 Retry-After: 1 等待 ≥1 秒后成功；预算不足请求数 0；限流超时请求数 1、5 秒内失败）。逻辑单测 RoutedModelTest 12 项通过（重试 3 次同一预扣、拒绝不重试、首包后不重试不切换、预算与限流不切换）"
     },
     {
       "id": "T09a-A02",
       "task": "T09a",
       "description": "限流：超过 RPM 时请求等待；等待超过 30 秒抛 `RateLimitTimeoutException`，本轮以 `session.error`（`retry_status=retryable`）结束并重新排队。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ModelRoutingWorkerIT.rateLimitTimeoutEndsTheTurnRetryableAndRequeuesIt：RPM=1，第二轮 TurnResult.Requeued(RETRYABLE_ERROR)，session.error 含 model.rate_limit_timeout 与 retryable，status_rescheduled(retryable_error)，turns.status=queued、recovery_attempt=1，供应商只收到 1 次请求；RateLimitWaitIT：RPM=60 用完后第 61 次等待约 1 秒放行；RedisRateLimiterIT 6 项（等待毫秒数、TPM、只检查不扣减、退回）。verify.sh 中均通过"
     },
     {
       "id": "T09a-A03",
       "task": "T09a",
       "description": "预算：任一级预算不足时本轮以 `budget_exceeded` 结束；流被取消时预扣被退回；结算后 Redis 计数与用量记录一致。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ModelRoutingWorkerIT.exhaustedBudgetEndsTheTurnWithBudgetExceeded：会话级限额 10，Finished(COMPLETED, BUDGET_EXCEEDED)，session.error(model.budget_exceeded「会话预算不足」)、status_idle(budget_exceeded)，供应商 0 次请求；ModelBudgetSettlementIT：完成、首包后取消（取消前计数含预扣 >500，取消后按估算结算）、首包前 401 释放，结算后租户/项目/API Key/会话四级 Redis 计数都等于用量记录的输入加输出之和，没有残留预扣键；RedisBudgetLedgerIT 4 项。verify.sh 中均通过"
     },
     {
       "id": "T09a-A04",
       "task": "T09a",
       "description": "压缩器的内部模型调用同样经过限流、预扣与计量。验证：集成测试（断言用量记录中包含压缩调用）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ModelRoutingWorkerIT.compactionCallsAreRateLimitedReservedMetered…：窗口 2000、预留 500 触发真实 2.0.4 压缩，outbox usage 的 purpose 依次为 reasoning、compaction、reasoning；会话预算计数等于三条记录之和；RPM=3 的令牌桶被三次调用（含压缩）用完。引擎层 CompactionGuardScenarioTest 结算用途同样为 REASONING、COMPACTION、REASONING"
     },
     {
       "id": "T09a-A05",
       "task": "T09a",
       "description": "P13：两层守护确实夹住压缩中间件；预算耗尽时压缩被阻止；失败摘要被拦截，不替换历史。验证：测试；报告 `docs/poc/P13-中间件顺序.md`。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=MiddlewareChainTest,CompactionGuardScenarioTest → 4 + 5 项通过：链路外层(20) < CompactionMiddleware(1) < 内层(0)；预算耗尽时外层预检阻止压缩（供应商无压缩调用、状态无摘要、budget_exceeded）；400 摘要失败被拦截（model.compaction_failed，状态含原始两条消息、无摘要与失败文本）；503 用尽后可重试置回队列；对照实验去掉守护时 2.0.4 把 \"(Summarization failed\" 写进历史。报告 docs/poc/P13-中间件顺序.md"
     },
     {
       "id": "T09a-A06",
       "task": "T09a",
       "description": "用量记录包含输入、输出、缓存读、缓存写、推理 token，并进入 outbox `usage` 主题。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ModelBudgetSettlementIT 与 RoutedModelProviderIT.credentialsAreSentPerCallAndUsageIsRecordedWithCacheAndReasoningTokens：rt.outbox topic=usage 的载荷含 input_tokens、output_tokens、cache_read_tokens、cache_write_tokens、reasoning_tokens（脚本 30/9/12/4/2，SSE 120/40/64/16），以及 kind=model_tokens、purpose、usage_source、tenant/project/session/thread/turn、agent_version_id、model_id、provider_account_id、request_id"
     },
     {
       "id": "T09a-A07",
       "task": "T09a",
       "description": "本任务列出的指标已注册并有值；`span.model_request_start` 事件带上下文构成摘要，且不含内容正文。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ModelRoutingWorkerIT：SimpleMeterRegistry 中 meridian.model.tokens{model=mdl_test,type=input}=3950、meridian.model.first.token{model=mdl_test} count=3、meridian.budget.rejections{level=session}=1（Prometheus 名 meridian_model_tokens_total、meridian_model_first_token_seconds、meridian_budget_rejections_total）；rt.session_events 中 span.model_request_start 的 data 含 context.system_prompt/history/tool_results，不含用户文本与系统提示词正文；ContextCompositionMiddlewareTest 2 项、TurnEventMapperTest、EventEnvelopeContractTest 按 OpenAPI 校验带构成的样本"
     },
     {
       "id": "T09a-A08",
       "task": "T09a",
       "description": "真实模型：工具调用轮次、流式、压缩，全部通过。验证：`./mvnw -Plive ...` 的输出（命令与结果，不含密钥）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -Plive -pl meridian-runtime -am verify → ModelLiveIT Tests run: 3, Failures: 0, Errors: 0（qwen-plus，DashScope compatible-mode/v1）：工具调用轮次 end_turn、agent.tool_use name=lookup、工具已执行、最终 agent.message、每次调用 usage_source=provider；流式多增量、首 token 计时 1 次、会话计数等于输入加输出；窗口 3000 触发真实压缩（2.0.4 日志 total=3 msgs / 3078 tokens, cutoff=1），压缩输出非空、状态摘要不以失败文本开头。BUILD SUCCESS；日志与报告中密钥出现 0 次"
     },
     {
       "id": "T09a-A09",
       "task": "T09a",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh → 全部模块 SUCCESS，BUILD SUCCESS，check-pom-versions: OK，exit=0（engine-agentscope-test 116 项、runtime 单测 145 项、runtime 集成测试 175 项、架构测试通过；2026-11-08 01:45）。首次运行时 TurnMetricsIT 因 T06 遗留的指标记录竞态偶发失败，修复后重跑通过"
     },
     {
       "id": "T09b-A01",

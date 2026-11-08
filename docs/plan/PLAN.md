@@ -67,7 +67,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T06 | [轮次 Worker、事件流水线与崩溃恢复](tasks/T06-turn-worker-and-recovery.md) | 1 | T05 | xhigh | 大 | P2（完整路径）、P3、P10 | 已完成 | c6ca61a |
 | T07 | [会话 API 与 SSE](tasks/T07-session-api-and-sse.md) | 1 | T06 | high | 大 | 无 | 已完成 | 708f7ca |
 | T08 | [消息投递、待处理动作与权限合成](tasks/T08-delivery-actions-permissions.md) | 1 | T07 | xhigh | 大 | P6（审批流程部分）、P15 | 已完成 | f75bc4f |
-| T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 进行中 | — |
+| T09a | [模型层：RoutedModel、限流、预算、计量与压缩守护](tasks/T09a-routed-model-budget-compaction.md) | 1 | T08 | xhigh | 大 | P13 | 已完成 | 5e8b21a |
 | T09b | [模型直通接口、Embedding 与 rerank、脚本化模型服务](tasks/T09b-model-endpoints-and-scripted-server.md) | 1 | T09a | high | 中 | 无 | 未开始 | — |
 | T10a | [平台工具基类、文件工具、工作区存储与技能](tasks/T10a-tools-files-workspace-skills.md) | 1 | T09b | high | 大 | P4（`none` 档）、P6（文件工具规则） | 未开始 | — |
 | T10b | [Web 工具、知识检索工具、MCP 客户端与提示词分层](tasks/T10b-web-knowledge-mcp-prompts.md) | 1 | T10a | high | 大 | P8（预验证） | 未开始 | — |
@@ -175,15 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-### T09a 模型层：RoutedModel、限流、预算、计量与压缩守护
-
-- [x] 1. `RoutedModel` 与生产模型工厂（OpenAI 兼容；Anthropic、Gemini 扩展点）、重试与降级、`setContextWindowSize`
-- [x] 2. runtime `modelrouting`：`ModelGateway` 实现、`dev-config/providers` 文件目录、`SecretResolver` 开发实现、令牌桶与预算 Lua、用量记录进 outbox `usage`
-- [x] 3. `CompactionGuardMiddleware` 内外两层与压缩配置、`agent.context_compacted` 事件、P13 顺序实测（引擎层场景与对照实验已通过）
-- [x] 4. 上下文构成摘要（`span.model_request_start`）与三个指标
-- [x] 5. 集成测试：A01 模拟供应商、A02 限流、A03 预算、A04 压缩计量、A05 P13、A06 用量、A07 指标与摘要（`RoutedModelProviderIT`、`ModelRoutingWorkerIT`、`ModelBudgetSettlementIT`、`CompactionGuardScenarioTest`）
-- [x] 6. 真实模型测试 `*LiveIT`（A08）：`ModelLiveIT` 3 项通过（工具调用轮次、流式、真实压缩）
-- [ ] 7. 收尾：文档（CLAUDE.md、P13 报告、ADR、架构）、`verify.sh`（A09）、验收记录
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -250,6 +242,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D20 | T07 | Hibernate Validator 第一次校验失败时在 Netty 事件循环上读取消息资源包（每个进程一次，测试中由 BlockHound 放行）；需要时可在启动时预热 | T27 |
 | D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a（文件工具）、T12a（bash） |
 | D22 | T08 | 租户与项目策略的开发实现在 `rt.permission_rules`，租户层没有写入接口；项目级"记住此决定"写入 runtime。平台安全规则使权限上下文永远不平凡，`DEFAULT` 模式下没有命中 allow 的工具都要确认：智能体版本的默认配置要显式放行工具（`unattended` 会话中的 `BYPASS` 智能体同样变为 `DONT_ASK`） | T15b |
+| D23 | T09a | 开发期的模型目录（`dev-config/providers`）与凭据解析（`EnvironmentSecretResolver`）不按项目授权：任何项目的智能体都能使用目录中的模型；`ModelGateway.resolve` 的"未授权给该项目"由 control-plane 的目录实现 | T15a |
+| D24 | T09a | 预算以 token（输入加输出）计，Redis 计数不分周期；软阈值告警、按价格表换算金额、预扣记录过期（1 小时）后未结算部分的修正、四级计数与账本的每小时对账都未实现（ADR-0032 第 6 条） | T16 |
+| D25 | T09a | `ModelGateway.Provider` 中只有 OpenAI 兼容类型有底层客户端（DashScope 走 `compatible-mode/v1`）；Anthropic、Gemini 的 2.0.4 模型类需要引入 `anthropic-java`、`google-genai`，DashScope 原生与 Ollama 同样未接入，扩展点是 `ProviderClientFactory`。供应商账号管理只能开放已实现的类型 | T15a |
 
 ## 技术债
 
@@ -316,6 +311,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：11 项通过，0 项阻塞
 - 决策：ADR-0031（合成的并集与排序、平台安全规则、平凡权限上下文与自定义工具放行、子线程 allow 子集、中断与"带中断请求的恢复轮"、结论与恢复轮、`replay_input` 重放原轮输入、无人值守自动拒绝以 `tools_denied` 结束、超时扫描、审计格式）；架构设计升至 v1.7
 - 遗留：登记事项 D21 内容级"记住此决定"（T10a、T12a）、D22 策略迁到 control-plane 与默认智能体需显式放行工具（T15b）；T06、T07 中按占位行为写的 4 处断言改为 T08 语义（`TurnRecoveryIT`、`WorkerLeaseFencingIT`、`TurnWorkerIT`、`SessionApiIT`）
+
+### 2026-11-08 T09a 已完成（提交 5e8b21a）
+- 交付：engine-spi 的 `ModelGateway` 补充（`describe`、`precheck`、`ModelCallRecord`）、`ContextComposition`、`ProviderUnavailableException`/`ProviderRejectedException`/`CompactionFailedException`；engine-agentscope 的 `model` 包（`RoutedModel` 与 `RoutedModelFactory`、`ProviderClients`、`OpenAiCompatibleClientFactory`、`ProviderHttpTransport`、`TokenEstimator`）、`CompactionGuardMiddleware` 内外两层、`ContextCompositionMiddleware`、平台摘要提示词；runtime 的 `modelrouting`（`RoutingModelGateway`、Redis 令牌桶与四级预算 Lua、outbox `usage` 用量、三个指标、`dev-config/providers` 与 `dev-config/budgets` 文件实现）、`EnvironmentSecretResolver`、`ModelFactoryAutoConfiguration`；OpenAPI `span.model_request_start.context`；testkit 的 `InMemoryModelGateway`、`StaticProviderClientFactory`；集成测试 `RoutedModelProviderIT`（mockwebserver3）、`ModelRoutingWorkerIT`、`ModelBudgetSettlementIT`、`RateLimitWaitIT`、Lua 脚本测试；真实模型测试 `ModelLiveIT`；P13 报告
+- 验收：9 项通过，0 项阻塞
+- 决策：ADR-0032（重试与结算细则、平台 HTTP 传输拿 `Retry-After`、失败摘要先恢复上下文再抛异常、`CUSTOM` 的平台事件、压缩只按 token 阈值、预算以 token 计、用量消息格式、供应商扩展点）；架构设计升至 v1.8；沿用 ADR-0023 的 `maxRetries(1)`（任务描述写的 0 在 2.0.4 中非法）
+- 遗留：登记事项 D23 开发期模型目录不按项目授权（T15a）、D24 预算的周期、金额与对账（T16）、D25 Anthropic、Gemini 等供应商类型未接入（T15a）；修复 T06 `TurnExecution` 的指标记录竞态（`TurnMetricsIT` 偶发失败）
 
 ## 计划变更记录
 
