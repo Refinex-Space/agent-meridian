@@ -178,7 +178,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 T12b 沙箱出网控制（开工 2026-11-08，基线 `verify.sh` 通过）：
 
 - [x] 1. kind 上实测 Envoy 的 HTTP `ext_authz` 对普通代理请求与 CONNECT 的回调形态：检查请求沿用客户端的方法，CONNECT 的检查本身成了 CONNECT，授权不了 HTTPS；Lua 过滤器回调四种情况全部正确。写 ADR-0038（提议，变更型），受影响部分（Envoy 的授权过滤器、内部接口的形态、P14 实测）等用户确认
-- [ ] 1b. kind 集群的 Pod 网段与 Docker Desktop 的宿主地址 `192.168.65.254` 重叠（Calico 对池内目的地址不做 NAT），Pod 访问不到 `host.docker.internal`：`kind-gvisor.sh` 改用不重叠的网段并重建集群
+- [x] 1b. kind 集群的 Pod 网段与 Docker Desktop 的宿主地址 `192.168.65.254` 重叠（Calico 对池内目的地址不做 NAT），Pod 访问不到 `host.docker.internal`：`kind-gvisor.sh` 改用 `10.244.0.0/16`（Calico IP 池同步设置）并重建集群，Pod 已能访问宿主
 - [ ] 2. 内部接口规范 `/internal/v1/egress:authorize`（`meridian-internal-v1.yaml`）
 - [ ] 3. runtime `egress`：按 Pod IP 查会话与环境（`infra.system`，`SystemRepository`）、白名单判定、30 秒缓存、Pod IP 清空时立即失效、指标 `meridian_egress_authorize_seconds` 与缓存命中率
 - [ ] 4. 集成测试：Pod IP 清空后缓存内的授权立即失效（T12b-A02）
