@@ -783,57 +783,57 @@
       "id": "T11-A01",
       "task": "T11",
       "description": "沙箱镜像构建成功，以非 root 运行；执行服务的 pytest 全部通过。验证：构建与测试输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docker build -t agent-meridian/sandbox-runtime:0.1.0 sandbox-runtime 成功（arm64；docker buildx --platform linux/amd64 也构建成功，容器内 uname -m=x86_64、id -u=1000、库可导入）；镜像 USER 1000，id → uid=1000(sandbox)；docker build --target test sandbox-runtime：以 uid 1000 在镜像内 pytest -W error → 23 passed；宿主 uv run pytest -q -W error → 23 passed（ruff、mypy 通过，已接入 verify.sh）；只读根文件系统下 touch /etc/x 被拒"
     },
     {
       "id": "T11-A02",
       "task": "T11",
       "description": "执行服务接口与 AgentScope 2.0.4 扩展的约定逐字段一致。验证：对照表（扩展源码位置与服务实现位置）加接口测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "对照表 sandbox-runtime/README.md「执行服务的接口约定对照」逐项列出扩展源码位置（client/CommandExecutor.java:59-63、client/Filesystem.java:64-75/120-123/155-170/195-205/278-302、client/model/ExecutionResult.java:25-32、client/model/FileEntry.java:25-37、Constants.java:40、KubernetesSandboxClientOptions.java:41/48）与 app.py 实现；接口测试 tests/test_execute.py、tests/test_files.py 按扩展的 multipart 写法与百分号编码构造请求（23 passed）；KubernetesSandboxDriverKindIT 经扩展真实调用 /execute、/upload、/download 通过"
     },
     {
       "id": "T11-A03",
       "task": "T11",
       "description": "`kind-verify.sh meridian` 输出 PASS；沙箱 Pod 内 `uname -r` 含 `gvisor`。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/kind-verify.sh meridian → gVisor：PASS（内核 4.19.0-gvisor）/ NetworkPolicy：PASS（策略前 OPEN，拒绝全部出网后 BLOCKED）/ PASS；sandbox-small Pod 内 uname -r → 4.19.0-gvisor（kubectl exec 与 KubernetesSandboxDriverKindIT 经 /execute 断言含 gvisor）"
     },
     {
       "id": "T11-A04",
       "task": "T11",
       "description": "三个规格的模板与预热池部署成功，Pod 的安全上下文符合要求。验证：`kubectl get` 与 Pod spec 的关键字段。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "kubectl get sandboxtemplates,sandboxwarmpools -n meridian-sandbox：sandbox-small/medium/large 三个模板与预热池（small READY 2/2，medium、large 0，values-kind.yaml）；命名空间 Pod Security enforce=restricted 下创建成功；Pod spec：runtimeClassName=gvisor，securityContext runAsNonRoot=true/runAsUser=1000/runAsGroup=1000/fsGroup=1000/seccompProfile=RuntimeDefault，容器 allowPrivilegeEscalation=false/readOnlyRootFilesystem=true/capabilities.drop=[ALL]，automountServiceAccountToken=false，emptyDir 工作区（sizeLimit 5Gi，挂 /var/lib/sandbox，/workspace 为符号链接）与 /tmp（1Gi），HTTP_PROXY/HTTPS_PROXY=http://meridian-egress-proxy.meridian-sandbox.svc.cluster.local:10000；Pod 内 CapEff=0、访问公网 IP 与 DNS 均超时（NetworkPolicy sandbox-default-deny）、ulimit -u 256 生效"
     },
     {
       "id": "T11-A05",
       "task": "T11",
       "description": "`SandboxDriver` 能完成认领、执行命令、上传下载文件、快照、删除、从快照恢复，恢复后文件一致。验证：`kind` 标签的集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -Pkind -pl meridian-engine-agentscope-test -am verify -Dit.test=KubernetesSandboxDriverKindIT → Tests run: 3, Failures: 0, Errors: 0：认领（命中 sandbox-small、claim 带会话标签）、执行命令（uname 含 gvisor、非零退出码抛 ExecException）、上传下载（中文路径、子目录）、快照（2 MB 随机文件，键 rt/snapshots/ten_kind/prj_kind/ses_…/….tar）、删除（claim 消失、resume 得 NotFoundException）、从快照恢复（新沙箱 SHA-256 清单与快照前一致）、另一驱动实例按序列化状态重连；缺失快照恢复得 NotFoundException"
     },
     {
       "id": "T11-A06",
       "task": "T11",
       "description": "`SingleStartSandbox` 在并发调用 `start()` 时只执行一次。验证：并发测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "SingleStartSandboxTest.concurrentStartRunsDelegateOnce：32 个线程同时 start()，被包装沙箱的 start 计数 1、最大并发 1，每个调用返回时启动已完成；另有失败后重试、stop 后重新启动、委托 exec 与文件接口共 5 个用例，Tests run: 5, Failures: 0"
     },
     {
       "id": "T11-A07",
       "task": "T11",
       "description": "P5 数据完整，报告已写。验证：报告路径与关键数值。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/poc/P05-沙箱与预热池.md：预热池命中连续认领 50 次（全部命中）p50 114 ms、p95 223 ms、p99 390 ms（目标 p95 < 3 s，达标）；预热池补充 p50 1855 ms、p95 1978 ms；工作区 10 MB 快照 p50 359 ms、恢复 p50 478 ms，100 MB 快照 p50 3062 ms、恢复 p50 4204 ms；medium 冷启动认领约 2 s；环境 kind v0.33.0、Kubernetes v1.37.0、gVisor release-20261102.0、Docker 内存 8 GB；docs/poc/README.md P5 标为通过"
     },
     {
       "id": "T11-A08",
       "task": "T11",
       "description": "`scripts/dev/verify.sh` 通过（不含 `kind` 标签）；`-Pkind` 的测试在本机通过。验证：两条命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh 退出码 0：BUILD SUCCESS（15 个模块，含 ArchitectureRulesTest、enforcer、覆盖率）、check-pom-versions: OK、sandbox-runtime ruff/mypy/pytest 23 passed（kind 标签默认排除）；./mvnw -Pkind -pl meridian-engine-agentscope-test -am verify 退出码 0：Tests run: 7, Failures: 0, Errors: 0（KubernetesSandboxDriverKindIT 3、SandboxPoolMeasurementKindIT 4），结束后 meridian-sandbox 中无残留 SandboxClaim"
     },
     {
       "id": "T12a-A01",
