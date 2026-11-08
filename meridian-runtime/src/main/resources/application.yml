@@ -38,6 +38,13 @@ meridian:
     dev-agent-config:
       # 开发配置目录（FileAgentConfigProvider），相对于工作目录；T15b 起智能体配置改由 control-plane 下发
       directory: dev-config/agents
+    model-routing:
+      # 限流等待上限（架构设计「模型调用」）；预扣记录的保留时间远大于一次模型调用，过期未结算的由对账修正
+      rate-limit-max-wait: 30s
+      reservation-ttl: 1h
+      # 开发期的供应商与模型目录（T15a 之前）、预算限额（T16 之前，目录不存在时不限），相对于工作目录
+      providers-directory: dev-config/providers
+      budgets-directory: dev-config/budgets
 
 management:
   endpoints:

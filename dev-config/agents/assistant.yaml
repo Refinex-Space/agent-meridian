@@ -5,7 +5,7 @@ agent_id: agt_dev_assistant
 agent_version_id: agv_dev_assistant_1
 name: assistant
 model:
-  # 模型目录的模型 ID；RoutedModel（T09a）之前没有生产的模型工厂，内核不会装配
+  # 模型目录的模型 ID，见 dev-config/providers/dashscope.yaml（T09a 的 RoutedModel 经它解析供应商与凭据）
   model_id: mdl_dev_default
 system_prompt: 你是企业内的通用助手，回答简洁、准确。
 tools: []

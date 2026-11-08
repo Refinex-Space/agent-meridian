@@ -31,6 +31,15 @@ public final class RuntimeTestRedis {
     }
 
     /**
+     * 阻塞的字符串 Redis 模板。
+     *
+     * @return 模板
+     */
+    public static synchronized StringRedisTemplate template() {
+        return new StringRedisTemplate(factory());
+    }
+
+    /**
      * 读取一个 Stream 的全部条目，按写入顺序。
      *
      * @param stream Stream 的键

@@ -10,6 +10,7 @@ import cn.refinex.meridian.engine.spi.engine.input.ToolConfirmation;
 import cn.refinex.meridian.engine.spi.engine.input.TurnInput;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent;
 import cn.refinex.meridian.engine.spi.event.BlobRef;
+import cn.refinex.meridian.engine.spi.event.ContextComposition;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.engine.spi.event.EventType;
 import cn.refinex.meridian.engine.spi.event.PendingAction;
@@ -205,7 +206,16 @@ class EngineJsonTest {
             case SESSION_THREAD_CREATED -> new SessionEvent.ThreadCreated("thr_2", "thr_1", "toolu_9", "researcher");
             case SESSION_THREAD_STATUS_RUNNING -> new SessionEvent.ThreadStatusRunning("thr_2");
             case SESSION_THREAD_STATUS_IDLE -> new SessionEvent.ThreadStatusIdle("thr_2", StopReason.END_TURN);
-            case SPAN_MODEL_REQUEST_START -> new SpanEvent.ModelRequestStart("req_1", "mdl_1");
+            case SPAN_MODEL_REQUEST_START ->
+                new SpanEvent.ModelRequestStart(
+                        "req_1",
+                        "mdl_1",
+                        new ContextComposition(
+                                new ContextComposition.Part(1, 320),
+                                new ContextComposition.Part(2, 140),
+                                new ContextComposition.Part(6, 1_800),
+                                new ContextComposition.Part(2, 600),
+                                ContextComposition.Part.EMPTY));
             case SPAN_MODEL_REQUEST_END -> new SpanEvent.ModelRequestEnd("req_1", "mdl_1", usage);
             case EVENT_START -> new StreamEvent.EventStart("rpl_1:text", StreamEvent.BlockKind.TEXT, null);
             case EVENT_DELTA -> new StreamEvent.EventDelta("rpl_1:text", StreamEvent.BlockKind.TOOL_USE, "{\"q\"");

@@ -1,0 +1,22 @@
+# 开发用的供应商账号与模型目录（FileModelCatalog，T09a）。T15a 起由 control-plane 下发，本目录只留给开发与测试。
+# secret_ref 是凭据引用：开发实现（EnvironmentSecretResolver）把它当作环境变量名，只允许 *_API_KEY；这里只写变量名，不写凭据。
+kind: provider_account
+provider_account_id: prv_dev_dashscope
+provider: openai_compatible
+base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+secret_ref: DASHSCOPE_API_KEY
+# 账号级限流，模型没有单独配置时使用（架构设计「模型调用」第 2 步）
+rate_limit:
+  rpm: 60
+  tpm: 200000
+models:
+  # 智能体开发配置引用的默认模型（dev-config/agents/assistant.yaml）
+  - model_id: mdl_dev_default
+    upstream_model: qwen-plus
+    context_window: 131072
+    max_output_tokens: 2048
+  # 低成本对话，流式增量带 reasoning_content
+  - model_id: mdl_dev_flash
+    upstream_model: qwen3.7-flash
+    context_window: 131072
+    max_output_tokens: 2048

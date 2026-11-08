@@ -1605,7 +1605,7 @@ components:
           $ref: '#/components/schemas/StopReason'
     SpanModelRequestStartData:
       type: object
-      required: [request_id, model_id]
+      required: [request_id, model_id, context]
       properties:
         request_id:
           description: 本次模型请求的 ID，起止事件相同。
@@ -1613,6 +1613,46 @@ components:
         model_id:
           description: 模型 ID（mdl_…）。
           type: string
+        context:
+          description: 本次请求的上下文构成，只有条数与 token 估算，不含正文；为 null 表示没有统计。
+          oneOf:
+            - $ref: '#/components/schemas/ContextComposition'
+            - type: 'null'
+    ContextComposition:
+      description: |
+        模型这一次请求实际看到的内容按来源分成五部分。token 是平台按字符数的估算（偏多），不是供应商的计数；命中提示词缓存的
+        token 在 `span.model_request_end` 的 `usage.cached_tokens` 中给出。
+      type: object
+      required: [system_prompt, skills, history, tool_results, injected]
+      properties:
+        system_prompt:
+          description: 系统提示词（不含技能清单），条数为系统消息数。
+          $ref: '#/components/schemas/ContextPart'
+        skills:
+          description: 技能清单，条数为列出的技能数。
+          $ref: '#/components/schemas/ContextPart'
+        history:
+          description: 历史消息：用户与助手的消息，含压缩摘要。
+          $ref: '#/components/schemas/ContextPart'
+        tool_results:
+          description: 工具结果消息。
+          $ref: '#/components/schemas/ContextPart'
+        injected:
+          description: 平台注入的内容：steer 消息、前置检索结果、恢复说明。
+          $ref: '#/components/schemas/ContextPart'
+    ContextPart:
+      description: 一部分内容的条数与 token 估算。
+      type: object
+      required: [count, tokens]
+      properties:
+        count:
+          description: 条数。
+          type: integer
+          minimum: 0
+        tokens:
+          description: 估算的 token 数。
+          type: integer
+          minimum: 0
     SpanModelRequestEndData:
       type: object
       required: [request_id, model_id, usage]
