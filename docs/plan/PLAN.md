@@ -183,6 +183,8 @@ T12b 沙箱出网控制（开工 2026-11-08，基线 `verify.sh` 通过）：
 - [x] 3. runtime `egress`：按 Pod IP 查会话与环境（`infra.system.SandboxAddressRepository`，迁移 `V0007` 的部分索引）、白名单判定（`EgressTarget`、`EgressAllowlist`）、30 秒缓存（`EgressGrants`，Caffeine）、Pod IP 变化时本节点立即淘汰并经 Pub/Sub `egress:revoke` 广播（`EgressRevocations`，`SandboxService` 的获取、回收、删除都调用）、指标 `meridian_egress_authorize_seconds` 与 `cache_gets_total{cache="egress_grants"}`。HTTP 接口等 ADR-0038
 - [x] 4. 集成测试：Pod IP 清空后缓存内的授权立即失效（T12b-A02）：`SandboxEgressRevocationIT`（回收、删除、重新连接换 IP、错过广播的节点在同 IP 新认领时淘汰）、`EgressAuthorizerIT`
 - [ ] 5. Helm chart：Envoy（HTTP 与 CONNECT、`ext_authz`、超时与连接上限写明理由）、NetworkPolicy（沙箱只到代理与 DNS），两种拓扑按 values 切换，`helm lint`（T12b-A03）
+  - [x] 5a. NetworkPolicy（沙箱只到代理与 DNS；代理只到 DNS、按拓扑的 runtime、排除私网的公网与列出的命名空间）、values 的两种拓扑与限额、`deploy/kind/egress-echo.yaml`（`deploy-sandbox.sh` 部署），`helm lint` 通过
+  - [ ] 5b. Envoy 的 Deployment、Service 与配置（授权过滤器等 ADR-0038）
 - [ ] 6. kind 实测 P14 四条（`allowed-echo`、`denied-echo`、新 Pod 不继承授权、直连被阻断）与 `-Pkind` 测试（T12b-A01）
 - [ ] 7. 文档：ADR、架构设计、P14 报告、`docs/poc/README.md`、runtime `CLAUDE.md`、chart README
 - [ ] 8. 收尾：`verify.sh`、`-Pkind`（T12b-A04）、`acceptance.json`、PLAN、报告

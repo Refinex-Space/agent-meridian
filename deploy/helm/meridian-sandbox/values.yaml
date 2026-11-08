@@ -39,10 +39,77 @@ exec:
   timeoutSeconds: 600
   outputLimitBytes: 1048576
 
-# 出网代理（T12b 部署 Envoy）。HTTP_PROXY、HTTPS_PROXY 固定指向它，代理按源 Pod IP 鉴权
+# 出网代理（Envoy，架构设计「沙箱出网」）。沙箱的 HTTP_PROXY、HTTPS_PROXY 固定指向它；代理对每个 HTTP 或 CONNECT 请求带上源 Pod IP
+# 与目标回调 runtime 的 /internal/v1/egress:authorize，按会话环境的白名单放行。沙箱的 NetworkPolicy 只允许访问代理与 DNS。
 egressProxy:
+  enabled: true
+  # 沙箱模板中的代理地址：服务 meridian-egress-proxy 在本命名空间，端口与 port 一致
   url: http://meridian-egress-proxy.meridian-sandbox.svc.cluster.local:10000
   noProxy: localhost,127.0.0.1
+  image: envoyproxy/envoy:distroless-v1.40.2
+  replicas: 2
+  port: 10000
+  # 健康检查监听（Envoy 的 health_check 过滤器，下线排空时返回 503）；管理接口只绑定 127.0.0.1，不对网络开放
+  healthPort: 9902
+  logLevel: warn
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+  # 授权回调的上游 runtime，两种拓扑二选一：
+  # - cluster：runtime 部署在集群内（生产），经 Service 访问，NetworkPolicy 按命名空间与 Pod 标签放行
+  # - host：runtime 跑在宿主 JVM（本机 kind 开发），经 host.docker.internal 访问，NetworkPolicy 按宿主 IP 放行
+  authz:
+    topology: cluster
+    cluster:
+      service: meridian-runtime.meridian.svc.cluster.local
+      port: 8080
+      namespace: meridian
+      podLabels:
+        app.kubernetes.io/name: meridian-runtime
+    host:
+      address: host.docker.internal
+      port: 8080
+      # host.docker.internal 在 Docker Desktop 中的地址，NetworkPolicy 的 ipBlock 按它放行
+      cidr: 192.168.65.254/32
+    # 单次回调的超时：runtime 命中缓存时是亚毫秒级，未命中要查一次数据库与环境配置（几毫秒）；2 秒给宿主拓扑与 GC 停顿留余量。
+    # 超时与任何错误都拒绝本次出网（失败即拒绝），沙箱的客户端可以重试
+    timeout: 2s
+
+  # 代理自身可以连接的目标网络（NetworkPolicy 的 ipBlock）：公网放行，私网、链路本地（含云元数据 169.254.169.254）、CGNAT 与回环
+  # 一律排除，即使白名单里的域名被解析到内网地址也连不上（防 DNS 重绑定）。集群内要被放行的服务按命名空间另列。
+  upstream:
+    cidr: 0.0.0.0/0
+    except:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 169.254.0.0/16
+      - 100.64.0.0/10
+      - 127.0.0.0/8
+    namespaces: []
+
+  # 连接与超时（理由见 templates/egress-proxy-config.yaml 中的注释）
+  limits:
+    # 每个代理副本同时接受的下游连接上限（Envoy 的 overload manager），超过时新连接被拒绝
+    maxDownstreamConnections: 10000
+    # 到出网目标的连接、等待与并发请求上限（动态转发代理集群的熔断阈值；Envoy 默认 1024）
+    maxUpstreamConnections: 4096
+    maxPendingRequests: 1024
+    maxRequests: 4096
+  timeouts:
+    # 读完请求头的上限：防止慢速请求头占住连接
+    requestHeaders: 10s
+    # 流（含 CONNECT 隧道）没有数据往来的上限：pip、npm、git 的长下载不会空闲这么久
+    streamIdle: 300s
+    # 连接出网目标的上限
+    upstreamConnect: 10s
+
+# 集群的 DNS（沙箱与代理都要解析服务名）：kind 与大多数发行版的 CoreDNS 在 kube-system，标签 k8s-app=kube-dns
+dns:
+  namespace: kube-system
+  podLabels:
+    k8s-app: kube-dns
 
 # agent-sandbox v1.0.10 的 Go 版 sandbox-router（发布清单不含它）。AgentScope 扩展的端口转发与网关方式都经它访问沙箱，
 # 服务名固定为 sandbox-router-svc、端口 8080。不开 Pod IP 缓存：扩展每次请求都带 X-Sandbox-Pod-IP。

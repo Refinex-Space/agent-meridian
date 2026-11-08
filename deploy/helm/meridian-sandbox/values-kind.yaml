@@ -1,5 +1,7 @@
 # 本机 kind 集群（8 GB Docker Desktop）：requests 取 limits 的 1/8；只有 small 有预热池（2 个），
 # medium、large 的预热池为 0，按需扩容验证。镜像由 kind load docker-image 加载，不拉取。
+# runtime 跑在宿主 JVM（scripts/dev/run-runtime.sh），出网代理经 host.docker.internal 回调它；P14 的白名单内外目标是
+# deploy/kind/egress-echo.yaml 中的两个服务，代理要能访问它们所在的命名空间。
 image:
   pullPolicy: Never
 
@@ -22,3 +24,15 @@ router:
 
 runtimeAccess:
   enabled: false
+
+egressProxy:
+  replicas: 1
+  logLevel: info
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: "1", memory: 256Mi }
+  authz:
+    topology: host
+  upstream:
+    namespaces:
+      - meridian-egress-test

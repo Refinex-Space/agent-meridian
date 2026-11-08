@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 在 kind 集群部署沙箱：构建沙箱镜像并加载进集群，创建命名空间 meridian-sandbox（Pod Security restricted），
-# 用 values-kind.yaml 安装 deploy/helm/meridian-sandbox，等待 sandbox-router 与预热池就绪。
+# 用 values-kind.yaml 安装 deploy/helm/meridian-sandbox，等待 sandbox-router 与预热池就绪；
+# 另部署 P14 的白名单内外目标 deploy/kind/egress-echo.yaml（命名空间 meridian-egress-test）。
 #
 # 用法：scripts/dev/deploy-sandbox.sh [集群名，默认 meridian] [--skip-build]
 # 前提：scripts/dev/kind-gvisor.sh 与 scripts/dev/install-agent-sandbox.sh 已执行。
@@ -32,6 +33,10 @@ echo "==> 安装 chart meridian-sandbox"
 helm --kube-context "$CTX" upgrade --install meridian-sandbox "$ROOT/deploy/helm/meridian-sandbox" \
   -n "$NS" -f "$ROOT/deploy/helm/meridian-sandbox/values-kind.yaml" --set image.tag="$TAG" >/dev/null
 $K -n "$NS" rollout status deployment/sandbox-router --timeout=180s >/dev/null
+
+echo "==> P14 的白名单内外目标 allowed-echo、denied-echo"
+$K apply -f "$ROOT/deploy/kind/egress-echo.yaml" >/dev/null
+$K -n meridian-egress-test rollout status deployment/egress-echo --timeout=180s >/dev/null
 
 # 镜像标签不变时模板也不变，预热池里未被认领的沙箱仍是旧镜像：删除它们，由预热池按新镜像补充
 STALE="$($K -n "$NS" get sandboxes -o json | python3 -c '

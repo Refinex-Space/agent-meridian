@@ -1,6 +1,6 @@
 {{- /*
-沙箱 Pod 默认拒绝全部出网与入网，只允许 sandbox-router 访问执行服务（8888），见架构设计「沙箱出网」。
-T12b 部署出网代理时再加一条只允许访问代理的出网规则。
+沙箱 Pod 默认拒绝全部出网与入网（架构设计「沙箱出网」）：入网只允许 sandbox-router 访问执行服务（8888）；出网只允许访问出网代理与
+集群 DNS（解析代理的服务名），绕过代理的直连一律被拦截。DNS 查询本身会经 CoreDNS 转发到外部解析器，DNS 隧道的防护见 ADR-0039。
 */}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -21,7 +21,19 @@ spec:
       ports:
         - protocol: TCP
           port: 8888
+  {{- if .Values.egressProxy.enabled }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "meridian-sandbox.egressProxySelector" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.egressProxy.port }}
+    {{- include "meridian-sandbox.dnsEgress" . | nindent 4 }}
+  {{- else }}
   egress: []
+  {{- end }}
 {{- if .Values.router.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -58,4 +70,72 @@ spec:
       ports:
         - protocol: TCP
           port: 8888
+{{- end }}
+{{- if .Values.egressProxy.enabled }}
+---
+{{- /*
+出网代理：入网只接受沙箱 Pod 的代理端口与 kubelet 的健康检查；出网只到集群 DNS、授权回调的 runtime（按拓扑二选一）、公网
+（排除私网、链路本地、CGNAT、回环），以及 values 中列出的集群内命名空间（本机 kind 的 P14 目标服务）。
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: meridian-egress-proxy
+  labels:
+    {{- include "meridian-sandbox.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "meridian-sandbox.egressProxySelector" . | nindent 6 }}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "meridian-sandbox.sandboxSelector" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.egressProxy.port }}
+    # kubelet 探针
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.egressProxy.healthPort }}
+  egress:
+    {{- include "meridian-sandbox.dnsEgress" . | nindent 4 }}
+    {{- with .Values.egressProxy.authz }}
+    {{- if eq .topology "cluster" }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .cluster.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .cluster.podLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .cluster.port }}
+    {{- else if eq .topology "host" }}
+    - to:
+        - ipBlock:
+            cidr: {{ .host.cidr }}
+      ports:
+        - protocol: TCP
+          port: {{ .host.port }}
+    {{- else }}
+    {{- fail (printf "egressProxy.authz.topology 只能是 cluster 或 host：%s" .topology) }}
+    {{- end }}
+    {{- end }}
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.egressProxy.upstream.cidr }}
+            {{- with .Values.egressProxy.upstream.except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+    {{- range .Values.egressProxy.upstream.namespaces }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+    {{- end }}
 {{- end }}

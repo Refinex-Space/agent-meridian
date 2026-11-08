@@ -15,3 +15,25 @@ app.kubernetes.io/component: sandbox
 app.kubernetes.io/name: sandbox-router
 app.kubernetes.io/component: sandbox-router
 {{- end -}}
+
+{{/* 出网代理 Pod 的选择标签：沙箱的出网规则与代理自己的网络策略按它选择 */}}
+{{- define "meridian-sandbox.egressProxySelector" -}}
+app.kubernetes.io/name: meridian-egress-proxy
+app.kubernetes.io/component: egress-proxy
+{{- end -}}
+
+{{/* 访问集群 DNS 的出网规则（UDP 与 TCP 53） */}}
+{{- define "meridian-sandbox.dnsEgress" -}}
+- to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ .Values.dns.namespace }}
+      podSelector:
+        matchLabels:
+          {{- toYaml .Values.dns.podLabels | nindent 10 }}
+  ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+{{- end -}}
