@@ -1,0 +1,7 @@
+name: custom-tool
+description: 调用会话声明的自定义工具 get_weather，调用方回传结果后回答。
+steps:
+  - tool_calls:
+      - name: get_weather
+        arguments: {city: 北京}
+  - text: 北京今天晴，适合出行。

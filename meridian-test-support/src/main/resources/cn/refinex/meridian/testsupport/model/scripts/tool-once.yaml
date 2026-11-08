@@ -1,0 +1,8 @@
+name: tool-once
+description: 调用一次工具 lookup_order，拿到结果后回答。
+steps:
+  - text: 我先查一下订单。
+    tool_calls:
+      - name: lookup_order
+        arguments: {order_id: o-1001}
+  - text: 订单 o-1001 已发货，预计明天送达。

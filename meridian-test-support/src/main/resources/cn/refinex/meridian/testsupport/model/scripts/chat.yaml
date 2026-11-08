@@ -1,0 +1,5 @@
+name: chat
+description: 普通对话：一句固定的回答，流式分块。
+steps:
+  - text: 你好，我是脚本化模型。这是一段固定的回答，用来验证普通对话的完整事件序列。
+    chunk_size: 6

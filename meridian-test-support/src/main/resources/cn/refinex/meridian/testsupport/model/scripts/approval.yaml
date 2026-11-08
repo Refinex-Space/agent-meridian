@@ -1,0 +1,7 @@
+name: approval
+description: 触发审批：调用需要确认的工具 refund_order（智能体没有放行它，默认 ask），回应之后回答。
+steps:
+  - tool_calls:
+      - name: refund_order
+        arguments: {order_id: o-1001, amount: 100}
+  - text: 退款申请已处理。

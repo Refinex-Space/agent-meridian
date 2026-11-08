@@ -1,0 +1,6 @@
+name: error-before-first-chunk
+description: 首包之前返回 503。服务无状态，同一步每次都失败：用于验证重试（共 3 次尝试）与可重试错误的处理。
+steps:
+  - error:
+      status: 503
+      message: 脚本化的供应商暂时不可用

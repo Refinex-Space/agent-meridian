@@ -1,0 +1,6 @@
+name: error-after-first-chunk
+description: 首包之后断流：输出两块后断开连接，不重试，本轮以可重试的 session.error 结束。
+steps:
+  - text: 这段回答会在中途断开。
+    chunk_size: 3
+    fail_after_chunks: 2

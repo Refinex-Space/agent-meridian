@@ -1,0 +1,7 @@
+name: subagent
+description: 拉起子智能体：调用平台工具 spawn_subagent（参数 subagent 与 task，架构设计「子智能体」），拿到结果后回答。
+steps:
+  - tool_calls:
+      - name: spawn_subagent
+        arguments: {subagent: researcher, task: 调研差旅住宿标准}
+  - text: 子智能体已完成调研：住宿标准为每晚 500 元。
