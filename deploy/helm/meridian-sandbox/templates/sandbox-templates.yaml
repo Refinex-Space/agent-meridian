@@ -72,7 +72,8 @@ spec:
             periodSeconds: 1
             failureThreshold: 3
           volumeMounts:
-            - { name: workspace, mountPath: /workspace }
+            # /workspace 是镜像中指向 /var/lib/sandbox/workspace 的符号链接（见 sandbox-runtime/Dockerfile）
+            - { name: workspace, mountPath: /var/lib/sandbox }
             - { name: tmp, mountPath: /tmp }
       volumes:
         - name: workspace

@@ -5,7 +5,9 @@
 #   构建：docker build -t agent-meridian/sandbox-runtime:0.1.0 sandbox-runtime
 #   测试：docker build --target test sandbox-runtime     （以 uid 1000 在镜像内跑 pytest）
 #
-# 运行时由沙箱模板把根文件系统设为只读，/workspace 与 /tmp 挂 emptyDir；HOME 与各类缓存都在 /tmp 下。
+# 运行时由沙箱模板把根文件系统设为只读，/var/lib/sandbox 与 /tmp 挂 emptyDir；HOME 与各类缓存都在 /tmp 下。
+# /workspace 是指向 /var/lib/sandbox/workspace 的符号链接，目录由入口脚本以 uid 1000 创建：emptyDir 的挂载点属于 root，
+# 非 root 用户不能修改它的时间与权限，而 AgentScope 恢复快照时 tar -xf 会设置归档根目录 "." 的时间与权限。
 ARG DEBIAN_IMAGE=debian:trixie-slim
 ARG NODE_IMAGE=node:24-trixie-slim
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.11.8
@@ -43,7 +45,7 @@ COPY entrypoint.sh /usr/local/bin/sandbox-entrypoint
 
 RUN groupadd --gid 1000 sandbox \
     && useradd --uid 1000 --gid 1000 --home-dir /tmp/home --no-create-home --shell /bin/bash sandbox \
-    && mkdir -p /workspace && chown 1000:1000 /workspace
+    && mkdir -p /var/lib/sandbox && ln -s /var/lib/sandbox/workspace /workspace
 
 ENV PATH=/opt/meridian/venv/bin:/usr/local/bin:/usr/bin:/bin \
     PYTHONPATH=/opt/meridian/service/src \
@@ -57,7 +59,8 @@ ENV PATH=/opt/meridian/venv/bin:/usr/local/bin:/usr/bin:/bin \
     SANDBOX_BASE_DIR=/workspace
 
 USER 1000:1000
-WORKDIR /workspace
+# 不能把工作目录设为 /workspace：容器启动时符号链接的目标还不存在，运行时会以 root 身份创建它
+WORKDIR /var/lib/sandbox
 EXPOSE 8888
 # tini 作为 1 号进程回收孤儿进程：执行服务终止命令的进程组后，逃出进程组的子进程会被过继给它
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/sandbox-entrypoint"]

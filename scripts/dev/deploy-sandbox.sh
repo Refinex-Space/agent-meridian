@@ -33,6 +33,20 @@ helm --kube-context "$CTX" upgrade --install meridian-sandbox "$ROOT/deploy/helm
   -n "$NS" -f "$ROOT/deploy/helm/meridian-sandbox/values-kind.yaml" --set image.tag="$TAG" >/dev/null
 $K -n "$NS" rollout status deployment/sandbox-router --timeout=180s >/dev/null
 
+# 镜像标签不变时模板也不变，预热池里未被认领的沙箱仍是旧镜像：删除它们，由预热池按新镜像补充
+STALE="$($K -n "$NS" get sandboxes -o json | python3 -c '
+import json, sys
+for item in json.load(sys.stdin)["items"]:
+    owners = item["metadata"].get("ownerReferences", [])
+    if any(o.get("kind") == "SandboxWarmPool" for o in owners):
+        print(item["metadata"]["name"])
+')"
+if [ -n "$STALE" ]; then
+  echo "==> 重建预热池中未认领的沙箱"
+  # shellcheck disable=SC2086
+  $K -n "$NS" delete sandboxes $STALE --wait=true >/dev/null
+fi
+
 for pool in $($K -n "$NS" get sandboxwarmpools -o jsonpath='{.items[*].metadata.name}'); do
   want="$($K -n "$NS" get sandboxwarmpool "$pool" -o jsonpath='{.spec.replicas}')"
   [ "$want" -gt 0 ] || continue

@@ -13,7 +13,7 @@ namePrefix: sandbox-
 runtimeClassName: gvisor
 
 # 三个规格，资源上限按架构设计「沙箱 Pod 与镜像」；requests 默认等于 limits。
-# disk 是容器的 ephemeral-storage 上限，也是 /workspace 的 sizeLimit。
+# disk 是容器的 ephemeral-storage 上限，也是工作区 emptyDir 的 sizeLimit。
 sizes:
   small:
     limits: { cpu: "1", memory: 2Gi, disk: 5Gi }

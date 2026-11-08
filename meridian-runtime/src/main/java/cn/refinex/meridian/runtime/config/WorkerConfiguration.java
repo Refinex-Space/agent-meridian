@@ -4,10 +4,12 @@ import cn.refinex.meridian.engine.agentscope.assembly.AssembledAgent;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.port.AgentConfigPort;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
+import cn.refinex.meridian.engine.spi.port.SnapshotStorePort;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import cn.refinex.meridian.persistence.jdbc.PeriodicJob;
 import cn.refinex.meridian.persistence.objectstore.ObjectStore;
 import cn.refinex.meridian.runtime.approval.app.PendingActionTimeouts;
+import cn.refinex.meridian.runtime.sandbox.app.ObjectStoreSnapshotStore;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
 import cn.refinex.meridian.runtime.session.app.ReservedToolNames;
 import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
@@ -76,6 +78,17 @@ public class WorkerConfiguration {
     @Bean
     public BlobStorePort blobStorePort(ObjectStore objects) {
         return new ObjectStoreBlobStore(objects);
+    }
+
+    /**
+     * 沙箱工作区快照的存储（架构设计「端口」「会话沙箱」），由 T12a 装配的 {@code SandboxDriver} 使用。
+     *
+     * @param objects 对象存储客户端
+     * @return 端口实现
+     */
+    @Bean
+    public SnapshotStorePort snapshotStorePort(ObjectStore objects) {
+        return new ObjectStoreSnapshotStore(objects);
     }
 
     /**

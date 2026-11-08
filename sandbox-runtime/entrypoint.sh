@@ -7,12 +7,14 @@ if [ -n "${SANDBOX_MAX_PROCESSES:-}" ]; then
   ulimit -u "$SANDBOX_MAX_PROCESSES"
 fi
 
-mkdir -p "$HOME" "$MPLCONFIGDIR" "$XDG_CACHE_HOME"
+# /workspace 指向这里；目录由本用户创建，tar 才能恢复归档根目录的时间与权限
+mkdir -p /var/lib/sandbox/workspace "$HOME" "$MPLCONFIGDIR" "$XDG_CACHE_HOME"
 for f in /opt/meridian/mplcache/*.json; do
   if [ -e "$f" ] && [ ! -e "$MPLCONFIGDIR/$(basename "$f")" ]; then
     cp "$f" "$MPLCONFIGDIR/"
   fi
 done
 
+cd /workspace
 exec python -m uvicorn sandbox_runtime.app:app \
   --host 0.0.0.0 --port 8888 --no-access-log --timeout-graceful-shutdown 5

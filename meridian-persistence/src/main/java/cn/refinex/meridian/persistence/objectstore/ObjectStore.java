@@ -21,6 +21,7 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
@@ -142,6 +143,26 @@ public final class ObjectStore implements AutoCloseable {
             return Optional.of(client.getObject(r -> r.bucket(bucket).key(key)));
         } catch (NoSuchKeyException e) {
             return Optional.empty();
+        }
+    }
+
+    /**
+     * 判断对象是否存在（HEAD 请求，不下载内容）。
+     *
+     * @param key 对象键
+     * @return 是否存在
+     */
+    public boolean exists(String key) {
+        try {
+            client.headObject(r -> r.bucket(bucket).key(key));
+            return true;
+        } catch (NoSuchKeyException e) {
+            return false;
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return false;
+            }
+            throw e;
         }
     }
 

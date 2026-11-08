@@ -54,8 +54,8 @@
         <!-- OpenAPI 代码生成（ADR-0029）：7.27.0 发布未满两周（2026-11-02），取 7.26.0（2026-10-06） -->
         <openapi-generator-maven-plugin.version>7.26.0</openapi-generator-maven-plugin.version>
 
-        <!-- 测试过滤：默认排除真实模型测试，live profile 中改为只运行它们 -->
-        <meridian.test.excludedGroups>live</meridian.test.excludedGroups>
+        <!-- 测试过滤：默认排除真实模型测试与 kind 集群测试，live、kind profile 中分别改为只运行它们 -->
+        <meridian.test.excludedGroups>live,kind</meridian.test.excludedGroups>
         <!-- domain 包的行覆盖率下限，见架构设计「测试策略」 -->
         <meridian.coverage.domain.minimum>0.80</meridian.coverage.domain.minimum>
     </properties>
@@ -401,6 +401,34 @@
     </build>
 
     <profiles>
+        <!-- kind 集群测试：只运行带 kind 标签的 *KindIT，需要本机 kind 集群 meridian 与已部署的沙箱（scripts/dev/deploy-sandbox.sh） -->
+        <profile>
+            <id>kind</id>
+            <properties>
+                <meridian.test.excludedGroups />
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skipTests>true</skipTests>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <includes combine.self="override">
+                                <include>**/*KindIT.java</include>
+                            </includes>
+                            <groups>kind</groups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!-- 真实模型测试：只运行带 live 标签的 *LiveIT，需要 DASHSCOPE_API_KEY，见测试规范「真实模型测试」 -->
         <profile>
             <id>live</id>

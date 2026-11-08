@@ -8,10 +8,10 @@ AgentMeridian 的沙箱镜像。每个需要执行代码的会话在一个由 gV
 |---|---|
 | 基础镜像 | `debian:trixie-slim`（Debian 13） |
 | 用户 | `sandbox`（uid 1000、gid 1000），镜像与 Pod 都以非 root 运行 |
-| 工作目录 | `/workspace`（运行时为 emptyDir） |
+| 工作区 | `/workspace`，指向 `/var/lib/sandbox/workspace` 的符号链接；`/var/lib/sandbox` 运行时为 emptyDir，`workspace/` 由入口脚本以 uid 1000 创建（emptyDir 挂载点属于 root，非 root 用户不能改它的时间与权限，恢复快照时 `tar -xf` 要改归档根目录 `.` 的这两项） |
 | 1 号进程 | `tini`：执行服务终止命令的进程组后，逃出进程组的子进程过继给它并被回收 |
 | 执行服务 | FastAPI + uvicorn，监听 8888 |
-| 可写目录 | 只有 `/workspace` 与 `/tmp`（根文件系统只读）；`HOME=/tmp/home`，pip、uv、npm、matplotlib 的缓存都在其下 |
+| 可写目录 | 只有 `/var/lib/sandbox`（即工作区）与 `/tmp`（根文件系统只读）；`HOME=/tmp/home`，pip、uv、npm、matplotlib 的缓存都在其下 |
 
 构建与测试：
 
