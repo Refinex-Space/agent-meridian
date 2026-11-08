@@ -99,7 +99,8 @@ public final class ResumptionPlanner {
                 input,
                 conclusion.isApproved(),
                 conclusion.denyReason(),
-                RememberedRules.of(stored.toolName(), conclusion).stream().toList());
+                RememberedRules.of(stored.toolName(), input, conclusion).stream()
+                        .toList());
     }
 
     private static CustomToolResult customResult(ResolvableAction action) {

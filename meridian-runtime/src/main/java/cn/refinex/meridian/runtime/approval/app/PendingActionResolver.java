@@ -26,6 +26,7 @@ import cn.refinex.meridian.runtime.dispatch.domain.NewTurn;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -212,7 +213,8 @@ public class PendingActionResolver {
 
     /** "记住此决定"：会话级规则写入 {@code rt.permission_rules}，项目级规则经 {@link PolicyStorePort}。 */
     private void remember(StoredPendingAction action, ActionConclusion conclusion, String decidedBy) {
-        Optional<PermissionRule> rule = RememberedRules.of(action.toolName(), conclusion);
+        Map<String, Object> input = conclusion.updatedInput() == null ? action.input() : conclusion.updatedInput();
+        Optional<PermissionRule> rule = RememberedRules.of(action.toolName(), input, conclusion);
         if (rule.isEmpty()) {
             return;
         }

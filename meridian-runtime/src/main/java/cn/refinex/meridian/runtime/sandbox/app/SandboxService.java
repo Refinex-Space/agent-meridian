@@ -130,7 +130,7 @@ public class SandboxService {
      * 准备本轮的会话沙箱。{@code none} 档什么都不做。
      *
      * @param turn 本轮的上下文
-     * @return 会话沙箱；{@code none} 档为空
+     * @return 会话沙箱；{@code none} 档、或没有配置沙箱集群时为空
      * @throws cn.refinex.meridian.engine.spi.error.SandboxUnavailableException 沙箱基础设施暂时不可用（可重试）
      */
     public Optional<SandboxHandle> prepare(TurnContext turn) {
@@ -138,7 +138,14 @@ public class SandboxService {
         if (environment.tier() != EnvironmentSpec.Tier.SANDBOX) {
             return Optional.empty();
         }
-        SandboxDriver driver = driver();
+        SandboxDriver driver = drivers.getIfAvailable();
+        if (driver == null) {
+            // 配置问题：不准备沙箱，内核取不到会话沙箱时以错误结束本轮，错误事件里写明原因
+            log.warn(
+                    "没有配置会话沙箱（meridian.runtime.sandbox.enabled=false），sandbox 档的轮次将以错误结束 sessionId={}",
+                    turn.platform().sessionId());
+            return Optional.empty();
+        }
         String sessionId = turn.platform().sessionId();
         AtomicReference<SandboxHandle> fresh = new AtomicReference<>();
         SandboxHandle handle;
