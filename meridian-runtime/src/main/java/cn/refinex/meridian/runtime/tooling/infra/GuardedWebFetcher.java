@@ -1,5 +1,6 @@
 package cn.refinex.meridian.runtime.tooling.infra;
 
+import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.common.error.ForbiddenException;
 import cn.refinex.meridian.engine.spi.port.WebFetchPort;
 import cn.refinex.meridian.runtime.tooling.domain.AddressPolicy;
@@ -29,7 +30,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import reactor.netty.http.HttpResources;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
@@ -151,14 +151,13 @@ public final class GuardedWebFetcher implements WebFetchPort, AutoCloseable {
                         yield hop(original, redirect.location(), redirects + 1);
                     }
                     case Hop.Body body ->
-                        Mono.fromCallable(() -> new Page(
-                                        original,
-                                        current,
-                                        WebContentConverter.mediaType(body.contentType()),
-                                        converter.convert(
-                                                body.contentType(), body.bytes().bytes(), current.toString()),
-                                        body.bytes().truncated()))
-                                .subscribeOn(Schedulers.boundedElastic());
+                        Blocking.call(() -> new Page(
+                                original,
+                                current,
+                                WebContentConverter.mediaType(body.contentType()),
+                                converter.convert(
+                                        body.contentType(), body.bytes().bytes(), current.toString()),
+                                body.bytes().truncated()));
                 });
     }
 

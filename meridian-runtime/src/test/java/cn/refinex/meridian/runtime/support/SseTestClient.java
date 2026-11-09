@@ -59,6 +59,10 @@ public final class SseTestClient {
                 .bodyToFlux(FRAME)
                 .subscribe(
                         event -> {
+                            if (event.data() == null && event.comment() != null) {
+                                // 注释行（连接建立时的 ": open"）不是帧，SSE 客户端按规范忽略
+                                return;
+                            }
                             Frame frame = new Frame(event.event(), event.id(), event.data());
                             ContractValidator.validateEvent(frame.data(), frame.id() != null);
                             frames.add(frame);

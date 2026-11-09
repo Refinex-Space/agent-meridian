@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import cn.refinex.meridian.common.error.MeridianException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -17,6 +19,30 @@ class ServiceCredentialWebFilterTest {
     private final ServiceCredentialWebFilter filter =
             new ServiceCredentialWebFilter(new DevServiceCredentialResolver(new DevServiceCredentialProperties(
                     true, List.of(new DevServiceCredentialProperties.Credential("svc_dev_a", "knowledge")))));
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/internal;a=b/v1/egress:authorize", "/%69nternal/v1/embeddings", "/internal;x/v1/rerank"})
+    void pathVariantsThatRouteToInternalEndpointsStillRequireCredentials(String path) {
+        // 路由按解码、去掉矩阵参数后的段匹配，过滤器必须按同样的值判断（R1 安全审查，ADR-0041）
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.method(org.springframework.http.HttpMethod.POST, java.net.URI.create(path)));
+
+        StepVerifier.create(filter.filter(exchange, ex -> Mono.empty()))
+                .expectErrorSatisfies(error -> assertThat(((MeridianException) error).errorCode())
+                        .isEqualTo(ServiceCredentialErrorCode.UNAUTHENTICATED))
+                .verify();
+    }
+
+    @Test
+    void handlersRejectRequestsThatBypassedTheFilter() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/internal/v1/rerank"));
+
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(
+                        () -> ServiceCredentialAuthorization.require(exchange)))
+                .isInstanceOfSatisfying(
+                        MeridianException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ServiceCredentialErrorCode.UNAUTHENTICATED));
+    }
 
     @Test
     void validCredentialsPassAndRecordTheCallingService() {

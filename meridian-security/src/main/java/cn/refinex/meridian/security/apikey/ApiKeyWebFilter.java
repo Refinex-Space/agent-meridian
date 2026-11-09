@@ -2,6 +2,7 @@ package cn.refinex.meridian.security.apikey;
 
 import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.common.context.PlatformContexts;
+import cn.refinex.meridian.security.web.RequestPaths;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.server.ServerWebExchange;
@@ -20,8 +21,8 @@ public final class ApiKeyWebFilter implements WebFilter, Ordered {
     /** 交换属性的键：认证后的 {@link ApiKeyPrincipal}，作用域检查从这里读取。 */
     public static final String PRINCIPAL_ATTRIBUTE = ApiKeyWebFilter.class.getName() + ".principal";
 
-    /** 需要认证的路径前缀：公开 API 的版本前缀（架构设计「约定」）。 */
-    static final String API_PREFIX = "/v1/";
+    /** 需要认证的路径的第一段：公开 API 的版本前缀（架构设计「约定」），按 {@link RequestPaths#firstSegment} 比较。 */
+    static final String API_SEGMENT = "v1";
 
     /** 在请求 ID 过滤器之后执行，认证失败的响应也带请求 ID。 */
     static final int ORDER = Ordered.HIGHEST_PRECEDENCE + 10;
@@ -39,8 +40,7 @@ public final class ApiKeyWebFilter implements WebFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-        String path = exchange.getRequest().getPath().pathWithinApplication().value();
-        if (!path.startsWith(API_PREFIX)) {
+        if (!API_SEGMENT.equals(RequestPaths.firstSegment(exchange.getRequest()))) {
             return chain.filter(exchange);
         }
         String authorization = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);

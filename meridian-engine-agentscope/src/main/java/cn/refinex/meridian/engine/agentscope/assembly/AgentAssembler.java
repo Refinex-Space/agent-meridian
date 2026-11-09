@@ -5,6 +5,7 @@ import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.model.ChatResponse;
+import io.agentscope.core.model.ExecutionConfig;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.model.ToolSchema;
@@ -17,6 +18,7 @@ import io.agentscope.harness.agent.filesystem.CompositeFilesystem;
 import io.agentscope.harness.agent.filesystem.RoutedSandboxFilesystem;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,9 +31,9 @@ import reactor.core.publisher.Flux;
  * 把智能体版本加环境装配为 {@link HarnessAgent}，逐行落实架构设计「引擎装配」表，表中每一行在
  * {@link #configure} 中有对应的一段，由 {@code AgentAssemblerTest} 逐项断言。
  *
- * <p>尚未实现的平台组件经构造参数注入：模型工厂（T09a 的 {@code RoutedModel}）、状态存储（T04/T05 的
- * {@code FencedAgentStateStore}）、平台中间件（T04 起）、平台工具（T10a 起）、文件系统（T10a、T12a）、技能仓库（T10a）。
- * 装配器自身无状态，可以并发调用；实例的复用与关闭由 {@link AgentInstanceCache} 负责。
+ * <p>平台组件经构造参数注入：模型工厂（{@code RoutedModelFactory}）、状态存储（{@code FencedAgentStateStore}）、平台中间件、
+ * 平台工具、两个档位的文件系统与技能仓库，测试换成 testkit 的替身。装配器自身无状态，可以并发调用；实例的复用与关闭由
+ * {@link AgentInstanceCache} 负责。
  *
  * <p>AgentScope 2.0.4 的 {@code maxRetries} 是含首次在内的总尝试次数，不重试写作 {@code maxRetries(1)}（ADR-0023）；
  * {@code asyncToolRegistry} 与 {@code enableAgentTracingLog(false)} 两项按 ADR-0024 补充。
@@ -51,6 +53,12 @@ public final class AgentAssembler {
 
     /** 按消息条数触发压缩的阈值；0 表示关闭，只按 token 阈值触发（架构设计「上下文管理」：阈值等于窗口减去 reserved）。 */
     static final int COMPACTION_TRIGGER_MESSAGES = 0;
+
+    /**
+     * 单个工具调用的超时。2.0.4 的 Toolkit 默认 5 分钟（{@code ExecutionConfig.TOOL_DEFAULTS}），会截断 {@code bash} 与
+     * {@code spawn_subagent} 各自 600 秒的上限；平台工具自己执行超时，这里只是兜底，取 600 秒加 60 秒余量（ADR-0041）。
+     */
+    static final Duration TOOL_EXECUTION_TIMEOUT = Duration.ofSeconds(660);
 
     /** 卸载目录，与 {@link WorkspaceFilesystemProvider#LARGE_TOOL_RESULTS_PREFIX} 是同一个路径。 */
     static final String TOOL_RESULT_EVICTION_PATH = "large_tool_results";
@@ -220,7 +228,9 @@ public final class AgentAssembler {
                 .disableTranscript()
                 // 工作区上下文中间件会把 AGENTS.md（智能体层提示词）再注入一次，并带上当天日期与本机路径，破坏提示词分层与缓存前缀
                 // （登记事项 D29，ADR-0035）；时间改由平台以消息注入
-                .disableWorkspaceContext();
+                .disableWorkspaceContext()
+                // 用户消息中的 @路径 会被展开为文件内容：读取不经权限引擎、账本与审计，sandbox 档能读到沙箱内的任意文件（ADR-0041）
+                .disableAtPathExpansion();
 
         // messageBus 与 asyncToolRegistry：都用空实现，推理前不读工作区（ADR-0024）
         builder.messageBus(NoopMessageBus.INSTANCE).asyncToolRegistry(NoopAsyncToolRegistry.INSTANCE);
@@ -251,6 +261,12 @@ public final class AgentAssembler {
 
         // middlewares：平台中间件
         builder.middlewares(middlewareProvider.middlewares(profile));
+
+        // toolExecutionConfig：单个工具的超时放宽到平台工具自己的上限之上，只尝试一次（ADR-0041）
+        builder.toolExecutionConfig(ExecutionConfig.builder()
+                .timeout(TOOL_EXECUTION_TIMEOUT)
+                .maxAttempts(1)
+                .build());
 
         // 平台工具注册在传入的 Toolkit 上；Toolkit 默认并行执行同一次推理发起的多个工具调用
         Toolkit toolkit = new Toolkit();

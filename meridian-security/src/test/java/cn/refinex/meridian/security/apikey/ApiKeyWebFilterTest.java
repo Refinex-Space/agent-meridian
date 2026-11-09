@@ -10,6 +10,8 @@ import cn.refinex.meridian.common.error.MeridianException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -59,6 +61,18 @@ class ApiKeyWebFilterTest {
                 .verify();
         assertThatThrownBy(() -> ApiKeyAuthorization.require(exchange, ApiKeyScope.SESSIONS_READ))
                 .isInstanceOf(MeridianException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/v1;x=y/sessions", "/%76%31/sessions"})
+    void pathVariantsThatRouteToThePublicApiStillRequireAKey(String path) {
+        // 与路由匹配一致：解码、去掉矩阵参数后的第一段是 v1 就要认证（ADR-0041）
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.method(org.springframework.http.HttpMethod.GET, java.net.URI.create(path)));
+
+        StepVerifier.create(filter.filter(exchange, ex -> Mono.empty()))
+                .expectError(MeridianException.class)
+                .verify();
     }
 
     @Test

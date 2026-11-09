@@ -8,6 +8,7 @@ import cn.refinex.meridian.runtime.egress.app.EgressAuthorizer;
 import cn.refinex.meridian.runtime.egress.domain.EgressDecision;
 import cn.refinex.meridian.runtime.egress.domain.EgressErrorCode;
 import cn.refinex.meridian.runtime.openapi.internal.InternalEgressApi;
+import cn.refinex.meridian.security.servicejwt.ServiceCredentialAuthorization;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
@@ -34,6 +35,7 @@ public class EgressApiController implements InternalEgressApi {
     @Override
     public Mono<ResponseEntity<EgressAuthorization>> authorizeEgress(
             Mono<EgressAuthorizeRequest> egressAuthorizeRequest, ServerWebExchange exchange) {
+        ServiceCredentialAuthorization.require(exchange);
         return egressAuthorizeRequest
                 .flatMap(request ->
                         Blocking.call(() -> authorizer.authorize(request.getSourceIp(), request.getTarget())))

@@ -38,7 +38,7 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 ## 新增平台工具（T10b、T12a 照此做；`spawn_subagent` 由提供者内建）
 
 1. 在 `tools` 包写一个 `PlatformTool` 子类：构造时给 `Spec`（名字取自 `PlatformToolNames`、英文描述写清用途、何时使用、参数、返回格式、限制；入参 JSON Schema；副作用等级；`RuleSyntax`；能否与同批调用并行），实现 `execute(ToolCall)`。
-2. `execute` 在有界弹性线程上运行，可以阻塞；文件与命令操作用 `call.filesystem()` 并传入 `call.runtimeContext()`；可预期的问题抛 `ToolInputException`（英文说明，交给模型修正）；`non_idempotent` 工具把 `call.idempotencyKey()` 传给下游。不要自己记账。
+2. `execute` 在 `Blocking` 的虚拟线程上运行，可以阻塞（不要用有上限的 `boundedElastic`，P7）；文件与命令操作用 `call.filesystem()` 并传入 `call.runtimeContext()`；可预期的问题抛 `ToolInputException`（英文说明，交给模型修正）；`non_idempotent` 工具把 `call.idempotencyKey()` 传给下游。不要自己记账。
 3. 在 `PlatformToolProvider` 登记工厂（runtime 的 `PlatformToolsAutoConfiguration` 经 `with(name, factory)` 加入；要读智能体配置时用 `(services, profile) -> …`）；输出超过 50000 字符时自己截断并提示如何继续（工具结果卸载阈值 80000）；外部内容先截断再用 `SourceTags.wrap` 包标签。
 4. 测试：`turn.EngineHarness.withPlatform(...)` 加 `ScriptedModel` 的场景测试（规则、账本、结果）；ArchUnit 规则 13 要求生产代码中的 `ToolBase` 子类都继承 `PlatformTool`。
 

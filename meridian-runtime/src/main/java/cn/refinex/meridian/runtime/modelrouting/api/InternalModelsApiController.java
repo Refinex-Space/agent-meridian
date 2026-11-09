@@ -11,6 +11,7 @@ import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.runtime.modelrouting.app.VectorModelService;
 import cn.refinex.meridian.runtime.openapi.internal.InternalModelsApi;
+import cn.refinex.meridian.security.servicejwt.ServiceCredentialAuthorization;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -42,6 +43,7 @@ public class InternalModelsApiController implements InternalModelsApi {
     @Override
     public Mono<ResponseEntity<InternalEmbeddingResponse>> createInternalEmbeddings(
             Mono<InternalEmbeddingRequest> internalEmbeddingRequest, ServerWebExchange exchange) {
+        ServiceCredentialAuthorization.require(exchange);
         return internalEmbeddingRequest.flatMap(request -> vectors.embed(
                         request.getModel(), request.getInput(), request.getDimensions())
                 .map(result -> {
@@ -60,6 +62,7 @@ public class InternalModelsApiController implements InternalModelsApi {
     @Override
     public Mono<ResponseEntity<InternalRerankResponse>> createInternalRerank(
             Mono<InternalRerankRequest> internalRerankRequest, ServerWebExchange exchange) {
+        ServiceCredentialAuthorization.require(exchange);
         return internalRerankRequest.flatMap(request -> vectors.rerank(
                         request.getModel(), request.getQuery(), request.getDocuments(), request.getTopN())
                 .map(result -> ResponseEntity.ok(new InternalRerankResponse(

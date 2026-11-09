@@ -2,6 +2,7 @@ package cn.refinex.meridian.security.servicejwt;
 
 import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.common.error.MeridianException;
+import cn.refinex.meridian.security.web.RequestPaths;
 import java.util.Locale;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
@@ -21,8 +22,8 @@ public final class ServiceCredentialWebFilter implements WebFilter, Ordered {
     /** 交换属性的键：认证后的 {@link ServicePrincipal}。 */
     public static final String PRINCIPAL_ATTRIBUTE = ServiceCredentialWebFilter.class.getName() + ".principal";
 
-    /** 需要服务凭据的路径前缀。 */
-    static final String INTERNAL_PREFIX = "/internal/";
+    /** 需要服务凭据的路径的第一段，按 {@link RequestPaths#firstSegment} 比较。 */
+    static final String INTERNAL_SEGMENT = "internal";
 
     /** 与 API Key 过滤器同一位置：在请求 ID 过滤器之后，认证失败的响应也带请求 ID。 */
     static final int ORDER = Ordered.HIGHEST_PRECEDENCE + 10;
@@ -45,8 +46,7 @@ public final class ServiceCredentialWebFilter implements WebFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-        String path = exchange.getRequest().getPath().pathWithinApplication().value();
-        if (!path.startsWith(INTERNAL_PREFIX)) {
+        if (!INTERNAL_SEGMENT.equals(RequestPaths.firstSegment(exchange.getRequest()))) {
             return chain.filter(exchange);
         }
         String authorization = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);

@@ -473,6 +473,8 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `disableDefaultWorkspaceSkills()`、`disableDynamicSkills()` | 必须 | 技能只来自平台技能仓库，智能体不能自建技能 |
 | `disableTranscript()` | 必须 | 转录写入工作区或沙箱，不受 fencing 约束且无限增长；会话记录以 `session_events` 为准 |
 | `disableWorkspaceContext()` | 必须 | 2.0.4 的 `WorkspaceContextMiddleware` 每次推理往系统提示词追加当天日期、本机路径与再读一遍的 `AGENTS.md`，破坏提示词分层与缓存前缀；时间改以消息注入（ADR-0035） |
+| `disableAtPathExpansion()` | 必须 | 2.0.4 的 `AtPathExpansionMiddleware` 把用户消息中的 `@路径` 展开为文件内容，读取不经权限引擎、账本与审计；`sandbox` 档的文件系统不是 `CompositeFilesystem`，会读到沙箱内的任意文件（ADR-0041） |
+| `toolExecutionConfig(...)` | 超时 660 秒，只尝试一次 | 2.0.4 的 Toolkit 默认单个工具 5 分钟超时，会截断 `bash` 与 `spawn_subagent` 各自 600 秒的上限；平台工具自己执行超时，这里只兜底（ADR-0041） |
 | `messageBus(...)` | 平台的 `NoopMessageBus` | 默认的工作区消息总线会让每次推理都读一次工作区；`wait_async_results` 仍会注册（2.0.4 把它包装为 `ReflectiveFunctionTool`，是 `ToolBase`），由工具策略的整工具拒绝规则拒绝（ADR-0034） |
 | `asyncToolRegistry(...)` | 平台的 `NoopAsyncToolRegistry` | 不设置时 harness 创建基于工作区的异步工具登记，`InboxMiddleware` 每次推理前仍会读工作区（ADR-0024） |
 | `enableAgentTracingLog(false)` | 必须 | 默认的 `AgentTraceMiddleware` 以 INFO 记录模型输出正文，违反日志规范（ADR-0024） |
@@ -1130,7 +1132,7 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 
 其他规则：
 
-- 每 15 秒发一次 `ping`。
+- 连接建立后先发一行注释 `:open`，响应头立即到达客户端（没有历史事件时不必等第一个 `ping`）；之后每 15 秒发一次 `ping`。
 - 带 `?event_deltas=true` 时才推送 `event_start` 和 `event_delta`。
 - 单连接最长 60 分钟，到期由服务端关闭，客户端带 `Last-Event-ID` 重连。推送 `session.status_terminated` 后服务端关闭连接。
 

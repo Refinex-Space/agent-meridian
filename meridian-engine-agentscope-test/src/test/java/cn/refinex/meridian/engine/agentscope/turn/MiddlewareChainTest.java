@@ -82,7 +82,6 @@ class MiddlewareChainTest {
                     .as("harness 自带的中间件按注册顺序")
                     .extracting(m -> m.getClass().getSimpleName())
                     .containsExactly(
-                            "AtPathExpansionMiddleware",
                             "CompactionMiddleware",
                             "ToolResultEvictionMiddleware",
                             "InboxMiddleware",

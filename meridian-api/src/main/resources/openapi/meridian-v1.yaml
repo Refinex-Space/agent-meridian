@@ -718,6 +718,7 @@ components:
       description: |
         SSE 事件流（`text/event-stream`）。每条消息的 `event:` 为事件类型，`id:` 为 `seq`（只在流上的事件没有 `id:`），
         `data:` 为一行事件信封 JSON（持久化事件为 `SessionEvent`，只在流上的事件为 `StreamOnlyEvent`）。
+        连接建立后服务端先发送一行注释 `:open`，使响应头立即到达客户端；SSE 客户端按规范忽略注释行。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'

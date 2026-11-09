@@ -66,7 +66,7 @@ package cn.refinex.meridian.runtime.dispatch;
 | outbox 写入与投递 | `persistence.outbox` | — |
 | Redis Stream 发布与消费、Pub/Sub | `persistence.redis` | — |
 | 对象存储客户端 | `persistence.objectstore` | S3 兼容 |
-| 阻塞调用的虚拟线程调度 | `common.concurrent` | `Blocking.call(...)`，runtime 中所有 JDBC 都经过它 |
+| 阻塞调用的虚拟线程调度 | `common.concurrent` | `Blocking.call(...)`，runtime 中所有 JDBC 都经过它；阻塞的流与工具执行 `subscribeOn(Blocking.scheduler())`，不用有线程上限的 `Schedulers.boundedElastic()`（P7） |
 | HTTP 幂等键（`Idempotency-Key`） | `persistence.idempotency` | 各服务共用，每个服务在自己的 schema 中建幂等表 |
 | API Key 校验、服务 JWT、OIDC | `security` | `security.apikey`：`ApiKeyResolver` 端口、WebFlux 过滤器、作用域检查 `ApiKeyAuthorization` |
 | 服务间 HTTP 调用约定（超时、重试、服务 JWT 注入） | `security.servicejwt` | 基于 Spring `RestClient` / `WebClient` |

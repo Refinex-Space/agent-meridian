@@ -30,6 +30,18 @@ public final class Blocking {
     private Blocking() {}
 
     /**
+     * 返回执行阻塞调用的虚拟线程调度器，供不经 {@link #call} 的阻塞流使用：逐行读取的供应商 HTTP 流、平台工具的执行。
+     * 不要换成 Reactor 的 {@code boundedElastic}：它的线程数上限是 CPU 数的 10 倍（4 核时 40），一个流式模型调用或一次
+     * {@code bash} 在整个持续期间占住一个线程，超出上限的调用排队，单节点的并发轮次被限制在这个数（P7，ADR-0041）。
+     * 它不绑定 {@link PlatformContext}，需要租户上下文时用 {@link #call}。
+     *
+     * @return 全局共享的调度器
+     */
+    public static Scheduler scheduler() {
+        return SCHEDULER;
+    }
+
+    /**
      * 在虚拟线程上执行有返回值的阻塞调用。
      *
      * @param callable 阻塞调用；返回 {@code null} 时 {@code Mono} 为空

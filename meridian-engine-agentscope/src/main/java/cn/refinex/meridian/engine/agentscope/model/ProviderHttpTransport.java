@@ -1,5 +1,6 @@
 package cn.refinex.meridian.engine.agentscope.model;
 
+import cn.refinex.meridian.common.concurrent.Blocking;
 import io.agentscope.core.model.transport.HttpRequest;
 import io.agentscope.core.model.transport.HttpResponse;
 import io.agentscope.core.model.transport.HttpTransport;
@@ -22,7 +23,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 /**
  * 供应商 HTTP 传输：AgentScope {@link HttpTransport} 的平台实现，基于 JDK {@link HttpClient}，供 OpenAI 兼容的模型类使用。
@@ -142,11 +142,11 @@ public final class ProviderHttpTransport implements HttpTransport {
         client.close();
     }
 
-    /** 读出错误响应的正文后以带状态码的 {@link HttpTransportException} 结束；读取在弹性线程上进行。 */
+    /** 读出错误响应的正文后以带状态码的 {@link HttpTransportException} 结束；读取在虚拟线程上进行。 */
     private static Flux<String> errorBody(java.net.http.HttpResponse<InputStream> response) {
         int status = response.statusCode();
         return Mono.fromCallable(() -> readLimited(response.body()))
-                .subscribeOn(Schedulers.boundedElastic())
+                .subscribeOn(Blocking.scheduler())
                 .onErrorReturn("")
                 .flatMapMany(body -> {
                     log.warn("供应商返回错误状态 status={}", status);
@@ -154,7 +154,10 @@ public final class ProviderHttpTransport implements HttpTransport {
                 });
     }
 
-    /** 按行读取 SSE，取出 {@code data:} 的内容，遇到 {@code [DONE]} 结束；阻塞读取在弹性线程上进行，取消时关闭连接。 */
+    /**
+     * 按行读取 SSE，取出 {@code data:} 的内容，遇到 {@code [DONE]} 结束；取消时关闭连接。阻塞读取在 {@link Blocking} 的虚拟线程上
+     * 进行，每个流式调用在整个持续期间占住一个线程，有上限的线程池会限制单节点并发的模型调用数（P7）。
+     */
     private Flux<String> dataLines(InputStream body, long startNanos) {
         Duration elapsed = Duration.ofNanos(System.nanoTime() - startNanos);
         Duration firstChunkLeft = firstChunkTimeout.minus(elapsed);
@@ -163,7 +166,7 @@ public final class ProviderHttpTransport implements HttpTransport {
                         stream -> Flux.fromStream(
                                 new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8)).lines()),
                         ProviderHttpTransport::closeQuietly)
-                .subscribeOn(Schedulers.boundedElastic());
+                .subscribeOn(Blocking.scheduler());
         return lines.filter(line -> line.startsWith(SSE_DATA_PREFIX))
                 .map(line -> line.substring(SSE_DATA_PREFIX.length()).trim())
                 .takeWhile(data -> !SSE_DONE_MARKER.equals(data))

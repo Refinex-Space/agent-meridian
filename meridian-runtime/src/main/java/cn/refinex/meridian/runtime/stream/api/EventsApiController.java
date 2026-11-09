@@ -27,6 +27,10 @@ import reactor.core.publisher.Mono;
 @RestController
 public class EventsApiController implements EventsApi {
 
+    /** 连接建立后立即发出的 SSE 注释，用来提交响应头。 */
+    private static final ServerSentEvent<String> OPENED =
+            ServerSentEvent.<String>builder().comment("open").build();
+
     /** {@code ?threads=main} 的取值。 */
     static final String MAIN_THREADS = "main";
 
@@ -110,10 +114,12 @@ public class EventsApiController implements EventsApi {
     }
 
     private static ResponseEntity<Flux<ServerSentEvent<String>>> stream(Flux<ServerSentEvent<String>> events) {
-        // 关闭代理缓冲（nginx 的 X-Accel-Buffering），事件立即到达客户端
+        // 关闭代理缓冲（nginx 的 X-Accel-Buffering），事件立即到达客户端。
+        // 先发一行 SSE 注释：WebFlux 在写出第一条消息时才提交响应头，没有历史事件的会话要等第一个 ping（15 秒），
+        // 等 onopen 之后才发消息的客户端会卡住（P7）；SSE 客户端按规范忽略注释行
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-cache")
                 .header("X-Accel-Buffering", "no")
-                .body(events);
+                .body(Flux.concat(Mono.just(OPENED), events));
     }
 }

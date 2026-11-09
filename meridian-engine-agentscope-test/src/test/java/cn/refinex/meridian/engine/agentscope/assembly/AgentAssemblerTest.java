@@ -19,6 +19,7 @@ import cn.refinex.meridian.engine.spi.spec.SubagentSpec;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.UserMessage;
 import io.agentscope.core.middleware.MiddlewareBase;
+import io.agentscope.core.model.ExecutionConfig;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.skill.AgentSkill;
 import io.agentscope.core.tool.AgentTool;
@@ -28,6 +29,7 @@ import io.agentscope.harness.agent.filesystem.RoutedSandboxFilesystem;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import io.agentscope.harness.agent.middleware.AgentTraceMiddleware;
+import io.agentscope.harness.agent.middleware.AtPathExpansionMiddleware;
 import io.agentscope.harness.agent.middleware.CompactionMiddleware;
 import io.agentscope.harness.agent.middleware.HarnessSkillMiddleware;
 import io.agentscope.harness.agent.middleware.InboxMiddleware;
@@ -265,6 +267,40 @@ class AgentAssemblerTest {
         assertThat(agent.getDelegate().getMiddlewares())
                 .as("工作区上下文中间件会重复注入 AGENTS.md 并带上日期（D29），装配时关闭")
                 .noneMatch(m -> m instanceof WorkspaceContextMiddleware);
+    }
+
+    @Test
+    void disableAtPathExpansion_userMessagesAreNotExpandedInEitherTier() {
+        TestAssembly assembly = TestAssembly.builder(model).build();
+        HarnessAgent none = assemble(assembly, TestSpecs.agent().build());
+        HarnessAgent sandbox = assemble(assembly, TestSpecs.agent().build(), TestSpecs.sandboxEnvironment());
+
+        // sandbox 档的文件系统不是 CompositeFilesystem，@路径 会被展开为文件内容，读取绕过权限、账本与审计（ADR-0041）
+        assertThat(none.getDelegate().getMiddlewares()).noneMatch(AtPathExpansionMiddleware.class::isInstance);
+        assertThat(sandbox.getDelegate().getMiddlewares()).noneMatch(AtPathExpansionMiddleware.class::isInstance);
+    }
+
+    @Test
+    void toolExecutionConfig_timeoutCoversThePlatformToolLimitsWithoutRetry() {
+        HarnessAgent agent =
+                assemble(TestAssembly.builder(model).build(), TestSpecs.agent().build());
+
+        ExecutionConfig config = agent.getDelegate().getToolExecutionConfig();
+        // 2.0.4 的默认值 5 分钟会截断 bash、spawn_subagent 的 600 秒上限（ADR-0041）
+        assertThat(config.getTimeout()).isEqualTo(Duration.ofSeconds(660));
+        assertThat(config.getTimeout()).isGreaterThan(ExecutionConfig.TOOL_DEFAULTS.getTimeout());
+        assertThat(config.getMaxAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    void workspace_localRootIsTheProvidersPlatformControlledDirectory() {
+        TestAssembly assembly = TestAssembly.builder(model).build();
+
+        HarnessAgent agent = assemble(assembly, TestSpecs.agent().build());
+
+        // 不设时 harness 用 ${user.dir}/.agentscope/workspace 并从中回退读取（D05）
+        assertThat(agent.getWorkspaceManager().getWorkspace())
+                .isEqualTo(assembly.filesystems().localWorkspaceRoot());
     }
 
     @Test

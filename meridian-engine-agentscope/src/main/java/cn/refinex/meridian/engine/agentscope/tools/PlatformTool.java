@@ -1,5 +1,6 @@
 package cn.refinex.meridian.engine.agentscope.tools;
 
+import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.LeaseLostException;
@@ -27,7 +28,6 @@ import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 /**
  * 所有平台工具的基类（架构设计「平台工具」：平台工具必须继承 {@code ToolBase} 并实现 {@code matchRule}）。
@@ -177,7 +177,7 @@ public abstract class PlatformTool extends ToolBase {
     }
 
     /**
-     * 执行工具。在有界弹性线程上调用，可以阻塞（文件系统是同步接口）；不要自己吞掉 {@code LeaseLostException}。
+     * 执行工具。在 {@link Blocking} 的虚拟线程上调用，可以阻塞（文件系统是同步接口）；不要自己吞掉 {@code LeaseLostException}。
      *
      * @param call 本次调用
      * @return 结果；参数不对、目标不存在等可预期的问题以 {@link ToolOutput#error} 返回或抛 {@link ToolInputException}，让模型修正
@@ -186,14 +186,15 @@ public abstract class PlatformTool extends ToolBase {
     protected abstract ToolOutput execute(ToolCall call) throws Exception;
 
     /**
-     * 以响应式方式执行工具。默认在有界弹性线程上调用 {@link #execute}；执行时间长、本身是响应式的工具（{@code spawn_subagent}
+     * 以响应式方式执行工具。默认在 {@link Blocking} 的虚拟线程上调用 {@link #execute}（不用有上限的 {@code boundedElastic}：
+     * 长时间的 {@code bash} 会占满它，P7）；执行时间长、本身是响应式的工具（{@code spawn_subagent}
      * 要等子智能体跑完，最长 600 秒）覆盖它，不占用线程，取消订阅也能传到下游。错误处理与 {@link #execute} 相同。
      *
      * @param call 本次调用
      * @return 结果
      */
     protected Mono<ToolOutput> executeAsync(ToolCall call) {
-        return Mono.fromCallable(() -> execute(call)).subscribeOn(Schedulers.boundedElastic());
+        return Mono.fromCallable(() -> execute(call)).subscribeOn(Blocking.scheduler());
     }
 
     private Mono<ToolOutput> run(ToolCall call) {
