@@ -53,7 +53,7 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 
 ## 不变量
 
-- 装配必须满足「引擎装配」表：`maxRetries(1)`、不设 `fallbackModel`、`enablePendingToolRecovery(true)`、关闭全部内置工具与 transcript、`NoopMessageBus` 加 `NoopAsyncToolRegistry`、`enableAgentTracingLog(false)`、压缩 `triggerMessages(0)` 加平台摘要提示词；`AgentAssemblerTest` 逐项断言，改装配先改表。
+- 装配必须满足「引擎装配」表：`maxRetries(1)`、不设 `fallbackModel`、`enablePendingToolRecovery(true)`、关闭全部内置工具与 transcript、`disableAtPathExpansion()`、工具执行超时 660 秒、`NoopMessageBus` 加 `NoopAsyncToolRegistry`、`enableAgentTracingLog(false)`、压缩 `triggerMessages(0)` 加平台摘要提示词；`AgentAssemblerTest` 逐项断言，改装配先改表。
 - 所有模型调用（含压缩器）都经 `RoutedModel`；底层客户端每次调用只尝试一次（`ExecutionConfig.maxAttempts(1)`），重试只在 `RoutedModel` 针对首包之前的供应商错误；预扣与结算由 `usingWhen` 成对保证。
 - 缓存键 `(agent_version_id, environment_id, environment_revision[, 子智能体名])`，容量 500，空闲 30 分钟；淘汰只退役，引用归零才关闭（ADR-0024）。`release` 由 `AgentScopeEngine` 在终态之前调用，每个凭据一次。
 - 每轮恰好一个终态：正常结束按 `GenerateReason`；错误先 `session.error` 后终态；`AgentShuttingDownException` 只发 `rescheduled(node_shutdown)`；`RetryableTurnException` 发 `error(retryable)` 加 `rescheduled(retryable_error)`；`LeaseLostException` 不发任何事件、原样结束；取消订阅不发事件、不写状态（ADR-0026）。
@@ -95,6 +95,7 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 - 工具直接返回的 `ToolResultBlock` 状态默认为 `RUNNING`（由 `ToolExecutor` 定稿），直接调用工具时不能用 `SUCCESS` 判断成功。
 - `Map.of` 的迭代顺序每个 JVM 随机：工具定义（入参 schema）由 `PlatformTool` 规整为按键排序，否则不同节点的请求前缀不同、命中不了提示词缓存。
 - 沙箱（2.0.4 已核实）：`KubernetesSandboxClient` 合并单次选项时非空字段一律覆盖默认值，命名空间、工作区、文件接口目录、端口都有非空缺省，单次选项必须完整设置；超时只取默认选项。`getSandbox` 在 claim 不存在时会监听等满 30 秒，所以 `resume` 先用 fabric8 查 claim。`KubernetesSandbox.shutdown()` 删除 claim 失败只打日志，驱动自己删 claim。`doExec` 不把超时传给执行服务，非零退出码抛 `ExecException`。三种连接方式都经沙箱命名空间中的 `sandbox-router-svc`。
+- `bash` 的命令前缀规则只认得简单命令：`$'…'`、复合命令关键字、以变量为命令名、`eval`/`source`/`sh -c` 都归为不可分析（ADR-0041）；改 `ShellCommands` 时先在 `ShellCommandsTest` 加真实 bash 的反例。驱动在沙箱里跑的 Python 辅助脚本用 `python3 -I`，工作目录是智能体可写的 `/workspace`。
 - 2.0.4 在执行工具前按入参 schema 校验参数（含 `enum`），不合法的调用直接得到 "Parameter validation failed" 错误结果，不进 `execute`。
 - sandbox 档（2.0.4 已核实，ADR-0037）：`RuntimeContext` 没有 `SandboxContext` 时 harness 用装配时的默认上下文自建沙箱，所以 sandbox 档每轮必须注入外部沙箱；`SandboxBackedFilesystem` 没有本次绑定时退回实例上最后绑定的沙箱（跨会话），工具必须经 `SandboxWorkspaceFilesystem`；`BaseSandboxFilesystem` 把路径原样拼进 shell，`CompositeFilesystem` 列根目录传 `/`；`RoutedSandboxFilesystem.execute` 不经路由。
 - 子智能体（2.0.4 已核实，ADR-0040）：`RuntimeContext.builder(parent)` 复制 `agentState`、`toolRequestConfig` 与全部类型化属性，`HarnessAgent` 只在上下文没有 `AbstractFilesystem` 时放本实例的，子线程上下文必须空白构建；在父线程的工具调用里 `streamEvents` 子智能体时，它自己的事件 sink 覆盖继承的键，事件不进父线程的流；子线程的终态不能写成 `session.status_*`（带线程的状态事件会推进会话状态）；取消子智能体的订阅后 AgentScope 把 `CancellationException` 交给 `onErrorDropped`，日志有一条 ERROR。

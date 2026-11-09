@@ -1,0 +1,25 @@
+# 开发与压测用的智能体版本：模型是脚本化模型服务（dev-config/providers/scripted.yaml 的 mdl_dev_scripted），没有工具，
+# 不需要真实模型的凭据。P7、P11 的压测驱动（scripts/perf/）用它；用户消息以 #script:<名称> 选择脚本。
+kind: agent_version
+agent_id: agt_dev_scripted
+agent_version_id: agv_dev_scripted_1
+name: scripted-chat
+model:
+  model_id: mdl_dev_scripted
+system_prompt: 你是用于开发与压测的助手，按脚本回答。
+tools: []
+mcp_servers: []
+skills: []
+subagents: []
+permissions:
+  mode: default
+  rules: []
+compaction:
+  reserved_tokens: 20000
+plan_mode: false
+knowledge:
+  knowledge_base_ids: []
+  prefetch: false
+  prefetch_top_k: 5
+max_iters: 10
+expose_thinking: false

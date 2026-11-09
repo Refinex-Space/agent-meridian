@@ -330,8 +330,15 @@ public final class AgentScopeEngine implements AgentEngine {
         // sandbox 档：会话沙箱作为外部沙箱放进本轮的 RuntimeContext，harness 不停止也不持久化它（架构设计「会话沙箱」）
         Sandbox sandbox = sandbox(platform, environment).orElse(null);
         AgentHandle handle = instances.acquire(agent, environment);
-        SubagentSlot.Parent parent = new SubagentSlot.Parent(ctx, agent, environment, userId, sandbox);
-        RunningTurn turn = new RunningTurn(ctx, input, parent, handle, subagents);
+        RunningTurn turn;
+        try {
+            SubagentSlot.Parent parent = new SubagentSlot.Parent(ctx, agent, environment, userId, sandbox);
+            turn = new RunningTurn(ctx, input, parent, handle, subagents);
+        } catch (RuntimeException e) {
+            // 构造失败（例如自定义工具声明不合法）时归还实例，否则引用计数永不归零，淘汰后也不会关闭（R1 审查 A-F5）
+            instances.release(handle);
+            throw e;
+        }
         if (running.putIfAbsent(threadId, turn) != null) {
             instances.release(handle);
             throw new IllegalStateException("线程已在本节点执行，上一次执行结束前不能再次认领：" + threadId);

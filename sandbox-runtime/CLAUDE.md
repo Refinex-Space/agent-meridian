@@ -10,7 +10,7 @@
 
 ## 结构
 
-- `src/sandbox_runtime/app.py`：五个接口与路径解析（越出 `SANDBOX_BASE_DIR` 的路径，含符号链接，返回 403）。
+- `src/sandbox_runtime/app.py`：健康检查 `/` 与五个业务接口、路径解析（越出 `SANDBOX_BASE_DIR` 的路径，含符号链接，返回 403）。
 - `executor.py`：`run_command`，`/bin/bash -c`、新进程组、超时与输出上限、结束后整组 SIGKILL。
 - `settings.py`：环境变量 `SANDBOX_BASE_DIR`、`SANDBOX_EXEC_TIMEOUT_SECONDS`、`SANDBOX_EXEC_OUTPUT_LIMIT_BYTES`（chart 设置）。
 - `entrypoint.sh`：`ulimit -u $SANDBOX_MAX_PROCESSES`、创建 `/var/lib/sandbox/workspace` 与 `/tmp` 下的 HOME 和缓存、启动 uvicorn。

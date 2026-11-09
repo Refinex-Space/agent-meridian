@@ -6,6 +6,7 @@
 
 - 编译与单测（含 engine-agentscope 的装配与场景测试）：`./mvnw -pl meridian-engine-agentscope-test -am test`
 - 单个测试：`./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=<类名> -Dsurefire.failIfNoSpecifiedTests=false`
+- 集成测试（`McpToolsIT`，进程内 MCP 服务）：`./mvnw -pl meridian-engine-agentscope-test -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`
 
 ## 包地图
 
@@ -20,6 +21,7 @@
 - `testkit.sandbox.FakeSandbox`（T12a）：脚本化的会话沙箱，记录命令、按 `respond(...)` 给结果，非零退出码抛 `ExecException`，`stop`/`close` 抛异常（外部沙箱不应被 harness 停止）。`turn.EngineHarness.withSandbox(model, spec, sandbox, 工具…)`：`sandbox` 档、生产的平台工具（含 `bash`）与 `TurnSandboxes`；场景测试 `BashToolScenarioTest`（P6 bash 规则、截断、审计、两线程共享沙箱、路径翻译、大结果卸载）、`tools.ShellCommandsTest`、`fs.SandboxWorkspaceFilesystemTest`、`sandbox.SkillProjectionTest`；`KubernetesSandboxDriverKindIT` 另验证技能投影与产物清单。
 - `sandbox`（T11）：`SingleStartSandboxTest`（并发 `start()` 只执行一次）、`PlatformSnapshotClientTest`；kind 集成测试 `KubernetesSandboxDriverKindIT`（认领、执行、上传下载、快照、删除、恢复、另一驱动实例重连）与 `SandboxPoolMeasurementKindIT`（P5 测量，结果写 `target/p5/p5-results.json`），标签 `kind`，`-Pkind` 才运行，kubeconfig 上下文 `kind-meridian`。
 - T13：`turn.EngineHarness.withSubagents(model, spec, 模型 ID→模型, 每轮上限, 平台工具, 沙箱)`：生产的 `spawn_subagent`、主智能体与子智能体各自的中间件集合、`SubagentRunner`；子线程的事件在 `harness.events`，子线程在 `harness.threads`；`claim(..., subagentPolicies, ...)` 给出预合成的子线程策略。子智能体的工具必须是平台工具名，测试替身用平台工具名经 `withSubagents` 的工具映射登记。场景测试 `turn.SubagentScenarioTest`（含 P12）。`InMemoryLeaseRegistry` 按被写入的线程记录权限安装标记（与 runtime 相同）。
+- R1：`turn.StateCacheReleaseTest` 反射读 `ReActAgent` 的三个状态缓存，守住 P11（每轮结束后不留槽）；`sandbox.OutputListingCommandTest` 在本机按沙箱方式执行产物清单命令（需要 `python3`）。
 - `turn.EngineHarness`（测试源码）：真实装配 + 平台中间件（按智能体配置创建，含压缩守护外层）+ `FencedAgentStateStore` + 内存端口 + `AgentScopeEngine`；接受任意 `Model`（例如 `RoutedModel`）；`claim(...)` 模拟 Worker 认领，`run(...)` 断言恰好一个终态且在最后；`createFiltered` 去掉某些平台中间件做对照实验；`states.jsonOf(userId, threadId)` 读状态原文。
 
 ## 不变量

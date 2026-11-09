@@ -15,7 +15,8 @@ Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json �
 - `web.RequestIdMdcAccessor`：WebFlux 中把 Reactor Context 的 `request_id` 恢复到 MDC，需要 Reactor 自动上下文传播。
 - `web.TraceParentWebFilter`（WebFlux）：合法的 `traceparent` 原样返回，trace-id 进 MDC 的 `trace_id`；跨服务传播在 T27。
 - `web.SecurityWebAutoConfiguration`：按应用的 Web 栈装配。
-- `servicejwt`（T09b，ADR-0033）：`ServiceCredentialResolver` 是服务凭据的来源端口（T14b 用服务 JWT 实现）；`ServiceCredentialWebFilter` 校验 `/internal/` 下的请求并把 `ServicePrincipal` 写入交换属性（不写 `PlatformContext`）；`DevServiceCredentialResolver` 按 SHA-256 摘要常量时间比较；`ServiceCredentialAutoConfiguration` 选择解析器。
+- `web.RequestPaths.firstSegment`：两个认证过滤器判断前缀的唯一入口，取路由匹配用的值（解码、去掉矩阵参数）；对原始路径做 `startsWith` 会被 `/internal;a=b/…`、`/%69nternal/…` 绕过（ADR-0041）。
+- `servicejwt`（T09b，ADR-0033）：`ServiceCredentialResolver` 是服务凭据的来源端口（T14b 用服务 JWT 实现）；`ServiceCredentialWebFilter` 校验 `/internal/` 下的请求并把 `ServicePrincipal` 写入交换属性（不写 `PlatformContext`），处理器首行 `ServiceCredentialAuthorization.require`；`DevServiceCredentialResolver` 按 SHA-256 摘要常量时间比较；`ServiceCredentialAutoConfiguration` 选择解析器。
 - `apikey`：`ApiKeyResolver` 是 API Key 的来源端口（可阻塞，T14a 提供正式实现）；`ApiKeyAuthenticator` 解析 `Authorization: Bearer`；`ApiKeyWebFilter` 认证 `/v1/` 下的请求并写入 `PlatformContext` 与主体（交换属性）；`ApiKeyAuthorization.require` 检查作用域；`ApiKeyAutoConfiguration` 选择解析器。
 
 ## 不变量
@@ -23,14 +24,12 @@ Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json �
 - 两种 Web 栈输出的 problem+json 完全相同，由 `ProblemAdaptersTest` 逐字段比较（架构设计「API 设计」、ADR-0020）。
 - 5xx 的 detail 固定为不含内部信息的说明；框架异常的 detail 取错误码标题。
 - `spring-webmvc`、`spring-webflux`、servlet API、context-propagation 都是可选依赖，应用只带自己的 Web 栈。
-
 - 开发期服务凭据（`meridian.security.dev-service-credentials`）与开发期 API Key 一样只能在 `dev`、`test` 启用，其他 profile 启用则启动失败，没有来源时一律拒绝。
 - `DevApiKeyResolver` 只能在 `dev`、`test` profile 启用（`meridian.security.dev-api-keys.enabled`），其他 profile 下启用则启动失败；没有任何解析器时一律拒绝（ADR-0030）。只保存 API Key 的 SHA-256，不记录明文。
 
 ## 易错点
 
 - 方法参数（查询参数、请求头）的约束校验失败是 `HandlerMethodValidationException`，映射为 `request.validation_failed`，字段名取 HTTP 中的名字；生成接口不能带类级 `@Validated`，否则会走 AOP 抛 `ConstraintViolationException` 变成 500（ADR-0029）。
-
 - WebFlux 的路由不存在、过滤器异常不经过 `@RestControllerAdvice`，所以 WebFlux 适配器必须是 `WebExceptionHandler`。
 - 不要返回 Spring 的 `ProblemDetail`：两种 Web 栈的 JSON 编码配置不同，字段会不一致。
 - 传入的 `X-Request-Id` 只接受不超过 128 个字符的字母、数字与 `._:-`，否则重新生成。
