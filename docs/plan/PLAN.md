@@ -74,7 +74,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 已完成 | bcd2246 |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 已完成 | b3bdef7 |
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 已完成 | 086b6f4 |
-| T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 进行中 | — |
+| T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 已完成 | e5621ba |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 未开始 | — |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 未开始 | — |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 未开始 | — |
@@ -175,16 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-**T13 子智能体**（2026-11-09 开工，基线 `scripts/dev/verify.sh` 通过）
-
-- [x] 1. `spawn_subagent`（`SpawnSubagentTool`）：参数、可用子智能体与工具集子集校验、副作用等级取子智能体工具中最高的
-- [x] 2. 子线程执行（`turn.SubagentRunner`、`SubagentSlot`、`SubagentOutcome`，runtime `DatabaseThreadRegistry`）：`ThreadRegistryPort` 创建子线程与 `session.thread_created`、空白的子 `RuntimeContext`、子智能体实例的装配与缓存、子智能体中间件集合、预合成权限、事件经 `EventSinkPort` 写为子线程事件与线程状态事件、最终消息作为工具结果
-- [x] 3. 配套（`InterruptRelay`、`ExecutionSlot`、`middleware.SubagentQuota`）：子线程状态用父轮次租约、`AgentEngine.interrupt` 先中断子线程、超时（上限 600 秒）、`PolicyMiddleware` 每轮拉起上限 8（可配置）、`PERMISSION_ASKING`/`TOOL_SUSPENDED` 转为拒绝结果
-- [x] 4. runtime（另：恢复快照只取本线程的调用，子线程工具结果写 `permission.decided`）：`ThreadRegistryPort` 实现、装配与配置、计量带子线程 ID、删除会话时清理子线程的 `agent_states`
-- [x] 5. 场景测试（`turn.SubagentScenarioTest`，8 个用例）（A01、A02、A04、A05、A06；两个不同 `ScriptedModel` 的模型选择）
-- [x] 6. P12 并行与中断测试与报告 `docs/poc/P12-子智能体.md`（A03）
-- [x] 7. 集成测试（`config.SubagentSessionIT`、`SubagentRecoveryIT`）：用量计入父会话（A07）、线程 API 与 `?threads=main`（A08）
-- [ ] 8. 收尾：`verify.sh`（A09）、模块 `CLAUDE.md`、架构设计与 ADR、`docs/poc/README.md`、验收记录、PLAN
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -380,6 +371,12 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：4 项通过，0 项阻塞
 - 决策：ADR-0038（变更型，用户采纳：`ext_authz` 的 HTTP 服务把客户端方法带进检查请求，授权不了 CONNECT，改用 Envoy Lua 过滤器回调）；ADR-0039（按 IP 找会话与两行同 IP 拒绝、白名单语法、缓存的跨节点失效、接口的 403 problem+json、网络策略、两种拓扑、kind 网段、回调凭据）；架构设计升至 v1.14
 - 遗留：登记事项 D38 代理的回调凭据（T14b）、D39 DNS 隧道（T37）、D40 代理的指标、排空与节点池容忍（T27、T28）；kind 集群 `meridian` 已按新网段重建并保留
+
+### 2026-11-09 T13 已完成（提交 e5621ba）
+- 交付：engine-spi 的 `ThreadRegistryPort`（创建子线程同一事务写 `session.thread_created`，`updateStatus` 带停止原因、写 `thread_status_*`）；engine-agentscope 的 `tools.SpawnSubagentTool`（`PlatformToolProvider` 内建，副作用取子智能体工具的最高等级）、`PlatformTool.executeAsync`、`turn.SubagentRunner`（空白构建的子上下文、预合成权限与失败关闭、独立映射器写子线程事件、终态换成 `thread_status_idle`、超时取消订阅、事件流之外的失败以错误结束）、`SubagentSlot`（本轮入口与子线程登记，`interrupt` 先中断子线程）、`SubagentOutcome`、`InterruptRelay`、`ExecutionSlot`，`middleware.SubagentQuota` 与 `PolicyMiddleware` 的每轮拉起上限；runtime 的 `session.app.DatabaseThreadRegistry`、`DatabaseEventSink` 经 `ApprovalAudit`（子线程的 `permission.decided`）、`SubagentRunner` 装配与 `meridian.runtime.worker.max-subagents-per-turn`、恢复快照只取本线程的调用、删除会话时删除全部线程的 `agent_states`；测试 `SubagentScenarioTest`、`SubagentSessionIT`（经 HTTP 的完整路径）、`SubagentRecoveryIT`；P12 报告
+- 验收：9 项通过，0 项阻塞
+- 决策：ADR-0040（执行组件与本轮入口、线程事件与停止原因、子线程上下文、终态与超时的停止原因、中断与拉起上限、恢复隔离、审计与删除）；架构设计升至 v1.15
+- 遗留：登记事项 D41 子线程事件逐条写入的容量（R1）、D42 子线程 `session.error` 的 Webhook 语义（T17a）、D43 取消执行后的 `onErrorDropped` ERROR 日志（T27）
 
 ## 计划变更记录
 
