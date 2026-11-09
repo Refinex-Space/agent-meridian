@@ -76,7 +76,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 已完成 | 086b6f4 |
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 已完成 | e5621ba |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 已完成 | 34b708c |
-| T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 已完成 | 见会话日志 |
+| T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 已完成 | 251ed4e |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 未开始 | — |
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 未开始 | — |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 未开始 | — |
@@ -398,7 +398,7 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：ADR-0041（M0 评审与容量测量的修正约定）；`SubagentRecoveryIT` 中把"回收后子线程仍为 running"写成期望的断言改为 `idle(interrupted)`（修正缺陷期望）
 - 遗留：登记事项 D44–D54；D19 关闭，D31、D41 改为 T29，D36 改为 T28；`/doctor prompt-audit` 在执行环境中不可用，未运行
 
-### 2026-11-09 T14a 已完成
+### 2026-11-09 T14a 已完成（提交 251ed4e）
 
 - 交付：`meridian-control-plane` 应用（MVC + 虚拟线程，`cp` 迁移：tenants、tenant_settings、projects、members、role_bindings、api_keys、outbox、幂等键）；管理 API `meridian-admin-v1.yaml`（`/admin/v1/`，26 个操作，幂等、游标分页、problem+json、审计 outbox）；内部接口 API Key 校验与租户配额；`meridian-security` 的 `oidc`（控制台开发期令牌）、`rbac`（角色矩阵、`@RequiresPermission`、拦截器）、MVC 服务凭据过滤器、`ServiceRestClients`、`ControlPlaneApiKeyResolver`（60 秒缓存、`key.revoked` 淘汰）、Redis 令牌桶限流；runtime 切换到 control-plane 校验（`DevApiKeyResolver` 只在 `test`），`TenantQuotaPort` 与 `config.invalidate` 订阅；Compose `app` profile 与 Jib 镜像、`run-control-plane.sh`、`dev-api-key.sh`、`build-images.sh`、`app-smoke.sh`；架构设计 v1.17、ADR-0042
 - 验收：A01–A09 全部 passing（角色矩阵 219 例；Compose 端到端吊销 0.053 秒内拒绝）
