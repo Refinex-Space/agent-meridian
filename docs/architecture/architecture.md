@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.14 |
-| 日期 | 2026-11-08 |
+| 版本 | v1.15 |
+| 日期 | 2026-11-09 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
 
@@ -230,7 +230,7 @@ agent-meridian/
 | `WebSearchPort`、`WebFetchPort` | 联网搜索与抓取（含 SSRF 防护） | `tooling` |
 | `SecretResolver` | 凭据明文解析 | `config` |
 | `BlobStorePort` | 大对象写入与读取（超过 16 KB 的工具结果等） | `stream` |
-| `ThreadRegistryPort` | 创建子线程、更新线程状态 | `session` |
+| `ThreadRegistryPort` | 创建子线程、更新线程状态；线程行与 `session.thread_*` 事件在同一事务中写入，状态更新带停止原因（ADR-0040） | `session` |
 | `AgentConfigPort` | 读取已解析的智能体版本与环境配置，智能体实例缓存未命中时使用（ADR-0024）；读取技能版本的内容，装配时生成受保护路径 `skills/`（ADR-0034）；读取租户提示词，装配时作为系统提示词的租户层（ADR-0035） | `config` |
 
 上表是落地时的初始清单。为落实本文档已规定的行为，可以在 `meridian-engine-spi` 中新增端口或给既有端口加方法，签名只出现平台类型，并同步更新本表；删除端口或改变既有端口的语义，才需要走 ADR。
@@ -490,7 +490,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 |---|---|---|
 | `PlatformContextMiddleware` | `onAgent` | 校验 `PlatformContext`，写入 MDC，打开轮次 span |
 | `LeaseGuardMiddleware` | `onReasoning`、`onActing` | 每次推理和工具执行前，向 `LeaseRegistry` 确认租约仍然有效；已失效则抛 `LeaseLostException` |
-| `PolicyMiddleware` | `onActing` | 纵深防御：工具必须在智能体允许的工具集内；非 `ToolBase` 工具只放行 `load_skill_through_path`，`wait_async_results` 得到 DENIED 结果；子智能体拉起数量上限。2.0.4 不发布 `onActing` 中间件自己合成的事件，所以工具集外的工具与 `wait_async_results` 由工具策略生成整工具拒绝规则、每轮并入权限，经权限引擎拒绝（有事件与审计）；中间件只拦截非 `ToolBase` 工具，违反时本轮以错误结束（ADR-0034） |
+| `PolicyMiddleware` | `onActing` | 纵深防御：工具必须在智能体允许的工具集内；非 `ToolBase` 工具只放行 `load_skill_through_path`，`wait_async_results` 得到 DENIED 结果；子智能体拉起数量上限。2.0.4 不发布 `onActing` 中间件自己合成的事件，所以工具集外的工具与 `wait_async_results` 由工具策略生成整工具拒绝规则、每轮并入权限，经权限引擎拒绝（有事件与审计）；中间件只拦截非 `ToolBase` 工具，违反时本轮以错误结束（ADR-0034）。拉起上限：每批执行前按批内顺序在本轮的名额中登记 `spawn_subagent` 调用，超出的调用由工具返回错误结果（ADR-0040） |
 | `RecoveryNoteMiddleware` | `onReasoning` | 恢复轮的第一次推理前，把恢复说明追加到输入和 `AgentState` 上下文。恢复说明不走调用入参，因为 AgentScope 在停机中断后的下一次调用会丢弃全部入参 |
 | `BatchCheckpointMiddleware` | `onActing`、`onReasoning` | 每批工具执行完成后、下一次推理之前保存一次状态（批次级 checkpoint，P3），强杀后从最近的批次续跑；可配置关闭。`SteerMiddleware` 必须排在它之外（ADR-0028） |
 | `InterruptCheckpointMiddleware` | `onReasoning` | 认领时已有中断请求的轮次（等待回应时被中断生成的恢复轮、中断后被恢复认领的轮次），在第一次推理前按用户中断结束：本轮的输入已写进上下文，不再调用模型。排在 `RecoveryNoteMiddleware` 之内、`SteerMiddleware` 之外（ADR-0031） |
@@ -803,6 +803,16 @@ AgentScope 只在三个检查点响应中断：每轮推理开始前、进入工
 
 并行与配额：父智能体可以在一次推理中拉起多个子智能体，Toolkit 默认并行执行，由于每个子线程的 ID 由平台生成，事件不会混淆。并行的子智能体共享会话工作区，平台不保证它们之间的文件互斥，子智能体的提示词应要求各自写入独立目录。每轮的拉起数量由 `PolicyMiddleware` 限制，默认 8 个。子智能体的用量计入父会话，账本里带子线程 ID。
 
+落地约定（ADR-0040）：
+
+- 执行组件：内核每轮把本轮入口（`SubagentSlot`）与拉起名额放进主线程的 `RuntimeContext`，`spawn_subagent` 从调用上下文取出入口，由内核级的 `SubagentRunner` 执行；工具以响应式执行，父线程的订阅被取消时取消一路传到子智能体。`spawn_subagent` 由 `PlatformToolProvider` 在其他工具之后加入，副作用等级按本实例中同名工具的等级计算。
+- 子线程的上下文只有派生的 `PlatformContext`、会话沙箱的 `SandboxContext` 与本次执行新建的停止记录；恢复说明、批次 checkpoint、中断检查点与本轮入口都不放，对应的中间件对子线程不起作用。输入是平台上下文消息加任务文本。
+- 缺少该子智能体的预合成策略时失败关闭（`DONT_ASK`、没有放行规则）。
+- 子线程的终态不写成 `session.status_*`（会推进会话状态），换成 `session.thread_status_idle`：取映射出的停止原因；`PERMISSION_ASKING`、`TOOL_SUSPENDED` 为 `tools_denied`；节点下线为 `interrupted`；超时为 `interrupted`。子线程的 `session.error` 照写，`retry_status` 一律为 `terminal`。只有 `end_turn` 是成功的工具结果。
+- 父线程被中断之后开始的拉起直接拒绝，不创建子线程。
+- 每轮拉起上限由 `meridian.runtime.worker.max-subagents-per-turn` 配置。
+- 子线程的工具结果同样写 `permission.decided`；删除会话时删除全部线程（含子线程）的 `agent_states`。
+
 二期的后台子智能体，改为在子线程上由平台调度的独立轮次，享有同样的租约与恢复机制。
 
 ### 崩溃恢复
@@ -826,6 +836,8 @@ AgentScope 保存状态的时机决定了恢复策略。只有进程被强杀时
 3. 两种情况都附恢复说明。它由平台根据 `tool_invocations` 生成：哪些工具调用已经成功（附结果摘要），哪些状态未知。恢复说明由 `RecoveryNoteMiddleware` 在第一次推理前注入，不走调用入参。
 4. 状态未知的 `non_idempotent` 调用，产生 `recovery_confirmation` 待处理动作，由人决定是否用原幂等键重试。
 5. `recovery_attempt` 达到 2 次后，轮次以 `stop_reason=error` 结束：认领时恢复次数已达 2 的轮次不再执行，写 `session.error`（`retry_status=exhausted`）与 `session.status_idle`（ADR-0028）。`claim_count` 只用于观测，不参与这个判断。
+
+子线程不会被恢复：每次拉起都是新的子线程。子线程的工具调用记在父轮次下，父线程恢复时的账本记录与结果摘要只取本线程的，父线程看到的是 `spawn_subagent` 本身，它的副作用等级决定状态未知时是否需要恢复确认；确认重试会拉起一条新的子线程（ADR-0040）。
 
 批次级 checkpoint 已通过 M0 验证（P3，[报告](../poc/P03-批次checkpoint.md)），默认开启：`BatchCheckpointMiddleware` 在每批工具执行完成后、下一次推理之前调用 `saveAgentState`，强杀后从最近的批次续跑，tool_use 与 tool_result 配对，不重复执行已完成的工具。保存不能放在 `onActing` 结束时，因为 2.0.4 在那之后才把工具结果写进状态。
 
@@ -1444,6 +1456,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.11 | 2026-11-08 | T10b：系统提示词的落点（`sysPrompt` 三层、关闭 `WorkspaceContextMiddleware`、时间以 `<platform_context>` 消息注入、工具 schema 按键排序）；`AgentConfigPort` 读取租户提示词；来源标签格式与转义；`web_fetch` 的 SSRF 实现、`web_search` 的两个后端、`knowledge_search` 的入参、MCP 客户端的构建与凭据注入（ADR-0035） |
 | v1.13 | 2026-11-08 | T12a：会话沙箱的获取、注入、回收与快照保留、产物同步、技能投影的细则；`sandbox` 档平台工具的文件系统（路径翻译与沙箱绑定）；`bash` 的复合命令规则、超时、输出上限与审计，"记住此决定"对 `bash` 记命令原文；`sessions` 的沙箱列与 `sandbox_outputs`；沙箱 vCPU 秒的计量；`ToolLedgerPort`、`SandboxDriver` 加方法（ADR-0037） |
 | v1.14 | 2026-11-08 | T12b：沙箱出网的授权回调改用 Envoy 的 Lua 过滤器，技术基线一行随之修改（ADR-0038）；沙箱出网的按 IP 找会话、白名单语法、缓存的跨节点失效、接口、网络策略与两种拓扑，指标增加 `meridian_egress_authorize_seconds`，本地 kind 的 Pod 网段（ADR-0039） |
+| v1.15 | 2026-11-09 | T13：`ThreadRegistryPort` 的线程事件与停止原因；`PolicyMiddleware` 的拉起名额；子智能体的执行组件、子线程上下文、终态与停止原因、超时与中断、配置项、审计与删除的落地约定；崩溃恢复中子线程不恢复、父线程只看本线程的调用（ADR-0040） |
 
 ## 待决问题
 
