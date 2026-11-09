@@ -18,7 +18,7 @@ cn.refinex.meridian.<模块>.<上下文>.<分层>
 | 模块 | 短名 | 说明 |
 |---|---|---|
 | `meridian-common` | `common` | 按能力分包：`id`、`error`、`page`、`json`、`time`、`context`、`concurrent` |
-| `meridian-security` | `security` | `apikey`、`oidc`、`servicejwt`、`web`（请求 ID、错误映射、PlatformContext 填充） |
+| `meridian-security` | `security` | `apikey`、`oidc`（控制台用户身份）、`rbac`（角色矩阵与声明式授权）、`servicejwt`、`web`（请求 ID、错误映射、PlatformContext 填充） |
 | `meridian-persistence` | `persistence` | `jdbc`、`tenant`、`outbox`、`redis`、`objectstore`、`idempotency`、`flyway` |
 | `meridian-engine-spi` | `engine.spi` | `engine`、`port`、`event`、`spec` |
 | `meridian-engine-agentscope` | `engine.agentscope` | 按架构设计"包结构"一节：`assembly`、`model`、`state`、`fs`、`tools`、`middleware`、`events`、`sandbox` |
@@ -68,8 +68,10 @@ package cn.refinex.meridian.runtime.dispatch;
 | 对象存储客户端 | `persistence.objectstore` | S3 兼容 |
 | 阻塞调用的虚拟线程调度 | `common.concurrent` | `Blocking.call(...)`，runtime 中所有 JDBC 都经过它；阻塞的流与工具执行 `subscribeOn(Blocking.scheduler())`，不用有线程上限的 `Schedulers.boundedElastic()`（P7） |
 | HTTP 幂等键（`Idempotency-Key`） | `persistence.idempotency` | 各服务共用，每个服务在自己的 schema 中建幂等表 |
-| API Key 校验、服务 JWT、OIDC | `security` | `security.apikey`：`ApiKeyResolver` 端口、WebFlux 过滤器、作用域检查 `ApiKeyAuthorization` |
-| 服务间 HTTP 调用约定（超时、重试、服务 JWT 注入） | `security.servicejwt` | 基于 Spring `RestClient` / `WebClient` |
+| API Key 校验、服务 JWT、OIDC | `security` | `security.apikey`：`ApiKeyResolver` 端口、`ControlPlaneApiKeyResolver`（经 control-plane 校验，缓存 60 秒）、`ApiKeyHashes`、WebFlux 过滤器、作用域检查 `ApiKeyAuthorization`；`security.oidc`：控制台用户的令牌端口与 `/admin/` 过滤器 |
+| 按 API Key 限流 | `security.apikey` | `ApiKeyRateLimiter` 端口与 Redis 令牌桶 `RedisApiKeyRateLimiter`，`RateLimit-*` 与 429 由过滤器输出（ADR-0042） |
+| 角色矩阵与管理 API 的授权 | `security.rbac` | `RoleMatrix`、`@RequiresPermission`、MVC 拦截器；角色绑定由应用实现 `GrantSource`，业务代码不写角色判断 |
+| 服务间 HTTP 调用约定（超时、重试、服务 JWT 注入） | `security.servicejwt` | `ServiceRestClients.create(baseUrl)`：基于 Spring `RestClient`，超时与出站凭据（`ServiceCredentialProvider`）；MVC 服务的 `/internal/` 由 `ServiceCredentialFilter` 保护 |
 | 平台工具基类 | `engine.agentscope.tools` | 所有平台工具继承同一个抽象基类 |
 
 判断规则：

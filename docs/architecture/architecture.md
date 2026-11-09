@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.16 |
+| 版本 | v1.17 |
 | 日期 | 2026-11-09 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -154,7 +154,7 @@ flowchart TB
 
 - `/v1/sessions*`、`/v1/files*`、`/v1/chat/completions`、`/v1/responses`、`/v1/embeddings` 进 runtime。
 - `/v1/knowledge-bases*` 和 `/mcp/knowledge` 进 knowledge。
-- 其余 `/v1/*` 进 control-plane。
+- 其余 `/v1/*`，以及管理 API `/admin/v1/*`（控制台使用，ADR-0042），进 control-plane。
 - `/` 进 console。
 
 runtime 和 knowledge 互相调用：runtime 调 knowledge 做检索，knowledge 调 runtime 做 Embedding 和 rerank，这样模型调用只有 runtime 一个计量点。双方都必须容忍对方不可用：检索失败时，`knowledge_search` 返回错误结果给智能体；Embedding 失败时，写入任务按退避策略重试。
@@ -330,6 +330,7 @@ erDiagram
 | `prv` | 供应商账号 | `doc` | 文档 |
 | `sec` | 凭据 | `fil` | 文件 |
 | `skl` | 技能 | `mcp` | MCP 服务 |
+| `mbr` | 成员 | `rbd` | 角色绑定 |
 
 ## 数据架构
 
@@ -372,7 +373,7 @@ erDiagram
 
 `turns` 上有一个部分唯一索引：`UNIQUE (thread_id) WHERE status IN ('queued','running','awaiting_action')`。所以每个线程同时最多一个未结束的轮次，插入用 `ON CONFLICT DO NOTHING`。
 
-**control-plane（schema `cp`）**：`tenants`（含并发配额 `max_concurrent_turns`、事件保留天数 `event_retention_days`）、`tenant_settings`（租户级系统提示词、联网搜索后端等）、`projects`、`members`、`role_bindings`、`api_keys`（只存 SHA-256 哈希和前 8 位）、`provider_accounts`、`models`、`price_books`、`secrets`（信封加密的密文）、`agents`、`agent_versions`（`spec jsonb`，发布后只读）、`environments`（带 `revision`）、`skills`、`skill_versions`、`mcp_servers`、`budgets`、`webhooks`。另有两张按月分区的表，主键都是 `(id, occurred_at)`，`occurred_at` 取自消息载荷，重投时落在同一分区，保证幂等：
+**control-plane（schema `cp`）**：`tenants`（含并发配额 `max_concurrent_turns`、事件保留天数 `event_retention_days`；租户与项目软删除，删除时吊销其下的 API Key）、`tenant_settings`（租户级系统提示词、联网搜索后端等）、`projects`、`members`（按身份提供方的主体标识 `subject` 识别）、`role_bindings`（`role`、租户级角色的 `project_id` 为空）、`api_keys`（只存 SHA-256 哈希和 `mk_live_` 之后随机部分的前 8 位，带作用域、每分钟上限、过期与吊销时间）、`provider_accounts`、`models`、`price_books`、`secrets`（信封加密的密文）、`agents`、`agent_versions`（`spec jsonb`，发布后只读）、`environments`（带 `revision`）、`skills`、`skill_versions`、`mcp_servers`、`budgets`、`webhooks`。另有两张按月分区的表，主键都是 `(id, occurred_at)`，`occurred_at` 取自消息载荷，重投时落在同一分区，保证幂等：
 
 - `usage_records`。
 - `audit_logs`，只追加。
@@ -601,7 +602,7 @@ UPDATE rt.turns SET status = 'running', lease_owner = :node, lease_epoch = lease
 
 调度与租约的时间（`:now`、租约到期时间、回收条件）都取应用注入的 `Clock`，不用数据库的 `now()`，各节点需要 NTP 同步（ADR-0027）。
 
-**租户并发计数行**。为某个租户第一次插入轮次时，同一事务中执行 `INSERT INTO rt.tenant_concurrency ... ON CONFLICT DO NOTHING`，`max_running` 取该租户的并发配额（`cp.tenants.max_concurrent_turns`，经内部接口下发，未配置时取全局默认值，默认 20，ADR-0027）。control-plane 修改配额时经 `config.invalidate` 通知 runtime 更新。
+**租户并发计数行**。为某个租户第一次插入轮次时，同一事务中执行 `INSERT INTO rt.tenant_concurrency ... ON CONFLICT DO NOTHING`，`max_running` 取该租户的并发配额（`cp.tenants.max_concurrent_turns`，经内部接口下发，未配置时取全局默认值，默认 20，ADR-0027）。control-plane 修改配额时经 `config.invalidate` 通知 runtime 更新。runtime 只在计数行不存在时经内部接口 `GET /internal/v1/tenants/{tenant_id}/quotas` 读取配额（尽量在入队事务之外）；`config.invalidate` 的消息为 `{"type":"tenant_quota","tenant_id":"ten_…"}`，各节点收到后重新读取并更新已有计数行的 `max_running`，其他 `type` 由各自的订阅者处理（ADR-0042）。
 
 **租约。**
 
@@ -1007,8 +1008,8 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 
 | 调用方 | 方式 |
 |---|---|
-| 业务系统 | `Authorization: Bearer mk_live_…`。只存 SHA-256 哈希；校验结果在各服务缓存 60 秒，吊销经 Pub/Sub 立即失效 |
-| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目；服务端按该用户在项目中的角色授权 |
+| 业务系统 | `Authorization: Bearer mk_live_…`。只存 SHA-256 哈希；各服务经 control-plane 内部接口 `POST /internal/v1/api-keys:verify` 按哈希校验，结果（含无效）缓存 60 秒，吊销经 Pub/Sub `key.revoked` 广播 Key ID 立即失效（ADR-0042） |
+| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目；服务端按该用户在项目中的角色授权。T14b 之前只有 `dev`、`test` profile 接受开发期控制台令牌；成员按令牌中的主体标识识别，角色只来自 control-plane 的角色绑定（ADR-0042） |
 | 服务之间 | control-plane 签发的服务 JWT（RS256，5 分钟有效，带 audience），经 `security.servicejwt` 的 `ServiceCredentialResolver` 校验 `/internal/` 下的请求；T14b 之前只有 `dev`、`test` profile 接受开发期的静态服务凭据（ADR-0033） |
 | 外部 MCP 客户端 | API Key；MCP 规范的 OAuth 在二期支持 |
 
@@ -1023,6 +1024,10 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 | 项目开发者 | 管理本项目的智能体、环境、技能、知识库、API Key，可用 Playground |
 | 项目观察者 | 只读，包括会话回放和用量 |
 | 审批人 | 处理本项目的待处理动作 |
+
+另有**平台管理员**，由 control-plane 配置给出主体标识，不属于任何租户：创建租户（同时指定首个所有者）、查看租户、修改租户配额。配额是平台资源的分配，租户所有者不能改自己的配额。
+
+授权是声明式的：角色矩阵（角色 × 操作类别）只在 `security.rbac` 中定义，管理 API 的处理器方法标注所需的操作类别，MVC 拦截器按路径中的租户与项目查该用户的角色绑定后判定；`/admin/` 下没有标注的处理器一律拒绝。租户级角色作用于租户下的全部项目，项目级角色只作用于绑定的项目，在租户级的只读操作上也算租户成员；授予或撤销租户所有者另需所有者权限，租户至少保留一位所有者（ADR-0042）。
 
 ### 租户隔离
 
@@ -1062,14 +1067,14 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 
 | 项 | 规则 |
 |---|---|
-| 规范 | OpenAPI 3.1，源文件 `meridian-api/src/main/resources/openapi/meridian-v1.yaml` |
+| 规范 | OpenAPI 3.1，源文件 `meridian-api/src/main/resources/openapi/meridian-v1.yaml`；控制台使用的管理 API 是单独的 `meridian-admin-v1.yaml`（前缀 `/admin/v1`，只接受控制台用户身份，所有写操作支持 `Idempotency-Key`，ADR-0042），服务之间的内部接口是 `meridian-internal-v1.yaml` |
 | 版本 | 路径前缀 `/v1`；破坏性变更只出现在新的大版本，旧版本至少保留 12 个月 |
 | 命名 | 路径用复数名词和短横线，JSON 字段用 snake_case |
 | 时间 | RFC 3339 UTC |
 | 分页 | 游标分页：`?limit=&after=`，返回 `{data, has_more, next_cursor}` |
 | 错误 | RFC 9457 `application/problem+json`，扩展字段 `code`、`request_id` |
 | 幂等 | 所有 POST 支持 `Idempotency-Key` 头，24 小时内同键返回首次结果 |
-| 限流 | 返回 `RateLimit-Limit`、`RateLimit-Remaining`、`RateLimit-Reset`；超限返回 429 加 `Retry-After` |
+| 限流 | 按 API Key 的 Redis 令牌桶，容量与每分钟补充量都是该 Key 的每分钟上限（默认 600）。返回 `RateLimit-Limit`、`RateLimit-Remaining`、`RateLimit-Reset`（补满所需秒数）；超限返回 429 `rate_limit.exceeded` 加 `Retry-After`；Redis 不可用时放行（ADR-0042） |
 | 追踪 | 响应带 `X-Request-Id`，支持传入 `traceparent` |
 
 ### 资源
@@ -1087,7 +1092,7 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 | 模型直通 | `POST /v1/chat/completions`、`POST /v1/responses`、`POST /v1/embeddings`（OpenAI 兼容）。服务之间的内部接口（`/internal/v1/embeddings`、`/internal/v1/rerank` 等）另写 `meridian-internal-v1.yaml`，不随公开 API 发布（ADR-0033） | 是 |
 | 用量 | `GET /v1/usage` | 是 |
 | 会话分叉与回退 | `POST /v1/sessions/{id}:fork`、`POST /v1/sessions/{id}:rewind` | 二期 |
-| 管理类资源 | 智能体、环境、技能、MCP、凭据、预算等的写操作 | 控制台 API，一期只对控制台开放 |
+| 管理类资源 | 租户、项目、成员与角色、API Key（T14a），智能体、环境、技能、MCP、凭据、预算等的写操作 | 管理 API `/admin/v1/`（`meridian-admin-v1.yaml`），一期只对控制台开放 |
 
 ### 事件
 
@@ -1247,7 +1252,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 
 ### 本地开发
 
-`deploy/compose` 启动 PostgreSQL、Redis、MinIO 等数据组件；`app` profile 启动三个 Java 服务与 doc-parser，`observability` profile 启动可观测组件，`auth` profile 启动 Keycloak。本地的沙箱档使用 `scripts/dev/kind-gvisor.sh` 创建的 kind 集群（Calico 加 gVisor），与生产的隔离方式一致。集群的 Pod 网段是 `10.244.0.0/16`，不能与 Docker Desktop 的宿主地址重叠，否则集群中的出网代理回调不到宿主上的 runtime（ADR-0039）。
+`deploy/compose` 启动 PostgreSQL、Redis、MinIO 等数据组件；`app` profile 启动 Java 服务（T14a 起为 control-plane、runtime 与脚本化模型服务，镜像由 Jib 构建；T18 加入 knowledge 与 doc-parser），`observability` profile 启动可观测组件，`auth` profile 启动 Keycloak。本地的沙箱档使用 `scripts/dev/kind-gvisor.sh` 创建的 kind 集群（Calico 加 gVisor），与生产的隔离方式一致。集群的 Pod 网段是 `10.244.0.0/16`，不能与 Docker Desktop 的宿主地址重叠，否则集群中的出网代理回调不到宿主上的 runtime（ADR-0039）。
 
 ## 控制台
 
@@ -1461,6 +1466,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.13 | 2026-11-08 | T12a：会话沙箱的获取、注入、回收与快照保留、产物同步、技能投影的细则；`sandbox` 档平台工具的文件系统（路径翻译与沙箱绑定）；`bash` 的复合命令规则、超时、输出上限与审计，"记住此决定"对 `bash` 记命令原文；`sessions` 的沙箱列与 `sandbox_outputs`；沙箱 vCPU 秒的计量；`ToolLedgerPort`、`SandboxDriver` 加方法（ADR-0037） |
 | v1.14 | 2026-11-08 | T12b：沙箱出网的授权回调改用 Envoy 的 Lua 过滤器，技术基线一行随之修改（ADR-0038）；沙箱出网的按 IP 找会话、白名单语法、缓存的跨节点失效、接口、网络策略与两种拓扑，指标增加 `meridian_egress_authorize_seconds`，本地 kind 的 Pod 网段（ADR-0039） |
 | v1.16 | 2026-11-09 | R1：「引擎装配」表新增 `disableAtPathExpansion()` 与 `toolExecutionConfig(...)`；SSE 连接先发 `:open` 注释；执行到一半被置回队列的消息轮被中断时带中断请求执行；父轮次被置回或取消时结束仍在运行的子线程；「非功能需求」写回 P7 实测值；Q6 已决（ADR-0041） |
+| v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
 | v1.15 | 2026-11-09 | T13：`ThreadRegistryPort` 的线程事件与停止原因；`PolicyMiddleware` 的拉起名额；子智能体的执行组件、子线程上下文、终态与停止原因、超时与中断、配置项、审计与删除的落地约定；崩溃恢复中子线程不恢复、父线程只看本线程的调用（ADR-0040） |
 
 ## 待决问题

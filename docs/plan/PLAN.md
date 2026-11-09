@@ -284,6 +284,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D52 | R1 | 供应商接入前的校验（审查）：S-F11 `user.message` 的 `image.url` 不限协议，Anthropic、Ollama 的转换器会读本机文件或下载；S-F10 `SecretResolver` 不校验密钥属于调用方租户，供应商与搜索的 `base_url` 没有 SSRF 校验 | T15a（在 D25 引入新供应商类型之前） |
 | D53 | R1 | AgentScope 集成后续（审查）：A-F5 装配自检失败不 `close` 智能体、MCP 资源在后续工具构造失败时不关；A-F6 `AgentEventDisposition` 与 `TurnEventMapper` 两张表各自独立；A-F7 `plan_write` 不经账本；A-F8 MCP 服务重启后的重连语义；A-F9 幂等键依赖供应商的 `tool_use_id`；A-F10 `HarnessAgent.close()` 在 commonPool 上等待 | T15b（A-F5、A-F8 随 MCP 配置分发），T19（A-F8 验证），T27（A-F10），其余 R2 复查 |
 | D54 | R1 | 工程质量（审查）：Q-M1 token 估算在 runtime 与 engine 重复；Q-M2 重试退避重复且 `VectorModelService` 缺上限；Q-M3 `app` 依赖具体 `infra`、跨上下文依赖对方的 `infra`（修订规范或加 ArchUnit 规则）；Q-L1、L2、L3 摘要、Map 拷贝、输出上限常量重复；Q-L5 配置默认值双写；Q-L6 `application-test.yml` 在 `src/main`；Q-L8 三处无超时的 `.block()`；Q-L9 `Optional` 作参数；Q-L11 两处丢 cause；Q-L12 靠 `sleep` 的静默断言；Q-L13 `md_to_docx.py` 与执行服务符号链接的测试缺口；Q-L14 test-support 的 enforcer 多放行、`ScriptedOpenAiServer` 的 `Instant.now()` | R2（Q-M3 的规范决定），重复实现在 T17b 收口时处理，Q-L6 给 T28 |
+| D55 | T14a | MVC 服务的公开 API 还没有 API Key 过滤器与按 Key 限流：`meridian-security` 只有 WebFlux 版（`ApiKeyWebFilter`）；control-plane 的 `/v1/agents`（T15b）、knowledge 的 `/v1/knowledge-bases*`（T18）上线前要加 MVC 版，复用 `ApiKeyAuthenticator`、`ApiKeyRateLimiter`，并订阅 `key.revoked` 淘汰缓存 | T15b、T18 |
+| D56 | T14a | `config.invalidate`、`key.revoked` 走 Pub/Sub，不保证送达：吊销有 60 秒缓存过期兜底，但租户并发配额的变更丢失后，runtime 的 `max_running` 要等下一次变更才更新；需要一个定期对账（按 control-plane 的配额刷新已有计数行）或改用 Stream | T27 |
+| D57 | T14a | 平台管理员来自配置 `meridian.control-plane.platform-admins`（主体标识列表）；接 OIDC 后是否改为按 IdP 的组或角色声明映射，由 T14b 与 Q2（企业 IdP 类型）一起决定 | T14b |
 
 ## 技术债
 

@@ -1,11 +1,12 @@
 # meridian-security
 
-Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json 映射（`web`），API Key 认证、`PlatformContext` 填充与作用域检查（`apikey`，T07），内部接口的服务凭据（`servicejwt`，T09b 只有开发期静态凭据）。OIDC 与服务 JWT 由 T14b 加入。不访问数据库。
+Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json 映射（`web`），API Key 认证、作用域、限流与 `PlatformContext` 填充（`apikey`），控制台用户身份（`oidc`，T14a 只有开发期令牌）与声明式角色矩阵（`rbac`），服务凭据与服务间调用客户端（`servicejwt`，开发期静态凭据）。OIDC 与服务 JWT 由 T14b 加入。不访问数据库（角色绑定由应用经 `GrantSource` 提供）。
 
 ## 命令
 
 - 编译与单测：`./mvnw -pl meridian-security -am test`
 - 单个测试：`./mvnw -pl meridian-security -am test -Dtest=<类名> -Dsurefire.failIfNoSpecifiedTests=false`
+- 令牌桶脚本的集成测试（Testcontainers Redis）：`./mvnw -pl meridian-security -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=RedisApiKeyRateLimiterIT -Dfailsafe.failIfNoSpecifiedTests=false`
 
 ## 包地图
 
@@ -15,9 +16,12 @@ Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json �
 - `web.RequestIdMdcAccessor`：WebFlux 中把 Reactor Context 的 `request_id` 恢复到 MDC，需要 Reactor 自动上下文传播。
 - `web.TraceParentWebFilter`（WebFlux）：合法的 `traceparent` 原样返回，trace-id 进 MDC 的 `trace_id`；跨服务传播在 T27。
 - `web.SecurityWebAutoConfiguration`：按应用的 Web 栈装配。
-- `web.RequestPaths.firstSegment`：两个认证过滤器判断前缀的唯一入口，取路由匹配用的值（解码、去掉矩阵参数）；对原始路径做 `startsWith` 会被 `/internal;a=b/…`、`/%69nternal/…` 绕过（ADR-0041）。
-- `servicejwt`（T09b，ADR-0033）：`ServiceCredentialResolver` 是服务凭据的来源端口（T14b 用服务 JWT 实现）；`ServiceCredentialWebFilter` 校验 `/internal/` 下的请求并把 `ServicePrincipal` 写入交换属性（不写 `PlatformContext`），处理器首行 `ServiceCredentialAuthorization.require`；`DevServiceCredentialResolver` 按 SHA-256 摘要常量时间比较；`ServiceCredentialAutoConfiguration` 选择解析器。
-- `apikey`：`ApiKeyResolver` 是 API Key 的来源端口（可阻塞，T14a 提供正式实现）；`ApiKeyAuthenticator` 解析 `Authorization: Bearer`；`ApiKeyWebFilter` 认证 `/v1/` 下的请求并写入 `PlatformContext` 与主体（交换属性）；`ApiKeyAuthorization.require` 检查作用域；`ApiKeyAutoConfiguration` 选择解析器。
+- `web.PrefixAuthenticationFilter`：MVC 版按路径首段认证的基类，失败交给 `handlerExceptionResolver`（过滤器在 `DispatcherServlet` 之前，异常不经过 `@RestControllerAdvice`）；`web.BearerTokens` 解析 `Bearer`。
+- `web.RequestPaths.firstSegment`：认证过滤器判断前缀的唯一入口（WebFlux 取 `ServerHttpRequest`，MVC 取 URI 与上下文路径字符串），取路由匹配用的值（解码、去掉矩阵参数）；对原始路径做 `startsWith` 会被 `/internal;a=b/…`、`/%69nternal/…` 绕过（ADR-0041）。
+- `servicejwt`（T09b，ADR-0033、ADR-0042）：入站 `ServiceCredentialResolver` 端口 → `ServiceCredentialAuthenticator`，WebFlux 的 `ServiceCredentialWebFilter`（处理器首行 `ServiceCredentialAuthorization.require`）与 MVC 的 `ServiceCredentialFilter`（处理器首行 `ServiceCredentialFilter.require`）都不写 `PlatformContext`；`DevServiceCredentialResolver` 按 SHA-256 常量时间比较。出站 `ServiceCredentialProvider` 端口（开发期取 `meridian.security.service-client.credential`）与 `ServiceRestClients.create(baseUrl)`（超时、凭据、请求 ID），配置 `ServiceClientProperties`（含 `control-plane-url`）。
+- `apikey`：`ApiKeyResolver` 端口；`ControlPlaneApiKeyResolver` 按 `ApiKeyHashes.sha256` 调 control-plane 的校验接口，结果（含无效）Caffeine 缓存 60 秒，`evict(apiKeyId)` 由应用订阅 `key.revoked`（`REVOKED_CHANNEL`）后调用；`ApiKeyWebFilter` 认证 `/v1/`、按 `ApiKeyRateLimiter`（`RedisApiKeyRateLimiter`，Lua 在 `resources/.../apikey/api_key_rate_limit.lua`）限流并写 `RateLimit-*`，再写入 `PlatformContext` 与主体；`ApiKeyAuthorization.require` 检查作用域。解析器的选择：应用提供的 > 配置了 control-plane 地址 > 开发期（只在 `test`）> 一律拒绝。
+- `oidc`（ADR-0042）：`ConsoleUserResolver` 端口（T14b 校验 OIDC），`DevConsoleUserResolver`（`meridian.security.dev-console-users`，`dev`、`test`），`ConsoleUserFilter` 认证 `/admin/` 并写 `ConsoleUser`（主体标识）。
+- `rbac`（ADR-0042）：`Role`、`Permission`（带判定层级）、`RoleMatrix`（矩阵的唯一定义）、`Grant`、`GrantSource` 端口、`@RequiresPermission`、`PermissionInterceptor`（路由后按路径变量 `tenant_id`、`project_id` 判定，写 `AccessContext`）；应用提供 `GrantSource` 时 `RbacAutoConfiguration` 注册拦截器。
 
 ## 不变量
 
@@ -25,7 +29,9 @@ Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json �
 - 5xx 的 detail 固定为不含内部信息的说明；框架异常的 detail 取错误码标题。
 - `spring-webmvc`、`spring-webflux`、servlet API、context-propagation 都是可选依赖，应用只带自己的 Web 栈。
 - 开发期服务凭据（`meridian.security.dev-service-credentials`）与开发期 API Key 一样只能在 `dev`、`test` 启用，其他 profile 启用则启动失败，没有来源时一律拒绝。
-- `DevApiKeyResolver` 只能在 `dev`、`test` profile 启用（`meridian.security.dev-api-keys.enabled`），其他 profile 下启用则启动失败；没有任何解析器时一律拒绝（ADR-0030）。只保存 API Key 的 SHA-256，不记录明文。
+- `DevApiKeyResolver` 只能在 `test` profile 启用（T14a-A05，`meridian.security.dev-api-keys.enabled`），其他 profile 下启用则启动失败；没有任何解析器时一律拒绝（ADR-0030、ADR-0042）。开发期控制台令牌与出站服务凭据只能在 `dev`、`test`。只保存令牌与 Key 的 SHA-256，不记录明文。
+- 限流只对带 `rateLimitPerMinute` 的主体生效（开发期 Key 不限流）；限流器出错放行并记 WARN，不扩大为 API 不可用。
+- control-plane 不可用时 `ControlPlaneApiKeyResolver` 抛 503 且不缓存；404 缓存为"无效"。
 
 ## 易错点
 
@@ -36,4 +42,4 @@ Web 入口与认证的公共能力：请求 ID、`traceparent`、problem+json �
 
 ## 对外接口
 
-三个应用通过自动配置获得请求 ID、problem+json 与 API Key 认证；业务代码只抛 `common.error` 中的异常，处理器调用 `ApiKeyAuthorization.require`。错误码 `auth.unauthenticated`、`auth.invalid_api_key`、`auth.insufficient_scope`、`auth.invalid_service_credential`。
+三个应用通过自动配置获得请求 ID、problem+json 与 API Key 认证；业务代码只抛 `common.error` 中的异常，处理器调用 `ApiKeyAuthorization.require`。MVC 服务的公开 API 还没有 API Key 过滤器与限流（T15b、T18 加，复用 `ApiKeyAuthenticator` 与 `ApiKeyRateLimiter`）。错误码 `auth.unauthenticated`、`auth.invalid_api_key`、`auth.insufficient_scope`、`auth.invalid_service_credential`、`auth.invalid_console_token`、`rate_limit.exceeded`（429）。

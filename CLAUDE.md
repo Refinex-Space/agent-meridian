@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-M0（内核与运行时核心，T01–T13）有条件完成，R1 的结论与进入 M1 的前提见 `docs/poc/M0-总结.md`；下一阶段是 M1 控制面与治理（T14a 起）。已实现的是 runtime（会话、事件与 SSE、调度与租约、崩溃恢复、投递与待处理动作、权限合成、模型路由与计量、平台工具、会话沙箱与出网、子智能体）、engine-agentscope、common、persistence、security、OpenAPI 规范、沙箱镜像与 chart；control-plane、knowledge、model-client 还是空骨架，console 尚未建立。每个任务交付了什么、对应哪个 ADR，见 `docs/plan/PLAN.md` 的会话日志与 `docs/adr/README.md`。
+M0（内核与运行时核心，T01–T13）有条件完成，R1 的结论与进入 M1 的前提见 `docs/poc/M0-总结.md`；当前是 M1 控制面与治理（T14a 起）。已实现的是 control-plane 的租户体系（租户、项目、成员与角色、API Key、限流、租户并发配额，T14a）、runtime（会话、事件与 SSE、调度与租约、崩溃恢复、投递与待处理动作、权限合成、模型路由与计量、平台工具、会话沙箱与出网、子智能体）、engine-agentscope、common、persistence、security、OpenAPI 规范、沙箱镜像与 chart；knowledge、model-client 还是空骨架，console 尚未建立。每个任务交付了什么、对应哪个 ADR，见 `docs/plan/PLAN.md` 的会话日志与 `docs/adr/README.md`。
 
 ## 交付流程
 
@@ -48,7 +48,10 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 
 - `scripts/dev/up.sh`：启动本地 PostgreSQL（pgvector + zhparser）、Redis、MinIO 并等待健康、创建桶；首次启动构建 PostgreSQL 镜像。端口 15432、16379、19000/19001，连接信息与口令见 `deploy/compose/.env.example`（本地覆盖写 `.env`，不提交）。
 - `scripts/dev/down.sh [--volumes]`：停止；加 `--volumes` 才删除数据。
-- `scripts/dev/run-runtime.sh [Spring 参数]`：以 `dev` profile 在本机启动 runtime（先 `up.sh`），健康检查 `/actuator/health`。
+- `scripts/dev/run-control-plane.sh [Spring 参数]`：以 `dev` profile 在本机启动 control-plane（端口 18081）。管理 API 用 env 文件的 `MERIDIAN_DEV_CONSOLE_TOKEN`（主体 `dev-admin`，平台管理员）。
+- `scripts/dev/run-runtime.sh [Spring 参数]`：以 `dev` profile 在本机启动 runtime（先 `up.sh` 与 `run-control-plane.sh`：API Key 经 control-plane 校验），健康检查 `/actuator/health`。
+- `scripts/dev/dev-api-key.sh`：经管理 API 建开发租户与项目、签发不限流的 API Key，写入 `deploy/compose/.env` 的 `MERIDIAN_DEV_API_KEY`（压测脚本读它）。
+- Compose `app` profile（control-plane、runtime、脚本化模型服务）：`scripts/dev/build-images.sh`（Jib 构建 `agent-meridian/*:dev`）后 `docker compose -f deploy/compose/compose.yaml --env-file deploy/compose/.env --profile app up -d`（没有 `.env` 时用 `.env.example`），端口 18081、18080、18090；`scripts/dev/app-smoke.sh` 跑通一轮会话、改配额、吊销 Key 并逐项输出 PASS。
 - kind 沙箱集群（集群名默认 `meridian`，上下文 `kind-meridian`），按顺序：
   1. `scripts/dev/kind-gvisor.sh meridian`：创建带 Calico（执行 NetworkPolicy）与 gVisor 运行时的集群。
   2. `scripts/dev/kind-verify.sh meridian`：验证 gVisor 生效、NetworkPolicy 被执行，输出 PASS。
@@ -87,6 +90,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 - 仓储继承 `TenantScopedRepository`；豁免只限架构基线"租户隔离"一节列出的端口实现类。子类只能经 `sql(...)` 写 SQL，语句必须引用 `:tenant_id`（项目级还要 `:project_id`），值由基类从 `PlatformContext` 绑定；跨租户的继承 `SystemRepository`，放在 `infra.system` 并标注 `@CrossTenant`。runtime 中所有 JDBC 经 `common.concurrent.Blocking`；阻塞的流与工具执行 `subscribeOn(Blocking.scheduler())`，不用 `Schedulers.boundedElastic()`（线程上限 10×CPU，曾把单节点的模型调用并发限在 40，P7）。
 - 禁止依赖：Spring AI、LangChain4j、AgentScope 的 Spring Boot starter、RAG 扩展、Service 模块。
 - Java 包根与 Maven groupId：`cn.refinex.meridian`。依赖版本只在 `meridian-bom` 声明。不直观的模块包根：`engine-spi` → `engine.spi`，`engine-agentscope-test` → `engine.agentscope.testkit`，`model-client` → `modelclient`，`control-plane` → `controlplane`，`test-support` → `testsupport`；不在已登记包根下的类会被 ArchUnit 拒绝。
+- 管理 API（`/admin/v1/`，`meridian-admin-v1.yaml`）的授权只经 `security.rbac`：处理器标注 `@RequiresPermission`，角色矩阵只在 `RoleMatrix`，业务代码不写角色判断；用例自己绑定 `PlatformContext`（ADR-0042）。
 - 依赖规则由构建强制：maven-enforcer 默认拒绝平台模块与 AgentScope 构件，每个模块在自己 POM 的 `enforce-rules` 中按「模块依赖规则」放行（ADR-0022）；包层面由 `meridian-arch-tests` 的 ArchUnit 规则检查，模块表在 `MeridianModule`。
 
 ## 集成 AgentScope 时最容易写错的地方
