@@ -75,7 +75,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 已完成 | b3bdef7 |
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 已完成 | 086b6f4 |
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 已完成 | e5621ba |
-| R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 未开始 | — |
+| R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 进行中 | — |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 未开始 | — |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 未开始 | — |
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 未开始 | — |
@@ -175,7 +175,15 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+R1 M0 评审与收口（开工基线 `scripts/dev/verify.sh` 通过）：
+
+- [ ] 四个维度的独立审查（并发与一致性、安全与租户隔离、AgentScope 集成、工程质量），逐条核实与处理（R1-A03）
+- [ ] P7 容量：并发轮次与 SSE 连接上限、瓶颈、测试条件，报告 `docs/poc/P07-容量.md`（R1-A01；含登记事项 D19、D31、D36、D41 的核对）
+- [ ] P11 内存：10 万线程轮转后堆内存稳定，`clearStateCache` 前后的内部缓存大小，报告 `docs/poc/P11-内存.md`（R1-A02）
+- [ ] 架构设计「非功能需求」写回实测值（R1-A05）
+- [ ] `CLAUDE.md` 体系检查：根文件 200 行以内，各模块与代码一致（R1-A06）
+- [ ] `docs/poc/M0-总结.md`：P1–P15 结论、对比、是否进入 M1（R1-A04）
+- [ ] 收尾：`verify.sh`、`-Plive`、`-Pkind` 全部通过（R1-A07），验收记录、阶段表、会话日志
 
 ## 控制台设计轨道
 
