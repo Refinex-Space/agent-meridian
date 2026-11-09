@@ -1035,64 +1035,64 @@
       "id": "T14a-A01",
       "task": "T14a",
       "description": "control-plane 启动，`cp` 迁移成功，健康检查通过。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-control-plane -am verify -Dit.test=ControlPlaneApplicationIT`：Tests run: 2, Failures: 0；`cp` 迁移建出 tenants、tenant_settings、projects、members、role_bindings、api_keys、outbox、idempotency_keys，`/actuator/health`、liveness、readiness 均 200 UP。"
     },
     {
       "id": "T14a-A02",
       "task": "T14a",
       "description": "角色矩阵表驱动测试全部通过。验证：测试报告。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`RoleMatrixIT`（表 `meridian-control-plane/src/test/resources/rbac/role-matrix.psv`，31 行 × 7 个身份，每次交互按 meridian-admin-v1.yaml 校验）：Tests run: 219, Failures: 0；另校验表覆盖规范中的全部 26 个管理操作、缺少或无效的控制台令牌为 401；`security` 的 `AccessContextTest`、`PermissionInterceptorTest` 通过。"
     },
     {
       "id": "T14a-A03",
       "task": "T14a",
       "description": "API Key：创建时返回一次明文；以哈希存储；作用域限制生效；吊销后 1 秒内 control-plane 与 runtime 都拒绝该 Key。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "control-plane：`ApiKeyLifecycleIT` 5 个用例通过（明文 `mk_live_`+40 位只在创建响应出现，GET 与列表不含明文，库中 key_hash = SHA-256、key_prefix = 前 8 位；内部校验返回作用域 [sessions:read, sessions:write]；吊销后校验接口立即 404 并在 1 秒内收到 `key.revoked`；删除项目、租户吊销其下 Key）。runtime：`ControlPlaneIntegrationIT.aRevokedKeyIsRejectedWithinOneSecond` 通过（通知前缓存仍接受，发布 `key.revoked` 后 1 秒内 401 auth.invalid_api_key）；作用域限制由 `ApiKeyWebFilterTest`、既有 `SessionApiIT` 只读 Key 用例覆盖；Compose 实测 `scripts/dev/app-smoke.sh`：『PASS 吊销后 0.053 秒内 runtime 拒绝该 Key（401）』。"
     },
     {
       "id": "T14a-A04",
       "task": "T14a",
       "description": "限流：超过速率时返回 429 与 `Retry-After`，正常请求带 `RateLimit-*` 头。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`ControlPlaneIntegrationIT.requestsBeyondTheKeysRateAreRejectedWithRetryAfter`（每分钟上限 3）：前 3 次 200 且 RateLimit-Limit=3、RateLimit-Remaining=2/1/0、RateLimit-Reset 1–60；第 4 次 429 rate_limit.exceeded 带 Retry-After（按 meridian-v1.yaml 校验）；`RedisApiKeyRateLimiterIT` 3 个用例（容量、按时间补充、Retry-After、多节点共享、时钟倒退不补充）通过。"
     },
     {
       "id": "T14a-A05",
       "task": "T14a",
       "description": "runtime 在非测试 profile 下不再使用 `DevApiKeyResolver`。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`DevApiKeyResolver` 只允许 `test` profile：`ApiKeyAutoConfigurationTest.enablingDevKeysOutsideTheTestProfileFailsTheStartup`（dev、prod 启动失败）通过；runtime `DevProfileApiKeyTest`：`application-dev.yml` 不含 dev-api-keys，按 dev 配置装配出 `ControlPlaneApiKeyResolver`，通过。"
     },
     {
       "id": "T14a-A06",
       "task": "T14a",
       "description": "管理操作产生审计 outbox 记录，不含 Key 明文。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`AdminAuditAndQuotaIT.adminOperationsWriteAuditOutboxRecordsWithoutTheKeyPlaintext`：cp.outbox 的 topic 全为 audit，含 tenant.created、member.added、role_binding.created、project.created、api_key.created；载荷不含 Key 明文随机部分，只有 display_prefix 与 actor {type: console_user, subject}。"
     },
     {
       "id": "T14a-A07",
       "task": "T14a",
       "description": "新建租户后，不手工插入任何数据就能完成一轮会话；修改该租户的并发配额后，runtime 中的 `max_running` 随之更新。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "runtime `ControlPlaneIntegrationIT.aNewTenantCompletesATurnAndQuotaChangesReachMaxRunning`：新租户不手工插数据完成一轮（agent.message、session.status_idle），计数行 max_running=3 取自配额，发布 config.invalidate 后变为 9；control-plane `AdminAuditAndQuotaIT.quotaChangesAreServedInternallyAndBroadcast` 通过。Compose 实测 `scripts/dev/app-smoke.sh`：『PASS 新租户的计数行由 runtime 创建，max_running=4』『PASS 修改配额后 max_running=11』。"
     },
     {
       "id": "T14a-A08",
       "task": "T14a",
       "description": "`docker compose --profile app up` 启动 control-plane、runtime 与脚本化模型服务，经 API Key 跑通一轮会话。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`scripts/dev/build-images.sh`（Jib：Built image agent-meridian/control-plane:dev、runtime:dev、scripted-model:dev）后 `docker compose -f deploy/compose/compose.yaml --env-file deploy/compose/.env.example --profile app up -d`，control-plane 与 runtime healthy；`scripts/dev/app-smoke.sh` 输出 events: user.message session.status_running session.message_consumed span.model_request_start agent.message span.model_request_end session.status_idle，『PASS 经 API Key 跑通一轮会话』。"
     },
     {
       "id": "T14a-A09",
       "task": "T14a",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw clean` 后 `scripts/dev/verify.sh` exit 0：全部 15 个模块 BUILD SUCCESS（格式、编译、单元与集成测试、架构测试 13 条、enforcer、覆盖率、POM 版本），Java 测试 1344 个 0 失败 0 跳过（control-plane 集成测试 230、runtime 单元 322 与集成 258），sandbox-runtime pytest 23 passed。"
     },
     {
       "id": "T14b-A01",
