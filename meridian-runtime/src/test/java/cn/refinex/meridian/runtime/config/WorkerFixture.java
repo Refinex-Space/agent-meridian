@@ -102,6 +102,9 @@ final class WorkerFixture {
     /** 创建节点前加入的其他测试工具（每个节点共用同一个实例）。 */
     final List<AgentTool> extraTools = new ArrayList<>();
 
+    /** 创建节点前登记：模型 ID → 模型，子智能体用自己的模型时使用（T13），其余模型 ID 用 {@link #agentModel}。 */
+    final Map<String, Model> models = new LinkedHashMap<>();
+
     /** 创建节点前设置：用生产的平台工具、工作区与技能仓库装配（T10a）。 */
     boolean platform;
 
@@ -178,13 +181,18 @@ final class WorkerFixture {
                 dataSource,
                 List.copyOf(extraTools),
                 platform,
-                sandbox));
+                sandbox,
+                Map.copyOf(models)));
     }
 
     static WorkerProperties withoutCheckpoint() {
         WorkerProperties defaults = WorkerProperties.defaults();
         return new WorkerProperties(
-                defaults.maxConcurrentTurns(), defaults.shutdownTimeout(), defaults.pendingActionTimeout(), false);
+                defaults.maxConcurrentTurns(),
+                defaults.shutdownTimeout(),
+                defaults.pendingActionTimeout(),
+                false,
+                defaults.maxSubagentsPerTurn());
     }
 
     TestSession session() {

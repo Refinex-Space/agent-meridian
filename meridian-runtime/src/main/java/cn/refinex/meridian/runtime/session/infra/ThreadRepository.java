@@ -133,6 +133,22 @@ public class ThreadRepository extends TenantScopedRepository {
                 .list();
     }
 
+    /**
+     * 删除会话全部线程（主线程与子线程）的智能体状态。子线程每次拉起都是新线程、不会再执行，它们的状态只随会话删除清理（架构设计
+     * 「子智能体」「数据保留」）。
+     *
+     * @param sessionId 会话 ID
+     * @return 删除的状态行数
+     */
+    public int deleteAgentStates(String sessionId) {
+        return sql("""
+                        DELETE FROM rt.agent_states s
+                         USING rt.threads t
+                         WHERE s.thread_id = t.id
+                           AND t.tenant_id = :tenant_id AND t.project_id = :project_id AND t.session_id = :session_id
+                        """).param("session_id", sessionId).update();
+    }
+
     private static SessionThread map(ResultSet rs, int row) throws SQLException {
         return new SessionThread(
                 rs.getString("id"),

@@ -12,12 +12,15 @@ import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvid
 import cn.refinex.meridian.engine.agentscope.sandbox.TurnSandboxes;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
 import cn.refinex.meridian.engine.agentscope.turn.AgentScopeEngine;
+import cn.refinex.meridian.engine.agentscope.turn.SubagentRunner;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.port.AgentConfigPort;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
+import cn.refinex.meridian.engine.spi.port.EventSinkPort;
 import cn.refinex.meridian.engine.spi.port.InboxPort;
 import cn.refinex.meridian.engine.spi.port.LeaseRegistry;
+import cn.refinex.meridian.engine.spi.port.ThreadRegistryPort;
 import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchWakeups;
 import cn.refinex.meridian.runtime.dispatch.app.TurnClaimer;
@@ -63,7 +66,8 @@ import org.springframework.context.annotation.Bean;
 public class EngineAutoConfiguration {
 
     /**
-     * 平台中间件，批次级 checkpoint 按 {@code meridian.runtime.worker.batch-checkpoint}（默认开启）。
+     * 平台中间件，批次级 checkpoint 按 {@code meridian.runtime.worker.batch-checkpoint}（默认开启），每轮拉起子智能体的上限按
+     * {@code meridian.runtime.worker.max-subagents-per-turn}（默认 8）。
      *
      * @param leases 本节点持有的租约
      * @param inbox 收件箱，steer 中间件使用
@@ -73,7 +77,8 @@ public class EngineAutoConfiguration {
     @Bean
     public PlatformMiddlewareProvider platformMiddlewareProvider(
             LeaseRegistry leases, InboxPort inbox, WorkerProperties properties) {
-        return new PlatformMiddlewareProvider(leases, inbox, properties.batchCheckpoint());
+        return new PlatformMiddlewareProvider(
+                leases, inbox, properties.batchCheckpoint(), properties.maxSubagentsPerTurn());
     }
 
     /**
@@ -137,6 +142,29 @@ public class EngineAutoConfiguration {
     }
 
     /**
+     * 子智能体的执行组件（架构设计「子智能体」）：子线程经 {@code session} 的 {@code ThreadRegistryPort} 创建，事件经 {@code stream} 的
+     * {@code EventSinkPort} 写入。
+     *
+     * @param instances 实例缓存
+     * @param leases 本节点持有的租约
+     * @param threads 子线程登记
+     * @param events 子线程事件的写入
+     * @param blobs 大对象存储
+     * @param clock 时钟
+     * @return 执行组件
+     */
+    @Bean
+    public SubagentRunner subagentRunner(
+            AgentInstanceCache instances,
+            LeaseRegistry leases,
+            ThreadRegistryPort threads,
+            EventSinkPort events,
+            BlobStorePort blobs,
+            Clock clock) {
+        return new SubagentRunner(instances, leases, threads, events, blobs, clock);
+    }
+
+    /**
      * 智能体内核。
      *
      * @param instances 实例缓存
@@ -145,6 +173,7 @@ public class EngineAutoConfiguration {
      * @param blobs 大对象存储
      * @param clock 时钟，平台上下文消息中的当前时间
      * @param sandboxes 每轮的会话沙箱；没有配置沙箱集群（{@code meridian.runtime.sandbox.enabled=false}）时不存在
+     * @param subagents 子智能体的执行组件
      * @return 内核
      */
     @Bean
@@ -154,8 +183,9 @@ public class EngineAutoConfiguration {
             LeaseRegistry leases,
             BlobStorePort blobs,
             Clock clock,
-            ObjectProvider<TurnSandboxes> sandboxes) {
-        return new AgentScopeEngine(instances, configs, leases, blobs, clock, sandboxes.getIfAvailable());
+            ObjectProvider<TurnSandboxes> sandboxes,
+            SubagentRunner subagents) {
+        return new AgentScopeEngine(instances, configs, leases, blobs, clock, sandboxes.getIfAvailable(), subagents);
     }
 
     /**

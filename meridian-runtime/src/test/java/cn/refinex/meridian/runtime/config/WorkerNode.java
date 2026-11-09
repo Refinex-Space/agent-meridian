@@ -19,10 +19,12 @@ import cn.refinex.meridian.engine.agentscope.tools.BashTool;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformTool;
 import cn.refinex.meridian.engine.agentscope.tools.PlatformToolProvider;
 import cn.refinex.meridian.engine.agentscope.turn.AgentScopeEngine;
+import cn.refinex.meridian.engine.agentscope.turn.SubagentRunner;
 import cn.refinex.meridian.engine.spi.driver.SandboxDriver;
 import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
+import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
@@ -46,6 +48,7 @@ import cn.refinex.meridian.runtime.sandbox.app.SandboxProperties;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxService;
 import cn.refinex.meridian.runtime.sandbox.infra.SandboxOutputRepository;
 import cn.refinex.meridian.runtime.sandbox.infra.SessionSandboxRepository;
+import cn.refinex.meridian.runtime.session.app.DatabaseThreadRegistry;
 import cn.refinex.meridian.runtime.session.app.TurnExecution;
 import cn.refinex.meridian.runtime.session.app.TurnFinisher;
 import cn.refinex.meridian.runtime.session.app.TurnMetrics;
@@ -145,7 +148,8 @@ record WorkerNode(
             DataSource dataSource,
             List<AgentTool> extraTools,
             boolean platform,
-            SandboxWiring sandbox) {}
+            SandboxWiring sandbox,
+            Map<String, Model> modelsById) {}
 
     /**
      * {@code sandbox} 档的装配（T12a）：沙箱驱动（kind 集群中的 {@code KubernetesSandboxDriver}）与配置。平台模式下才生效。
@@ -185,9 +189,20 @@ record WorkerNode(
                 .forEach((name, tool) ->
                         tools.put(name, new LedgerTool(name, tool.sideEffect(), ledger, blobs, tool.calls())));
         AgentStateRepository states = spec.states().apply(node.states());
-        List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(
-                        node.registry(), inbox, spec.properties().batchCheckpoint())
-                .middlewares(spec.profile()));
+        PlatformMiddlewareProvider middlewareProvider = new PlatformMiddlewareProvider(
+                node.registry(),
+                inbox,
+                spec.properties().batchCheckpoint(),
+                spec.properties().maxSubagentsPerTurn());
+        List<MiddlewareBase> middlewares = new ArrayList<>(middlewareProvider.middlewares(spec.profile()));
+        // 子智能体挂载生产提供者给出的子智能体中间件集合（不含 steer，T13）
+        ResolvedAgentSpec agentSpec = spec.profile().agent();
+        List<MiddlewareBase> subagentMiddlewares = agentSpec.subagents().isEmpty()
+                ? middlewares
+                : middlewareProvider.middlewares(AgentProfile.subagent(
+                        agentSpec,
+                        agentSpec.subagents().getFirst().name(),
+                        spec.profile().environment()));
         ProvidedAgentConfigPort configs = new ProvidedAgentConfigPort(spec.agents());
         AgentAssembler assembler;
         if (spec.platform()) {
@@ -214,10 +229,12 @@ record WorkerNode(
                 all.addAll(testTools);
                 return ToolProvider.ToolBundle.of(all);
             };
+            RecordingModelFactory models = new RecordingModelFactory(spec.model());
+            spec.modelsById().forEach(models::register);
             assembler = new AgentAssembler(
-                    new RecordingModelFactory(spec.model()),
+                    models,
                     new FencedAgentStateStore(states, node.registry()),
-                    new RecordingMiddlewareProvider(middlewares, middlewares),
+                    new RecordingMiddlewareProvider(middlewares, subagentMiddlewares),
                     combined,
                     workspace,
                     workspace.skills(),
@@ -254,8 +271,17 @@ record WorkerNode(
                     node.meters(),
                     spec.clock());
         }
+        AgentInstanceCache instances = new AgentInstanceCache(assembler);
+        DatabaseThreadRegistry threads = new DatabaseThreadRegistry(
+                new ThreadRepository(dataSource), node.events(), node.eventSink(), transactions, spec.clock());
         AgentScopeEngine engine = new AgentScopeEngine(
-                new AgentInstanceCache(assembler), configs, node.registry(), blobs, spec.clock(), turnSandboxes);
+                instances,
+                configs,
+                node.registry(),
+                blobs,
+                spec.clock(),
+                turnSandboxes,
+                new SubagentRunner(instances, node.registry(), threads, node.eventSink(), blobs, spec.clock()));
 
         PendingActionRepository pendingActions = new PendingActionRepository(dataSource);
         PermissionRuleRepository rules = new PermissionRuleRepository(dataSource);

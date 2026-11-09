@@ -233,7 +233,9 @@ public class TurnPreparer {
     }
 
     private RecoverySnapshot snapshot(ClaimedTurn turn, TurnInput stored) {
+        // 子线程的工具调用记在父轮次下，但不是父线程的调用：父线程只看到 spawn_subagent 本身，子线程不会被恢复（ADR-0040）
         List<ToolInvocation> invocations = ledger.listByTurn(turn.turnId()).stream()
+                .filter(invocation -> invocation.threadId().equals(turn.threadId()))
                 .filter(invocation -> invocation.leaseEpoch() < turn.epoch())
                 .toList();
         Map<String, String> summaries = invocations.stream().anyMatch(i -> i.status() == Status.SUCCEEDED)
@@ -265,6 +267,9 @@ public class TurnPreparer {
         List<StoredEvent> results = events.listByTurn(
                 turn.sessionId(), turn.turnId(), List.of(EventType.AGENT_TOOL_RESULT, EventType.AGENT_MCP_TOOL_RESULT));
         for (StoredEvent stored : results) {
+            if (!turn.threadId().equals(stored.threadId())) {
+                continue;
+            }
             switch (EngineJson.readEvent(stored.type(), stored.data())) {
                 case AgentOutputEvent.ToolResult result ->
                     summaries.put(result.toolUseId(), text(result.content(), result.contentRef()));

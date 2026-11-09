@@ -178,12 +178,12 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 **T13 子智能体**（2026-11-09 开工，基线 `scripts/dev/verify.sh` 通过）
 
 - [x] 1. `spawn_subagent`（`SpawnSubagentTool`）：参数、可用子智能体与工具集子集校验、副作用等级取子智能体工具中最高的
-- [ ] 2. 子线程执行（内核部分已完成：`turn.SubagentRunner`、`SubagentSlot`、`SubagentOutcome`，`ThreadRegistryPort` 写线程事件）：`ThreadRegistryPort` 创建子线程与 `session.thread_created`、空白的子 `RuntimeContext`、子智能体实例的装配与缓存、子智能体中间件集合、预合成权限、事件经 `EventSinkPort` 写为子线程事件与线程状态事件、最终消息作为工具结果
+- [x] 2. 子线程执行（`turn.SubagentRunner`、`SubagentSlot`、`SubagentOutcome`，runtime `DatabaseThreadRegistry`）：`ThreadRegistryPort` 创建子线程与 `session.thread_created`、空白的子 `RuntimeContext`、子智能体实例的装配与缓存、子智能体中间件集合、预合成权限、事件经 `EventSinkPort` 写为子线程事件与线程状态事件、最终消息作为工具结果
 - [x] 3. 配套（`InterruptRelay`、`ExecutionSlot`、`middleware.SubagentQuota`）：子线程状态用父轮次租约、`AgentEngine.interrupt` 先中断子线程、超时（上限 600 秒）、`PolicyMiddleware` 每轮拉起上限 8（可配置）、`PERMISSION_ASKING`/`TOOL_SUSPENDED` 转为拒绝结果
-- [ ] 4. runtime：`ThreadRegistryPort` 实现、装配与配置、计量带子线程 ID、删除会话时清理子线程的 `agent_states`
+- [x] 4. runtime（另：恢复快照只取本线程的调用，子线程工具结果写 `permission.decided`）：`ThreadRegistryPort` 实现、装配与配置、计量带子线程 ID、删除会话时清理子线程的 `agent_states`
 - [x] 5. 场景测试（`turn.SubagentScenarioTest`，8 个用例）（A01、A02、A04、A05、A06；两个不同 `ScriptedModel` 的模型选择）
-- [ ] 6. P12 并行与中断测试与报告 `docs/poc/P12-子智能体.md`（A03）
-- [ ] 7. 集成测试：用量计入父会话（A07）、线程 API 与 `?threads=main`（A08）
+- [x] 6. P12 并行与中断测试与报告 `docs/poc/P12-子智能体.md`（A03）
+- [x] 7. 集成测试（`config.SubagentSessionIT`、`SubagentRecoveryIT`）：用量计入父会话（A07）、线程 API 与 `?threads=main`（A08）
 - [ ] 8. 收尾：`verify.sh`（A09）、模块 `CLAUDE.md`、架构设计与 ADR、`docs/poc/README.md`、验收记录、PLAN
 
 ## 控制台设计轨道

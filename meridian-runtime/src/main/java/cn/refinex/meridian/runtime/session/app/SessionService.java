@@ -229,7 +229,8 @@ public class SessionService {
 
     /**
      * 删除会话：取消排队、执行中与等待回应的轮次，未回应的待处理动作作废，写入 {@code session.status_terminated(deleted)}，
-     * 记录删除时间（架构设计「状态机」「数据保留」）。数据的清理在 24 小时内由后台作业完成（T17a）。重复删除原样返回。
+     * 记录删除时间，并删除全部线程（含子线程）的智能体状态（架构设计「状态机」「数据保留」「子智能体」）。其余数据的清理在 24 小时内
+     * 由后台作业完成（T17a）。重复删除原样返回。
      *
      * @param sessionId 会话 ID
      * @return 删除后的会话
@@ -249,7 +250,9 @@ public class SessionService {
                 terminate(sessionId, SessionEvent.TerminationReason.DELETED);
             }
             sessions.markDeleted(sessionId, clock.instant());
-            log.info("会话已删除 sessionId={}", sessionId);
+            // 执行中的轮次已在本事务中取消，带租约的状态写入会被拒绝，删除之后不会再写入
+            int states = threads.deleteAgentStates(sessionId);
+            log.info("会话已删除 sessionId={} agentStates={}", sessionId, states);
         });
         return get(sessionId);
     }

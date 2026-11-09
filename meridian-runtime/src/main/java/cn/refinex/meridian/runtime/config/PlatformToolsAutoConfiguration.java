@@ -48,7 +48,7 @@ public class PlatformToolsAutoConfiguration {
 
     /**
      * 平台工具：T10a 的六个文件工具；T10b 的 {@code web_fetch}、{@code web_search}、{@code knowledge_search} 与 MCP 工具（智能体挂载的
-     * MCP 服务在装配时连接）；T12a、T13 经 {@code PlatformToolProvider.with} 继续加入。
+     * MCP 服务在装配时连接）；T12a 的 {@code bash} 经 {@code PlatformToolProvider.with} 加入；{@code spawn_subagent}（T13）由提供者内建，不在这里登记。
      *
      * @param ledger 工具账本
      * @param blobs 大对象存储

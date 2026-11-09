@@ -1,5 +1,7 @@
 package cn.refinex.meridian.runtime.support;
 
+import cn.refinex.meridian.persistence.outbox.OutboxWriter;
+import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchProperties;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseReaper;
 import cn.refinex.meridian.runtime.dispatch.app.LeaseRenewer;
@@ -110,7 +112,9 @@ public record TestNode(
                 new LeaseReaper(transitions),
                 transitions,
                 events,
-                new DatabaseEventSink(events, publisher),
+                new DatabaseEventSink(
+                        new ApprovalAudit(events, new OutboxWriter(dataSource, "rt", clock), transactions, clock),
+                        publisher),
                 new JdbcAgentStateRepository(dataSource, transactions, node, clock),
                 queue,
                 wakeups,

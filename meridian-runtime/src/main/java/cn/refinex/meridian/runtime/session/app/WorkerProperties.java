@@ -13,13 +13,15 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *     {@code awaitTermination(Duration.ofSeconds(60))}）
  * @param pendingActionTimeout 待处理动作的默认截止时长，默认 30 分钟（架构设计「待处理动作」）
  * @param batchCheckpoint 每批工具执行完成后是否保存状态，默认开启（P3，ADR-0028）；关闭时强杀只能整轮恢复
+ * @param maxSubagentsPerTurn 每轮拉起子智能体的上限，默认 8（架构设计「子智能体」，由 {@code PolicyMiddleware} 执行）
  */
 @ConfigurationProperties("meridian.runtime.worker")
 public record WorkerProperties(
         @DefaultValue("300") int maxConcurrentTurns,
         @DefaultValue("60s") Duration shutdownTimeout,
         @DefaultValue("30m") Duration pendingActionTimeout,
-        @DefaultValue("true") boolean batchCheckpoint) {
+        @DefaultValue("true") boolean batchCheckpoint,
+        @DefaultValue("8") int maxSubagentsPerTurn) {
 
     /**
      * 校验取值。
@@ -27,6 +29,9 @@ public record WorkerProperties(
      * @throws IllegalArgumentException 上限不为正、时长不为正时
      */
     public WorkerProperties {
+        if (maxSubagentsPerTurn < 1) {
+            throw new IllegalArgumentException("max-subagents-per-turn 必须为正：" + maxSubagentsPerTurn);
+        }
         if (maxConcurrentTurns < 1) {
             throw new IllegalArgumentException("max-concurrent-turns 必须为正：" + maxConcurrentTurns);
         }
@@ -44,6 +49,6 @@ public record WorkerProperties(
      * @return 配置
      */
     public static WorkerProperties defaults() {
-        return new WorkerProperties(300, Duration.ofSeconds(60), Duration.ofMinutes(30), true);
+        return new WorkerProperties(300, Duration.ofSeconds(60), Duration.ofMinutes(30), true, 8);
     }
 }
