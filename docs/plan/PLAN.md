@@ -177,11 +177,11 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 T14a（开工 2026-11-09，基线 `verify.sh` 通过）：
 
-- [ ] 1. control-plane 应用骨架：MVC + 虚拟线程、`cp` 迁移（`tenants`、`tenant_settings`、`projects`、`members`、`role_bindings`、`api_keys`、`outbox`、幂等表）、健康检查、profile（A01）
-- [ ] 2. ADR：管理 API 单独成规范、角色与平台管理员、API Key 格式与校验接口；`meridian-admin-v1.yaml` 与内部接口规范
-- [ ] 3. security：控制台身份端口与开发实现、声明式角色矩阵与 MVC 拦截器、MVC 的服务凭据过滤器、服务间调用客户端（A02）
-- [ ] 4. 管理接口：租户、租户设置、项目、成员、角色绑定、API Key（幂等、problem+json、游标分页、审计 outbox）（A06）
-- [ ] 5. API Key：生成、哈希存储、作用域、吊销与 `key.revoked`、内部校验接口；security 的远程解析器（60 秒缓存、吊销即失效）；runtime 切换（A03、A05）
+- [x] 1. control-plane 应用骨架：MVC + 虚拟线程、`cp` 迁移（`tenants`、`tenant_settings`、`projects`、`members`、`role_bindings`、`api_keys`、`outbox`、幂等表）、健康检查、profile（A01）
+- [x] 2. ADR：管理 API 单独成规范、角色与平台管理员、API Key 格式与校验接口；`meridian-admin-v1.yaml` 与内部接口规范
+- [x] 3. security：控制台身份端口与开发实现、声明式角色矩阵与 MVC 拦截器、MVC 的服务凭据过滤器、服务间调用客户端（A02）
+- [x] 4. 管理接口：租户、租户设置、项目、成员、角色绑定、API Key（幂等、problem+json、游标分页、审计 outbox）（A06）
+- [ ] 5. API Key：生成、哈希存储、作用域、吊销与 `key.revoked`、内部校验接口；security 的远程解析器（60 秒缓存、吊销即失效）；runtime 切换（A03、A05）——control-plane 与 security 部分已完成（`cf1dfea`），剩 runtime 订阅与端到端
 - [ ] 6. 按 API Key 限流（Redis 令牌桶、`RateLimit-*`、429 + `Retry-After`）（A04）
 - [ ] 7. 租户并发配额：内部接口、runtime 取配额建计数行、`config.invalidate` 更新 `max_running`（A07）
 - [ ] 8. Compose `app` profile：Jib 镜像（control-plane、runtime、脚本化模型服务），经 API Key 跑通一轮（A08）
