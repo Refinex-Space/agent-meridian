@@ -27,6 +27,7 @@ public class TurnEnqueuer {
     private final TurnQueueRepository queue;
     private final TransactionTemplate transactions;
     private final WakeupPublisher wakeups;
+    private final TenantQuotaPort quotas;
     private final DispatchProperties properties;
     private final Clock clock;
 
@@ -36,18 +37,21 @@ public class TurnEnqueuer {
      * @param queue 轮次队列仓储
      * @param transactions 事务模板（传播行为 REQUIRED）
      * @param wakeups 唤醒通知
-     * @param properties 调度配置，取新租户的并发上限
+     * @param quotas 租户并发配额的来源，为租户创建计数行时读取
+     * @param properties 调度配置
      * @param clock 时钟
      */
     public TurnEnqueuer(
             TurnQueueRepository queue,
             TransactionTemplate transactions,
             WakeupPublisher wakeups,
+            TenantQuotaPort quotas,
             DispatchProperties properties,
             Clock clock) {
         this.queue = queue;
         this.transactions = transactions;
         this.wakeups = wakeups;
+        this.quotas = quotas;
         this.properties = properties;
         this.clock = clock;
     }
@@ -70,10 +74,15 @@ public class TurnEnqueuer {
      * @return 新轮次的 ID，或线程已有未结束的轮次
      */
     public EnqueueResult enqueue(String turnId, NewTurn turn) {
+        // 租户的第一个轮次才读取配额（ADR-0042）。尽量在事务之外读：外层没有事务时，远程调用不占数据库连接与锁；
+        // 计数行已存在时 ensureTenantCounter 什么都不做，传入的上限不起作用
+        int maxRunning = queue.hasTenantCounter(turn.tenantId())
+                ? properties.defaultTenantMaxRunning()
+                : quotas.maxConcurrentTurns(turn.tenantId());
         return transactions.execute(status -> {
             Instant now = clock.instant();
             // 先写计数行再写轮次：与同一线程、同一租户的并发入队保持相同的加锁顺序
-            queue.ensureTenantCounter(turn.tenantId(), properties.defaultTenantMaxRunning(), now);
+            queue.ensureTenantCounter(turn.tenantId(), maxRunning, now);
             if (!queue.insertQueued(turnId, turn, now)) {
                 return new EnqueueResult.ThreadBusy(turn.threadId());
             }

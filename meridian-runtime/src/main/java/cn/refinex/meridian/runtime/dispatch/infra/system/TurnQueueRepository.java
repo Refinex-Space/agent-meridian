@@ -70,6 +70,40 @@ public class TurnQueueRepository extends SystemRepository {
     }
 
     /**
+     * 租户是否已有并发计数行。入队前在事务之外调用：没有时才向 control-plane 读取配额（ADR-0042）。
+     *
+     * @param tenantId 租户 ID
+     * @return 已有时为 true
+     */
+    public boolean hasTenantCounter(String tenantId) {
+        return jdbc().sql("SELECT EXISTS (SELECT 1 FROM rt.tenant_concurrency WHERE tenant_id = :tenant_id)")
+                .param("tenant_id", tenantId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    /**
+     * 更新租户的并发上限（control-plane 修改配额后，经 {@code config.invalidate} 通知）。只改已有的计数行，不影响 {@code running}；
+     * 新上限低于正在执行的轮次数时，已在执行的轮次不受影响，之后的认领等 {@code running} 降下来。
+     *
+     * @param tenantId 租户 ID
+     * @param maxRunning 新的并发上限
+     * @param now 当前时间
+     * @return 有计数行并已更新时为 true；租户还没有计数行时为 false（创建时会读取最新配额）
+     */
+    public boolean updateTenantMaxRunning(String tenantId, int maxRunning, Instant now) {
+        return jdbc().sql("""
+                        UPDATE rt.tenant_concurrency SET max_running = :max_running, updated_at = :now
+                         WHERE tenant_id = :tenant_id
+                        """)
+                        .param("tenant_id", tenantId)
+                        .param("max_running", maxRunning)
+                        .param("now", JdbcValues.timestamptz(now))
+                        .update()
+                == 1;
+    }
+
+    /**
      * 插入一个待认领的轮次。线程已有未结束的轮次时，部分唯一索引使插入成为空操作。
      *
      * @param turnId 新轮次 ID

@@ -57,6 +57,7 @@ class DispatchWakeupsIT {
                 new TurnQueueRepository(RuntimeTestDatabase.dataSource()),
                 RuntimeTestDatabase.transactions(),
                 publisher,
+                tenantId -> DispatchProperties.defaults().defaultTenantMaxRunning(),
                 DispatchProperties.defaults(),
                 clock);
 

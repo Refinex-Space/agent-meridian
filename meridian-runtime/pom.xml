@@ -10,6 +10,11 @@
 
     <artifactId>meridian-runtime</artifactId>
 
+    <properties>
+        <!-- 开发镜像（Compose app profile） -->
+        <jib.skip>false</jib.skip>
+    </properties>
+
     <name>AgentMeridian Runtime</name>
     <description>运行时应用：会话、事件、SSE、轮次调度、执行智能体、沙箱、模型调用。</description>
 
@@ -116,6 +121,21 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <configuration>
+                    <to>
+                        <image>agent-meridian/runtime:dev</image>
+                    </to>
+                    <container>
+                        <mainClass>cn.refinex.meridian.runtime.RuntimeApplication</mainClass>
+                        <ports>
+                            <port>8080</port>
+                        </ports>
+                    </container>
+                </configuration>
+            </plugin>
             <!--
               从 meridian-api 的规范生成 reactive 服务端接口（cn.refinex.meridian.runtime.openapi），模型引用 meridian-api 的 DTO；
               SSE 帧映射为 ServerSentEvent，见 ADR-0029。

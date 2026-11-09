@@ -106,7 +106,13 @@ public record TestNode(
         return new TestNode(
                 node,
                 registry,
-                new TurnEnqueuer(queue, transactions, wakeups::incrementAndGet, properties, clock),
+                new TurnEnqueuer(
+                        queue,
+                        transactions,
+                        wakeups::incrementAndGet,
+                        tenantId -> properties.defaultTenantMaxRunning(),
+                        properties,
+                        clock),
                 new TurnClaimer(queue, registry, transactions, node, properties, clock),
                 new LeaseRenewer(leases, transactions, registry, node, properties, clock),
                 new LeaseReaper(transitions),
