@@ -986,50 +986,50 @@
       "id": "R1-A01",
       "task": "R1",
       "description": "P7 报告给出并发轮次与 SSE 连接的上限、瓶颈与测试条件。验证：报告路径与数值。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/poc/P07-容量.md：单个 runtime（-Xmx6g、按 4 核设置线程池，CPU 峰值 2.1 核）300 个并发会话吞吐 71.5 轮/秒、0 失败、整轮 p95 6100 ms、推送 p99 113 ms；轮次启动速率约 70–74 轮/秒（单线程认领 + 连接池 10），20 秒一轮时 1000 会话约 820 个并发；SSE 连接池 10 时 2000 个（p99 189 ms）、30 时 3000 个（p99 127 ms），5000 个时连接池排队（p99 950 ms）；瓶颈为数据库连接池、串行认领与每连接 5 秒一次的对账查询；修正前 boundedElastic 把模型流限在 40 个（吞吐 30 轮/秒）"
     },
     {
       "id": "R1-A02",
       "task": "R1",
       "description": "P11 报告证明 10 万线程轮转后堆内存稳定，或已实现缓解措施并重新证明。验证：报告路径与数值。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/poc/P11-内存.md：scripts/perf/capacity.sh rotate 10 万个会话各一轮（并发 50，0 失败），每 1 万个 jcmd GC.class_histogram：存活对象 1 万至 9 万时 59.1–60.1 MB，结束 54.0 MB、空闲后 53.8 MB；空闲后 AgentState、PermissionEngine 实例为 0；StateCacheReleaseTest：执行中三个缓存各 1、结束后 0、200 线程轮转后 0；不需要 Q6 的缓解措施"
     },
     {
       "id": "R1-A03",
       "task": "R1",
       "description": "四个维度的审查都已完成；每条发现都有处理结论（已修复并有测试、不同意及理由、登记为后续项）。验证：报告中的发现清单。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/poc/R1-评审发现.md：四个只读审查子代理（并发与一致性 13 条、安全与租户隔离 16 条、AgentScope 集成 11 条、工程质量 19 条）逐条核实；已修复 19 条（含 4 条高严重度，均有回归测试，例如 AuthenticationPathVariantsIT、AgentAssemblerTest.disableAtPathExpansion…、LeaseLifecycleIT.aTurnRowLockedForLongOnlyDelaysItsOwnRenewal），不同意 3 条（附理由），登记 35 条（PLAN 登记事项 D44–D54 与已有 D21/D22/D30/D32/D08）；压测发现 2 条已修复"
     },
     {
       "id": "R1-A04",
       "task": "R1",
       "description": "`docs/poc/M0-总结.md` 覆盖 P1 至 P15，并给出是否进入 M1 的结论。验证：文件路径。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/poc/M0-总结.md：P1–P15 逐项结论（13 通过、P7 与 P8 有条件通过、0 不通过）与 ADR、实测与目标对比、结论“进入 M1”及 5 条前提"
     },
     {
       "id": "R1-A05",
       "task": "R1",
       "description": "架构设计「非功能需求」已更新为实测值。验证：diff。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/architecture/architecture.md v1.16「非功能需求」：单 Pod 一行改为实测值（300 并发轮次、启动速率约 70 轮/秒、SSE 连接池 10 时 2000 个与 30 时 3000 个、推送 p99 < 200 ms）并补测试条件（提交 32c9388）"
     },
     {
       "id": "R1-A06",
       "task": "R1",
       "description": "各模块 `CLAUDE.md` 与代码一致，根 `CLAUDE.md` 在 200 行以内。验证：检查清单。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "根 CLAUDE.md 116 行（init 技能检查后精简「项目阶段」、统一 -Pkind 命令、补压测命令与 R1 约束）；模块 CLAUDE.md 最长 108 行，逐个核对清单见 docs/poc/M0-总结.md「CLAUDE.md 检查」，新建 meridian-arch-tests/CLAUDE.md；/doctor prompt-audit 为终端内置命令，本环境不可用，未运行"
     },
     {
       "id": "R1-A07",
       "task": "R1",
       "description": "`scripts/dev/verify.sh` 与 `-Plive`、`-Pkind` 的测试全部通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw clean 后 scripts/dev/verify.sh EXIT=0（Java 测试 1061 个 0 失败 0 跳过，sandbox-runtime pytest 23 passed）；./mvnw -Plive -pl meridian-runtime -am verify BUILD SUCCESS（ModelLiveIT 3、ModelEndpointsLiveIT 3）；./mvnw -Pkind -pl meridian-engine-agentscope-test -am verify BUILD SUCCESS（8 个）、./mvnw -Pkind -pl meridian-runtime -am verify BUILD SUCCESS（EgressProxyKindIT 1、SandboxSessionKindIT 5，先 deploy-sandbox.sh 重新部署出网代理）"
     },
     {
       "id": "T14a-A01",
