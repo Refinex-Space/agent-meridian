@@ -406,6 +406,8 @@
             <id>kind</id>
             <properties>
                 <meridian.test.excludedGroups />
+                <!-- 本 profile 跳过单元测试：domain 覆盖率门禁只在 verify.sh 的全量构建中有意义，这里不读 target 中残留的 jacoco.exec -->
+                <jacoco.skip>true</jacoco.skip>
             </properties>
             <build>
                 <plugins>
@@ -434,6 +436,8 @@
             <id>live</id>
             <properties>
                 <meridian.test.excludedGroups />
+                <!-- 本 profile 跳过单元测试：domain 覆盖率门禁只在 verify.sh 的全量构建中有意义，这里不读 target 中残留的 jacoco.exec -->
+                <jacoco.skip>true</jacoco.skip>
             </properties>
             <build>
                 <plugins>
