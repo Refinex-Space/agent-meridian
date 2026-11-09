@@ -81,4 +81,56 @@ class ApiKeyWebFilterTest {
 
         StepVerifier.create(filter.filter(exchange, ex -> Mono.empty())).verifyComplete();
     }
+
+    @Test
+    void rateLimitedKeysCarryHeadersAndAreRejectedWithRetryAfterWhenExhausted() {
+        // 每分钟上限 2 的 Key：限流器按调用次数给出剩余量，第三次拒绝
+        ApiKeyResolver resolver = key -> java.util.Optional.of(
+                new ApiKeyPrincipal("key_rl", "ten_1", "prj_a", java.util.Set.of(ApiKeyScope.SESSIONS_READ), 2));
+        java.util.concurrent.atomic.AtomicInteger used = new java.util.concurrent.atomic.AtomicInteger();
+        ApiKeyRateLimiter limiter = (keyId, limit) -> {
+            int n = used.incrementAndGet();
+            return n <= limit
+                    ? new RateLimitDecision(true, limit, limit - n, 30L * n, 0)
+                    : new RateLimitDecision(false, limit, 0, 60, 30);
+        };
+        ApiKeyWebFilter limited = new ApiKeyWebFilter(new ApiKeyAuthenticator(resolver), limiter);
+
+        for (int i = 1; i <= 2; i++) {
+            MockServerWebExchange ok = MockServerWebExchange.from(
+                    MockServerHttpRequest.get("/v1/sessions").header(HttpHeaders.AUTHORIZATION, "Bearer mk_live_x"));
+            StepVerifier.create(limited.filter(ok, ex -> Mono.empty())).verifyComplete();
+            assertThat(ok.getResponse().getHeaders().getFirst("RateLimit-Limit"))
+                    .isEqualTo("2");
+            assertThat(ok.getResponse().getHeaders().getFirst("RateLimit-Remaining"))
+                    .isEqualTo(Integer.toString(2 - i));
+            assertThat(ok.getResponse().getHeaders().getFirst("RateLimit-Reset"))
+                    .isEqualTo(Integer.toString(30 * i));
+        }
+        MockServerWebExchange rejected = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/v1/sessions").header(HttpHeaders.AUTHORIZATION, "Bearer mk_live_x"));
+        StepVerifier.create(limited.filter(rejected, ex -> Mono.empty()))
+                .expectErrorSatisfies(error ->
+                        assertThat(((MeridianException) error).errorCode()).isEqualTo(ApiKeyErrorCode.RATE_LIMITED))
+                .verify();
+        assertThat(rejected.getResponse().getHeaders().getFirst(HttpHeaders.RETRY_AFTER))
+                .isEqualTo("30");
+        assertThat(rejected.getResponse().getHeaders().getFirst("RateLimit-Remaining"))
+                .isEqualTo("0");
+    }
+
+    @Test
+    void limiterFailuresLetTheRequestThroughWithoutHeaders() {
+        ApiKeyResolver resolver = key -> java.util.Optional.of(
+                new ApiKeyPrincipal("key_rl", "ten_1", "prj_a", java.util.Set.of(ApiKeyScope.SESSIONS_READ), 2));
+        ApiKeyWebFilter limited = new ApiKeyWebFilter(new ApiKeyAuthenticator(resolver), (keyId, limit) -> {
+            throw new IllegalStateException("Redis 不可用");
+        });
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/v1/sessions").header(HttpHeaders.AUTHORIZATION, "Bearer mk_live_x"));
+
+        StepVerifier.create(limited.filter(exchange, ex -> Mono.empty())).verifyComplete();
+        assertThat(exchange.getResponse().getHeaders().containsHeader("RateLimit-Limit"))
+                .isFalse();
+    }
 }

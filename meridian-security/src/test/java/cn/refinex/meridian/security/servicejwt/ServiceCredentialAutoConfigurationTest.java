@@ -46,6 +46,32 @@ class ServiceCredentialAutoConfigurationTest {
     }
 
     @Test
+    void outgoingDevCredentialIsOnlyAllowedInTheDevAndTestProfiles() {
+        runner.withPropertyValues(
+                        "spring.profiles.active=dev", "meridian.security.service-client.credential=svc_dev_out")
+                .run(context -> assertThat(
+                                context.getBean(ServiceCredentialProvider.class).credential())
+                        .isEqualTo("svc_dev_out"));
+        runner.withPropertyValues(
+                        "spring.profiles.active=prod", "meridian.security.service-client.credential=svc_dev_out")
+                .run(context -> assertThat(context)
+                        .getFailure()
+                        .rootCause()
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("只能在 dev 或 test profile 中设置"));
+    }
+
+    @Test
+    void withoutAnOutgoingCredentialCallsFailBeforeBeingSent() {
+        runner.withPropertyValues("spring.profiles.active=prod").run(context -> {
+            assertThat(context).hasNotFailed();
+            ServiceCredentialProvider provider = context.getBean(ServiceCredentialProvider.class);
+            org.assertj.core.api.Assertions.assertThatThrownBy(provider::credential)
+                    .isInstanceOf(IllegalStateException.class);
+        });
+    }
+
+    @Test
     void withoutAnyCredentialSourceEveryCredentialIsRejected() {
         runner.withPropertyValues("spring.profiles.active=prod").run(context -> {
             assertThat(context).hasNotFailed();

@@ -13,8 +13,10 @@ import java.util.Set;
  * @param tenantId 租户 ID；必填
  * @param projectId 项目 ID；必填
  * @param scopes 作用域；可为空集合，表示什么都不能做
+ * @param rateLimitPerMinute 每分钟请求上限（令牌桶的容量与每分钟补充量，ADR-0042）；可为空，表示不限流（开发期 API Key）
  */
-public record ApiKeyPrincipal(String apiKeyId, String tenantId, String projectId, Set<ApiKeyScope> scopes) {
+public record ApiKeyPrincipal(
+        String apiKeyId, String tenantId, String projectId, Set<ApiKeyScope> scopes, Integer rateLimitPerMinute) {
 
     /**
      * 创建主体。
@@ -26,6 +28,21 @@ public record ApiKeyPrincipal(String apiKeyId, String tenantId, String projectId
         Objects.requireNonNull(tenantId, "tenantId");
         Objects.requireNonNull(projectId, "projectId");
         scopes = scopes == null || scopes.isEmpty() ? Set.of() : Set.copyOf(EnumSet.copyOf(scopes));
+        if (rateLimitPerMinute != null && rateLimitPerMinute < 1) {
+            throw new IllegalArgumentException("rateLimitPerMinute 必须为正数：" + rateLimitPerMinute);
+        }
+    }
+
+    /**
+     * 创建不限流的主体（开发期 API Key）。
+     *
+     * @param apiKeyId API Key ID
+     * @param tenantId 租户 ID
+     * @param projectId 项目 ID
+     * @param scopes 作用域
+     */
+    public ApiKeyPrincipal(String apiKeyId, String tenantId, String projectId, Set<ApiKeyScope> scopes) {
+        this(apiKeyId, tenantId, projectId, scopes, null);
     }
 
     /**

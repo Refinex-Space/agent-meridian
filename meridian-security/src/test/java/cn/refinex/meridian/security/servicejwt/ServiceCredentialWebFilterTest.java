@@ -16,9 +16,9 @@ import reactor.test.StepVerifier;
 /** {@link ServiceCredentialWebFilter}：{@code /internal/} 下的请求必须带有效的服务凭据。 */
 class ServiceCredentialWebFilterTest {
 
-    private final ServiceCredentialWebFilter filter =
-            new ServiceCredentialWebFilter(new DevServiceCredentialResolver(new DevServiceCredentialProperties(
-                    true, List.of(new DevServiceCredentialProperties.Credential("svc_dev_a", "knowledge")))));
+    private final ServiceCredentialWebFilter filter = new ServiceCredentialWebFilter(
+            new ServiceCredentialAuthenticator(new DevServiceCredentialResolver(new DevServiceCredentialProperties(
+                    true, List.of(new DevServiceCredentialProperties.Credential("svc_dev_a", "knowledge"))))));
 
     @ParameterizedTest
     @ValueSource(strings = {"/internal;a=b/v1/egress:authorize", "/%69nternal/v1/embeddings", "/internal;x/v1/rerank"})

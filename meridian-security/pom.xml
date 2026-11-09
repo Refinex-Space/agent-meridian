@@ -59,6 +59,29 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- 按 API Key 限流的令牌桶（ADR-0042）：只有带 Redis 的应用启用 -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- API Key 校验结果的 60 秒缓存（架构设计「认证」）；版本由 Spring Boot 的依赖管理给出 -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- 令牌桶脚本的集成测试：Testcontainers 的 Redis 与 Lettuce 客户端 -->
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-test</artifactId>

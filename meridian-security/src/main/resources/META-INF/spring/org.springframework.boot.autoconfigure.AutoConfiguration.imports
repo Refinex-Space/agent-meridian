@@ -1,3 +1,5 @@
 cn.refinex.meridian.security.web.SecurityWebAutoConfiguration
 cn.refinex.meridian.security.apikey.ApiKeyAutoConfiguration
 cn.refinex.meridian.security.servicejwt.ServiceCredentialAutoConfiguration
+cn.refinex.meridian.security.oidc.ConsoleAuthAutoConfiguration
+cn.refinex.meridian.security.rbac.RbacAutoConfiguration

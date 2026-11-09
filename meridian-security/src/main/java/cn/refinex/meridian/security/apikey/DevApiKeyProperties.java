@@ -4,7 +4,7 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * 开发期 API Key 的配置（{@code meridian.security.dev-api-keys}），只在 {@code dev} 与 {@code test} profile 中允许启用；
+ * 开发期 API Key 的配置（{@code meridian.security.dev-api-keys}），只在 {@code test} profile 中允许启用（T14a 起，ADR-0042）；
  * 在其他 profile 中启用会让应用启动失败（{@link ApiKeyAutoConfiguration}）。
  *
  * @param enabled 是否启用 {@link DevApiKeyResolver}；默认 false
