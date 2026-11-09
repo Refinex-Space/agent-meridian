@@ -24,8 +24,10 @@ metadata:
 data:
   envoy.yaml: |
     admin:
-      # 管理接口只在 Pod 内可达（kubectl port-forward 排障用），不对网络开放
-      address: { socket_address: { address: 127.0.0.1, port_value: 9901 } }
+      # 管理接口用 Unix 域套接字，不监听任何 TCP 端口：绑在 127.0.0.1 时，沙箱经代理访问解析到 127.0.0.1 的白名单域名
+      # 就能连到它（/quitquitquit 让所有租户的出网中断）；NetworkPolicy 管不到回环流量（R1 安全审查，ADR-0041）。
+      # 排障：kubectl exec 进 Pod 后对套接字发请求
+      address: { pipe: { path: /var/run/envoy/admin.sock, mode: 0600 } }
     overload_manager:
       resource_monitors:
         - name: envoy.resource_monitors.global_downstream_max_connections

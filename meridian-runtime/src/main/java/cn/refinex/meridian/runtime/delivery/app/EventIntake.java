@@ -57,8 +57,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>校验：会话未终止；回应事件对应仍在等待、类型匹配的动作（{@link EventAdmission}，动作行被锁到事务结束）。锁住主线程的
  *       未结束轮次，此后认领、回收与带租约的写入都要等本事务提交。
  *   <li>{@code user.interrupt}，按本批到达时的线程状态：空闲时无效果；执行中写 {@code interrupt_requested_at}，提交后通知
- *       {@code node:{lease_owner}}；排队中的消息轮直接置为 {@code cancelled}（排队中的恢复轮带着中断请求执行，把结论写进上下文后
- *       停止，否则状态里待确认的调用没有结论）；等待回应时对全部待处理动作生成拒绝结论。
+ *       {@code node:{lease_owner}}；从未被认领的排队消息轮直接置为 {@code cancelled}（排队中的恢复轮、执行到一半被置回队列的消息轮
+ *       带着中断请求执行，把结论写进上下文后停止，否则状态里待确认的调用没有结论）；等待回应时对全部待处理动作生成拒绝结论。
  *   <li>回应事件：记录结论与"记住此决定"；一轮的全部动作都有结论后生成恢复轮（{@link PendingActionResolver}）。
  *   <li>{@code user.message}：先生成事件 ID（登记事项 D10）。线程空闲时把收件箱中尚未投递的消息与本批的全部消息合成一个
  *       {@code messages} 轮；否则逐条写入收件箱，等待回应时 steer 降级为 queue（恢复轮结束后才成为下一轮）。按锁顺序"同一事务里
@@ -194,14 +194,15 @@ public class EventIntake {
             resolver.resumeIfComplete(session.id(), main.id(), active.turnId());
             return null;
         }
-        if (active.messages()) {
+        if (active.messages() && !active.everClaimed()) {
             transitions.cancelQueued(active.turnId());
             log.info("排队中的轮次被中断，已取消 turnId={}", active.turnId());
             return active.turnId();
         }
-        // 排队中的恢复轮：取消会让状态里待确认的调用失去结论，改为带着中断请求执行，写入结论后停止
+        // 排队中的恢复轮，或执行到一半被置回队列的消息轮：取消会让状态里待确认的调用失去结论（状态未知的非幂等调用不进入
+        // 恢复确认、被消费的 steer 不重投），改为带着中断请求执行，按恢复判定写入结论后停止（R1 并发审查）
         transitions.requestInterrupt(active.turnId());
-        log.info("排队中的恢复轮被中断，执行时写入结论后停止 turnId={} kind={}", active.turnId(), active.kind());
+        log.info("排队中的轮次被中断，执行时写入结论后停止 turnId={} kind={}", active.turnId(), active.kind());
         return null;
     }
 

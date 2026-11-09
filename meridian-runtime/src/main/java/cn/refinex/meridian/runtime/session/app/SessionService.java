@@ -211,8 +211,15 @@ public class SessionService {
             }
             lockMainThread(sessionId);
             List<ActiveTurn> active = transitions.lockActive(sessionId);
-            // 锁住轮次之后再读状态：此后认领、回收与结束都要等本事务提交，状态不会再变
-            SessionStatus current = get(sessionId).status();
+            // 锁住轮次之后再读状态：此后认领、回收与结束都要等本事务提交，状态不会再变。取锁之前读到的可能已过时（并发的归档、删除）
+            Session locked = get(sessionId);
+            if (locked.isDeleted()) {
+                throw terminated(sessionId);
+            }
+            if (locked.isTerminated()) {
+                return locked;
+            }
+            SessionStatus current = locked.status();
             boolean running = active.stream().anyMatch(ActiveTurn::running);
             if (running || (current != SessionStatus.IDLE && current != SessionStatus.REQUIRES_ACTION)) {
                 throw new ConflictException(SessionErrorCode.SESSION_BUSY, "会话正在执行，不能归档；需要停止时先中断，或直接删除会话");
@@ -238,11 +245,15 @@ public class SessionService {
      */
     public Session delete(String sessionId) {
         transactions.executeWithoutResult(status -> {
+            if (get(sessionId).isDeleted()) {
+                return;
+            }
+            lockMainThread(sessionId);
+            // 取锁之后重新读：并发的删除（客户端超时重试）或归档可能已经提交
             Session session = get(sessionId);
             if (session.isDeleted()) {
                 return;
             }
-            lockMainThread(sessionId);
             if (session.isTerminated()) {
                 cancelActive(sessionId);
                 pendingActions.expirePending(sessionId, clock.instant());

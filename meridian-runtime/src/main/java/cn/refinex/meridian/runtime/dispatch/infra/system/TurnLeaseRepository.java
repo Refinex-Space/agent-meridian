@@ -7,6 +7,7 @@ import cn.refinex.meridian.persistence.tenant.SystemRepository;
 import cn.refinex.meridian.runtime.dispatch.domain.TurnOutcome;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +32,19 @@ public class TurnLeaseRepository extends SystemRepository {
      */
     public TurnLeaseRepository(DataSource dataSource) {
         super(dataSource);
+    }
+
+    /**
+     * 为当前事务设置等待行锁的上限（{@code lock_timeout}，事务结束即恢复）；超过时语句以 {@code lock_not_available} 失败。
+     * 必须在事务中调用。
+     *
+     * @param limit 上限，至少 1 毫秒
+     */
+    public void limitLockWait(Duration limit) {
+        jdbc().sql("SELECT set_config('lock_timeout', :timeout, true)")
+                .param("timeout", Math.max(1, limit.toMillis()) + "ms")
+                .query((rs, row) -> rs.getString(1))
+                .single();
     }
 
     /**
@@ -382,6 +396,16 @@ public class TurnLeaseRepository extends SystemRepository {
          */
         public boolean messages() {
             return "messages".equals(kind);
+        }
+
+        /**
+         * 是否被认领执行过。置回队列的轮次保留最近一次的持有者，所以排队中的轮次有持有者，说明它执行到一半被置回（崩溃、
+         * 停机、可重试错误），状态与账本里可能已有本轮的内容。
+         *
+         * @return 有过持有者时为 true
+         */
+        public boolean everClaimed() {
+            return leaseOwner != null;
         }
 
         /**

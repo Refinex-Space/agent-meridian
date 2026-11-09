@@ -78,10 +78,14 @@ spec:
               drop: ["ALL"]
           volumeMounts:
             - { name: config, mountPath: /etc/envoy, readOnly: true }
+            # 根文件系统只读，管理接口的套接字放在内存卷里
+            - { name: admin-socket, mountPath: /var/run/envoy }
       volumes:
         - name: config
           configMap:
             name: meridian-egress-proxy
+        - name: admin-socket
+          emptyDir: { medium: Memory, sizeLimit: 1Mi }
       terminationGracePeriodSeconds: 30
 ---
 # 服务名与端口是沙箱模板中 HTTP_PROXY 的约定（values.egressProxy.url）

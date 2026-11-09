@@ -283,10 +283,12 @@ paths:
         | 事件 | 何时可以发送 | 效果 |
         |---|---|---|
         | `user.message` | 会话未终止 | 主线程空闲时立即开始一轮；正在执行时进入收件箱，`queue` 在本轮结束后成为下一轮，`steer` 在下一次推理前注入当前轮（来不及注入时按 `queue`）；等待回应时进入收件箱，一律按 `queue`，恢复轮结束后成为下一轮 |
-        | `user.interrupt` | 会话未终止 | 执行中：在下一个检查点停止（`stop_reason=interrupted`）；排队中：取消该轮；等待回应：全部待处理动作视为拒绝，运行一个恢复轮后停止；空闲时无效果 |
+        | `user.interrupt` | 会话未终止 | 执行中：在下一个检查点停止（`stop_reason=interrupted`）；排队中：取消该轮（执行到一半被置回队列的轮次改为带着中断请求执行，处理完中断前的结论后停止）；等待回应：全部待处理动作视为拒绝，运行一个恢复轮后停止；空闲时无效果 |
         | `user.tool_confirmation` | 存在类型为 `tool_confirmation` 或 `plan_exit` 的未回应动作 | 回应该动作；一轮的全部动作都有回应后开始恢复轮 |
         | `user.custom_tool_result` | 存在类型为 `custom_tool_result` 的未回应动作 | 回传自定义工具结果；同上 |
         | `user.recovery_confirmation` | 存在类型为 `recovery_confirmation` 的未回应动作 | 决定重试或跳过；同上 |
+
+        同一批里不能既有 `user.interrupt` 又有回应事件（400 `request.validation_failed`）：中断会把全部待处理动作视为拒绝。
       security:
         - ApiKeyAuth: [sessions:write]
       parameters:

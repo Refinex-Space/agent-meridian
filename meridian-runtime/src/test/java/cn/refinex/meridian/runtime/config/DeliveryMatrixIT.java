@@ -387,6 +387,32 @@ class DeliveryMatrixIT {
     }
 
     @Test
+    void interrupt_queuedAfterARequeue_runsWithTheInterruptInsteadOfBeingCancelled() {
+        // R1 并发审查：执行到一半被置回队列的消息轮，状态与账本里可能已有本轮的内容；直接取消会让状态未知的调用失去恢复确认、
+        // 被消费的 steer 不重投。改为带着中断请求执行，按恢复判定处理后以 interrupted 结束
+        WorkerFixture fixture = new WorkerFixture(ScriptedModel.builder()
+                .respondTo((request, r) -> r.text("收到：" + request.lastUserText()))
+                .build());
+        WorkerNode nodeA = fixture.node("node-a");
+        WorkerNode nodeB = fixture.node("node-b");
+        TestSession session = fixture.session();
+        fixture.post(nodeA, session, message("先查订单 42", Delivery.QUEUE));
+        String turnId = turnId(session);
+        nodeA.claim();
+        fixture.clock.advance(Duration.ofSeconds(31));
+        WorkerFixture.reap(nodeB);
+
+        fixture.post(nodeB, session, new UserEvent.Interrupt());
+
+        Map<String, Object> requeued = DbAssertions.turn(turnId);
+        assertThat(requeued).containsEntry("status", "queued");
+        assertThat(requeued.get("interrupt_requested_at")).isNotNull();
+        assertThat(nodeB.claimAndRun())
+                .isEqualTo(new TurnResult.Finished(turnId, TurnOutcome.INTERRUPTED, StopReason.INTERRUPTED));
+        assertThat(fixture.model.requests()).as("在第一次推理前停止").isEmpty();
+    }
+
+    @Test
     void interrupt_awaitingAction_deniesEveryActionAndRunsOneResumptionTurnThenStops() {
         WorkerFixture fixture = new WorkerFixture(
                 ScriptedModel.builder()
@@ -483,6 +509,44 @@ class DeliveryMatrixIT {
                 .singleElement()
                 .satisfies(action -> assertThat(action.status()).isEqualTo(PendingActionStatus.EXPIRED));
         assertThat(sessionStatus(session)).isEqualTo("terminated");
+    }
+
+    @Test
+    void delete_concurrentRetriesWriteOneTerminationEvent() throws Exception {
+        // R1 并发审查：删除曾在取线程锁之前读会话状态，客户端超时重试的两个删除都按"未删除"处理，终止事件写两次
+        WorkerFixture fixture = new WorkerFixture(ScriptedModel.builder().build());
+        WorkerNode node = fixture.node("node-a");
+        TestSession session = fixture.session();
+
+        try (java.sql.Connection holder = cn.refinex.meridian.runtime.support.RuntimeTestDatabase.dataSource()
+                        .getConnection();
+                var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            holder.setAutoCommit(false);
+            try (java.sql.PreparedStatement lock =
+                    holder.prepareStatement("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))")) {
+                lock.setString(1, session.mainThreadId());
+                lock.executeQuery().close();
+            }
+            List<java.util.concurrent.Future<?>> deletes = List.of(
+                    executor.submit(() -> PlatformContexts.run(
+                            session.context(), () -> fixture.sessions(node).delete(session.sessionId()))),
+                    executor.submit(() -> PlatformContexts.run(
+                            session.context(), () -> fixture.sessions(node).delete(session.sessionId()))));
+            // 两个删除都已读过会话、在线程锁上等待
+            WorkerFixture.await(
+                    () -> DbAssertions.list(
+                            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted", Long.class),
+                    waiting -> waiting.getFirst() == 2L);
+            holder.commit();
+            for (var delete : deletes) {
+                delete.get(30, TimeUnit.SECONDS);
+            }
+        }
+
+        assertThat(types(fixture.events(node, session)).stream()
+                        .filter("session.status_terminated"::equals)
+                        .count())
+                .isEqualTo(1);
     }
 
     // ------------------------------------------------------------------ 辅助

@@ -12,6 +12,8 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 续租：每 10 秒（{@code DispatchProperties.renewInterval}）为本节点的每个租约带 epoch 条件推迟到期时间，同时读出中断请求
@@ -25,13 +27,24 @@ import org.springframework.stereotype.Service;
  *       {@link LeaseLoss#RENEWAL_TIMEOUT}，执行方在租约到期之前停下，不与新的持有者并行执行。
  * </ul>
  * 时间取注入的 {@code Clock}。每个租约单独处理，一个失败不影响其他。
+ *
+ * <p>每次续租在自己的事务里执行，并设 {@link #RENEW_LOCK_TIMEOUT} 的锁等待上限：轮次行可能被长时间锁住（发送事件的事务锁住轮次行后
+ * 等待被沙箱准备占住的会话行），不设上限时续租的 {@code UPDATE} 会一直等，单线程的续租循环随之停住，本节点全部租约在 30 秒后
+ * 被回收、在别的节点重复执行。设了上限，被锁住的那个租约按"续租抛出异常"处理，其他租约照常续租（R1 并发审查，ADR-0041）。
  */
 @Service
 public class LeaseRenewer {
 
     private static final Logger log = LoggerFactory.getLogger(LeaseRenewer.class);
 
+    /**
+     * 单次续租等待行锁的上限。带租约条件的写入以 {@code FOR SHARE} 锁轮次行、持锁只到事务结束（毫秒级），2 秒足以等过它们；
+     * 远小于续租周期（10 秒）与失败阈值（15 秒），一个租约被锁住不会拖住其他租约的续租。
+     */
+    static final Duration RENEW_LOCK_TIMEOUT = Duration.ofSeconds(2);
+
     private final TurnLeaseRepository leases;
+    private final TransactionTemplate transactions;
     private final NodeLeaseRegistry registry;
     private final NodeId nodeId;
     private final DispatchProperties properties;
@@ -41,6 +54,7 @@ public class LeaseRenewer {
      * 创建续租任务。
      *
      * @param leases 租约仓储
+     * @param transactions 事务模板；每次续租在新事务中执行
      * @param registry 本节点的租约登记
      * @param nodeId 本节点 ID
      * @param properties 调度配置，取租约时长与续租失败阈值
@@ -48,11 +62,14 @@ public class LeaseRenewer {
      */
     public LeaseRenewer(
             TurnLeaseRepository leases,
+            TransactionTemplate transactions,
             NodeLeaseRegistry registry,
             NodeId nodeId,
             DispatchProperties properties,
             Clock clock) {
         this.leases = leases;
+        this.transactions = new TransactionTemplate(transactions.getTransactionManager());
+        this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.registry = registry;
         this.nodeId = nodeId;
         this.properties = properties;
@@ -85,7 +102,10 @@ public class LeaseRenewer {
         Instant now = clock.instant();
         Optional<Renewal> renewal;
         try {
-            renewal = leases.renew(turn.turnId(), nodeId.value(), turn.epoch(), now.plus(properties.leaseTtl()), now);
+            renewal = transactions.execute(status -> {
+                leases.limitLockWait(RENEW_LOCK_TIMEOUT);
+                return leases.renew(turn.turnId(), nodeId.value(), turn.epoch(), now.plus(properties.leaseTtl()), now);
+            });
         } catch (RuntimeException e) {
             Duration sinceRenewed = Duration.between(handle.lastRenewedAt(), now);
             if (sinceRenewed.compareTo(properties.renewFailureTimeout()) > 0) {

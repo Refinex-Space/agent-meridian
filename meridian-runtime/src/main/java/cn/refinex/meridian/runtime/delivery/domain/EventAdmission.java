@@ -20,6 +20,8 @@ import java.util.Set;
  *       {@code tool_confirmation} 与 {@code plan_exit}，{@code user.custom_tool_result} 回应 {@code custom_tool_result}，
  *       {@code user.recovery_confirmation} 回应 {@code recovery_confirmation}；同一批里不能回应同一个动作两次。
  *   <li>跟在 {@code user.interrupt} 后面的消息一律按 queue 投递：AgentScope 忽略随中断传入的消息，steer 来不及注入当前轮。
+ *   <li>同一批里不能既有 {@code user.interrupt} 又有回应事件：等待回应时中断会把全部待处理动作视为拒绝，与同批的回应相互矛盾
+ *       （曾在回应时因动作已有结论抛出 500 并回滚整批，R1 并发审查）。
  * </ul>
  * 会话已终止时不接受任何事件，由调用方先检查。纯函数，线程安全。
  */
@@ -32,9 +34,16 @@ public final class EventAdmission {
      *
      * @param events 用户事件
      * @return 动作 ID
-     * @throws ValidationException 同一批里有两个事件回应同一个动作时
+     * @throws ValidationException 同一批里有两个事件回应同一个动作，或既有中断又有回应事件时
      */
     public static Set<String> respondedActionIds(List<UserEvent> events) {
+        if (events.stream().anyMatch(UserEvent.Interrupt.class::isInstance)
+                && events.stream().anyMatch(event -> actionIdOf(event) != null)) {
+            throw new ValidationException(
+                    CommonErrorCode.VALIDATION_FAILED,
+                    "同一批事件不能既中断又回应待处理动作",
+                    List.of(new FieldViolation("events", "user.interrupt 与回应事件请分两次发送")));
+        }
         Set<String> ids = new LinkedHashSet<>();
         for (UserEvent event : events) {
             String actionId = actionIdOf(event);

@@ -42,6 +42,34 @@ class DatabaseWorkspaceStoreIT {
     }
 
     @Test
+    void concurrentFirstWritesToTheSameKeyAreBothRecorded() throws Exception {
+        // R1 并发审查：两个写入都看到键不存在时，后插入的一方在冲突上什么都不做，put 曾不检查结果、静默丢掉本次写入
+        int keys = 20;
+        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            java.util.List<java.util.concurrent.Future<?>> writes = new java.util.ArrayList<>();
+            for (int k = 0; k < keys; k++) {
+                String key = "/race" + k + ".md";
+                java.util.concurrent.CyclicBarrier start = new java.util.concurrent.CyclicBarrier(2);
+                for (String text : List.of("甲", "乙")) {
+                    writes.add(executor.submit(() -> {
+                        start.await();
+                        store.put(SESSION, key, file(text));
+                        return null;
+                    }));
+                }
+            }
+            for (var write : writes) {
+                write.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        }
+
+        for (int k = 0; k < keys; k++) {
+            Item item = store.get(SESSION, "/race" + k + ".md").orElseThrow();
+            assertThat(item.version()).as("两次写入都生效：一次创建、一次覆盖").isEqualTo(2);
+        }
+    }
+
+    @Test
     void putIfVersionCreatesOnlyWhenAbsentAndUpdatesOnlyTheExpectedVersion() {
         assertThat(store.putIfVersion(SESSION, "/a.md", file("一"), 0)).isTrue();
         assertThat(store.putIfVersion(SESSION, "/a.md", file("重复创建"), 0))

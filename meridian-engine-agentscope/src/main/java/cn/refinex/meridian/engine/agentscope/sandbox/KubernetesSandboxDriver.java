@@ -95,6 +95,13 @@ public final class KubernetesSandboxDriver implements SandboxDriver, SandboxAtta
             json.dump(out, sys.stdout)
             """.formatted(OUTPUTS_DIR);
 
+    /**
+     * 执行 {@link #LIST_OUTPUTS_SCRIPT} 的命令。必须用隔离模式 {@code -I}：命令的工作目录是智能体可写的 {@code /workspace}，
+     * 普通的 {@code python3 -c} 把当前目录放进 {@code sys.path}，智能体放一个 {@code hashlib.py} 就能接管脚本、伪造清单中的大小
+     * （R1 安全审查，ADR-0041）；{@code -I} 同时忽略 {@code PYTHON*} 环境变量。
+     */
+    static final String LIST_OUTPUTS_COMMAND = "python3 -I -c " + shellQuote(LIST_OUTPUTS_SCRIPT);
+
     private static final Logger log = LoggerFactory.getLogger(KubernetesSandboxDriver.class);
     private static final Pattern LABEL_VALUE = Pattern.compile("[A-Za-z0-9]([A-Za-z0-9_.-]{0,61}[A-Za-z0-9])?");
 
@@ -208,7 +215,7 @@ public final class KubernetesSandboxDriver implements SandboxDriver, SandboxAtta
         Objects.requireNonNull(handle, "handle");
         return guard(
                 Blocking.call(() -> {
-                    String json = run(attach(handle.state()), "python3 -c " + shellQuote(LIST_OUTPUTS_SCRIPT));
+                    String json = run(attach(handle.state()), LIST_OUTPUTS_COMMAND);
                     List<?> entries = JsonUtils.getJsonCodec().fromJson(json.strip(), List.class);
                     return entries.stream()
                             .map(entry -> (Map<?, ?>) entry)

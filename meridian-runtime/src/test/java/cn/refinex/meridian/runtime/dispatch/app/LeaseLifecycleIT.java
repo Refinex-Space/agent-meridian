@@ -182,6 +182,47 @@ class LeaseLifecycleIT {
     }
 
     @Test
+    @org.junit.jupiter.api.Timeout(60)
+    void aTurnRowLockedForLongOnlyDelaysItsOwnRenewal() throws Exception {
+        // R1 并发审查：发送事件的事务锁住轮次行后等待被沙箱准备占住的会话行，续租的 UPDATE 曾无限等待，单线程的续租循环停住，
+        // 本节点全部租约过期被回收（ADR-0041）。现在被锁住的租约在锁等待上限后按续租失败处理，其他租约照常续上
+        LeaseHandle locked = claimHandle(nodeA, TestSessions.create(clock));
+        LeaseHandle free = claimHandle(nodeA, TestSessions.create(clock));
+        RecordingListener listener = new RecordingListener();
+        locked.listen(listener);
+        clock.advance(Duration.ofSeconds(10));
+
+        try (java.sql.Connection holder = RuntimeTestDatabase.dataSource().getConnection()) {
+            holder.setAutoCommit(false);
+            try (java.sql.PreparedStatement lock =
+                    holder.prepareStatement("SELECT id FROM rt.turns WHERE id = ? FOR UPDATE")) {
+                lock.setString(1, locked.turn().turnId());
+                lock.executeQuery().close();
+            }
+            long started = System.nanoTime();
+            nodeA.renewer().renewAll();
+            Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+            holder.rollback();
+
+            assertThat(elapsed).as("只等一次锁等待上限").isLessThan(LeaseRenewer.RENEW_LOCK_TIMEOUT.multipliedBy(3));
+        }
+        assertThat(DbAssertions.instant(DbAssertions.turn(free.turn().turnId()).get("lease_expires_at")))
+                .as("没被锁住的租约照常续上")
+                .isEqualTo(START.plusSeconds(40));
+        assertThat(DbAssertions.instant(
+                        DbAssertions.turn(locked.turn().turnId()).get("lease_expires_at")))
+                .isEqualTo(START.plusSeconds(30));
+        assertThat(listener.events).as("距上次成功续租 10 秒，仍在失败阈值内").isEmpty();
+
+        clock.advance(Duration.ofSeconds(1));
+        nodeA.renewer().renewAll();
+        assertThat(DbAssertions.instant(
+                        DbAssertions.turn(locked.turn().turnId()).get("lease_expires_at")))
+                .as("锁释放后下个周期续上")
+                .isEqualTo(START.plusSeconds(41));
+    }
+
+    @Test
     void renewalFailingForMoreThanFifteenSecondsTellsTheExecutionToCancel() {
         FailingDataSource dataSource = new FailingDataSource(RuntimeTestDatabase.dataSource());
         TestNode node = TestNode.create("node-flaky", clock, DispatchProperties.defaults(), dataSource);

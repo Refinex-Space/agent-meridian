@@ -73,6 +73,20 @@ class EventAdmissionTest {
     }
 
     @Test
+    void anInterruptCannotShareABatchWithResponses() {
+        // 中断会把全部待处理动作视为拒绝，同批的回应随后找不到等待中的动作（曾返回 500 并回滚整批，R1 并发审查）
+        assertThatThrownBy(
+                        () -> EventAdmission.respondedActionIds(List.of(confirm("act_1"), new UserEvent.Interrupt())))
+                .isInstanceOf(ValidationException.class);
+        assertThatThrownBy(
+                        () -> EventAdmission.respondedActionIds(List.of(new UserEvent.Interrupt(), confirm("act_1"))))
+                .isInstanceOf(ValidationException.class);
+        assertThat(EventAdmission.respondedActionIds(
+                        List.of(message(UserEvent.Delivery.QUEUE), new UserEvent.Interrupt())))
+                .isEmpty();
+    }
+
+    @Test
     void messagesAfterAnInterruptAreDowngradedToQueue() {
         assertThat(EventAdmission.deliveries(List.of(
                         message(UserEvent.Delivery.STEER),

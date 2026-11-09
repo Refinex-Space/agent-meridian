@@ -79,11 +79,15 @@ public class DatabaseWorkspaceStore implements WorkspaceStorePort {
         String replaced = transactions.execute(status -> {
             Optional<Row> current = repository.find(scope, namespace, key, true);
             if (current.isEmpty()) {
-                repository.insert(scope, namespace, key, content, clock.instant());
-                return null;
+                if (repository.insert(scope, namespace, key, content, clock.instant())) {
+                    return null;
+                }
+                // 并发的首次写入先提交了（插入在冲突上等它提交后不做任何事）：锁住它写入的行，按覆盖处理，不静默丢掉本次写入
+                current = repository.find(scope, namespace, key, true);
             }
-            repository.update(scope, namespace, key, content, current.get().version(), clock.instant());
-            return current.get().objectKey();
+            Row row = current.orElseThrow();
+            repository.update(scope, namespace, key, content, row.version(), clock.instant());
+            return row.objectKey();
         });
         deleteObject(replaced);
     }

@@ -16,6 +16,11 @@ import java.util.regex.Pattern;
  * 不可分析，宁可多一次审批，也不误放行。
  *
  * <p>分段保留原文（引号不去掉），只把引号外的连续空白折叠为一个空格；重定向（{@code >}、{@code 2>&1}、{@code &>}）属于所在的段。
+ *
+ * <p>同样归为不可分析的（R1 安全审查，ADR-0041）：ANSI-C 与本地化引用（{@code $'…'}、{@code $"…"}，引号规则与普通引号不同，
+ * {@code echo $'\'' ; rm x ; echo \'} 会被误读成一段）、复合命令（{@code { …; }}、{@code if}/{@code for}/{@code while} 等关键字、
+ * {@code !}）、命令名含变量展开、执行字符串的命令（{@code eval}、{@code source}、{@code .}、{@code bash -c} 等）。命令前缀规则
+ * 是审批层的尽力而为，不是隔离手段，沙箱才是边界。
  */
 public final class ShellCommands {
 
@@ -24,6 +29,33 @@ public final class ShellCommands {
             Set.of("env", "nice", "nohup", "time", "timeout", "command", "exec", "xargs", "sudo");
 
     private static final Pattern ASSIGNMENT = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*=.*");
+
+    /** 复合命令的关键字与保留字：出现在命令位置时，这一段不是一条简单命令。 */
+    private static final Set<String> RESERVED = Set.of(
+            "{",
+            "}",
+            "!",
+            "if",
+            "then",
+            "else",
+            "elif",
+            "fi",
+            "for",
+            "while",
+            "until",
+            "do",
+            "done",
+            "case",
+            "esac",
+            "select",
+            "function",
+            "coproc");
+
+    /** 把参数当作命令字符串执行的命令：后面实际执行什么看不出来。 */
+    private static final Set<String> EVALUATORS = Set.of("eval", "source", ".");
+
+    /** 带 {@code -c} 时执行命令字符串的 shell。 */
+    private static final Set<String> SHELLS = Set.of("sh", "bash", "zsh", "dash", "ksh", "ash", "fish");
 
     /** 包装命令的数值参数：优先级、时长（{@code 10}、{@code 1.5}、{@code 10s}）、个数。 */
     private static final Pattern NUMERIC = Pattern.compile("[0-9]+(\\.[0-9]+)?[smhd]?");
@@ -74,6 +106,9 @@ public final class ShellCommands {
                     quote = 0;
                 }
                 continue;
+            }
+            if (c == '$' && (next == '\'' || next == '"')) {
+                return new Opaque("ANSI-C or locale quoting");
             }
             switch (c) {
                 case '\'', '"' -> {
@@ -128,7 +163,65 @@ public final class ShellCommands {
             return new Opaque("unterminated quote");
         }
         flush(current, segments);
+        for (String segment : segments) {
+            String reason = notSimple(segment);
+            if (reason != null) {
+                return new Opaque(reason);
+            }
+        }
         return new Segments(List.copyOf(segments));
+    }
+
+    /** 一段不是可按前缀判断的简单命令时返回原因，否则为 null。 */
+    private static String notSimple(String segment) {
+        List<String> words = commandWords(segment);
+        if (words.isEmpty()) {
+            return null;
+        }
+        String head = words.getFirst();
+        if (head.startsWith("{") || RESERVED.contains(head)) {
+            return "compound command";
+        }
+        if (head.contains("$")) {
+            return "command name from expansion";
+        }
+        String name = commandName(head);
+        if (EVALUATORS.contains(name)) {
+            return "evaluated string";
+        }
+        if (SHELLS.contains(name) && words.stream().skip(1).anyMatch(word -> word.matches("-[A-Za-z]*c[A-Za-z]*"))) {
+            return "shell command string";
+        }
+        return null;
+    }
+
+    /** 去掉开头的环境变量赋值与包装命令（连同其选项与数值参数）之后的词，第一个词是实际执行的命令。 */
+    private static List<String> commandWords(String segment) {
+        List<String> words = new ArrayList<>(List.of(segment.split(" ")));
+        while (!words.isEmpty()) {
+            String head = words.getFirst();
+            if (ASSIGNMENT.matcher(head).matches()) {
+                words.removeFirst();
+                continue;
+            }
+            if (!WRAPPERS.contains(commandName(head))) {
+                break;
+            }
+            words.removeFirst();
+            while (!words.isEmpty()
+                    && (words.getFirst().startsWith("-")
+                            || NUMERIC.matcher(words.getFirst()).matches())) {
+                words.removeFirst();
+            }
+        }
+        return words;
+    }
+
+    /** 命令名的规范形式：去掉引号与反斜杠、取路径的最后一段（{@code "rm"}、{@code \rm}、{@code /bin/rm} 都是 {@code rm}）。 */
+    static String commandName(String word) {
+        String bare = word.replace("'", "").replace("\"", "").replace("\\", "");
+        int slash = bare.lastIndexOf('/');
+        return slash >= 0 && slash < bare.length() - 1 ? bare.substring(slash + 1) : bare;
     }
 
     /**
@@ -149,37 +242,29 @@ public final class ShellCommands {
     }
 
     /**
-     * 一段命令在比较拒绝与询问规则时的各种形式：原文，以及去掉开头的环境变量赋值与包装命令（{@link #WRAPPERS}，连同紧随的选项
-     * 与数值参数，例如 {@code nice -n 5}、{@code timeout -k 5 10}）之后的命令。
+     * 一段命令在比较拒绝与询问规则时的各种形式：原文；去掉开头的环境变量赋值与包装命令（{@link #WRAPPERS}，连同紧随的选项
+     * 与数值参数，例如 {@code nice -n 5}、{@code timeout -k 5 10}）之后的命令；再把命令名换成规范形式（{@link #commandName}）
+     * 之后的命令，{@code /bin/rm -rf x}、{@code \rm x}、{@code "rm" x} 也要命中 {@code rm:*}。
      *
      * @param segment 一段命令
-     * @return 原文在前的各种形式
+     * @return 原文在前、不重复的各种形式
      */
     static List<String> denyForms(String segment) {
         List<String> forms = new ArrayList<>();
         forms.add(segment);
-        List<String> words = new ArrayList<>(List.of(segment.split(" ")));
-        boolean stripped = false;
-        while (!words.isEmpty()) {
-            String head = words.getFirst();
-            if (ASSIGNMENT.matcher(head).matches()) {
-                words.removeFirst();
-                stripped = true;
-                continue;
-            }
-            if (!WRAPPERS.contains(head)) {
-                break;
-            }
-            words.removeFirst();
-            stripped = true;
-            while (!words.isEmpty()
-                    && (words.getFirst().startsWith("-")
-                            || NUMERIC.matcher(words.getFirst()).matches())) {
-                words.removeFirst();
-            }
+        List<String> words = commandWords(segment);
+        if (words.isEmpty()) {
+            return forms;
         }
-        if (stripped && !words.isEmpty()) {
-            forms.add(String.join(" ", words));
+        String stripped = String.join(" ", words);
+        if (!forms.contains(stripped)) {
+            forms.add(stripped);
+        }
+        List<String> named = new ArrayList<>(words);
+        named.set(0, commandName(words.getFirst()));
+        String normalized = String.join(" ", named);
+        if (!forms.contains(normalized)) {
+            forms.add(normalized);
         }
         return forms;
     }
