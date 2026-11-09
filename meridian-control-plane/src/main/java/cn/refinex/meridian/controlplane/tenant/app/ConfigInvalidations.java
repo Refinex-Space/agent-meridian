@@ -3,7 +3,6 @@ package cn.refinex.meridian.controlplane.tenant.app;
 import cn.refinex.meridian.common.json.JsonMappers;
 import cn.refinex.meridian.controlplane.web.AfterCommit;
 import cn.refinex.meridian.persistence.redis.RedisMessaging;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -40,7 +39,7 @@ public class ConfigInvalidations {
      * @param tenantId 租户 ID
      */
     public void tenantQuotaChanged(String tenantId) {
-        String message = JsonMappers.lenient().writeValueAsString(Map.of("type", TENANT_QUOTA, "tenant_id", tenantId));
+        String message = JsonMappers.lenient().writeValueAsString(new Invalidation(TENANT_QUOTA, tenantId));
         AfterCommit.run(() -> {
             try {
                 redis.notify(CHANNEL, message);
@@ -49,4 +48,12 @@ public class ConfigInvalidations {
             }
         });
     }
+
+    /**
+     * {@code config.invalidate} 的消息：{@code {"type":"…","tenant_id":"…"}}，字段顺序固定。
+     *
+     * @param type 变更类型
+     * @param tenantId 租户 ID
+     */
+    record Invalidation(String type, String tenantId) {}
 }
