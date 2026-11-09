@@ -1,0 +1,1551 @@
+openapi: 3.1.0
+info:
+  title: AgentMeridian Admin API
+  version: 1.0.0
+  summary: 控制台使用的管理 API：租户、租户设置、项目、成员、角色绑定与 API Key。
+  description: |
+    只供控制台调用（ADR-0042），与控制台同版本发布，不对业务系统开放；业务系统使用公开 API（`meridian-v1.yaml`）。
+
+    **认证。** 每个请求带 `Authorization: Bearer <控制台用户令牌>`。正式实现是 OIDC access token（T14b）；在那之前只有
+    `dev`、`test` profile 接受开发期令牌，其他 profile 一律拒绝。API Key 不能调用管理 API。
+
+    **授权。** 角色来自 control-plane 的角色绑定（架构设计「授权」）：租户所有者、租户管理员作用于整个租户；项目开发者、
+    项目观察者、审批人只作用于绑定的项目。创建租户、修改租户配额只有平台管理员可以执行。没有权限时返回 403 `access.forbidden`。
+
+    **约定。**
+    - 字段名 snake_case；时间为 RFC 3339 UTC。
+    - 列表接口用游标分页：`?limit=&after=`，返回 `{data, has_more, next_cursor}`。
+    - 所有写操作支持 `Idempotency-Key` 请求头：24 小时内同键同请求返回首次的结果（响应带 `Idempotent-Replayed: true`）。
+    - 错误一律为 RFC 9457 `application/problem+json`，扩展字段 `code` 与 `request_id`；每个响应带 `X-Request-Id`。
+servers:
+  - url: http://localhost:18081
+    description: 本地开发（scripts/dev/run-control-plane.sh）
+security:
+  - ConsoleAuth: []
+tags:
+  - name: Tenants
+    description: 租户：计费与管理的单位，带并发配额与事件保留天数。
+  - name: Projects
+    description: 项目：隔离与授权的基本单位，API Key、智能体、会话都挂在项目下。
+  - name: Members
+    description: 成员与角色绑定：谁能在租户与项目中做什么。
+  - name: ApiKeys
+    description: 项目下的 API Key：业务系统调用公开 API 的凭据，明文只在创建时返回一次。
+
+paths:
+  /admin/v1/tenants:
+    post:
+      operationId: createTenant
+      tags: [Tenants]
+      summary: 创建租户
+      description: 平台管理员创建租户，并把 `owner` 加为成员、授予租户所有者。配额不给出时取平台默认值。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+            example:
+              name: 财务共享中心
+              owner: {subject: 3f1c2a9e-7b1d-4c55-9a0e-2d8f6b4e1a77, email: lin@example.com, display_name: 林晓}
+      responses:
+        '201':
+          $ref: '#/components/responses/TenantCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listTenants
+      tags: [Tenants]
+      summary: 列出租户
+      description: 平台管理员看到全部租户；其他用户只看到自己是成员的租户。已删除的租户不出现，按创建时间从早到晚。
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 租户列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      operationId: getTenant
+      tags: [Tenants]
+      summary: 查看租户
+      responses:
+        '200':
+          $ref: '#/components/responses/TenantOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateTenant
+      tags: [Tenants]
+      summary: 修改租户
+      description: 修改租户名称。配额用 `PUT /admin/v1/tenants/{tenant_id}/quotas`。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/TenantOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteTenant
+      tags: [Tenants]
+      summary: 删除租户
+      description: |
+        只有租户所有者可以删除。租户被标记为已删除，其下全部项目随之删除、全部 API Key 立即吊销；会话等运行数据的清理由后续任务处理。
+        删除不可恢复。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/quotas:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    put:
+      operationId: updateTenantQuotas
+      tags: [Tenants]
+      summary: 修改租户配额
+      description: 平台管理员修改并发配额与事件保留天数。新的并发配额随即下发到 runtime（`config.invalidate`）。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantQuotas'
+            example:
+              max_concurrent_turns: 50
+              event_retention_days: 180
+      responses:
+        '200':
+          $ref: '#/components/responses/TenantOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/settings:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      operationId: getTenantSettings
+      tags: [Tenants]
+      summary: 查看租户设置
+      responses:
+        '200':
+          $ref: '#/components/responses/TenantSettingsOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateTenantSettings
+      tags: [Tenants]
+      summary: 修改租户设置
+      description: 整体替换租户设置。设置下发到 runtime 由 T15b 完成。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantSettings'
+            example:
+              system_prompt: 本组织的回答使用简体中文；涉及金额时注明币种。
+              web_search: {backend: searxng, base_url: 'http://searxng.internal:8080', secret_id: null}
+      responses:
+        '200':
+          $ref: '#/components/responses/TenantSettingsOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: createProject
+      tags: [Projects]
+      summary: 创建项目
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+            example:
+              name: 报销助手
+              description: 员工报销问答与单据预审。
+      responses:
+        '201':
+          $ref: '#/components/responses/ProjectCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listProjects
+      tags: [Projects]
+      summary: 列出项目
+      description: 列出租户中未删除的项目，按创建时间从早到晚。
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 项目列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: getProject
+      tags: [Projects]
+      summary: 查看项目
+      responses:
+        '200':
+          $ref: '#/components/responses/ProjectOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateProject
+      tags: [Projects]
+      summary: 修改项目
+      description: 只修改给出的字段。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProjectOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteProject
+      tags: [Projects]
+      summary: 删除项目
+      description: 项目被标记为已删除，其下全部 API Key 立即吊销、项目级角色绑定随之删除。删除不可恢复。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/members:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: addMember
+      tags: [Members]
+      summary: 添加成员
+      description: 按身份提供方的主体标识（OIDC `sub`）把用户加入租户。成员加入后还没有任何角色，用角色绑定授权。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+            example:
+              subject: 8a2d4c6e-1f3b-4a5c-9e7d-0b2f4d6a8c1e
+              email: zhou@example.com
+              display_name: 周岚
+      responses:
+        '201':
+          $ref: '#/components/responses/MemberCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listMembers
+      tags: [Members]
+      summary: 列出成员
+      description: 按加入时间从早到晚。
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 成员列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/members/{member_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/MemberId'
+    get:
+      operationId: getMember
+      tags: [Members]
+      summary: 查看成员
+      responses:
+        '200':
+          $ref: '#/components/responses/MemberOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateMember
+      tags: [Members]
+      summary: 修改成员
+      description: 只修改给出的字段；主体标识不能修改。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/MemberOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: removeMember
+      tags: [Members]
+      summary: 移除成员
+      description: 成员与其全部角色绑定一起删除。不能移除租户最后一位所有者（409 `member.last_owner`）。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/role-bindings:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: createRoleBinding
+      tags: [Members]
+      summary: 授予角色
+      description: |
+        租户级角色（`tenant_owner`、`tenant_admin`）不带 `project_id`；项目级角色（`project_developer`、`project_viewer`、
+        `approver`）必须带 `project_id`。授予 `tenant_owner` 需要调用方自己是租户所有者。同一成员同一范围的同一角色已存在时 409。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleBindingRequest'
+            example:
+              member_id: mbr_01JC8Z5E8G6J0L2N4Q7S9U1W3Y
+              role: project_developer
+              project_id: prj_01JC8Z2B5D3F7H9K1M4P6R8T0V
+      responses:
+        '201':
+          description: 已授予。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleBinding'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listRoleBindings
+      tags: [Members]
+      summary: 列出角色绑定
+      description: 按授予时间从早到晚，可按成员或项目过滤。
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+        - name: member_id
+          in: query
+          description: 只列出该成员的角色绑定。
+          schema:
+            type: string
+            minLength: 1
+        - name: project_id
+          in: query
+          description: 只列出该项目的角色绑定。
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: 角色绑定列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleBindingPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/role-bindings/{role_binding_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - name: role_binding_id
+        in: path
+        required: true
+        description: 角色绑定 ID（rbd_…）。
+        schema:
+          type: string
+    delete:
+      operationId: deleteRoleBinding
+      tags: [Members]
+      summary: 撤销角色
+      description: 撤销 `tenant_owner` 需要调用方自己是租户所有者；不能撤销最后一位所有者（409 `member.last_owner`）。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/api-keys:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: createApiKey
+      tags: [ApiKeys]
+      summary: 创建 API Key
+      description: |
+        响应中的 `key` 是明文，只在这一次返回，平台只保存它的 SHA-256；之后只能看到 `display_prefix`。作用域与限流在创建后
+        不能修改，需要变化时创建新 Key 并吊销旧 Key。用 `Idempotency-Key` 重放时同样返回首次的明文。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+            example:
+              name: 报销系统生产环境
+              scopes: [sessions:read, sessions:write]
+              rate_limit_per_minute: 1200
+      responses:
+        '201':
+          description: 已创建，响应带一次性的明文。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedApiKey'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listApiKeys
+      tags: [ApiKeys]
+      summary: 列出 API Key
+      description: 包括已吊销的 Key，按创建时间从早到晚；不含明文与哈希。
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: API Key 列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/api-keys/{api_key_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ApiKeyId'
+    get:
+      operationId: getApiKey
+      tags: [ApiKeys]
+      summary: 查看 API Key
+      responses:
+        '200':
+          $ref: '#/components/responses/ApiKeyOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateApiKey
+      tags: [ApiKeys]
+      summary: 修改 API Key
+      description: 只能修改名称。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateApiKeyRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApiKeyOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/api-keys/{api_key_id}:revoke:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ApiKeyId'
+    post:
+      operationId: revokeApiKey
+      tags: [ApiKeys]
+      summary: 吊销 API Key
+      description: 吊销后各服务在 1 秒内拒绝该 Key（经 Pub/Sub `key.revoked` 淘汰缓存）。已吊销的 Key 再次吊销返回原结果。不可恢复。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApiKeyOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    ConsoleAuth:
+      type: http
+      scheme: bearer
+      description: 控制台用户的令牌：OIDC access token（T14b）；T14a 只有 `dev`、`test` profile 的开发期令牌。
+
+  headers:
+    XRequestId:
+      description: 本次请求的 ID：沿用合法的传入值，否则由服务端生成；排查问题时提供它。
+      required: true
+      schema:
+        type: string
+    IdempotentReplayed:
+      description: 值为 `true` 表示这是同一 `Idempotency-Key` 首次请求结果的重放。
+      schema:
+        type: string
+        enum: ['true']
+
+  parameters:
+    TenantId:
+      name: tenant_id
+      in: path
+      required: true
+      description: 租户 ID（ten_…）。
+      schema:
+        type: string
+    ProjectId:
+      name: project_id
+      in: path
+      required: true
+      description: 项目 ID（prj_…）。
+      schema:
+        type: string
+    MemberId:
+      name: member_id
+      in: path
+      required: true
+      description: 成员 ID（mbr_…）。
+      schema:
+        type: string
+    ApiKeyId:
+      name: api_key_id
+      in: path
+      required: true
+      description: API Key ID（key_…）。
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: 幂等键，24 小时内同键同请求返回首次结果。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    Limit:
+      name: limit
+      in: query
+      description: 每页条数。
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    After:
+      name: after
+      in: query
+      description: 游标：上一页响应的 `next_cursor`。不传时从第一页开始。
+      schema:
+        type: string
+        minLength: 1
+
+  responses:
+    TenantCreated:
+      description: 已创建。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Tenant'
+    TenantOk:
+      description: 租户。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Tenant'
+    TenantSettingsOk:
+      description: 租户设置。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TenantSettings'
+    ProjectCreated:
+      description: 已创建。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Project'
+    ProjectOk:
+      description: 项目。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Project'
+    MemberCreated:
+      description: 已加入。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Member'
+    MemberOk:
+      description: 成员。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Member'
+    ApiKeyOk:
+      description: API Key（不含明文）。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiKey'
+    Deleted:
+      description: 已删除，没有响应体。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+    BadRequest:
+      description: |
+        请求不合法：`request.invalid`（格式错误）、`request.validation_failed`（字段校验失败，见 `errors`）、
+        `request.invalid_cursor`（游标无效）、`request.invalid_id`（ID 格式错误）。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: '`auth.unauthenticated`：缺少 `Authorization: Bearer`；`auth.invalid_console_token`：令牌无效或已过期。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: '`access.forbidden`：当前用户在该租户或项目中没有执行该操作的角色。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: |
+        资源不存在或已删除：`tenant.not_found`、`project.not_found`、`member.not_found`、`role_binding.not_found`、
+        `api_key.not_found`。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: |
+        `member.already_exists`：该主体已是租户成员；`role_binding.already_exists`：同一角色已授予；`member.last_owner`：
+        不能移除或撤销最后一位所有者；`idempotency.key_reused`、`idempotency.in_progress`：幂等键冲突。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: '`internal.error`：服务内部错误，`detail` 不含内部信息，排查以 `request_id` 关联日志；`service.unavailable`（503）：依赖暂时不可用。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Tenant:
+      description: 租户。
+      type: object
+      required: [id, name, max_concurrent_turns, event_retention_days, created_at, updated_at]
+      properties:
+        id:
+          description: 租户 ID（ten_…）。
+          type: string
+        name:
+          description: 名称。
+          type: string
+        max_concurrent_turns:
+          description: 并发配额：该租户同时执行的轮次上限，下发到 runtime 的租户并发计数。
+          type: integer
+        event_retention_days:
+          description: 会话事件的保留天数（架构设计「数据保留」）。
+          type: integer
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    TenantPage:
+      description: 一页租户。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的租户。
+          type: array
+          items:
+            $ref: '#/components/schemas/Tenant'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    MemberIdentity:
+      description: 用户在身份提供方的标识与资料。
+      type: object
+      required: [subject]
+      properties:
+        subject:
+          description: 主体标识（OIDC 的 `sub`），在身份提供方内唯一且不变。
+          type: string
+          minLength: 1
+          maxLength: 255
+        email:
+          description: 邮箱，只用于展示。
+          type: string
+          maxLength: 320
+        display_name:
+          description: 显示名称。
+          type: string
+          maxLength: 128
+    CreateTenantRequest:
+      description: 创建租户的请求。
+      type: object
+      required: [name, owner]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        owner:
+          $ref: '#/components/schemas/MemberIdentity'
+        max_concurrent_turns:
+          description: 并发配额，1 到 10000；不给出时取平台默认值（默认 20）。
+          type: integer
+          minimum: 1
+          maximum: 10000
+        event_retention_days:
+          description: 事件保留天数，1 到 3650；不给出时取平台默认值（默认 365）。
+          type: integer
+          minimum: 1
+          maximum: 3650
+    UpdateTenantRequest:
+      description: 修改租户的请求。
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          description: 新名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+    TenantQuotas:
+      description: 租户配额。
+      type: object
+      required: [max_concurrent_turns, event_retention_days]
+      additionalProperties: false
+      properties:
+        max_concurrent_turns:
+          description: 并发配额，1 到 10000。
+          type: integer
+          minimum: 1
+          maximum: 10000
+        event_retention_days:
+          description: 事件保留天数，1 到 3650。
+          type: integer
+          minimum: 1
+          maximum: 3650
+    TenantSettings:
+      description: 租户设置：系统提示词的租户层与联网搜索后端（ADR-0035）。
+      type: object
+      required: [system_prompt, web_search]
+      additionalProperties: false
+      properties:
+        system_prompt:
+          description: 租户层系统提示词，位于平台基础提示词之后、智能体提示词之前；空字符串表示没有。最多 8000 个字符。
+          type: string
+          maxLength: 8000
+        web_search:
+          description: 联网搜索后端；为 null 时 `web_search` 工具返回"未配置"。
+          oneOf:
+            - $ref: '#/components/schemas/WebSearchSettings'
+            - type: 'null'
+    WebSearchSettings:
+      description: 联网搜索后端。
+      type: object
+      required: [backend, base_url, secret_id]
+      additionalProperties: false
+      properties:
+        backend:
+          description: 后端类型：`searxng`（自建 SearXNG）或 `bocha`（博查）。
+          type: string
+          enum: [searxng, bocha]
+        base_url:
+          description: 后端的基础 URL。
+          type: string
+          format: uri
+          maxLength: 2048
+        secret_id:
+          description: 访问凭据的 ID（sec_…，T15a）；不需要凭据时为 null。
+          type: [string, 'null']
+    Project:
+      description: 项目。
+      type: object
+      required: [id, tenant_id, name, description, created_at, updated_at]
+      properties:
+        id:
+          description: 项目 ID（prj_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        name:
+          description: 名称。
+          type: string
+        description:
+          description: 说明；空字符串表示没有。
+          type: string
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    ProjectPage:
+      description: 一页项目。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的项目。
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    CreateProjectRequest:
+      description: 创建项目的请求。
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          description: 说明，最多 1000 个字符。
+          type: string
+          maxLength: 1000
+    UpdateProjectRequest:
+      description: 修改项目的请求，只修改给出的字段。
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          description: 新名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          description: 新说明，最多 1000 个字符。
+          type: string
+          maxLength: 1000
+    Member:
+      description: 租户成员。
+      type: object
+      required: [id, tenant_id, subject, email, display_name, created_at, updated_at]
+      properties:
+        id:
+          description: 成员 ID（mbr_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        subject:
+          description: 主体标识（OIDC 的 `sub`）。
+          type: string
+        email:
+          description: 邮箱；空字符串表示没有。
+          type: string
+        display_name:
+          description: 显示名称；空字符串表示没有。
+          type: string
+        created_at:
+          description: 加入时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    MemberPage:
+      description: 一页成员。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的成员。
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    AddMemberRequest:
+      description: 添加成员的请求。
+      type: object
+      required: [subject]
+      additionalProperties: false
+      properties:
+        subject:
+          description: 主体标识（OIDC 的 `sub`）。
+          type: string
+          minLength: 1
+          maxLength: 255
+        email:
+          description: 邮箱。
+          type: string
+          maxLength: 320
+        display_name:
+          description: 显示名称。
+          type: string
+          maxLength: 128
+    UpdateMemberRequest:
+      description: 修改成员的请求，只修改给出的字段。
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          description: 新邮箱。
+          type: string
+          maxLength: 320
+        display_name:
+          description: 新显示名称。
+          type: string
+          maxLength: 128
+    Role:
+      description: |
+        角色（架构设计「授权」）：`tenant_owner` 租户所有者、`tenant_admin` 租户管理员、`project_developer` 项目开发者、
+        `project_viewer` 项目观察者、`approver` 审批人。
+      type: string
+      enum: [tenant_owner, tenant_admin, project_developer, project_viewer, approver]
+    RoleBinding:
+      description: 角色绑定：某成员在租户或某项目中的一个角色。
+      type: object
+      required: [id, tenant_id, member_id, role, project_id, created_at]
+      properties:
+        id:
+          description: 角色绑定 ID（rbd_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        member_id:
+          description: 成员 ID。
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        project_id:
+          description: 项目 ID；租户级角色为 null。
+          type: [string, 'null']
+        created_at:
+          description: 授予时间。
+          type: string
+          format: date-time
+    RoleBindingPage:
+      description: 一页角色绑定。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的角色绑定。
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleBinding'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    CreateRoleBindingRequest:
+      description: 授予角色的请求。
+      type: object
+      required: [member_id, role]
+      additionalProperties: false
+      properties:
+        member_id:
+          description: 成员 ID。
+          type: string
+          minLength: 1
+        role:
+          $ref: '#/components/schemas/Role'
+        project_id:
+          description: 项目 ID；项目级角色必填，租户级角色不能给出。
+          type: string
+          minLength: 1
+    ApiKeyScope:
+      description: |
+        API Key 的作用域（架构设计「授权」）：`sessions:write`、`sessions:read`、`knowledge:read`、`knowledge:write`、
+        `files:write`、`models:invoke`。
+      type: string
+      enum: ['sessions:write', 'sessions:read', 'knowledge:read', 'knowledge:write', 'files:write', 'models:invoke']
+    ApiKey:
+      description: API Key 的元数据，不含明文与哈希。
+      type: object
+      required:
+        [id, tenant_id, project_id, name, display_prefix, scopes, rate_limit_per_minute, status, expires_at, created_at,
+         revoked_at]
+      properties:
+        id:
+          description: API Key ID（key_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        name:
+          description: 名称。
+          type: string
+        display_prefix:
+          description: 用于辨认的前缀：`mk_live_` 加随机部分的前 8 位。
+          type: string
+        scopes:
+          description: 作用域。
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKeyScope'
+        rate_limit_per_minute:
+          description: 每分钟请求上限（令牌桶的容量与每分钟补充量）。
+          type: integer
+        status:
+          description: '`active` 有效；`revoked` 已吊销；`expired` 已过期。'
+          type: string
+          enum: [active, revoked, expired]
+        expires_at:
+          description: 过期时间；为 null 表示不过期。
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        revoked_at:
+          description: 吊销时间；未吊销时为 null。
+          type: [string, 'null']
+          format: date-time
+    CreatedApiKey:
+      description: 新创建的 API Key，带一次性的明文。
+      type: object
+      required:
+        [id, tenant_id, project_id, name, display_prefix, scopes, rate_limit_per_minute, status, expires_at, created_at,
+         revoked_at, key]
+      properties:
+        id:
+          description: API Key ID（key_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        name:
+          description: 名称。
+          type: string
+        display_prefix:
+          description: 用于辨认的前缀：`mk_live_` 加随机部分的前 8 位。
+          type: string
+        scopes:
+          description: 作用域。
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKeyScope'
+        rate_limit_per_minute:
+          description: 每分钟请求上限。
+          type: integer
+        status:
+          description: 新建的 Key 总是 `active`。
+          type: string
+          enum: [active, revoked, expired]
+        expires_at:
+          description: 过期时间；为 null 表示不过期。
+          type: [string, 'null']
+          format: date-time
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        revoked_at:
+          description: 吊销时间；新建时为 null。
+          type: [string, 'null']
+          format: date-time
+        key:
+          description: API Key 明文（`mk_live_…`），只在本响应中出现一次，平台不保存。
+          type: string
+    ApiKeyPage:
+      description: 一页 API Key。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的 API Key。
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKey'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    CreateApiKeyRequest:
+      description: 创建 API Key 的请求。
+      type: object
+      required: [name, scopes]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名称，1 到 128 个字符，便于辨认用途。
+          type: string
+          minLength: 1
+          maxLength: 128
+        scopes:
+          description: 作用域，至少一个，不重复。
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ApiKeyScope'
+        expires_at:
+          description: 过期时间，必须晚于当前时间；不给出表示不过期。
+          type: string
+          format: date-time
+        rate_limit_per_minute:
+          description: 每分钟请求上限，1 到 100000；不给出时取平台默认值（默认 600）。
+          type: integer
+          minimum: 1
+          maximum: 100000
+    UpdateApiKeyRequest:
+      description: 修改 API Key 的请求。
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          description: 新名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+    Problem:
+      description: RFC 9457 错误响应，扩展字段 `code` 与 `request_id`。
+      type: object
+      required: [type, title, status, detail, instance, code, request_id]
+      properties:
+        type:
+          description: 错误类型 URI，`urn:meridian:error:<code>`。
+          type: string
+        title:
+          description: 错误码的简短标题。
+          type: string
+        status:
+          description: HTTP 状态码。
+          type: integer
+        detail:
+          description: 本次错误的说明，不含凭据与内部信息。
+          type: [string, 'null']
+        instance:
+          description: 请求路径。
+          type: string
+        code:
+          description: 错误码，格式 `<领域>.<原因>`。
+          type: string
+        request_id:
+          description: 本次请求的 ID，与响应头 `X-Request-Id` 相同。
+          type: string
+        errors:
+          description: 字段校验失败的明细，只在 `request.validation_failed` 时出现。
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldViolation'
+    FieldViolation:
+      description: 一个字段的校验失败。
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          description: 字段名（snake_case），嵌套字段用点号连接。
+          type: string
+        message:
+          description: 失败原因。
+          type: string

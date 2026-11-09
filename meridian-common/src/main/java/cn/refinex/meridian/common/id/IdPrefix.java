@@ -45,7 +45,11 @@ public enum IdPrefix {
     /** 文件。 */
     FILE("fil"),
     /** MCP 服务。 */
-    MCP_SERVER("mcp");
+    MCP_SERVER("mcp"),
+    /** 租户成员（ADR-0042）。 */
+    MEMBER("mbr"),
+    /** 角色绑定（ADR-0042）。 */
+    ROLE_BINDING("rbd");
 
     private final String value;
 

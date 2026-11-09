@@ -70,6 +70,20 @@
                             </configOptions>
                         </configuration>
                     </execution>
+                    <!-- 管理 API（控制台使用）的 DTO，包与公开 API 分开（ADR-0042） -->
+                    <execution>
+                        <id>generate-admin-dto</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/src/main/resources/openapi/meridian-admin-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <modelPackage>cn.refinex.meridian.api.admin.model</modelPackage>
+                            <generateApis>false</generateApis>
+                            <generateModels>true</generateModels>
+                        </configuration>
+                    </execution>
                     <!-- 内部接口（服务之间调用）的 DTO，包与公开 API 分开（ADR-0033） -->
                     <execution>
                         <id>generate-internal-dto</id>

@@ -2,10 +2,13 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Internal API
   version: 1.0.0
-  summary: 平台服务之间调用 runtime 的内部接口：知识库写入与检索用的 Embedding 与 rerank，沙箱出网代理的授权回调。
+  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，control-plane 提供 API Key 校验与租户配额。
   description: |
-    只供平台内部服务调用（knowledge 经 `meridian-model-client`，沙箱出网代理经 Envoy 的 Lua 过滤器），不对业务系统开放，
-    不随公开 API 发布。
+    只供平台内部服务调用（knowledge 经 `meridian-model-client`，沙箱出网代理经 Envoy 的 Lua 过滤器，runtime 与 knowledge
+    经 `meridian-security` 的服务间调用客户端访问 control-plane），不对业务系统开放，不随公开 API 发布。
+
+    **提供方。** 标签 `InternalModels`、`InternalEgress` 由 runtime 提供；`InternalApiKeys`、`InternalTenants` 由 control-plane
+    提供（ADR-0042）。各服务只生成并实现自己的标签。
 
     **认证。** 请求带 `Authorization: Bearer <服务凭据>`。正式实现是 control-plane 签发的服务 JWT（T14b）；在那之前
     只有 `dev`、`test` profile 接受开发期的静态服务凭据，其他 profile 一律拒绝。
@@ -24,6 +27,10 @@ tags:
     description: 知识库使用的 Embedding 与 rerank，与智能体共用平台的限流、预算与计量。
   - name: InternalEgress
     description: 沙箱出网代理的授权回调（架构设计「沙箱出网」，ADR-0038）。
+  - name: InternalApiKeys
+    description: control-plane 提供：按哈希校验 API Key（架构设计「认证」，ADR-0042）。
+  - name: InternalTenants
+    description: control-plane 提供：租户并发配额（架构设计「认领」中的租户并发计数行，ADR-0042）。
 
 paths:
   /internal/v1/embeddings:
@@ -153,6 +160,84 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /internal/v1/api-keys:verify:
+    post:
+      operationId: verifyApiKey
+      tags: [InternalApiKeys]
+      summary: 校验 API Key
+      description: |
+        调用方计算 `Authorization: Bearer` 中明文的 SHA-256（小写十六进制），只传哈希。Key 有效时返回主体与限流参数；
+        不存在、已吊销、已过期，或所属项目、租户已删除时 404 `api_key.not_found`。调用方把结果（含 404）缓存 60 秒，
+        收到 Pub/Sub `key.revoked`（消息是 Key ID）时淘汰该 Key。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyVerifyRequest'
+            example:
+              key_hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+      responses:
+        '200':
+          description: Key 有效。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyVerification'
+              example:
+                api_key_id: key_01JC8Z7G0J8L2N4Q6S8U0W2Y4A
+                tenant_id: ten_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
+                project_id: prj_01JC8Z2B5D3F7H9K1M4P6R8T0V
+                scopes: ['sessions:read', 'sessions:write']
+                rate_limit_per_minute: 600
+                expires_at: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ApiKeyNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/tenants/{tenant_id}/quotas:
+    get:
+      operationId: getTenantQuotas
+      tags: [InternalTenants]
+      summary: 租户配额
+      description: |
+        runtime 为租户创建并发计数行时读取 `max_concurrent_turns`；control-plane 修改配额后发布 Pub/Sub `config.invalidate`
+        （`{"type":"tenant_quota","tenant_id":"ten_…"}`），runtime 收到后重新读取并更新计数行。已删除的租户 404 `tenant.not_found`。
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          description: 租户 ID（ten_…）。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 配额。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantQuota'
+              example:
+                tenant_id: ten_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
+                max_concurrent_turns: 20
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/TenantNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ServiceAuth:
@@ -169,6 +254,24 @@ components:
         type: string
 
   responses:
+    ApiKeyNotFound:
+      description: '`api_key.not_found`：Key 不存在、已吊销、已过期，或所属项目、租户已删除。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TenantNotFound:
+      description: '`tenant.not_found`：租户不存在或已删除。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     BadRequest:
       description: |
         请求不合法：`request.invalid`、`request.validation_failed`（见 `errors`）；`model.unsupported_operation`：模型的种类
@@ -238,6 +341,53 @@ components:
             $ref: '#/components/schemas/Problem'
 
   schemas:
+    ApiKeyVerifyRequest:
+      description: 校验 API Key 的请求。
+      type: object
+      required: [key_hash]
+      additionalProperties: false
+      properties:
+        key_hash:
+          description: API Key 明文的 SHA-256，64 位小写十六进制。
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+    ApiKeyVerification:
+      description: 有效 API Key 的主体与限流参数。
+      type: object
+      required: [api_key_id, tenant_id, project_id, scopes, rate_limit_per_minute, expires_at]
+      properties:
+        api_key_id:
+          description: API Key ID（key_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        scopes:
+          description: 作用域取值，例如 `sessions:read`。
+          type: array
+          items:
+            type: string
+        rate_limit_per_minute:
+          description: 每分钟请求上限（令牌桶的容量与每分钟补充量）。
+          type: integer
+        expires_at:
+          description: 过期时间；为 null 表示不过期。调用方缓存的结果在过期后不再使用。
+          type: [string, 'null']
+          format: date-time
+    TenantQuota:
+      description: 租户配额。
+      type: object
+      required: [tenant_id, max_concurrent_turns]
+      properties:
+        tenant_id:
+          description: 租户 ID。
+          type: string
+        max_concurrent_turns:
+          description: 并发配额：该租户同时执行的轮次上限。
+          type: integer
     Problem:
       description: RFC 9457 错误响应，扩展字段 `code` 与 `request_id`，与公开 API 相同。
       type: object

@@ -16,6 +16,9 @@ info:
     - 所有 POST 支持 `Idempotency-Key` 请求头：24 小时内同键同请求体返回首次的结果（响应带 `Idempotent-Replayed: true`），
       同键不同请求体返回 409 `idempotency.key_reused`，首次请求仍在处理时返回 409 `idempotency.in_progress`。
     - 错误一律为 RFC 9457 `application/problem+json`，扩展字段 `code`（`<领域>.<原因>`）与 `request_id`。
+    - 限流按 API Key 计（令牌桶，容量与每分钟补充量是该 Key 的每分钟上限）：每个响应带 `RateLimit-Limit`（上限）、
+      `RateLimit-Remaining`（剩余请求数）、`RateLimit-Reset`（多少秒后补满）；超限返回 429 `rate_limit.exceeded` 与
+      `Retry-After`（秒）。
     - 每个响应带 `X-Request-Id`；请求可传入 `X-Request-Id`（不超过 128 个字符的字母、数字与 `._:-`）与 W3C `traceparent`，
       合法的 `traceparent` 在响应中原样返回，用于把平台日志关联到调用方的追踪。
 
@@ -94,6 +97,8 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
     get:
@@ -129,6 +134,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
 
@@ -158,6 +165,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/SessionNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
     patch:
@@ -193,6 +202,8 @@ paths:
           $ref: '#/components/responses/SessionNotFound'
         '409':
           $ref: '#/components/responses/SessionConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
     delete:
@@ -221,6 +232,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/SessionNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
 
@@ -267,6 +280,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
 
@@ -341,6 +356,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
     get:
@@ -371,6 +388,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/SessionNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
 
@@ -410,6 +429,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/SessionNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
 
@@ -444,6 +465,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/SessionNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
 
@@ -486,6 +509,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
 
@@ -525,6 +550,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/SessionNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
 
@@ -667,6 +694,11 @@ components:
       schema:
         type: string
         enum: ['true']
+    RetryAfter:
+      description: 多少秒后可以重试，至少 1。
+      schema:
+        type: integer
+        minimum: 1
 
   parameters:
     SessionId:
@@ -787,6 +819,17 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    RateLimited:
+      description: '`rate_limit.exceeded`：API Key 的请求速率超限，`Retry-After` 秒后重试。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     InternalError:
       description: '`internal.error`：服务内部错误，`detail` 不含内部信息，排查以 `request_id` 关联日志；`service.unavailable`（503）：依赖暂时不可用。'
       headers:
@@ -818,10 +861,14 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     ModelTooManyRequests:
-      description: '`model.budget_exceeded`：租户、项目或 API Key 的预算不足；`model.rate_limit_timeout`：供应商账号的限流等待超过 30 秒。'
+      description: |
+        `model.budget_exceeded`：租户、项目或 API Key 的预算不足；`model.rate_limit_timeout`：供应商账号的限流等待超过 30 秒；
+        `rate_limit.exceeded`：API Key 的请求速率超限，`Retry-After` 给出秒数。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
       content:
         application/problem+json:
           schema:
