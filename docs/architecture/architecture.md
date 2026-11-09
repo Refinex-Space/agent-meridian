@@ -808,7 +808,7 @@ AgentScope 只在三个检查点响应中断：每轮推理开始前、进入工
 - 执行组件：内核每轮把本轮入口（`SubagentSlot`）与拉起名额放进主线程的 `RuntimeContext`，`spawn_subagent` 从调用上下文取出入口，由内核级的 `SubagentRunner` 执行；工具以响应式执行，父线程的订阅被取消时取消一路传到子智能体。`spawn_subagent` 由 `PlatformToolProvider` 在其他工具之后加入，副作用等级按本实例中同名工具的等级计算。
 - 子线程的上下文只有派生的 `PlatformContext`、会话沙箱的 `SandboxContext` 与本次执行新建的停止记录；恢复说明、批次 checkpoint、中断检查点与本轮入口都不放，对应的中间件对子线程不起作用。输入是平台上下文消息加任务文本。
 - 缺少该子智能体的预合成策略时失败关闭（`DONT_ASK`、没有放行规则）。
-- 子线程的终态不写成 `session.status_*`（会推进会话状态），换成 `session.thread_status_idle`：取映射出的停止原因；`PERMISSION_ASKING`、`TOOL_SUSPENDED` 为 `tools_denied`；节点下线为 `interrupted`；超时为 `interrupted`。子线程的 `session.error` 照写，`retry_status` 一律为 `terminal`。只有 `end_turn` 是成功的工具结果。
+- 子线程的终态不写成 `session.status_*`（会推进会话状态），换成 `session.thread_status_idle`：取映射出的停止原因；`PERMISSION_ASKING`、`TOOL_SUSPENDED` 为 `tools_denied`；节点下线为 `interrupted`；超时为 `interrupted`。子线程的 `session.error` 照写，`retry_status` 一律为 `terminal`；子线程创建之后的装配失败同样以 `session.error` 加 `thread_status_idle(error)` 结束。只有 `end_turn` 是成功的工具结果。
 - 父线程被中断之后开始的拉起直接拒绝，不创建子线程。
 - 每轮拉起上限由 `meridian.runtime.worker.max-subagents-per-turn` 配置。
 - 子线程的工具结果同样写 `permission.decided`；删除会话时删除全部线程（含子线程）的 `agent_states`。

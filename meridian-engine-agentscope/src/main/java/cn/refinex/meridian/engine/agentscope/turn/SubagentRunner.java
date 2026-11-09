@@ -33,6 +33,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -118,7 +120,23 @@ public final class SubagentRunner {
                             parentPlatform.threadId(),
                             childThreadId,
                             parentToolUseId);
-                    return execute(slot, subagent, task, child).contextWrite(PlatformContexts.write(child));
+                    return execute(slot, subagent, task, child)
+                            .onErrorResume(error -> failed(childThreadId, subagent, error))
+                            .contextWrite(PlatformContexts.write(child));
+                });
+    }
+
+    /**
+     * 子线程已创建、执行却在开始之前或之外失败（例如子智能体的实例装配失败、写事件失败）：与事件流中的错误相同，写
+     * {@code session.error} 与 {@code session.thread_status_idle}，子线程不会停在只有 {@code thread_created} 的状态。租约丢失
+     * 原样结束（{@link TurnEventMapper#fail} 不输出事件）；再次写入也失败时以原错误结束。
+     */
+    private Mono<SubagentOutcome> failed(String childThreadId, SubagentSpec subagent, Throwable error) {
+        log.warn("子智能体执行失败 subagent={} childThreadId={}", subagent.name(), childThreadId, error);
+        return conclude(childThreadId, subagent, TurnEventMapper.fail(error), () -> "", () -> false)
+                .onErrorResume(writeError -> writeError != error, writeError -> {
+                    error.addSuppressed(writeError);
+                    return Mono.error(error);
                 });
     }
 
@@ -204,24 +222,29 @@ public final class SubagentRunner {
         Flux<EngineEvent> mapped = source.concatMap(mapper::map)
                 .concatWith(Mono.defer(() -> timedOut.get() ? Mono.empty() : Mono.fromSupplier(mapper::complete)))
                 .onErrorResume(TurnEventMapper::fail);
-        ChildEnding ending = new ChildEnding();
         return threads.updateStatus(run.threadId(), ThreadStatus.RUNNING, null)
-                .thenMany(mapped.concatMap(event -> write(run, ending, event)))
-                .then(Mono.defer(() -> {
-                    SubagentOutcome outcome = ending.outcome(run, timedOut.get());
-                    StopReason stopReason = stopReasonOf(outcome);
-                    log.info(
-                            "子智能体结束 subagent={} childThreadId={} stopReason={}",
-                            subagent.name(),
-                            run.threadId(),
-                            stopReason.value());
-                    return threads.updateStatus(run.threadId(), ThreadStatus.IDLE, stopReason)
-                            .thenReturn(outcome);
-                }));
+                .then(conclude(run.threadId(), subagent, mapped, run::finalText, timedOut::get));
+    }
+
+    /** 按顺序写入子线程的事件，再按终态写 {@code session.thread_status_idle}，给出结果。 */
+    private Mono<SubagentOutcome> conclude(
+            String threadId,
+            SubagentSpec subagent,
+            Flux<EngineEvent> mapped,
+            Supplier<String> finalText,
+            BooleanSupplier timedOut) {
+        ChildEnding ending = new ChildEnding();
+        return mapped.concatMap(event -> write(threadId, ending, event)).then(Mono.defer(() -> {
+            SubagentOutcome outcome = ending.outcome(threadId, subagent, finalText.get(), timedOut.getAsBoolean());
+            StopReason stopReason = stopReasonOf(outcome);
+            log.info(
+                    "子智能体结束 subagent={} childThreadId={} stopReason={}", subagent.name(), threadId, stopReason.value());
+            return threads.updateStatus(threadId, ThreadStatus.IDLE, stopReason).thenReturn(outcome);
+        }));
     }
 
     /** 写入子线程的一个事件；终态事件不写，记进 {@code ending}。 */
-    private Mono<Void> write(ChildRun run, ChildEnding ending, EngineEvent event) {
+    private Mono<Void> write(String threadId, ChildEnding ending, EngineEvent event) {
         return switch (event) {
             case SessionEvent.StatusIdle _, SessionEvent.StatusRequiresAction _, SessionEvent.StatusRescheduled _ -> {
                 ending.terminal = event;
@@ -230,10 +253,10 @@ public final class SubagentRunner {
             case SessionEvent.Error error -> {
                 ending.error = error.message();
                 yield events.append(
-                        run.threadId(),
+                        threadId,
                         new SessionEvent.Error(error.code(), error.message(), SessionEvent.RetryStatus.TERMINAL));
             }
-            default -> events.append(run.threadId(), event);
+            default -> events.append(threadId, event);
         };
     }
 
@@ -259,32 +282,31 @@ public final class SubagentRunner {
         private EngineEvent terminal;
         private String error;
 
-        SubagentOutcome outcome(ChildRun run, boolean timedOut) {
+        SubagentOutcome outcome(String threadId, SubagentSpec subagent, String finalText, boolean timedOut) {
             if (timedOut) {
-                return new SubagentOutcome.TimedOut(
-                        run.threadId(), run.subagent().timeout());
+                return new SubagentOutcome.TimedOut(threadId, subagent.timeout());
             }
             return switch (terminal) {
                 case SessionEvent.StatusIdle idle ->
-                    new SubagentOutcome.Finished(run.threadId(), idle.stopReason(), run.finalText(), error);
+                    new SubagentOutcome.Finished(threadId, idle.stopReason(), finalText, error);
                 case SessionEvent.StatusRequiresAction requires ->
                     new SubagentOutcome.Rejected(
-                            run.threadId(),
+                            threadId,
                             requires.actions().stream()
                                     .map(PendingAction::toolName)
                                     .toList());
                 // 节点下线时子智能体被 AgentScope 以 SYSTEM 来源中断；可重试的错误在子线程上不重试
                 case SessionEvent.StatusRescheduled rescheduled ->
                     new SubagentOutcome.Finished(
-                            run.threadId(),
+                            threadId,
                             rescheduled.reason() == SessionEvent.RescheduleReason.NODE_SHUTDOWN
                                     ? StopReason.INTERRUPTED
                                     : StopReason.ERROR,
-                            run.finalText(),
+                            finalText,
                             error);
                 case null, default -> {
-                    log.warn("子智能体的事件流没有终态，按 error 结束 childThreadId={}", run.threadId());
-                    yield new SubagentOutcome.Finished(run.threadId(), StopReason.ERROR, run.finalText(), error);
+                    log.warn("子智能体的事件流没有终态，按 error 结束 childThreadId={}", threadId);
+                    yield new SubagentOutcome.Finished(threadId, StopReason.ERROR, finalText, error);
                 }
             };
         }

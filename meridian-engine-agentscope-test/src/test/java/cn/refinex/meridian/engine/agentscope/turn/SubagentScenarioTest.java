@@ -32,6 +32,7 @@ import cn.refinex.meridian.engine.spi.spec.PermissionRule;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import cn.refinex.meridian.engine.spi.spec.PolicyLayer;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
+import cn.refinex.meridian.engine.spi.spec.SkillRef;
 import cn.refinex.meridian.engine.spi.spec.SubagentSpec;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.TextBlock;
@@ -317,6 +318,46 @@ class SubagentScenarioTest {
         assertThat(harness.threads.threads()).as("被拒绝的调用不创建子线程").hasSize(2);
         assertThat(child.requests()).hasSize(2);
         assertThat(events.getLast()).isEqualTo(new SessionEvent.StatusIdle(StopReason.END_TURN));
+    }
+
+    @Test
+    void subagentThatCannotBeAssembledEndsItsThreadWithAnErrorAndTheParentContinues() {
+        ScriptedModel parent = ScriptedModel.builder()
+                .respond(r ->
+                        r.toolCall("call_spawn", PlatformToolNames.SPAWN_SUBAGENT, spawn("researcher", "probe it")))
+                .respondTo((request, r) -> r.text("parent: " + lastToolResult(request)))
+                .build();
+        ScriptedModel child = ScriptedModel.builder().build();
+        // 子智能体引用了配置中不存在的技能，实例装配失败：子线程已经创建，必须以错误结束而不是停在 thread_created
+        SubagentSpec broken = new SubagentSpec(
+                "researcher",
+                "Looks things up.",
+                ModelSpec.of(CHILD_MODEL),
+                "You are the researcher subagent.",
+                Set.of(PROBE),
+                List.of(new SkillRef("skl_missing", 1, "missing")),
+                PermissionPolicy.empty(),
+                10,
+                Duration.ofSeconds(30));
+        EngineHarness harness = harness(parent, child, new Probe(), 8, broken);
+
+        List<EngineEvent> events = harness.run(claim(harness), EngineHarness.userText("go"));
+
+        assertThat(events.getLast()).isEqualTo(new SessionEvent.StatusIdle(StopReason.END_TURN));
+        AgentOutputEvent.ToolResult result = toolResult(events, "call_spawn");
+        assertThat(result.state()).isEqualTo(AgentOutputEvent.ToolResultState.ERROR);
+        assertThat(text(result)).startsWith("Error: Subagent 'researcher' failed");
+        String childThread = harness.threads.threads().getFirst().threadId();
+        List<EngineEvent> childEvents = harness.events.eventsOf(childThread);
+        assertThat(childEvents.getFirst()).isInstanceOf(SessionEvent.ThreadCreated.class);
+        assertThat(childEvents)
+                .anySatisfy(e -> assertThat(e)
+                        .isInstanceOfSatisfying(
+                                SessionEvent.Error.class,
+                                error -> assertThat(error.retryStatus()).isEqualTo(SessionEvent.RetryStatus.TERMINAL)));
+        assertThat(childEvents.getLast()).isEqualTo(new SessionEvent.ThreadStatusIdle(childThread, StopReason.ERROR));
+        assertThat(child.requests()).isEmpty();
+        assertThat(harness.leases.find(childThread)).isEmpty();
     }
 
     /** P12：同一批中并行拉起两个同名子智能体，两条子线程的事件互不混淆；中断父线程时两条子线程都停止。 */
