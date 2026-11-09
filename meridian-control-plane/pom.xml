@@ -30,10 +30,96 @@
             <groupId>cn.refinex.meridian</groupId>
             <artifactId>meridian-persistence</artifactId>
         </dependency>
+        <!-- control-plane 是 Spring MVC 加虚拟线程的应用（架构设计「部署单元」），平台 API 用 Boot 默认的 Jackson 3 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+        <!-- 健康检查（/actuator/health 与 liveness、readiness 探针），供本地、Compose 与 Kubernetes 使用 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- 生成接口上的 @Valid 与约束注解需要 Bean Validation 实现才生效（ADR-0029） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- 契约测试：按 meridian-admin-v1.yaml 与内部接口规范校验每个请求与响应（ADR-0029） -->
+        <dependency>
+            <groupId>com.atlassian.oai</groupId>
+            <artifactId>openapi-request-validator-core</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <!--
+              从 meridian-api 的规范生成 servlet 服务端接口，模型引用 meridian-api 的 DTO（ADR-0029、ADR-0042）：
+              管理 API 全部生成；内部接口只生成 control-plane 提供的两个标签。
+            -->
+            <plugin>
+                <groupId>org.openapitools</groupId>
+                <artifactId>openapi-generator-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>generate-admin-server</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/../meridian-api/src/main/resources/openapi/meridian-admin-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <apiPackage>cn.refinex.meridian.controlplane.openapi.admin</apiPackage>
+                            <modelPackage>cn.refinex.meridian.api.admin.model</modelPackage>
+                            <generateApis>true</generateApis>
+                            <generateModels>false</generateModels>
+                            <configOptions>
+                                <interfaceOnly>true</interfaceOnly>
+                                <skipDefaultInterface>true</skipDefaultInterface>
+                                <useTags>true</useTags>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-internal-server</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/../meridian-api/src/main/resources/openapi/meridian-internal-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <apiPackage>cn.refinex.meridian.controlplane.openapi.internal</apiPackage>
+                            <modelPackage>cn.refinex.meridian.api.internal.model</modelPackage>
+                            <generateApis>true</generateApis>
+                            <generateModels>false</generateModels>
+                            <apisToGenerate>InternalApiKeys,InternalTenants</apisToGenerate>
+                            <configOptions>
+                                <interfaceOnly>true</interfaceOnly>
+                                <skipDefaultInterface>true</skipDefaultInterface>
+                                <useTags>true</useTags>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

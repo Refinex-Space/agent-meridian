@@ -161,6 +161,8 @@
                             <modelPackage>cn.refinex.meridian.api.internal.model</modelPackage>
                             <generateApis>true</generateApis>
                             <generateModels>false</generateModels>
+                            <!-- 只生成 runtime 提供的标签；InternalApiKeys、InternalTenants 由 control-plane 提供（ADR-0042） -->
+                            <apisToGenerate>InternalModels,InternalEgress</apisToGenerate>
                             <configOptions>
                                 <reactive>true</reactive>
                                 <interfaceOnly>true</interfaceOnly>

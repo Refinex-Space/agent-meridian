@@ -1,0 +1,9 @@
+# 集成测试：数据源、Flyway 与 Redis 的连接由测试类的 @DynamicPropertySource 从 Testcontainers 注入（meridian-test-support）。
+management:
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    cn.refinex.meridian: DEBUG

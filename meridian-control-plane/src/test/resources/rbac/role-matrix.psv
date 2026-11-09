@@ -1,0 +1,36 @@
+# 角色矩阵（架构设计「授权」，ADR-0042）：每个角色对每类管理操作的允许（A，2xx）与拒绝（D，403 access.forbidden）。
+# T14a 用开发期令牌驱动（RoleMatrixIT），T14b 接上 OIDC 后复用同一张表。
+# 列：操作（operationId，# 后是同一操作的变体）| 方法 | 路径 | 请求体 | platform owner admin developer viewer approver outsider
+# 路径与请求体中的占位符由夹具替换：{tenant} {project}（各项目级角色绑定的项目）{other_project} {spare_member}
+# {spare_binding}（spare 的项目级绑定）{owner2_member} {owner2_binding}（第二位所有者）{key}（{project} 下的 API Key）
+createTenant            | POST   | /admin/v1/tenants | {"name":"新租户","owner":{"subject":"someone"}} | A D D D D D D
+listTenants             | GET    | /admin/v1/tenants | | A A A A A A A
+getTenant               | GET    | /admin/v1/tenants/{tenant} | | A A A A A A D
+updateTenant            | PATCH  | /admin/v1/tenants/{tenant} | {"name":"改名"} | D A A D D D D
+deleteTenant            | DELETE | /admin/v1/tenants/{tenant} | | D A D D D D D
+updateTenantQuotas      | PUT    | /admin/v1/tenants/{tenant}/quotas | {"max_concurrent_turns":5,"event_retention_days":30} | A D D D D D D
+getTenantSettings       | GET    | /admin/v1/tenants/{tenant}/settings | | A A A A A A D
+updateTenantSettings    | PUT    | /admin/v1/tenants/{tenant}/settings | {"system_prompt":"用中文回答","web_search":null} | D A A D D D D
+createProject           | POST   | /admin/v1/tenants/{tenant}/projects | {"name":"新项目"} | D A A D D D D
+listProjects            | GET    | /admin/v1/tenants/{tenant}/projects | | A A A A A A D
+getProject              | GET    | /admin/v1/tenants/{tenant}/projects/{project} | | D A A A A A D
+getProject#other        | GET    | /admin/v1/tenants/{tenant}/projects/{other_project} | | D A A D D D D
+updateProject           | PATCH  | /admin/v1/tenants/{tenant}/projects/{project} | {"description":"说明"} | D A A D D D D
+deleteProject           | DELETE | /admin/v1/tenants/{tenant}/projects/{other_project} | | D A A D D D D
+addMember               | POST   | /admin/v1/tenants/{tenant}/members | {"subject":"newcomer"} | D A A D D D D
+listMembers             | GET    | /admin/v1/tenants/{tenant}/members | | D A A D D D D
+getMember               | GET    | /admin/v1/tenants/{tenant}/members/{spare_member} | | D A A D D D D
+updateMember            | PATCH  | /admin/v1/tenants/{tenant}/members/{spare_member} | {"display_name":"新名字"} | D A A D D D D
+removeMember            | DELETE | /admin/v1/tenants/{tenant}/members/{spare_member} | | D A A D D D D
+removeMember#owner      | DELETE | /admin/v1/tenants/{tenant}/members/{owner2_member} | | D A D D D D D
+createRoleBinding       | POST   | /admin/v1/tenants/{tenant}/role-bindings | {"member_id":"{spare_member}","role":"project_developer","project_id":"{project}"} | D A A D D D D
+createRoleBinding#owner | POST   | /admin/v1/tenants/{tenant}/role-bindings | {"member_id":"{spare_member}","role":"tenant_owner"} | D A D D D D D
+listRoleBindings        | GET    | /admin/v1/tenants/{tenant}/role-bindings | | D A A D D D D
+deleteRoleBinding       | DELETE | /admin/v1/tenants/{tenant}/role-bindings/{spare_binding} | | D A A D D D D
+deleteRoleBinding#owner | DELETE | /admin/v1/tenants/{tenant}/role-bindings/{owner2_binding} | | D A D D D D D
+createApiKey            | POST   | /admin/v1/tenants/{tenant}/projects/{project}/api-keys | {"name":"k","scopes":["sessions:read"]} | D A A A D D D
+listApiKeys             | GET    | /admin/v1/tenants/{tenant}/projects/{project}/api-keys | | D A A A A D D
+listApiKeys#other       | GET    | /admin/v1/tenants/{tenant}/projects/{other_project}/api-keys | | D A A D D D D
+getApiKey               | GET    | /admin/v1/tenants/{tenant}/projects/{project}/api-keys/{key} | | D A A A A D D
+updateApiKey            | PATCH  | /admin/v1/tenants/{tenant}/projects/{project}/api-keys/{key} | {"name":"k2"} | D A A A D D D
+revokeApiKey            | POST   | /admin/v1/tenants/{tenant}/projects/{project}/api-keys/{key}:revoke | | D A A A D D D

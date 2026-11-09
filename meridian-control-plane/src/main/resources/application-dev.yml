@@ -1,0 +1,41 @@
+# 本地开发：连接 scripts/dev/up.sh 启动的 compose（端口见 deploy/compose/.env.example）。
+# 口令与开发期令牌只从环境变量读取：MERIDIAN_APP_PASSWORD、MERIDIAN_MIGRATOR_PASSWORD、MERIDIAN_DEV_SERVICE_CREDENTIAL、
+# MERIDIAN_DEV_CONSOLE_TOKEN。
+server:
+  port: ${MERIDIAN_CONTROL_PLANE_PORT:18081}
+
+spring:
+  datasource:
+    url: ${MERIDIAN_DB_URL:jdbc:postgresql://localhost:15432/meridian}
+    username: meridian_app
+    password: ${MERIDIAN_APP_PASSWORD}
+  flyway:
+    user: meridian_migrator
+    password: ${MERIDIAN_MIGRATOR_PASSWORD}
+  data:
+    redis:
+      host: ${MERIDIAN_REDIS_HOST:localhost}
+      port: ${MERIDIAN_REDIS_PORT:16379}
+
+meridian:
+  control-plane:
+    # 开发期控制台用户 dev-admin 同时是平台管理员，可以创建租户
+    platform-admins: [dev-admin]
+  security:
+    dev-console-users:
+      # 开发期控制台令牌（T14a）：只在 dev、test profile 允许启用，T14b 起改为 OIDC
+      enabled: true
+      users:
+        - token: ${MERIDIAN_DEV_CONSOLE_TOKEN}
+          subject: dev-admin
+    dev-service-credentials:
+      # 内部接口的开发期服务凭据：runtime 校验 API Key、读取配额时使用；T14b 起改为服务 JWT
+      enabled: true
+      credentials:
+        - credential: ${MERIDIAN_DEV_SERVICE_CREDENTIAL}
+          service: runtime
+
+management:
+  endpoint:
+    health:
+      show-details: always

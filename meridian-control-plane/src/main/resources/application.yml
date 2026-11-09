@@ -1,0 +1,39 @@
+# control-plane 的公共配置。环境相关的连接信息在 profile 中：dev 连接本地 compose，test 由 Testcontainers 注入。
+spring:
+  application:
+    name: meridian-control-plane
+  threads:
+    virtual:
+      # MVC 加虚拟线程（架构设计「部署单元」）：请求、定时任务都跑在虚拟线程上，按普通阻塞代码编写
+      enabled: true
+  jackson:
+    deserialization:
+      # 请求体中未声明的字段返回 400，不静默忽略（与 runtime 相同）
+      fail-on-unknown-properties: true
+  flyway:
+    # 迁移以 meridian_migrator 执行（spring.flyway.user/password），脚本位置与 schema 由 meridian-persistence 的迁移约定设置
+    enabled: true
+
+meridian:
+  persistence:
+    schema: cp
+  control-plane:
+    tenants:
+      # 新租户的默认配额：并发配额默认 20（架构设计「认领」，ADR-0027），事件保留 365 天（「数据保留」）
+      default-max-concurrent-turns: 20
+      default-event-retention-days: 365
+    api-keys:
+      # 创建 API Key 时不给出上限的默认值（ADR-0042）
+      default-rate-limit-per-minute: 600
+    # 平台管理员的主体标识（ADR-0042）；部署时按身份提供方配置
+    platform-admins: []
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
