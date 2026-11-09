@@ -269,6 +269,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D38 | T12b | 出网代理（Envoy 的 Lua 过滤器）回调 runtime 的 `/internal/v1/egress:authorize` 用开发期静态服务凭据（Secret `meridian-egress-proxy-credential`，本机取 `MERIDIAN_DEV_SERVICE_CREDENTIAL`，`dev`、`test` 之外不被接受）；Envoy 不能签发服务 JWT，T14b 要为代理另定凭据方式（例如 control-plane 为 `egress-proxy` 签发的长期凭据，或由边车刷新 JWT 写入文件、Lua 每次读取），并决定是否按调用方服务限定内部接口 | T14b |
 | D39 | T12b | 沙箱的网络策略放行集群 DNS（解析代理的服务名），CoreDNS 会把任意外部域名的查询转发出去，沙箱可以用 DNS 查询外带数据（DNS 隧道）；可选做法：CoreDNS 对沙箱网段只解析 `cluster.local`、沙箱改用固定 ClusterIP 的代理地址不放行 DNS，或 DNS 出口加策略（ADR-0039） | T37 |
 | D40 | T12b | 出网代理的可观测与运维：管理接口只绑定 127.0.0.1，`/stats/prometheus` 没有被采集；访问日志（JSON，含源 IP、目标、状态码）只在容器标准输出；下线时不排空（SIGTERM 即退出，进行中的隧道被切断）；生产的沙箱节点池污点（`meridian.io/sandbox=true:NoSchedule`）在沙箱模板与代理上都还没有容忍配置 | T27（指标与日志）、T28（排空与节点池） |
+| D41 | T13 | 子线程的事件经 `EventSinkPort` 逐条在各自的事务中写入（每条锁一次轮次行与会话行），事件量大、并行的子智能体会放大数据库写入；需要在容量测试中计入，必要时按批写入 | R1（P7 容量） |
+| D42 | T13 | 子线程的 `session.error`（信封 `thread_id` 为子线程，`retry_status=terminal`）与主线程的同名事件类型相同：Webhook 订阅 `session.error` 时是否推送子线程的错误、是否按线程区分，需要在实现 Webhook 时决定 | T17a |
+| D43 | T13 | 取消 AgentScope 的执行（失去租约、强杀模拟、子智能体超时）后，AgentScope 内部的 `CancellationException` 与被取消的供应商 HTTP 流经 Reactor 的 `onErrorDropped` 以 ERROR 记录（T06 起的恢复与 fencing 测试中同样出现），按 ERROR 告警会误报；可对这类取消降级日志 | T27 |
 
 ## 技术债
 

@@ -923,64 +923,64 @@
       "id": "T13-A01",
       "task": "T13",
       "description": "主智能体调用 `spawn_subagent` 后，子线程被创建、执行、返回结果，父智能体基于结果继续。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=SubagentScenarioTest` 9/9 通过：`parentSpawnsSubagentAndContinuesWithItsAnswer` 中子线程被创建（parent_thread_id、parent_tool_use_id=call_spawn、agent_name）、依次写 thread_created→thread_status_running→工具调用→thread_status_idle(end_turn)，`spawn_subagent` 的结果是子智能体的最终消息，父模型第 2 次请求带该结果并以 end_turn 结束；父、子模型各 2 次请求（两个不同的 ScriptedModel，子请求只有子智能体的工具与提示词）。经 HTTP 的完整路径：`SubagentSessionIT.subagentRunsOnItsOwnThreadAndTheThreadApisServeItsData` 通过"
     },
     {
       "id": "T13-A02",
       "task": "T13",
       "description": "子上下文不包含父线程的 `AgentState`、`ToolRequestConfig`（自定义工具）与文件系统对象。验证：测试断言。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`SubagentScenarioTest.childContextIsBuiltFromScratch` 通过：父线程声明了自定义工具，子线程工具拿到的 RuntimeContext 中 `getToolRequestConfig()` 为 null、`getAgentState()` 不是父线程的对象且上下文不含父线程的用户消息、`AbstractFilesystem` 不是父线程的对象，没有 SubagentSlot/SubagentQuota/BatchCheckpoint，PlatformContext 的线程是子线程；子模型请求不含父线程消息"
     },
     {
       "id": "T13-A03",
       "task": "T13",
       "description": "P12：同时拉起两个同名子智能体，两条子线程的事件互不混淆；中断父线程时两条子线程都停止。验证：测试；报告 `docs/poc/P12-子智能体.md`。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "P12 通过，报告 `docs/poc/P12-子智能体.md`。内核：`SubagentScenarioTest.parallelSameNameSubagentsKeepEventsApartAndStopOnInterrupt` 两条子线程 ID 不同、事件只含自己任务（probe:alpha/probe:beta 不交叉），`AgentEngine.interrupt` 后两条子线程 thread_status_idle(interrupted)、父线程 status_idle(interrupted)、子模型只调用 2 次。端到端：`SubagentSessionIT.parallelSameNameSubagentsAreIsolatedAndStopWhenTheParentIsInterrupted` 两次拉起相隔 4 ms，每条子线程的流式增量只有自己的字（甲/乙），经 API 发 user.interrupt 后 138 ms 内两条子线程都以 interrupted 结束，父线程不再推理"
     },
     {
       "id": "T13-A04",
       "task": "T13",
       "description": "子智能体遇到需要审批的工具时被拒绝（存在显式 ask 规则时同样如此），父智能体收到拒绝结果。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "内核：`SubagentScenarioTest.permissionAskingSubagentIsTurnedIntoRejectionForParent`（子线程停在确认上→thread_status_idle(tools_denied)、无待处理动作、工具未执行，父智能体收到“needed approval… were rejected”错误结果并继续）与 `subagentWithoutAllowRuleGetsDeniedAndParentReceivesItsAnswer`（DONT_ASK 下无放行规则→DENIED）通过；端到端：`SubagentSessionIT.explicitAskRuleIsDeniedOnTheSubagentThread` 父智能体对 write_file 显式 ask，子线程上 write_file 结果 state=denied、permission=denied，无 status_requires_action、待处理动作为空、工具未执行"
     },
     {
       "id": "T13-A05",
       "task": "T13",
       "description": "超时后子智能体被取消，父智能体收到超时结果。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`SubagentScenarioTest.timedOutSubagentIsCancelledAndParentReceivesTimeoutResult`：超时 1 秒，子线程以 thread_status_idle(interrupted) 结束，子线程工具的账本记为 interrupted（取消传到工具），父智能体收到“did not finish within 1 seconds and was cancelled”并以 end_turn 结束；端到端 `SubagentSessionIT.timedOutSubagentIsCancelledAndTheParentContinues` 通过（1.02 秒取消）"
     },
     {
       "id": "T13-A06",
       "task": "T13",
       "description": "每轮超过拉起上限时，多余的调用被拒绝。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`SubagentScenarioTest.spawnsBeyondPerTurnLimitAreRejected`：上限 2，第 1 批 1 个、第 2 批 2 个拉起，第 3 个调用得到“limit of subagents per turn has been reached”错误结果、不创建子线程（2 条子线程、子模型 2 次调用）；端到端 `SubagentSessionIT.spawnsBeyondTheConfiguredLimitAreRejected` 以 `meridian.runtime.worker.max-subagents-per-turn=2` 配置，同一批 3 个调用 2 个成功、1 个被拒绝，线程列表 3 条"
     },
     {
       "id": "T13-A07",
       "task": "T13",
       "description": "子智能体的用量计入父会话，账本带子线程 ID。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-runtime -am verify -Dit.test=SubagentSessionIT` 5/5 通过：生产的 RoutedModelFactory 与 RoutingModelGateway，outbox `usage` 中子线程的 2 条记录 session_id 为父会话、thread_id 为子线程、turn_id 为父轮次、model_id=mdl_e2e_child，父线程 2 条 model_id=mdl_e2e_parent；子线程的工具账本行 thread_id 为子线程，审计 permission.decided 带子线程 ID"
     },
     {
       "id": "T13-A08",
       "task": "T13",
       "description": "`GET /v1/sessions/{id}/threads` 与线程流返回正确的数据；`?threads=main` 的会话流只含主线程事件与线程状态事件。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`SubagentSessionIT.subagentRunsOnItsOwnThreadAndTheThreadApisServeItsData`（ApiTestClient/SseTestClient 按规范校验）：`GET /v1/sessions/{id}/threads` 返回主线程在前、子线程的 parent_thread_id/parent_tool_use_id/agent_name/status=idle；`/threads/{tid}/stream` 只含子线程事件；`?threads=main` 的会话流只含主线程、会话级事件与 thread_created/thread_status_* 事件；完整会话流含子线程事件且 seq 连续；删除会话后两条线程的 agent_states 为 0"
     },
     {
       "id": "T13-A09",
       "task": "T13",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`scripts/dev/verify.sh` exit=0（BUILD SUCCESS；engine-agentscope-test 231 个测试，runtime 319 个单元测试、245 个集成测试，架构测试 13，sandbox-runtime 23 passed）"
     },
     {
       "id": "R1-A01",
