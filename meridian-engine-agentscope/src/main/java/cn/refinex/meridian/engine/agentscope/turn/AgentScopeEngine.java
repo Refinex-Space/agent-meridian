@@ -12,6 +12,7 @@ import cn.refinex.meridian.engine.agentscope.middleware.BatchCheckpoint;
 import cn.refinex.meridian.engine.agentscope.middleware.PendingInterrupt;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformStopRequest;
 import cn.refinex.meridian.engine.agentscope.middleware.RecoveryNoteSlot;
+import cn.refinex.meridian.engine.agentscope.middleware.SubagentQuota;
 import cn.refinex.meridian.engine.agentscope.sandbox.TurnSandboxes;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.engine.ThreadRef;
@@ -27,7 +28,6 @@ import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
-import io.agentscope.core.event.AgentStartEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
@@ -79,6 +79,10 @@ import reactor.core.publisher.Mono;
  * 调用之前的错误）；{@code AgentShuttingDownException} 只输出 {@code session.status_rescheduled}；租约丢失不输出任何事件，
  * 以 {@code LeaseLostException} 结束；订阅被取消时不输出事件，也不调用 {@code interrupt}（ADR-0026）。
  *
+ * <p>子智能体（T13，架构设计「子智能体」）：配置了 {@link SubagentRunner} 时，每轮把 {@link SubagentQuota}（{@code PolicyMiddleware}
+ * 登记拉起名额）与 {@link SubagentSlot}（{@code spawn_subagent} 的入口）放进主线程的 {@code RuntimeContext}；{@link #interrupt}
+ * 先中断本轮登记的全部子线程，再中断父线程。
+ *
  * <p>同一节点上同一线程同时只能有一轮在执行（架构设计「一轮执行的生命周期」中"同节点重新认领"），重复执行以
  * {@link IllegalStateException} 失败。阻塞的步骤（装配、读写状态）经 {@link Blocking} 在虚拟线程上执行，AgentScope
  * 的调用也在该线程上订阅。
@@ -102,6 +106,7 @@ public final class AgentScopeEngine implements AgentEngine {
     private final BlobStorePort blobs;
     private final Clock clock;
     private final TurnSandboxes sandboxes;
+    private final SubagentRunner subagents;
     private final Map<String, RunningTurn> running = new ConcurrentHashMap<>();
 
     /**
@@ -143,7 +148,30 @@ public final class AgentScopeEngine implements AgentEngine {
             BlobStorePort blobs,
             Clock clock,
             TurnSandboxes sandboxes) {
+        this(instances, configs, leases, blobs, clock, sandboxes, null);
+    }
+
+    /**
+     * 创建支持 {@code sandbox} 档与子智能体的内核。
+     *
+     * @param instances 智能体实例缓存
+     * @param configs 智能体版本与环境配置
+     * @param leases 本节点持有的租约，权限安装时在条目上做标记
+     * @param blobs 大对象存储，超过 16 KB 的工具结果写入这里
+     * @param clock 时钟，平台上下文消息中的当前时间取自它
+     * @param sandboxes 每轮的会话沙箱；为 null 时不支持 {@code sandbox} 档，这类轮次以错误结束
+     * @param subagents 子智能体的执行组件；为 null 时 {@code spawn_subagent} 返回"不可用"的错误结果
+     */
+    public AgentScopeEngine(
+            AgentInstanceCache instances,
+            AgentConfigPort configs,
+            LeaseRegistry leases,
+            BlobStorePort blobs,
+            Clock clock,
+            TurnSandboxes sandboxes,
+            SubagentRunner subagents) {
         this.sandboxes = sandboxes;
+        this.subagents = subagents;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.instances = Objects.requireNonNull(instances, "instances");
         this.configs = Objects.requireNonNull(configs, "configs");
@@ -161,15 +189,15 @@ public final class AgentScopeEngine implements AgentEngine {
                         configs.agentVersion(ctx.agentVersionId()),
                         configs.environment(ctx.environmentId(), ctx.environmentRevision()))
                 .flatMapMany(specs -> {
-                    TurnSlot slot = new TurnSlot();
+                    ExecutionSlot<RunningTurn> slot = new ExecutionSlot<>(this::finish);
                     // usingWhen 在终态之前归还资源；取消发生在 begin 仍在虚拟线程上执行时，usingWhen 拿不到资源，
                     // 由 slot 在 begin 完成后自行清理，避免实例与执行登记泄漏
                     return Flux.usingWhen(
                                     Blocking.call(() -> slot.attach(begin(ctx, input, specs.getT1(), specs.getT2()))),
                                     this::execute,
-                                    turn -> end(slot),
-                                    (turn, error) -> end(slot),
-                                    turn -> end(slot))
+                                    turn -> Mono.fromRunnable(slot::close),
+                                    (turn, error) -> Mono.fromRunnable(slot::close),
+                                    turn -> Mono.fromRunnable(slot::close))
                             .doOnCancel(slot::close);
                 })
                 .onErrorResume(TurnEventMapper::fail)
@@ -197,7 +225,7 @@ public final class AgentScopeEngine implements AgentEngine {
                 .flatMap(specs -> Blocking.call(() -> sandbox(ctx.platform(), specs.getT2()))
                         .flatMap(sandbox -> Mono.usingWhen(
                                 Blocking.call(() -> instances.acquire(specs.getT1(), specs.getT2())),
-                                handle -> callTool(ctx, retry, handle, sandbox),
+                                handle -> callTool(ctx, retry, handle, specs.getT1(), specs.getT2(), sandbox),
                                 handle -> Mono.fromRunnable(() -> instances.release(handle)))))
                 .onErrorResume(error -> !(error instanceof LeaseLostException), error -> {
                     log.warn("重新执行工具调用失败 toolUseId={} tool={}", retry.toolUseId(), retry.toolName(), error);
@@ -221,20 +249,35 @@ public final class AgentScopeEngine implements AgentEngine {
 
     /**
      * 在智能体实例的 Toolkit 中找到工具并直接调用，不经模型与权限引擎（调用已由人确认重试）。{@code sandbox} 档把会话沙箱作为本次
-     * 调用绑定的沙箱放进上下文：直接调用工具不经过 harness 的沙箱生命周期，沙箱文件系统要从上下文取到它。
+     * 调用绑定的沙箱放进上下文：直接调用工具不经过 harness 的沙箱生命周期，沙箱文件系统要从上下文取到它。重新执行的是
+     * {@code spawn_subagent} 时，放入子智能体的入口，拉起一个新的子线程（不经 {@code PolicyMiddleware}，不占本轮名额）。
      */
     private Mono<ToolRetry.Result> callTool(
-            TurnContext ctx, ToolRetry retry, AgentHandle handle, Optional<Sandbox> sandbox) {
+            TurnContext ctx,
+            ToolRetry retry,
+            AgentHandle handle,
+            ResolvedAgentSpec agent,
+            EnvironmentSpec environment,
+            Optional<Sandbox> sandbox) {
         AgentTool tool = handle.agent().getToolkit().getTool(retry.toolName());
         if (tool == null) {
             return Mono.just(new ToolRetry.Result(false, "工具已不存在：" + retry.toolName()));
         }
         PlatformContext platform = ctx.platform();
+        String userId = AgentScopeIdentity.userId(platform.projectId(), ctx.endUserId());
         RuntimeContext.Builder builder = RuntimeContext.builder()
                 .sessionId(platform.threadId())
-                .userId(AgentScopeIdentity.userId(platform.projectId(), ctx.endUserId()))
+                .userId(userId)
                 .put(PlatformContext.class, platform)
                 .put(ToolRetryContext.class, new ToolRetryContext(retry.idempotencyKey()));
+        if (subagents != null) {
+            builder.put(
+                    SubagentSlot.class,
+                    new SubagentSlot(
+                            subagents,
+                            new SubagentSlot.Parent(ctx, agent, environment, userId, sandbox.orElse(null)),
+                            new SubagentQuota()));
+        }
         sandbox.ifPresent(s -> builder.put(
                         SandboxContext.class,
                         SandboxContext.builder().externalSandbox(s).build())
@@ -285,11 +328,10 @@ public final class AgentScopeEngine implements AgentEngine {
         String threadId = platform.threadId();
         String userId = AgentScopeIdentity.userId(platform.projectId(), ctx.endUserId());
         // sandbox 档：会话沙箱作为外部沙箱放进本轮的 RuntimeContext，harness 不停止也不持久化它（架构设计「会话沙箱」）
-        SandboxContext sandboxContext = sandbox(platform, environment)
-                .map(s -> SandboxContext.builder().externalSandbox(s).build())
-                .orElse(null);
+        Sandbox sandbox = sandbox(platform, environment).orElse(null);
         AgentHandle handle = instances.acquire(agent, environment);
-        RunningTurn turn = new RunningTurn(ctx, input, agent, handle, userId, sandboxContext);
+        SubagentSlot.Parent parent = new SubagentSlot.Parent(ctx, agent, environment, userId, sandbox);
+        RunningTurn turn = new RunningTurn(ctx, input, parent, handle, subagents);
         if (running.putIfAbsent(threadId, turn) != null) {
             instances.release(handle);
             throw new IllegalStateException("线程已在本节点执行，上一次执行结束前不能再次认领：" + threadId);
@@ -351,10 +393,6 @@ public final class AgentScopeEngine implements AgentEngine {
         return all;
     }
 
-    private Mono<Void> end(TurnSlot slot) {
-        return Mono.fromRunnable(slot::close);
-    }
-
     /** 结束一轮：注销执行、清理状态缓存、归还实例。只清理本机内存，不写任何数据，所以取消时也可以执行。 */
     private void finish(RunningTurn turn) {
         try {
@@ -370,46 +408,7 @@ public final class AgentScopeEngine implements AgentEngine {
     }
 
     /**
-     * 一轮执行的资源槽：{@link #attach} 与 {@link #close} 无论谁先发生，{@link #finish} 都恰好执行一次。
-     *
-     * <p>线程安全：两个方法互斥。
-     */
-    private final class TurnSlot {
-
-        private RunningTurn turn;
-        private boolean closed;
-
-        /** 登记准备好的执行；槽已关闭（订阅已被取消）时立即结束它。 */
-        RunningTurn attach(RunningTurn prepared) {
-            synchronized (this) {
-                if (!closed) {
-                    turn = prepared;
-                    return prepared;
-                }
-            }
-            finish(prepared);
-            return prepared;
-        }
-
-        /** 关闭槽并结束已登记的执行，可以重复调用。 */
-        void close() {
-            RunningTurn toFinish;
-            synchronized (this) {
-                closed = true;
-                toFinish = turn;
-                turn = null;
-            }
-            if (toFinish != null) {
-                finish(toFinish);
-            }
-        }
-    }
-
-    /**
-     * 本节点上正在执行的一轮。
-     *
-     * <p>中断：AgentScope 只在调用被受理（进入 {@code runningCalls}）之后响应 {@code interrupt}，之前的中断会被静默丢弃。
-     * 调用在发出 {@code AGENT_START} 之后才被受理，所以受理前收到的中断，在看到第一个其他事件时再发一次。
+     * 本节点上正在执行的一轮。中断经 {@link InterruptRelay} 处理受理前到达的情况；配置了子智能体执行时，先中断本轮登记的子线程。
      */
     private static final class RunningTurn {
 
@@ -420,27 +419,35 @@ public final class AgentScopeEngine implements AgentEngine {
         private final String userId;
         private final RuntimeContext runtimeContext;
         private final PlatformStopRequest platformStop = new PlatformStopRequest();
-        private boolean admitted;
-        private boolean interruptBeforeAdmission;
+        private final InterruptRelay relay;
+        private final SubagentSlot subagentSlot;
 
         RunningTurn(
                 TurnContext ctx,
                 TurnInput input,
-                ResolvedAgentSpec spec,
+                SubagentSlot.Parent parent,
                 AgentHandle handle,
-                String userId,
-                SandboxContext sandboxContext) {
+                SubagentRunner subagents) {
             this.ctx = ctx;
             this.input = input;
-            this.spec = spec;
+            this.spec = parent.agent();
             this.handle = handle;
-            this.userId = userId;
+            this.userId = parent.userId();
+            this.relay =
+                    new InterruptRelay(handle.agent(), userId, ctx.platform().threadId());
+            SubagentQuota quota = new SubagentQuota();
+            this.subagentSlot = subagents == null ? null : new SubagentSlot(subagents, parent, quota);
             RuntimeContext.Builder builder = RuntimeContext.builder()
                     .sessionId(ctx.platform().threadId())
                     .userId(userId)
                     .put(PlatformContext.class, ctx.platform())
                     .put(PlatformStopRequest.class, platformStop)
-                    .put(BatchCheckpoint.class, new BatchCheckpoint());
+                    .put(BatchCheckpoint.class, new BatchCheckpoint())
+                    // PolicyMiddleware 在每批工具执行前登记 spawn_subagent 的名额（架构设计「子智能体」）
+                    .put(SubagentQuota.class, quota);
+            if (subagentSlot != null) {
+                builder.put(SubagentSlot.class, subagentSlot);
+            }
             if (input.recovery() != null) {
                 // 恢复说明由 RecoveryNoteMiddleware 在第一次推理前注入，不走调用入参（架构设计「崩溃恢复」）
                 builder.put(RecoveryNoteSlot.class, new RecoveryNoteSlot(input.recovery()));
@@ -449,8 +456,13 @@ public final class AgentScopeEngine implements AgentEngine {
                 // 认领时已有中断请求：输入写进上下文后，在第一次推理前按用户中断结束（InterruptCheckpointMiddleware）
                 builder.put(PendingInterrupt.class, new PendingInterrupt());
             }
-            if (sandboxContext != null) {
-                builder.put(SandboxContext.class, sandboxContext);
+            if (parent.sandbox() != null) {
+                // sandbox 档：会话沙箱作为外部沙箱放进本轮的 RuntimeContext，harness 不停止也不持久化它（架构设计「会话沙箱」）
+                builder.put(
+                        SandboxContext.class,
+                        SandboxContext.builder()
+                                .externalSandbox(parent.sandbox())
+                                .build());
             }
             ToolRequestConfig customTools = TurnInputTranslator.toolRequestConfig(ctx.customTools());
             if (customTools != null) {
@@ -469,21 +481,16 @@ public final class AgentScopeEngine implements AgentEngine {
                     platformStop);
         }
 
-        synchronized void interrupt() {
-            agent().interrupt(userId, threadId());
-            if (!admitted) {
-                interruptBeforeAdmission = true;
+        /** 先中断本轮的子线程，再中断父线程：{@code spawn_subagent} 是工具，父线程被中断后它不会停（架构设计「消息投递」）。 */
+        void interrupt() {
+            if (subagentSlot != null) {
+                subagentSlot.interruptAll();
             }
+            relay.interrupt();
         }
 
-        synchronized void observe(AgentEvent event) {
-            if (admitted || event instanceof AgentStartEvent) {
-                return;
-            }
-            admitted = true;
-            if (interruptBeforeAdmission) {
-                agent().interrupt(userId, threadId());
-            }
+        void observe(AgentEvent event) {
+            relay.observe(event);
         }
 
         HarnessAgent agent() {

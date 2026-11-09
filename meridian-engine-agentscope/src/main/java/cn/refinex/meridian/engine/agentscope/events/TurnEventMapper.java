@@ -90,7 +90,8 @@ import reactor.core.publisher.Flux;
  * {@link #fail(Throwable)} 先输出 {@code session.error} 再输出终态，节点下线输出 {@code session.status_rescheduled}
  * 且不输出错误，租约丢失则不输出任何事件、原样结束（ADR-0026）。订阅被取消时两者都不会被调用。
  *
- * <p>子线程事件（{@code source} 不为空）只记日志，由 T13 的 {@code SpawnSubagentTool} 经 {@code EventSinkPort} 写入。
+ * <p>带 {@code source} 的事件（harness 的 {@code agent_spawn} 转发的子智能体事件）只记日志：平台不用 {@code agent_spawn}，子线程的事件由
+ * {@code SubagentRunner} 用另一个映射器映射、经 {@code EventSinkPort} 写入（T13）。
  *
  * <p>线程安全：不支持并发调用。引擎以 {@code concatMap} 串行调用 {@link #map}，Reactor 保证相邻信号之间的可见性。
  */

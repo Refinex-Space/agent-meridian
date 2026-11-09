@@ -74,7 +74,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T11 | [沙箱运行时镜像、集群与驱动](tasks/T11-sandbox-runtime-and-driver.md) | 1 | T10b | high | 大 | P5 | 已完成 | bcd2246 |
 | T12a | [会话沙箱生命周期、bash 与产物](tasks/T12a-session-sandbox-and-bash.md) | 1 | T11 | xhigh | 大 | P4（`sandbox` 档）、P6（bash 规则）、P9 | 已完成 | b3bdef7 |
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 已完成 | 086b6f4 |
-| T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 未开始 | — |
+| T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 进行中 | — |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 未开始 | — |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 未开始 | — |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 未开始 | — |
@@ -175,7 +175,16 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+**T13 子智能体**（2026-11-09 开工，基线 `scripts/dev/verify.sh` 通过）
+
+- [x] 1. `spawn_subagent`（`SpawnSubagentTool`）：参数、可用子智能体与工具集子集校验、副作用等级取子智能体工具中最高的
+- [ ] 2. 子线程执行（内核部分已完成：`turn.SubagentRunner`、`SubagentSlot`、`SubagentOutcome`，`ThreadRegistryPort` 写线程事件）：`ThreadRegistryPort` 创建子线程与 `session.thread_created`、空白的子 `RuntimeContext`、子智能体实例的装配与缓存、子智能体中间件集合、预合成权限、事件经 `EventSinkPort` 写为子线程事件与线程状态事件、最终消息作为工具结果
+- [x] 3. 配套（`InterruptRelay`、`ExecutionSlot`、`middleware.SubagentQuota`）：子线程状态用父轮次租约、`AgentEngine.interrupt` 先中断子线程、超时（上限 600 秒）、`PolicyMiddleware` 每轮拉起上限 8（可配置）、`PERMISSION_ASKING`/`TOOL_SUSPENDED` 转为拒绝结果
+- [ ] 4. runtime：`ThreadRegistryPort` 实现、装配与配置、计量带子线程 ID、删除会话时清理子线程的 `agent_states`
+- [x] 5. 场景测试（`turn.SubagentScenarioTest`，8 个用例）（A01、A02、A04、A05、A06；两个不同 `ScriptedModel` 的模型选择）
+- [ ] 6. P12 并行与中断测试与报告 `docs/poc/P12-子智能体.md`（A03）
+- [ ] 7. 集成测试：用量计入父会话（A07）、线程 API 与 `?threads=main`（A08）
+- [ ] 8. 收尾：`verify.sh`（A09）、模块 `CLAUDE.md`、架构设计与 ADR、`docs/poc/README.md`、验收记录、PLAN
 
 ## 控制台设计轨道
 

@@ -21,7 +21,7 @@ public enum AgentEventDisposition {
     TERMINAL,
     /** 不输出：平台已有对应事件（{@code session.status_running}、{@code user.*}），或信息已在其他事件中。 */
     IGNORED,
-    /** 不输出，只记日志；子线程事件由 {@code SpawnSubagentTool} 经 {@code EventSinkPort} 写入（T13）。 */
+    /** 不输出，只记日志；子线程事件由 {@code SubagentRunner} 用自己的映射器经 {@code EventSinkPort} 写入（T13）。 */
     LOGGED,
     /**
      * 平台中间件以约定名字发出的自定义事件按名字映射为平台事件（{@code meridian.context_compacted} →

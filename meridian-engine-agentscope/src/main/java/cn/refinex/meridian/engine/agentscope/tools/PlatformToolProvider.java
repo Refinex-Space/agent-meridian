@@ -4,6 +4,9 @@ import cn.refinex.meridian.engine.agentscope.assembly.AgentProfile;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.tools.mcp.McpConnector;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
+import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
+import cn.refinex.meridian.engine.spi.spec.SideEffect;
+import cn.refinex.meridian.engine.spi.spec.SubagentSpec;
 import io.agentscope.core.tool.AgentTool;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -21,6 +24,10 @@ import org.slf4j.LoggerFactory;
  * 共享）。T10a 登记六个文件工具；T10b、T12a、T13 的工具经 {@link #with} 加入同一个提供者；工厂可以读取装配对象（例如
  * {@code knowledge_search} 取智能体绑定的知识库）。挂载了 MCP 服务时，经 {@link #withMcp} 登记的 {@link McpConnector} 连接服务、
  * 发现工具，客户端随实例关闭（T10b，ADR-0035）。
+ *
+ * <p>{@code spawn_subagent}（T13）不经登记：主智能体启用了它且声明了子智能体时，在其他工具（含 MCP 工具）都创建之后加入，
+ * 副作用等级取子智能体可用工具在本实例中的最高等级（架构设计「平台工具」：取子智能体工具中最高的等级）。子智能体的装配对象
+ * 不会有它（{@code SubagentSpec} 不允许）。
  *
  * <p>装配对象启用了、但还没有实现的工具不注册，记一条告警：模型看不到它，也就调不到它。
  *
@@ -110,6 +117,9 @@ public final class PlatformToolProvider implements ToolProvider {
     public ToolBundle tools(AgentProfile profile) {
         List<AgentTool> tools = new ArrayList<>();
         for (String name : new TreeSet<>(profile.tools())) {
+            if (name.equals(PlatformToolNames.SPAWN_SUBAGENT)) {
+                continue;
+            }
             BiFunction<PlatformTool.ToolServices, AgentProfile, PlatformTool> factory = factories.get(name);
             if (factory != null) {
                 PlatformTool tool = factory.apply(services, profile);
@@ -132,16 +142,43 @@ public final class PlatformToolProvider implements ToolProvider {
                         name);
             }
         }
-        if (mcp == null) {
-            if (!profile.agent().mcpServers().isEmpty()) {
-                log.warn(
-                        "智能体挂载了 MCP 服务但没有登记 MCP 连接器，未注册 MCP 工具 agentVersionId={}",
-                        profile.key().agentVersionId());
-            }
-            return ToolBundle.of(tools);
+        List<AutoCloseable> resources = List.of();
+        if (mcp != null) {
+            ToolBundle mcpTools = mcp.connect(profile, services);
+            tools.addAll(mcpTools.tools());
+            resources = mcpTools.resources();
+        } else if (!profile.agent().mcpServers().isEmpty()) {
+            log.warn(
+                    "智能体挂载了 MCP 服务但没有登记 MCP 连接器，未注册 MCP 工具 agentVersionId={}",
+                    profile.key().agentVersionId());
         }
-        ToolBundle mcpTools = mcp.connect(profile, services);
-        tools.addAll(mcpTools.tools());
-        return new ToolBundle(tools, mcpTools.resources());
+        if (!profile.isSubagent() && profile.tools().contains(PlatformToolNames.SPAWN_SUBAGENT)) {
+            if (profile.agent().subagents().isEmpty()) {
+                log.debug(
+                        "智能体启用了 spawn_subagent 但没有声明子智能体，未注册 agentVersionId={}",
+                        profile.key().agentVersionId());
+            } else {
+                tools.add(new SpawnSubagentTool(services, profile.agent(), subagentSideEffect(profile.agent(), tools)));
+            }
+        }
+        return new ToolBundle(tools, resources);
+    }
+
+    /**
+     * 子智能体可用工具中最高的副作用等级，按本实例中同名工具的声明取（子智能体的工具是父智能体工具集的子集）。本实例没有注册的工具
+     * （例如 {@code none} 档的 {@code bash}）子智能体同样没有，不计入。{@link SideEffect} 的声明顺序就是从低到高。
+     */
+    private static SideEffect subagentSideEffect(ResolvedAgentSpec agent, List<AgentTool> parentTools) {
+        SideEffect highest = SideEffect.NONE;
+        for (SubagentSpec subagent : agent.subagents()) {
+            for (AgentTool tool : parentTools) {
+                if (tool instanceof PlatformTool platformTool
+                        && subagent.tools().contains(tool.getName())
+                        && platformTool.sideEffect().ordinal() > highest.ordinal()) {
+                    highest = platformTool.sideEffect();
+                }
+            }
+        }
+        return highest;
     }
 }

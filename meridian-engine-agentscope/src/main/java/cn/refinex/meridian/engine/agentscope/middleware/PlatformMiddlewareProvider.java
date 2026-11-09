@@ -17,9 +17,13 @@ import java.util.Objects;
  * {@link BatchCheckpointMiddleware}（80，可关闭）。T08 提供：{@link InterruptCheckpointMiddleware}（88）、{@link SteerMiddleware}
  * （85，只挂在主智能体上，必须在批次 checkpoint 之外）。T09a 提供：{@link CompactionGuardMiddleware}（外层 20，按智能体配置的
  * 压缩预留创建）与 {@link CompactionGuardMiddleware.Inner}（0），夹住 harness 的 {@code CompactionMiddleware}（1）；
- * {@link ContextCompositionMiddleware}（10，只用 {@code onModelCall}）。括号内是 {@code order()}，数值大的在外层；harness 自带的
- * 中间件都是默认值 1。后续任务在这里加入 {@code PolicyMiddleware}（T10a）、{@code KnowledgePrefetchMiddleware}（T19），
- * 子智能体不含 Steer 与 KnowledgePrefetch（T13）。
+ * {@link ContextCompositionMiddleware}（10，只用 {@code onModelCall}）。T10a 提供 {@link PolicyMiddleware}（70，T13 起另限制每轮
+ * 拉起子智能体的数量）。括号内是 {@code order()}，数值大的在外层；harness 自带的中间件都是默认值 1。T19 在这里加入
+ * {@code KnowledgePrefetchMiddleware}。
+ *
+ * <p>子智能体挂载另一组中间件（架构设计「子智能体」）：不含 {@link SteerMiddleware}（以及 T19 的 {@code KnowledgePrefetchMiddleware}）；
+ * 恢复说明、中断检查点、批次 checkpoint 三个中间件也在其中，但引擎不往子线程的 {@code RuntimeContext} 放它们读取的标记，所以
+ * 对子线程不起作用（子线程不会被恢复，见 ADR-0040）。
  */
 public final class PlatformMiddlewareProvider implements MiddlewareProvider {
 
@@ -45,6 +49,19 @@ public final class PlatformMiddlewareProvider implements MiddlewareProvider {
      * @param batchCheckpoint 是否在每批工具执行完成后保存状态（P3）；关闭时强杀只能整轮恢复
      */
     public PlatformMiddlewareProvider(LeaseRegistry leases, InboxPort inbox, boolean batchCheckpoint) {
+        this(leases, inbox, batchCheckpoint, PolicyMiddleware.DEFAULT_MAX_SUBAGENTS_PER_TURN);
+    }
+
+    /**
+     * 创建提供者。
+     *
+     * @param leases 本节点持有的租约，供租约守卫与压缩守护使用
+     * @param inbox 收件箱，供 steer 中间件取出 steer 消息
+     * @param batchCheckpoint 是否在每批工具执行完成后保存状态（P3）；关闭时强杀只能整轮恢复
+     * @param maxSubagentsPerTurn 每轮拉起子智能体的上限（架构设计「子智能体」，默认 8）
+     */
+    public PlatformMiddlewareProvider(
+            LeaseRegistry leases, InboxPort inbox, boolean batchCheckpoint, int maxSubagentsPerTurn) {
         this.leases = Objects.requireNonNull(leases, "leases");
         Objects.requireNonNull(inbox, "inbox");
         List<MiddlewareBase> shared = new ArrayList<>(List.of(
@@ -54,7 +71,7 @@ public final class PlatformMiddlewareProvider implements MiddlewareProvider {
                 new RecoveryNoteMiddleware(),
                 new InterruptCheckpointMiddleware(),
                 new ToolSpanMiddleware(),
-                new PolicyMiddleware(),
+                new PolicyMiddleware(maxSubagentsPerTurn),
                 new ContextCompositionMiddleware(),
                 new CompactionGuardMiddleware.Inner()));
         if (batchCheckpoint) {

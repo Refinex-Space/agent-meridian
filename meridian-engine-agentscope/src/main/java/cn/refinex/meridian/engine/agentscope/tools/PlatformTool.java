@@ -185,9 +185,19 @@ public abstract class PlatformTool extends ToolBase {
      */
     protected abstract ToolOutput execute(ToolCall call) throws Exception;
 
+    /**
+     * 以响应式方式执行工具。默认在有界弹性线程上调用 {@link #execute}；执行时间长、本身是响应式的工具（{@code spawn_subagent}
+     * 要等子智能体跑完，最长 600 秒）覆盖它，不占用线程，取消订阅也能传到下游。错误处理与 {@link #execute} 相同。
+     *
+     * @param call 本次调用
+     * @return 结果
+     */
+    protected Mono<ToolOutput> executeAsync(ToolCall call) {
+        return Mono.fromCallable(() -> execute(call)).subscribeOn(Schedulers.boundedElastic());
+    }
+
     private Mono<ToolOutput> run(ToolCall call) {
-        return Mono.fromCallable(() -> execute(call))
-                .subscribeOn(Schedulers.boundedElastic())
+        return Mono.defer(() -> executeAsync(call))
                 .onErrorResume(ToolInputException.class, error -> Mono.just(ToolOutput.error(error.getMessage())))
                 .onErrorResume(error -> !(error instanceof LeaseLostException), error -> {
                     log.warn("平台工具执行出错 tool={} toolUseId={}", getName(), call.toolUseId(), error);

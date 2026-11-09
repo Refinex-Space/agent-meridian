@@ -13,6 +13,7 @@ import cn.refinex.meridian.engine.agentscope.assembly.TenantPromptProvider;
 import cn.refinex.meridian.engine.agentscope.assembly.ToolProvider;
 import cn.refinex.meridian.engine.agentscope.fs.PlatformWorkspace;
 import cn.refinex.meridian.engine.agentscope.middleware.PlatformMiddlewareProvider;
+import cn.refinex.meridian.engine.agentscope.middleware.PolicyMiddleware;
 import cn.refinex.meridian.engine.agentscope.sandbox.SandboxDriverSettings;
 import cn.refinex.meridian.engine.agentscope.sandbox.TurnSandboxes;
 import cn.refinex.meridian.engine.agentscope.state.FencedAgentStateStore;
@@ -26,9 +27,11 @@ import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryAgentConfig;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryAgentStateRepository;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryBlobStore;
+import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryEventSink;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryInbox;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryLeaseRegistry;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemorySandboxStates;
+import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryThreadRegistry;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryToolLedger;
 import cn.refinex.meridian.engine.agentscope.testkit.port.InMemoryWorkspaceStore;
 import cn.refinex.meridian.engine.agentscope.testkit.sandbox.FakeSandbox;
@@ -89,6 +92,10 @@ final class EngineHarness {
     final InMemoryWorkspaceStore workspace = new InMemoryWorkspaceStore();
     final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     final InMemorySandboxStates sandboxStates = new InMemorySandboxStates();
+    /** 子线程的事件（含 {@code session.thread_*}），经 {@code EventSinkPort} 与内存的 {@code ThreadRegistryPort} 写入。 */
+    final InMemoryEventSink events = new InMemoryEventSink();
+
+    final InMemoryThreadRegistry threads = new InMemoryThreadRegistry(events);
     final ResolvedAgentSpec spec;
     final EnvironmentSpec environment;
     final AgentInstanceCache instances;
@@ -100,7 +107,19 @@ final class EngineHarness {
             List<AgentTool> tools,
             List<MiddlewareBase> extraMiddlewares,
             Predicate<MiddlewareBase> keep) {
-        this(model, spec, tools, extraMiddlewares, keep, false, List.of(), Map.of(), null, null);
+        this(
+                model,
+                spec,
+                tools,
+                extraMiddlewares,
+                keep,
+                false,
+                List.of(),
+                Map.of(),
+                null,
+                null,
+                Map.of(),
+                PolicyMiddleware.DEFAULT_MAX_SUBAGENTS_PER_TURN);
     }
 
     private EngineHarness(
@@ -113,14 +132,23 @@ final class EngineHarness {
             List<SkillDefinition> skills,
             Map<String, Function<PlatformTool.ToolServices, PlatformTool>> extraPlatformTools,
             McpConnector mcp,
-            FakeSandbox sandbox) {
+            FakeSandbox sandbox,
+            Map<String, Model> modelsById,
+            int maxSubagentsPerTurn) {
         this.model = model;
         this.spec = spec;
         this.environment = sandbox == null ? TestSpecs.noneEnvironment() : TestSpecs.sandboxEnvironment();
-        List<MiddlewareBase> middlewares = new ArrayList<>(new PlatformMiddlewareProvider(leases, inbox)
-                .middlewares(AgentProfile.main(spec, TestSpecs.noneEnvironment())));
+        PlatformMiddlewareProvider provider = new PlatformMiddlewareProvider(leases, inbox, true, maxSubagentsPerTurn);
+        List<MiddlewareBase> middlewares =
+                new ArrayList<>(provider.middlewares(AgentProfile.main(spec, TestSpecs.noneEnvironment())));
         middlewares.removeIf(keep.negate());
         middlewares.addAll(extraMiddlewares);
+        // 子智能体挂载生产提供者给出的子智能体中间件集合（不含 steer）
+        List<MiddlewareBase> subagentMiddlewares = spec.subagents().isEmpty()
+                ? middlewares
+                : new ArrayList<>(provider.middlewares(
+                        AgentProfile.subagent(spec, spec.subagents().getFirst().name(), TestSpecs.noneEnvironment())));
+        subagentMiddlewares.removeIf(keep.negate());
         configs.register(spec).register(environment);
         skills.forEach(configs::register);
         AgentAssembler assembler;
@@ -132,27 +160,29 @@ final class EngineHarness {
                     InMemoryWorkspaceFilesystems.LOCAL_WORKSPACE_ROOT,
                     () -> TurnSandboxes.filesystemSpec(
                             SandboxDriverSettings.defaults(new SandboxDriverSettings.PortForward())));
-            PlatformToolProvider provider = PlatformToolProvider.withFileTools(
+            PlatformToolProvider toolProvider = PlatformToolProvider.withFileTools(
                             new PlatformTool.ToolServices(ledger, blobs))
                     .with(PlatformToolNames.BASH, BashTool.factory(BashTool.Settings.DEFAULTS));
             for (Map.Entry<String, Function<PlatformTool.ToolServices, PlatformTool>> extra :
                     extraPlatformTools.entrySet()) {
-                provider = provider.with(extra.getKey(), extra.getValue());
+                toolProvider = toolProvider.with(extra.getKey(), extra.getValue());
             }
             if (mcp != null) {
-                provider = provider.withMcp(mcp);
+                toolProvider = toolProvider.withMcp(mcp);
             }
-            ToolProvider platformTools = provider;
+            ToolProvider platformTools = toolProvider;
             ToolProvider combined = profile -> {
                 ToolProvider.ToolBundle bundle = platformTools.tools(profile);
                 List<AgentTool> all = new ArrayList<>(bundle.tools());
                 all.addAll(tools);
                 return new ToolProvider.ToolBundle(all, bundle.resources());
             };
+            RecordingModelFactory models = new RecordingModelFactory(model);
+            modelsById.forEach(models::register);
             assembler = new AgentAssembler(
-                    new RecordingModelFactory(model),
+                    models,
                     new FencedAgentStateStore(states, leases),
-                    new RecordingMiddlewareProvider(middlewares, middlewares),
+                    new RecordingMiddlewareProvider(middlewares, subagentMiddlewares),
                     combined,
                     platformWorkspace,
                     platformWorkspace.skills(),
@@ -174,7 +204,14 @@ final class EngineHarness {
                     .block();
             sandboxes = new TurnSandboxes(sandboxStates, state -> sandbox);
         }
-        this.engine = new AgentScopeEngine(instances, configs, leases, blobs, clock, sandboxes);
+        this.engine = new AgentScopeEngine(
+                instances,
+                configs,
+                leases,
+                blobs,
+                clock,
+                sandboxes,
+                new SubagentRunner(instances, leases, threads, events, blobs, clock));
     }
 
     static EngineHarness create(ScriptedModel model, AgentTool... tools) {
@@ -235,7 +272,9 @@ final class EngineHarness {
                 skills,
                 platformTools,
                 null,
-                null);
+                null,
+                Map.of(),
+                PolicyMiddleware.DEFAULT_MAX_SUBAGENTS_PER_TURN);
     }
 
     /**
@@ -258,7 +297,9 @@ final class EngineHarness {
                 List.of(),
                 Map.of(),
                 mcp,
-                null);
+                null,
+                Map.of(),
+                PolicyMiddleware.DEFAULT_MAX_SUBAGENTS_PER_TURN);
     }
 
     /**
@@ -283,7 +324,44 @@ final class EngineHarness {
                 List.of(),
                 Map.of(),
                 null,
-                sandbox);
+                sandbox,
+                Map.of(),
+                PolicyMiddleware.DEFAULT_MAX_SUBAGENTS_PER_TURN);
+    }
+
+    /**
+     * 子智能体（T13）：生产的平台工具（{@code spawn_subagent} 由 {@code PlatformToolProvider} 加入）、主智能体与子智能体各自的
+     * 中间件集合、内存的 {@code ThreadRegistryPort} 与 {@code EventSinkPort}（{@link #events}）。主智能体用 {@code model}，
+     * {@code modelsById} 中登记的模型 ID 用对应的模型（例如子智能体的 {@code ScriptedModel}）。
+     *
+     * @param model 主智能体的模型（模型 ID 没有登记时的默认模型）
+     * @param spec 智能体配置，声明子智能体
+     * @param modelsById 模型 ID → 模型
+     * @param maxSubagentsPerTurn 每轮拉起子智能体的上限
+     * @param platformTools 额外的平台工具：工具名 → 工厂（子智能体的工具必须是平台工具名）
+     * @param sandbox 会话沙箱替身；为 null 时是 {@code none} 档
+     * @return 组装
+     */
+    static EngineHarness withSubagents(
+            Model model,
+            UnaryOperator<TestSpecs.AgentSpecBuilder> spec,
+            Map<String, Model> modelsById,
+            int maxSubagentsPerTurn,
+            Map<String, Function<PlatformTool.ToolServices, PlatformTool>> platformTools,
+            FakeSandbox sandbox) {
+        return new EngineHarness(
+                model,
+                spec.apply(TestSpecs.agent()).build(),
+                List.of(),
+                List.of(),
+                middleware -> true,
+                true,
+                List.of(),
+                platformTools,
+                null,
+                sandbox,
+                modelsById,
+                maxSubagentsPerTurn);
     }
 
     /** 对照实验用：只保留 {@code keep} 为真的平台中间件。 */
@@ -317,6 +395,18 @@ final class EngineHarness {
             PermissionPolicy permissions,
             String endUserId,
             List<CustomToolDeclaration> customTools) {
+        return claim(threadId, turnId, epoch, permissions, Map.of(), endUserId, customTools);
+    }
+
+    /** 同上，另给出每个子智能体预先合成的权限策略（runtime 由 {@code PermissionSynthesizer.subagents} 合成）。 */
+    TurnContext claim(
+            String threadId,
+            String turnId,
+            long epoch,
+            PermissionPolicy permissions,
+            Map<String, PermissionPolicy> subagentPolicies,
+            String endUserId,
+            List<CustomToolDeclaration> customTools) {
         leases.grant(threadId, turnId, epoch);
         states.activate(threadId, epoch);
         PlatformContext platform = PlatformContext.builder()
@@ -336,7 +426,7 @@ final class EngineHarness {
                 environment.environmentId(),
                 environment.revision(),
                 permissions,
-                null,
+                subagentPolicies,
                 customTools,
                 null);
     }
