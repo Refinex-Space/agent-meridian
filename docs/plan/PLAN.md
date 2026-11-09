@@ -46,7 +46,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 |---|---|---|---|---|
 | 0 工程基座 | 脚手架、质量门禁、通用基础库、本地基础设施 | T01–T02 | — | 已完成 |
 | 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 在 T14b 开工前决定；Q3 在 T15a 开工前决定，T15a 先做 D52；T28 落实 D44–D46 并由 T29 复测 P7；P8 随 T19 定稿（`docs/poc/M0-总结.md`） |
-| 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 未开始 |
+| 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 进行中 |
 | 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 未开始 |
 | 4 M1 控制台 | 设计方向与组件、原型（并行轨道）、工程基座、五组页面 | T20a–T25b | R3 | 未开始 |
 | 5 M1 交付 | SDK 与接入文档、可观测性、部署、端到端验收 | T26–T29 | R4 | 未开始 |
@@ -76,7 +76,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T12b | [沙箱出网控制：Envoy、ext_authz 与 NetworkPolicy](tasks/T12b-sandbox-egress-control.md) | 1 | T12a | xhigh | 中 | P14 | 已完成 | 086b6f4 |
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 已完成 | e5621ba |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 已完成 | 34b708c |
-| T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 未开始 | — |
+| T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 进行中 | — |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 未开始 | — |
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 未开始 | — |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 未开始 | — |
@@ -175,7 +175,17 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T14a（开工 2026-11-09，基线 `verify.sh` 通过）：
+
+- [ ] 1. control-plane 应用骨架：MVC + 虚拟线程、`cp` 迁移（`tenants`、`tenant_settings`、`projects`、`members`、`role_bindings`、`api_keys`、`outbox`、幂等表）、健康检查、profile（A01）
+- [ ] 2. ADR：管理 API 单独成规范、角色与平台管理员、API Key 格式与校验接口；`meridian-admin-v1.yaml` 与内部接口规范
+- [ ] 3. security：控制台身份端口与开发实现、声明式角色矩阵与 MVC 拦截器、MVC 的服务凭据过滤器、服务间调用客户端（A02）
+- [ ] 4. 管理接口：租户、租户设置、项目、成员、角色绑定、API Key（幂等、problem+json、游标分页、审计 outbox）（A06）
+- [ ] 5. API Key：生成、哈希存储、作用域、吊销与 `key.revoked`、内部校验接口；security 的远程解析器（60 秒缓存、吊销即失效）；runtime 切换（A03、A05）
+- [ ] 6. 按 API Key 限流（Redis 令牌桶、`RateLimit-*`、429 + `Retry-After`）（A04）
+- [ ] 7. 租户并发配额：内部接口、runtime 取配额建计数行、`config.invalidate` 更新 `max_running`（A07）
+- [ ] 8. Compose `app` profile：Jib 镜像（control-plane、runtime、脚本化模型服务），经 API Key 跑通一轮（A08）
+- [ ] 9. 收尾：`CLAUDE.md`（新建 control-plane，更新 security、runtime、根）、架构设计与规范同步、`verify.sh`、验收记录（A09）
 
 ## 控制台设计轨道
 
