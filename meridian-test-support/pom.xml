@@ -13,6 +13,11 @@
     <name>AgentMeridian Test Support</name>
     <description>Testcontainers 夹具与脚本化模型服务（ScriptedOpenAiServer），只作为 test 作用域依赖。</description>
 
+    <properties>
+        <!-- 开发镜像（Compose app profile） -->
+        <jib.skip>false</jib.skip>
+    </properties>
+
     <!--
       不依赖 meridian-persistence：persistence 自己的集成测试要以 test 作用域依赖本模块，
       反向依赖会形成 Maven 循环。本模块只提供容器与 JDBC 辅助，不需要平台类型。
@@ -72,6 +77,25 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <configuration>
+                    <to>
+                        <image>agent-meridian/scripted-model:dev</image>
+                    </to>
+                    <container>
+                        <mainClass>cn.refinex.meridian.testsupport.model.ScriptedOpenAiServer</mainClass>
+                        <args>
+                            <arg>--host=0.0.0.0</arg>
+                            <arg>--port=18090</arg>
+                        </args>
+                        <ports>
+                            <port>18090</port>
+                        </ports>
+                    </container>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

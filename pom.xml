@@ -53,6 +53,10 @@
         <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
         <!-- OpenAPI 代码生成（ADR-0029）：7.27.0 发布未满两周（2026-11-02），取 7.26.0（2026-10-06） -->
         <openapi-generator-maven-plugin.version>7.26.0</openapi-generator-maven-plugin.version>
+        <!-- 开发镜像（Compose app profile，T14a）：3.5.2 发布于 2026-07，读取 JDK 25 的 class 文件 -->
+        <jib-maven-plugin.version>3.5.2</jib-maven-plugin.version>
+        <!-- 只有 control-plane、runtime 与 test-support（脚本化模型服务）打镜像，它们各自把它设为 false -->
+        <jib.skip>true</jib.skip>
 
         <!-- 测试过滤：默认排除真实模型测试与 kind 集群测试，live、kind profile 中分别改为只运行它们 -->
         <meridian.test.excludedGroups>live,kind</meridian.test.excludedGroups>
@@ -216,6 +220,28 @@
                             <!-- 列表与映射字段默认为 null：PATCH 据此区分"未给出"与"给出空值" -->
                             <containerDefaultToNull>true</containerDefaultToNull>
                         </configOptions>
+                    </configuration>
+                </plugin>
+                <!--
+                  Jib 构建开发镜像（scripts/dev/build-images.sh）：不需要 Dockerfile，镜像写入本机 Docker。基础镜像从本机 Docker 读取
+                  （docker:// 前缀），构建脚本先拉取；工作目录 /app，开发配置由 Compose 挂载到 /app/dev-config。
+                -->
+                <plugin>
+                    <groupId>com.google.cloud.tools</groupId>
+                    <artifactId>jib-maven-plugin</artifactId>
+                    <version>${jib-maven-plugin.version}</version>
+                    <configuration>
+                        <from>
+                            <image>docker://eclipse-temurin:25-jre</image>
+                        </from>
+                        <container>
+                            <workingDirectory>/app</workingDirectory>
+                            <!-- Netty 加载本地传输库需要 enable-native-access（登记事项 D06） -->
+                            <jvmFlags>
+                                <jvmFlag>--enable-native-access=ALL-UNNAMED</jvmFlag>
+                            </jvmFlags>
+                            <creationTime>USE_CURRENT_TIMESTAMP</creationTime>
+                        </container>
                     </configuration>
                 </plugin>
             </plugins>

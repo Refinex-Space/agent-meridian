@@ -10,13 +10,13 @@
 
     <artifactId>meridian-runtime</artifactId>
 
+    <name>AgentMeridian Runtime</name>
+    <description>运行时应用：会话、事件、SSE、轮次调度、执行智能体、沙箱、模型调用。</description>
+
     <properties>
         <!-- 开发镜像（Compose app profile） -->
         <jib.skip>false</jib.skip>
     </properties>
-
-    <name>AgentMeridian Runtime</name>
-    <description>运行时应用：会话、事件、SSE、轮次调度、执行智能体、沙箱、模型调用。</description>
 
     <dependencies>
         <dependency>

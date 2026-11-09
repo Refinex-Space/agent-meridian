@@ -1,0 +1,24 @@
+# Compose app profile 中的脚本化模型服务（T14a）：与 dev-config/providers/scripted.yaml 相同，只是地址换成 Compose 网络中的服务名。
+# runtime 容器以 MERIDIAN_RUNTIME_MODEL_ROUTING_PROVIDERS_DIRECTORY 指向本目录；不需要凭据，不访问外网。
+kind: provider_account
+provider_account_id: prv_dev_scripted
+provider: openai_compatible
+base_url: http://scripted-model:18090/v1
+profiles: [dev, test]
+models:
+  - model_id: mdl_dev_scripted
+    upstream_model: scripted
+    context_window: 131072
+    max_output_tokens: 2048
+  - model_id: mdl_dev_scripted_embedding
+    kind: embedding
+    upstream_model: scripted-embedding
+    context_window: 8192
+    max_output_tokens: 1
+    max_batch_size: 20
+  - model_id: mdl_dev_scripted_rerank
+    kind: rerank
+    upstream_model: scripted-rerank
+    base_url: http://scripted-model:18090/compatible-api/v1
+    context_window: 8192
+    max_output_tokens: 1

@@ -13,6 +13,11 @@
     <name>AgentMeridian Control Plane</name>
     <description>控制面应用：租户、RBAC、API Key、模型目录、凭据、智能体版本、预算、审计。</description>
 
+    <properties>
+        <!-- 开发镜像（Compose app profile） -->
+        <jib.skip>false</jib.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>cn.refinex.meridian</groupId>
@@ -71,6 +76,21 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <configuration>
+                    <to>
+                        <image>agent-meridian/control-plane:dev</image>
+                    </to>
+                    <container>
+                        <mainClass>cn.refinex.meridian.controlplane.ControlPlaneApplication</mainClass>
+                        <ports>
+                            <port>18081</port>
+                        </ports>
+                    </container>
+                </configuration>
+            </plugin>
             <!--
               从 meridian-api 的规范生成 servlet 服务端接口，模型引用 meridian-api 的 DTO（ADR-0029、ADR-0042）：
               管理 API 全部生成；内部接口只生成 control-plane 提供的两个标签。
