@@ -44,6 +44,8 @@ import reactor.core.publisher.Sinks;
  *
  * <ol>
  *   <li>准备（{@link TurnPreparer}）：读取输入；恢复认领时先判定恢复方式；写 {@code session.status_running}。
+ *   <li>{@code sandbox} 档先由 {@code SandboxService.prepare} 取得会话沙箱（可重试的失败自己写 {@code error(retryable)} 加
+ *       {@code rescheduled}），终态之前 {@code afterTurn} 同步产物、计量 vCPU 秒（ADR-0037）。
  *   <li>调用 {@link AgentEngine#runTurn}。每个事件经租约条件写入 {@code session_events}，提交后由写入入口 XADD 到
  *       {@code ev:{session_id}}；只在流上的事件只发布。
  *   <li>终态事件到达后由 {@link TurnFinisher} 在一个事务里结束轮次（或置回队列）。

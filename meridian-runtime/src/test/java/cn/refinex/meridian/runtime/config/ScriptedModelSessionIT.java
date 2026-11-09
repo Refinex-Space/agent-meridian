@@ -48,7 +48,7 @@ import reactor.core.publisher.Mono;
 /**
  * 端到端（T09b-A03、A04）：经 HTTP 启动的 runtime 以脚本化模型服务为供应商跑完整会话。模型工厂是生产的 {@code RoutedModelFactory}
  * （测试没有声明 {@code ModelFactory}），所以模型调用走真实的 OpenAI 兼容客户端、限流、预扣与计量，供应商是
- * {@link ScriptedOpenAiServer}；工具是测试工具，文件系统与技能仓库是内存实现（T10a 之前没有生产实现）。
+ * {@link ScriptedOpenAiServer}；工具是测试工具，文件系统与技能仓库是内存实现：本类只验证模型层的完整路径，生产的平台工具由 {@code FileToolsWorkerIT} 等覆盖。
  *
  * <p>内置脚本各有一个用例：调用一次工具（并重复运行比较事件序列）、审批、自定义工具、长时间流式中的中断、拉起子智能体、首包前 5xx。
  */

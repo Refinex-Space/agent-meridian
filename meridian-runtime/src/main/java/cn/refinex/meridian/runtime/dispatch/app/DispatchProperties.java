@@ -12,7 +12,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param renewInterval 续租周期，默认 10 秒（「租约」），必须小于租约时长
  * @param renewFailureTimeout 距上次成功续租超过该时长仍续不上，通知执行方取消，默认 15 秒（「租约」），必须小于租约时长
  * @param reapInterval 回收器的运行周期，默认 5 秒（「租约回收」）
- * @param pollInterval Worker 没有收到唤醒通知时的轮询周期，默认 1 秒（T05 任务「唤醒」）
+ * @param pollInterval Worker 没有收到唤醒通知时的轮询周期，默认 1 秒（「一轮执行的生命周期」中的唤醒）
  * @param defaultTenantMaxRunning 新租户并发计数行的 {@code max_running}，默认 20；T14a 起改为取租户配额（「认领」中的租户并发计数行，ADR-0027）
  */
 @ConfigurationProperties("meridian.runtime.dispatch")

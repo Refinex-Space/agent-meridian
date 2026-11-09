@@ -17,7 +17,7 @@
 | 前端单元与组件 | `*.test.ts(x)` | Vitest | 无 |
 | 前端端到端 | `console/e2e/*.spec.ts` | Playwright | 运行中的控制台与后端 |
 
-具体的 Maven 与 pnpm 命令由 T01、T21 落地后写入根目录和模块的 `CLAUDE.md`。
+Maven 命令见根目录与各模块的 `CLAUDE.md`；pnpm 命令由 T21 落地后写入。
 
 ## 测试的写法
 
@@ -79,6 +79,8 @@ BlockHound 需要 JVM 参数 `-XX:+AllowRedefinitionToAddDeleteMethods -XX:+Enab
 - 它是 OpenAI 兼容的 HTTP 服务（对话补全的流式与非流式、确定的 Embedding、DashScope 格式的 rerank），runtime 把它当普通供应商调用，限流、预扣、计量都照常经过。
 - 测试中内嵌：`ScriptedOpenAiServer.builder().start()`，把 `baseUrl()` 写进临时的供应商目录（`meridian.runtime.model-routing.providers-directory`）；独立启动：`scripts/dev/scripted-model.sh`（默认端口 18090），`dev` profile 的 runtime 经 `dev-config/providers/scripted.yaml` 调用它（模型 `mdl_dev_scripted`）。
 - 用户消息以 `#script:<名称>` 开头选择脚本，没有标记时回显；内置脚本清单与 YAML 写法见 `meridian-test-support/CLAUDE.md`。新的端到端情形优先加脚本，不为它接真实模型。
+
+## 前端测试
 
 
 - **Vitest 加 Testing Library**：组件与 Hook 的行为测试。
