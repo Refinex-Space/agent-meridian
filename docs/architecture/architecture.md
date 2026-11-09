@@ -839,7 +839,7 @@ AgentScope 保存状态的时机决定了恢复策略。只有进程被强杀时
 4. 状态未知的 `non_idempotent` 调用，产生 `recovery_confirmation` 待处理动作，由人决定是否用原幂等键重试。
 5. `recovery_attempt` 达到 2 次后，轮次以 `stop_reason=error` 结束：认领时恢复次数已达 2 的轮次不再执行，写 `session.error`（`retry_status=exhausted`）与 `session.status_idle`（ADR-0028）。`claim_count` 只用于观测，不参与这个判断。
 
-子线程不会被恢复：每次拉起都是新的子线程。子线程的工具调用记在父轮次下，父线程恢复时的账本记录与结果摘要只取本线程的，父线程看到的是 `spawn_subagent` 本身，它的副作用等级决定状态未知时是否需要恢复确认；确认重试会拉起一条新的子线程（ADR-0040）。
+子线程不会被恢复：每次拉起都是新的子线程。父线程的轮次被置回队列或取消时，仍在运行的子线程在同一事务中写 `session.thread_status_idle(interrupted)`，执行它的节点已失去租约、写不进它的结束事件（ADR-0041）。子线程的工具调用记在父轮次下，父线程恢复时的账本记录与结果摘要只取本线程的，父线程看到的是 `spawn_subagent` 本身，它的副作用等级决定状态未知时是否需要恢复确认；确认重试会拉起一条新的子线程（ADR-0040）。
 
 批次级 checkpoint 已通过 M0 验证（P3，[报告](../poc/P03-批次checkpoint.md)），默认开启：`BatchCheckpointMiddleware` 在每批工具执行完成后、下一次推理之前调用 `saveAgentState`，强杀后从最近的批次续跑，tool_use 与 tool_result 配对，不重复执行已完成的工具。保存不能放在 `onActing` 结束时，因为 2.0.4 在那之后才把工具结果写进状态。
 

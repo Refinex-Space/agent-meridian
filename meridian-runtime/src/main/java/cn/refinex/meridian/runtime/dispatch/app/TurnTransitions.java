@@ -149,6 +149,24 @@ public class TurnTransitions {
                 turn.turnId(),
                 WriteFence.none(),
                 List.of(new SessionEvent.StatusRescheduled(reason.eventReason()))));
+        closeChildThreads(turn.sessionId(), turn.threadId(), turn.turnId());
+    }
+
+    /**
+     * 父线程的轮次不再执行（置回队列、取消）时，把仍在运行的子线程写成 {@code session.thread_status_idle(interrupted)}：子线程不会
+     * 被恢复（ADR-0040），执行它的节点失去了父轮次的租约、写不进它的结束事件，不补写时子线程永远停在 {@code running}
+     * （R1 并发审查）。
+     */
+    private void closeChildThreads(String sessionId, String parentThreadId, String parentTurnId) {
+        for (String child : leases.runningChildThreads(sessionId, parentThreadId)) {
+            events.append(new EventBatch(
+                    sessionId,
+                    child,
+                    parentTurnId,
+                    WriteFence.none(),
+                    List.of(new SessionEvent.ThreadStatusIdle(child, StopReason.INTERRUPTED))));
+            log.info("父线程的轮次不再执行，子线程以 interrupted 结束 sessionId={} threadId={}", sessionId, child);
+        }
     }
 
     /**
@@ -220,6 +238,10 @@ public class TurnTransitions {
                 log.info(
                         "会话终止，轮次已取消 sessionId={} turnId={} previousStatus={}", sessionId, turn.turnId(), turn.status());
             }
+            cancelled.stream()
+                    .filter(ActiveTurn::running)
+                    .findFirst()
+                    .ifPresent(running -> closeChildThreads(sessionId, null, running.turnId()));
             return cancelled;
         });
     }

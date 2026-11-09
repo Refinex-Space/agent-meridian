@@ -232,6 +232,27 @@ public class TurnLeaseRepository extends SystemRepository {
     }
 
     /**
+     * 会话中仍在运行的子线程，按 ID 排序。调用方已锁住（置回、取消）父线程的轮次：子线程的状态事件带父轮次的租约条件写入，
+     * 在本事务提交前写不进来，读到的集合不会再变。
+     *
+     * @param sessionId 会话 ID
+     * @param parentThreadId 父线程 ID；为空时取会话中全部仍在运行的子线程
+     * @return 子线程 ID
+     */
+    public List<String> runningChildThreads(String sessionId, String parentThreadId) {
+        return jdbc().sql("""
+                        SELECT id FROM rt.threads
+                         WHERE session_id = :session_id AND parent_thread_id IS NOT NULL AND status = 'running'
+                           AND (CAST(:parent_thread_id AS text) IS NULL OR parent_thread_id = :parent_thread_id)
+                         ORDER BY id
+                        """)
+                .param("session_id", sessionId)
+                .param("parent_thread_id", parentThreadId)
+                .query(String.class)
+                .list();
+    }
+
+    /**
      * 记录轮次的中断请求；已有中断请求时保留最早的时间。执行中的轮次由持有租约的节点在续租时读到；排队中的恢复轮在被认领时读到，
      * 把结论写进上下文后停止。
      *

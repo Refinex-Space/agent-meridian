@@ -104,13 +104,22 @@ class SubagentRecoveryIT {
                 .containsEntry("parent_thread_id", session.mainThreadId())
                 .containsEntry("parent_tool_use_id", "call_spawn")
                 .containsEntry("agent_name", "researcher")
-                .containsEntry("status", "running");
+                .as("父轮次被回收时子线程以 interrupted 结束，不会停在 running（R1 并发审查）")
+                .containsEntry("status", "idle");
         assertThat(DbAssertions.list(
                         "SELECT type FROM rt.session_events WHERE session_id = ? AND thread_id = ? ORDER BY seq",
                         String.class,
                         session.sessionId(),
                         childThread))
-                .containsExactly("session.thread_created", "session.thread_status_running");
+                .containsExactly(
+                        "session.thread_created", "session.thread_status_running", "session.thread_status_idle");
+        assertThat(DbAssertions.list(
+                        "SELECT data->>'stop_reason' FROM rt.session_events WHERE session_id = ? AND thread_id = ?"
+                                + " AND type = 'session.thread_status_idle'",
+                        String.class,
+                        session.sessionId(),
+                        childThread))
+                .containsExactly("interrupted");
 
         // 旧 epoch 的执行已失去租约：不能再创建子线程，什么都不写
         PlatformContext stale = parent;
