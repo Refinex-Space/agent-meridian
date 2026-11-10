@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.18 |
+| 版本 | v1.19 |
 | 日期 | 2026-11-09 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -71,7 +71,7 @@ AgentMeridian（简称 Meridian）是部署在企业内的通用智能体平台�
 | 沙箱出网代理 | Envoy（Lua 过滤器回调 runtime 做域名授权，ADR-0038） | Envoy v1.40 |
 | 文档解析 | Apache Tika、PDFBox、POI；复杂 PDF 用 Python 服务（Docling、MinerU） | — |
 | 可观测 | OpenTelemetry、Langfuse（自托管）、Prometheus、Grafana、Loki | — |
-| 身份 | OIDC（只认标准协议，不绑定具体 IdP；参考实现 Keycloak，ADR-0043） | — |
+| 身份 | OIDC（只认标准协议，不绑定具体 IdP；参考实现 Keycloak，ADR-0043）；JWT 的签名与校验用 Nimbus JOSE + JWT（ADR-0044） | — |
 | 控制台 | React 19、TypeScript、Vite、TanStack Router 与 Query、shadcn/ui、Tailwind CSS 4、motion、xyflow、xterm.js、Monaco、ECharts | 立项时锁定 |
 | 部署 | Kubernetes、Helm；本地开发用 Docker Compose | — |
 
@@ -441,7 +441,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 |---|---|---|
 | `RuntimeContext.sessionId` | 线程 ID（`thr_…`） | 每条线程一份状态，主智能体与子智能体互不覆盖 |
 | `RuntimeContext.userId` | `{project_id}:{end_user_id}`；没有终端用户时为 `{project_id}:_` | 按项目加终端用户隔离 |
-| 类型键 `PlatformContext` | 租户、项目、会话、线程、轮次、API Key、租约 epoch、预算句柄、`interaction`、终端用户（ADR-0034） | 平台中间件和工具读取；工作区命名空间的四个值从这里取 |
+| 类型键 `PlatformContext` | 租户、项目、会话、线程、轮次、API Key、租约 epoch、预算句柄、`interaction`、终端用户（ADR-0034）、控制台用户（ADR-0044） | 平台中间件和工具读取；工作区命名空间的四个值从这里取 |
 | Reactor Context | `runTurn` 顶层 `contextWrite(PlatformContext)` | `RoutedModel` 在压缩等内部模型调用中也能取到上下文 |
 
 ### 引擎装配
@@ -959,7 +959,8 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 - **白名单。** 条目是主机名或 IP 字面量（逐字匹配），或 `*.` 加域名（匹配任意层级的子域名，不含域名本身）；不区分大小写，不限定端口，非法条目被忽略。目标只接受规整的 DNS 名与 IP 字面量。
 - **缓存与失效。** 每个节点按源 IP 缓存会话与白名单 30 秒，找不到会话不缓存。会话的 Pod IP 每次变化（认领、恢复、重新连接时 IP 变了、回收、删除），本节点立即淘汰旧 IP 与新 IP，提交后经 Redis Pub/Sub 频道 `egress:revoke` 通知其他节点。
 - **接口。** 放行返回 200 与会话 ID；拒绝返回 403 problem+json，`code` 为 `egress.not_allowlisted`、`egress.unknown_source`、`egress.invalid_target`。
-- **网络策略。** 沙箱只能访问代理与集群 DNS。代理只能访问 DNS、授权回调的 runtime 与公网（排除私网、链路本地、CGNAT、回环），白名单域名被解析到内网地址时也连不上。runtime 在集群内时代理经 Service 回调，在宿主（本机开发）时经 `host.docker.internal`，由 Helm values 切换。
+- **回调凭据。** 代理是服务客户端 `egress-proxy`：Lua 用客户端密钥向 control-plane 换取 `audience=runtime` 的服务 JWT，按 Envoy worker 缓存到过期前 60 秒，换不到令牌时拒绝出网；runtime 的出网授权接口只接受 `egress-proxy`（ADR-0044）。
+- **网络策略。** 沙箱只能访问代理与集群 DNS。代理只能访问 DNS、授权回调的 runtime、换取令牌的 control-plane 与公网（排除私网、链路本地、CGNAT、回环），白名单域名被解析到内网地址时也连不上。runtime 在集群内时代理经 Service 回调，在宿主（本机开发）时经 `host.docker.internal`，由 Helm values 切换。
 
 ## 知识库架构
 
@@ -1009,8 +1010,8 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 | 调用方 | 方式 |
 |---|---|
 | 业务系统 | `Authorization: Bearer mk_live_…`。只存 SHA-256 哈希；各服务经 control-plane 内部接口 `POST /internal/v1/api-keys:verify` 按哈希校验，结果（含无效）缓存 60 秒，吊销经 Pub/Sub `key.revoked` 广播 Key ID 立即失效（ADR-0042） |
-| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目；服务端按该用户在项目中的角色授权。T14b 之前只有 `dev`、`test` profile 接受开发期控制台令牌；成员按令牌中的主体标识识别，角色只来自 control-plane 的角色绑定（ADR-0042）。签发方、受众与客户端是配置项；用户标识默认取 `sub`、可配置为其他稳定声明，平台管理员可按主体标识或组声明配置（ADR-0043） |
-| 服务之间 | control-plane 签发的服务 JWT（RS256，5 分钟有效，带 audience），经 `security.servicejwt` 的 `ServiceCredentialResolver` 校验 `/internal/` 下的请求；T14b 之前只有 `dev`、`test` profile 接受开发期的静态服务凭据（ADR-0033） |
+| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存。签发方、受众与客户端是配置项，服务端按发现文档与 JWKS 校验签名、`iss`、`aud`、`exp`；用户标识默认取 `sub`、可配置为其他稳定声明，平台管理员可按主体标识或组声明配置（ADR-0043）。成员按用户标识识别，角色只来自 control-plane 的角色绑定（ADR-0042）。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目：服务按令牌形状区分 API Key 与 OIDC 令牌，经 control-plane 内部接口 `POST /internal/v1/project-access:resolve` 取该用户在项目上的作用域（缓存 60 秒），按用户限流（ADR-0044） |
+| 服务之间 | control-plane 签发的服务 JWT（RS256，5 分钟有效，`aud` 是被调用的服务名，`sub` 是调用方服务名）。服务用自己的客户端密钥在 `POST /oauth2/token` 换取（OAuth2 客户端凭据模式，每个客户端登记允许的目标服务），按目标服务缓存、过期前 60 秒刷新；资源服务经 `GET /oauth2/jwks` 校验，公钥缓存 5 分钟、遇到未知 `kid` 立即刷新一次。每个内部接口只接受列明的调用方服务。签名密钥经 `SigningKeySource` 取得：开发方式是目录中的密钥文件，生产从密钥管理系统加载（ADR-0044） |
 | 外部 MCP 客户端 | API Key；MCP 规范的 OAuth 在二期支持 |
 
 ### 授权
@@ -1025,9 +1026,11 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 | 项目观察者 | 只读，包括会话回放和用量 |
 | 审批人 | 处理本项目的待处理动作 |
 
-另有**平台管理员**，由 control-plane 配置给出主体标识，不属于任何租户：创建租户（同时指定首个所有者）、查看租户、修改租户配额。配额是平台资源的分配，租户所有者不能改自己的配额。
+另有**平台管理员**，由 control-plane 配置给出主体标识或令牌中的组，不属于任何租户：创建租户（同时指定首个所有者）、查看租户、修改租户配额。配额是平台资源的分配，租户所有者不能改自己的配额。
 
 授权是声明式的：角色矩阵（角色 × 操作类别）只在 `security.rbac` 中定义，管理 API 的处理器方法标注所需的操作类别，MVC 拦截器按路径中的租户与项目查该用户的角色绑定后判定；`/admin/` 下没有标注的处理器一律拒绝。租户级角色作用于租户下的全部项目，项目级角色只作用于绑定的项目，在租户级的只读操作上也算租户成员；授予或撤销租户所有者另需所有者权限，租户至少保留一位所有者（ADR-0042）。
+
+控制台用户在公开 API 上没有 API Key，作用域由他在项目中的角色按同一张矩阵换算：操作类别 `SESSION_READ`、`SESSION_WRITE`、`MODEL_INVOKE` 分别对应 `sessions:read`、`sessions:write`、`models:invoke`；所有者与项目开发者三个都有，租户管理员、项目观察者、审批人只有 `sessions:read`。项目不存在与没有角色同样返回 403（ADR-0044）。
 
 ### 租户隔离
 
@@ -1074,7 +1077,8 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 | 分页 | 游标分页：`?limit=&after=`，返回 `{data, has_more, next_cursor}` |
 | 错误 | RFC 9457 `application/problem+json`，扩展字段 `code`、`request_id` |
 | 幂等 | 所有 POST 支持 `Idempotency-Key` 头，24 小时内同键返回首次结果 |
-| 限流 | 按 API Key 的 Redis 令牌桶，容量与每分钟补充量都是该 Key 的每分钟上限（默认 600）。返回 `RateLimit-Limit`、`RateLimit-Remaining`、`RateLimit-Reset`（补满所需秒数）；超限返回 429 `rate_limit.exceeded` 加 `Retry-After`；Redis 不可用时放行（ADR-0042） |
+| 控制台调用公开 API | `Authorization: Bearer <OIDC access token>` 加 `Meridian-Project: <项目 ID>`；缺少项目头返回 400 `auth.project_required`（ADR-0044） |
+| 限流 | 按 API Key 的 Redis 令牌桶（控制台用户按用户，桶键 `ratelimit:user:{主体}`），容量与每分钟补充量都是该 Key 的每分钟上限（默认 600）。返回 `RateLimit-Limit`、`RateLimit-Remaining`、`RateLimit-Reset`（补满所需秒数）；超限返回 429 `rate_limit.exceeded` 加 `Retry-After`；Redis 不可用时放行（ADR-0042） |
 | 追踪 | 响应带 `X-Request-Id`，支持传入 `traceparent` |
 
 ### 资源
@@ -1252,7 +1256,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 
 ### 本地开发
 
-`deploy/compose` 启动 PostgreSQL、Redis、MinIO 等数据组件；`app` profile 启动 Java 服务（T14a 起为 control-plane、runtime 与脚本化模型服务，镜像由 Jib 构建；T18 加入 knowledge 与 doc-parser），`observability` profile 启动可观测组件，`auth` profile 启动 Keycloak。本地的沙箱档使用 `scripts/dev/kind-gvisor.sh` 创建的 kind 集群（Calico 加 gVisor），与生产的隔离方式一致。集群的 Pod 网段是 `10.244.0.0/16`，不能与 Docker Desktop 的宿主地址重叠，否则集群中的出网代理回调不到宿主上的 runtime（ADR-0039）。
+`deploy/compose` 启动 PostgreSQL、Redis、MinIO 等数据组件；`app` profile 启动 Java 服务（T14a 起为 control-plane、runtime 与脚本化模型服务，镜像由 Jib 构建；T18 加入 knowledge 与 doc-parser），`observability` profile 启动可观测组件，`auth` profile 启动 Keycloak（导入开发 realm `deploy/keycloak/meridian-dev-realm.json`：控制台客户端用授权码加 PKCE，开发脚本与测试用另一个可直接授权的客户端，`app` profile 也启动它；ADR-0044）。本地的沙箱档使用 `scripts/dev/kind-gvisor.sh` 创建的 kind 集群（Calico 加 gVisor），与生产的隔离方式一致。集群的 Pod 网段是 `10.244.0.0/16`，不能与 Docker Desktop 的宿主地址重叠，否则集群中的出网代理回调不到宿主上的 runtime（ADR-0039）。
 
 ## 控制台
 
@@ -1466,6 +1470,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.13 | 2026-11-08 | T12a：会话沙箱的获取、注入、回收与快照保留、产物同步、技能投影的细则；`sandbox` 档平台工具的文件系统（路径翻译与沙箱绑定）；`bash` 的复合命令规则、超时、输出上限与审计，"记住此决定"对 `bash` 记命令原文；`sessions` 的沙箱列与 `sandbox_outputs`；沙箱 vCPU 秒的计量；`ToolLedgerPort`、`SandboxDriver` 加方法（ADR-0037） |
 | v1.14 | 2026-11-08 | T12b：沙箱出网的授权回调改用 Envoy 的 Lua 过滤器，技术基线一行随之修改（ADR-0038）；沙箱出网的按 IP 找会话、白名单语法、缓存的跨节点失效、接口、网络策略与两种拓扑，指标增加 `meridian_egress_authorize_seconds`，本地 kind 的 Pod 网段（ADR-0039） |
 | v1.16 | 2026-11-09 | R1：「引擎装配」表新增 `disableAtPathExpansion()` 与 `toolExecutionConfig(...)`；SSE 连接先发 `:open` 注释；执行到一半被置回队列的消息轮被中断时带中断请求执行；父轮次被置回或取消时结束仍在运行的子线程；「非功能需求」写回 P7 实测值；Q6 已决（ADR-0041） |
+| v1.19 | 2026-11-09 | T14b：服务 JWT 的换取（客户端凭据模式）、JWKS、密钥与轮换、按调用方限定内部接口；控制台用户经 `Meridian-Project` 调用公开 API 的作用域来源与限流；`PlatformContext` 增加控制台用户；出网代理的回调凭据；技术基线补 Nimbus；本地开发的 `auth` profile（ADR-0044） |
 | v1.18 | 2026-11-09 | Q2 已决：身份只认标准 OIDC，声明映射可配置，SAML、LDAP 经 Keycloak 转接，Keycloak 作为参考实现与可选组件（ADR-0043） |
 | v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
 | v1.15 | 2026-11-09 | T13：`ThreadRegistryPort` 的线程事件与停止原因；`PolicyMiddleware` 的拉起名额；子智能体的执行组件、子线程上下文、终态与停止原因、超时与中断、配置项、审计与删除的落地约定；崩溃恢复中子线程不恢复、父线程只看本线程的调用（ADR-0040） |

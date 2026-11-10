@@ -65,6 +65,7 @@ Maven 命令见根目录与各模块的 `CLAUDE.md`；pnpm 命令由 T21 落地�
 
 - `TestDatabase`：两个角色的数据源（被测代码用只有 DML 的 `meridian_app`）、`migrate(schema)`（按 `classpath:db/migration/<schema>` 约定）、`runScript(schema, 资源)`、`truncate(schema)`。
 - `SpringContainerProperties`：在 `@DynamicPropertySource` 中注册数据源、Flyway、Redis、对象存储属性。
+- 身份（ADR-0044）：`auth.KeycloakRealm` 是以单例复用的 Keycloak（Testcontainers 的 Keycloak 模块，导入 `deploy/keycloak/meridian-dev-realm.json`），`user(名字, 组…)` 经管理 REST API 建用户、`token(名字)` 取 OIDC 令牌，`issuer()` 配给被测服务；`auth.TestTokenIssuer` 是不需要 Docker 的令牌签发方（JWKS、发现文档、`/oauth2/token`），签发服务 JWT 或任意声明的令牌，`route(...)` 可以在它上面挂替身接口。服务 JWT 与控制台身份都走真实的校验，不用开发期的静态凭据。
 
 容器跨测试类共用，数据也会保留：测试用随机 ID 隔离数据，或开始前清空自己用到的 schema。
 

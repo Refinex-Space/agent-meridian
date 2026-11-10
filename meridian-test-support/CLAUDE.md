@@ -1,6 +1,6 @@
 # meridian-test-support
 
-集成测试夹具：单例 Testcontainers 容器（PostgreSQL + pgvector + zhparser、Redis、MinIO）、Spring 属性注册、纯 JDBC 的迁移与清理，以及脚本化模型服务 `ScriptedOpenAiServer`（OpenAI 兼容的本地假供应商）。只作为其他模块的 test 作用域依赖；脚本化模型服务另可独立启动。
+集成测试夹具：单例 Testcontainers 容器（PostgreSQL + pgvector + zhparser、Redis、MinIO、Keycloak）、Spring 属性注册、纯 JDBC 的迁移与清理、令牌签发方，以及脚本化模型服务 `ScriptedOpenAiServer`（OpenAI 兼容的本地假供应商）。只作为其他模块的 test 作用域依赖；脚本化模型服务另可独立启动。
 
 ## 命令
 
@@ -14,6 +14,8 @@
 - `PostgresImage`：从 `deploy/docker/postgres/` 构建 `agent-meridian/postgres:test-<内容摘要>`，本机已有同摘要镜像时跳过构建。
 - `TestDatabase`：`appDataSource()`（`meridian_app`，只有 DML）、`migratorDataSource()`、`migrate(schema)`、`runScript(schema, 资源)`、`truncate(schema)`。
 - `SpringContainerProperties`：`@DynamicPropertySource` 中调用 `postgres`、`redis`、`minio`。
+- `auth.KeycloakRealm`（ADR-0044）：Testcontainers 的 Keycloak 模块，导入 `deploy/keycloak/meridian-dev-realm.json`（从工作目录向上查找）；`issuer()`、`user(名字, 组…)`（经管理 REST API 创建，返回 `sub`，同名只建一次）、`token(名字)`（客户端 `meridian-dev-cli` 的口令换取）。启动后在容器内用 `kcadm.sh` 关掉 master realm 的 HTTPS 要求，否则宿主经端口映射调用管理 API 得到 `HTTPS required`。
+- `auth.TestTokenIssuer`（ADR-0044）：JDK HTTP 服务上的 `/oauth2/jwks`、`/oauth2/token`（`client(服务, 密钥)` 登记）、OIDC 发现文档；`serviceToken`、`sign`（任意声明）、`signWithForeignKey`、`rotate()`、`route(路径, 处理器)` 挂替身接口；执行器是虚拟线程（替身接口会回头读本服务的 JWKS）。
 - `model.ScriptedOpenAiServer`：`builder().script(yaml).scriptsDirectory(dir).start()`（默认回环地址的随机端口）；`baseUrl()` 作供应商账号的 `base_url`，`rerankBaseUrl()` 作 rerank 模型的 `base_url`；`calls()` 记录每次请求（路径、脚本、步骤、是否流式；对话补全另有请求体原文 `body`，T10b 比较请求前缀用），断言重试次数用。`ScriptLoader` 解析 YAML，`ScriptedVectors` 是 Embedding 与 rerank 的确定算法。
 
 ## 脚本化模型服务
@@ -41,6 +43,7 @@
 
 ## 不变量
 
+- Keycloak 镜像 `quay.io/keycloak/keycloak:26.4.7` 与 Compose 的 `auth` profile 一致，修改时两处一起改。
 - 不依赖任何平台模块：`meridian-persistence` 的集成测试依赖本模块，反向依赖会形成 Maven 循环（ADR-0020）。
 - 镜像版本与 `deploy/compose/compose.yaml` 一致，修改时两处一起改；MinIO 用按摘要固定的 Chainguard 镜像。
 - 迁移约定与 `persistence.flyway.MigrationConventions` 一致：`classpath:db/migration/<schema>`，历史表在该 schema 内。

@@ -68,10 +68,11 @@ package cn.refinex.meridian.runtime.dispatch;
 | 对象存储客户端 | `persistence.objectstore` | S3 兼容 |
 | 阻塞调用的虚拟线程调度 | `common.concurrent` | `Blocking.call(...)`，runtime 中所有 JDBC 都经过它；阻塞的流与工具执行 `subscribeOn(Blocking.scheduler())`，不用有线程上限的 `Schedulers.boundedElastic()`（P7） |
 | HTTP 幂等键（`Idempotency-Key`） | `persistence.idempotency` | 各服务共用，每个服务在自己的 schema 中建幂等表 |
-| API Key 校验、服务 JWT、OIDC | `security` | `security.apikey`：`ApiKeyResolver` 端口、`ControlPlaneApiKeyResolver`（经 control-plane 校验，缓存 60 秒）、`ApiKeyHashes`、WebFlux 过滤器、作用域检查 `ApiKeyAuthorization`；`security.oidc`：控制台用户的令牌端口与 `/admin/` 过滤器 |
+| API Key 校验、服务 JWT、OIDC | `security` | `security.apikey`：`ApiKeyResolver` 端口、`ControlPlaneApiKeyResolver`（经 control-plane 校验，缓存 60 秒）、`ApiKeyHashes`、WebFlux 过滤器、作用域检查 `ApiKeyAuthorization`；`security.oidc`：`OidcTokenVerifier`（标准 OIDC，声明映射可配置）、`/admin/` 过滤器、公开 API 上的控制台用户（`ConsoleApiAuthenticator`、`ControlPlaneProjectAccessResolver`）；`security.servicejwt.ServiceJwtVerifier`：服务 JWT 的校验（ADR-0044） |
 | 按 API Key 限流 | `security.apikey` | `ApiKeyRateLimiter` 端口与 Redis 令牌桶 `RedisApiKeyRateLimiter`，`RateLimit-*` 与 429 由过滤器输出（ADR-0042） |
 | 角色矩阵与管理 API 的授权 | `security.rbac` | `RoleMatrix`、`@RequiresPermission`、MVC 拦截器；角色绑定由应用实现 `GrantSource`，业务代码不写角色判断 |
-| 服务间 HTTP 调用约定（超时、重试、服务 JWT 注入） | `security.servicejwt` | `ServiceRestClients.create(baseUrl)`：基于 Spring `RestClient`，超时与出站凭据（`ServiceCredentialProvider`）；MVC 服务的 `/internal/` 由 `ServiceCredentialFilter` 保护 |
+| 服务间 HTTP 调用约定（超时、重试、服务 JWT 注入） | `security.servicejwt` | `ServiceRestClients.create(baseUrl, audience)`：基于 Spring `RestClient`，超时与按目标服务换取并缓存的服务 JWT（`ServiceTokenClient`）；`/internal/` 由两种 Web 栈的过滤器保护，处理器首行 `ServiceCredentialAuthorization.require(exchange, 调用方…)` 或 `ServiceCredentialFilter.require(request, 调用方…)` 限定调用方（ADR-0044） |
+| JWT 的签名与校验、JWKS | Nimbus JOSE + JWT | 不自写 JWS 解析与 JWKS 缓存：校验经 `ServiceJwtVerifier`、`OidcTokenVerifier`（`JWKSourceBuilder` 负责缓存与未知 `kid` 刷新），签发只在 control-plane 的 `servicetoken` 上下文 |
 | 平台工具基类 | `engine.agentscope.tools` | 所有平台工具继承同一个抽象基类 |
 
 判断规则：

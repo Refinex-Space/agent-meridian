@@ -5,7 +5,7 @@ import java.util.Optional;
 /**
  * 控制台用户令牌的来源：按 {@code Authorization: Bearer} 中的令牌找到用户。
  *
- * <p>T14a 提供开发期的 {@link DevConsoleUserResolver}（只在 {@code dev}、{@code test}）；T14b 提供校验 OIDC access token 的实现。
+ * <p>实现是校验标准 OIDC access token 的 {@link OidcTokenVerifier}（ADR-0043、ADR-0044）。
  * 实现可以阻塞，必须线程安全，不能记录令牌。
  */
 public interface ConsoleUserResolver {

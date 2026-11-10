@@ -1098,36 +1098,36 @@
       "id": "T14b-A01",
       "task": "T14b",
       "description": "OIDC：Keycloak 登录得到的令牌可以访问管理 API；配合 `Meridian-Project` 头可以访问 runtime 公开 API；没有该项目角色时被拒绝。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-control-plane -am verify（Keycloak 26.4.7 Testcontainers）：OidcSubjectClaimIT 1/1 通过——默认 sub 声明，Keycloak 口令换取的令牌访问管理 API：按 sub 登记的平台管理员创建租户 201、组成员（该配置不按组）403、按 sub 绑定的所有者读租户 200；RoleMatrixIT 219/219（preferred_username 加按组的配置）。./mvnw -pl meridian-runtime -am verify -Dit.test=ControlPlaneIntegrationIT：5/5 通过，consoleUsersCallThePublicApiWithTheirProjectRole——Keycloak 令牌加 Meridian-Project：开发者创建会话 201 并列出，观察者读 200、写 403 auth.insufficient_scope，没有该项目角色与项目不存在都是 403 access.forbidden，缺少 Meridian-Project 400 auth.project_required，篡改签名 401 auth.invalid_console_token，按用户限流（ratelimit:user:{sub}）。"
     },
     {
       "id": "T14b-A02",
       "task": "T14b",
       "description": "服务 JWT：runtime 调用 control-plane 内部接口时使用服务 JWT；过期或 audience 不符时被拒绝；JWKS 轮换后校验仍然成功。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "control-plane ServiceTokenIT 4/4：runtime 用 meridian-security 的 ServiceTokenClient + ServiceRestClients 换取服务 JWT 调 /internal/v1/api-keys:verify 成功；刚过期（超出 30 秒偏差）的令牌 401 auth.invalid_service_credential，aud=runtime 的令牌调 control-plane 401，签名正确但调用方 egress-proxy 不在列表 403 access.forbidden；SigningKeySource.rotate() 后 JWKS 有两把密钥，经 HTTP 读 JWKS 的 ServiceJwtVerifier 遇到新 kid 刷新一次后新旧令牌都校验成功。runtime ControlPlaneIntegrationIT.internalCallsCarryTheServiceJwtOfRuntime：runtime 对 control-plane 的内部调用都带 aud=control-plane、sub=runtime 的服务 JWT（替身用真实校验器检查）。meridian-security ServiceJwtVerifierTest 6/6（过期、受众、签发方、伪造密钥、轮换只多一次 JWKS 请求、JWKS 不可达 503）。kind：./mvnw -Pkind -pl meridian-runtime -am verify -Dit.test=EgressProxyKindIT 1/1，Envoy 出网代理用客户端密钥换取服务 JWT（1 次，按 worker 缓存）后回调 runtime，P14 四条仍通过。"
     },
     {
       "id": "T14b-A03",
       "task": "T14b",
       "description": "开发期静态服务凭据已从非测试代码中移除。验证：代码搜索输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "rg -n --hidden -g '!.git' -g '!**/target/**' -g '!**/src/test/**' -g '!docs/**' -g '!**/CLAUDE.md' \"DevServiceCredential|dev-service-credentials|service-client\\.credential|MERIDIAN_DEV_SERVICE_CREDENTIAL|svc_dev|DevConsoleUser|dev-console-users|MERIDIAN_DEV_CONSOLE_TOKEN|MERIDIAN_EGRESS_AUTHZ_CREDENTIAL\" .：无匹配（退出码 1）。DevServiceCredentialResolver/Properties、DevConsoleUserResolver/Properties 已删除，application-dev.yml、compose.yaml、.env.example、chart 与开发脚本改为客户端密钥换取服务 JWT 与 Keycloak。"
     },
     {
       "id": "T14b-A04",
       "task": "T14b",
       "description": "角色矩阵测试由 OIDC 令牌驱动，全部通过。验证：测试报告。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-control-plane -am verify -Dit.test=RoleMatrixIT：Tests run: 219, Failures: 0, Errors: 0（role-matrix.psv 每个用户是 Keycloak 中动态创建的用户，令牌经口令直接换取，用户标识 preferred_username、平台管理员按组 meridian-platform-admins；无效令牌 401 auth.invalid_console_token）。"
     },
     {
       "id": "T14b-A05",
       "task": "T14b",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh：EXIT=0，Maven BUILD SUCCESS（格式、编译、单元与集成测试共 1383 个、架构测试、enforcer、覆盖率、POM 版本），sandbox-runtime ruff/mypy 通过、pytest 23 passed。第一次运行时 meridian-persistence 的 ObjectStoreIT 因 MinIO 容器健康检查超时（本机 Docker 内存紧张）失败，重跑通过。"
     },
     {
       "id": "T15a-A01",
