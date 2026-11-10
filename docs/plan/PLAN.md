@@ -77,7 +77,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 已完成 | e5621ba |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 已完成 | 34b708c |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 已完成 | 251ed4e |
-| T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 未开始 | — |
+| T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 进行中 | — |
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 未开始 | — |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 未开始 | — |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 未开始 | — |
@@ -175,7 +175,17 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T14b（ADR-0044）：
+
+- [x] 开工：基线 `verify.sh` 通过；ADR-0044（补充）
+- [ ] 1. 依赖与 `meridian-security`：Nimbus；服务 JWT 校验（`ServiceJwtVerifier`）与签发客户端（`ServiceTokenClient`）；OIDC 校验（`OidcTokenVerifier`，声明映射）；公开 API 的 OIDC 分流（`Meridian-Project`、`ProjectAccessResolver`、按用户限流）；`rbac` 的公开 API 作用域；移除开发期服务凭据与控制台令牌
+- [ ] 2. control-plane：`servicetoken`（`/oauth2/token`、`/oauth2/jwks`、目录密钥与轮换）、`project-access:resolve`、按组的平台管理员、调用方限定；内部接口规范
+- [ ] 3. runtime：服务 JWT 配置、调用方限定、`PlatformContext.userId` 与 `actor()`、OIDC 公开 API
+- [ ] 4. 本地 Keycloak：Compose `auth` profile、realm 文件、test-support 的 Keycloak 夹具
+- [ ] 5. 测试：RoleMatrixIT 改由 OIDC 驱动（A04）、OIDC 访问管理 API 与公开 API（A01）、服务 JWT（A02）
+- [ ] 6. 出网代理（D38）：Lua 换取服务 JWT、chart、`deploy-sandbox.sh`、`EgressProxyKindIT`
+- [ ] 7. 开发脚本与文档（`.env.example`、`dev-api-key.sh`、`app-smoke.sh`、架构设计、CLAUDE.md）；A03 代码搜索
+- [ ] 8. 收尾：`verify.sh`（A05）、验收记录、会话日志
 
 ## 控制台设计轨道
 
