@@ -77,7 +77,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T13 | [子智能体](tasks/T13-subagents.md) | 1 | T12b | xhigh | 中 | P12 | 已完成 | e5621ba |
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 已完成 | 34b708c |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 已完成 | 251ed4e |
-| T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 已完成 | COMMIT_PLACEHOLDER |
+| T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 已完成 | ed57d00 |
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 未开始 | — |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 未开始 | — |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 未开始 | — |
@@ -405,7 +405,7 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：A01–A09 全部 passing（角色矩阵 219 例；Compose 端到端吊销 0.053 秒内拒绝）
 - 遗留：D55（MVC 的 API Key 过滤器与限流，T15b、T18）、D56（配额变更丢消息的对账，T27）、D57（平台管理员与 IdP 的映射，T14b）
 
-### 2026-11-09 T14b 已完成（提交 COMMIT_PLACEHOLDER）
+### 2026-11-09 T14b 已完成（提交 ed57d00）
 
 - 交付：`meridian-security` 的服务 JWT 校验（`ServiceJwtVerifier`，JWKS 缓存与未知 `kid` 刷新）与签发客户端（`ServiceTokenClient`，客户端凭据模式，过期前 60 秒刷新）、OIDC 校验（`OidcTokenVerifier`，用户标识与组声明可配置）、公开 API 接受 OIDC 令牌加 `Meridian-Project`（`ConsoleApiAuthenticator`、`ControlPlaneProjectAccessResolver`、按用户限流）、`rbac.PublicApiScopes`、内部接口按调用方限定；删除开发期服务凭据与控制台令牌；control-plane 的 `servicetoken` 上下文（`/oauth2/token`、`/oauth2/jwks`、`DirectorySigningKeys` 与轮换）、`project-access:resolve`、按组的平台管理员；`PlatformContext.userId` 与 `actor()`；Keycloak 开发 realm、Compose `auth` profile、`console-token.sh`；test-support 的 `KeycloakRealm`、`TestTokenIssuer`；出网代理的 Lua 用客户端密钥换取服务 JWT；架构设计 v1.19、ADR-0044
 - 验收：A01–A05 全部 passing（角色矩阵 219 例由 OIDC 令牌驱动；两种声明配置；P14 在 kind 上以服务 JWT 复测通过）
