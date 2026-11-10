@@ -45,7 +45,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | 阶段 | 内容 | 任务 | 阶段门 | 状态 |
 |---|---|---|---|---|
 | 0 工程基座 | 脚手架、质量门禁、通用基础库、本地基础设施 | T01–T02 | — | 已完成 |
-| 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 在 T14b 开工前决定；Q3 在 T15a 开工前决定，T15a 先做 D52；T28 落实 D44–D46 并由 T29 复测 P7；P8 随 T19 定稿（`docs/poc/M0-总结.md`） |
+| 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 已决（ADR-0043）；Q3 在 T15a 开工前决定，T15a 先做 D52；T28 落实 D44–D46 并由 T29 复测 P7；P8 随 T19 定稿（`docs/poc/M0-总结.md`） |
 | 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 进行中 |
 | 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 未开始 |
 | 4 M1 控制台 | 设计方向与组件、原型（并行轨道）、工程基座、五组页面 | T20a–T25b | R3 | 未开始 |
@@ -276,7 +276,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D54 | R1 | 工程质量（审查）：Q-M1 token 估算在 runtime 与 engine 重复；Q-M2 重试退避重复且 `VectorModelService` 缺上限；Q-M3 `app` 依赖具体 `infra`、跨上下文依赖对方的 `infra`（修订规范或加 ArchUnit 规则）；Q-L1、L2、L3 摘要、Map 拷贝、输出上限常量重复；Q-L5 配置默认值双写；Q-L6 `application-test.yml` 在 `src/main`；Q-L8 三处无超时的 `.block()`；Q-L9 `Optional` 作参数；Q-L11 两处丢 cause；Q-L12 靠 `sleep` 的静默断言；Q-L13 `md_to_docx.py` 与执行服务符号链接的测试缺口；Q-L14 test-support 的 enforcer 多放行、`ScriptedOpenAiServer` 的 `Instant.now()` | R2（Q-M3 的规范决定），重复实现在 T17b 收口时处理，Q-L6 给 T28 |
 | D55 | T14a | MVC 服务的公开 API 还没有 API Key 过滤器与按 Key 限流：`meridian-security` 只有 WebFlux 版（`ApiKeyWebFilter`）；control-plane 的 `/v1/agents`（T15b）、knowledge 的 `/v1/knowledge-bases*`（T18）上线前要加 MVC 版，复用 `ApiKeyAuthenticator`、`ApiKeyRateLimiter`，并订阅 `key.revoked` 淘汰缓存 | T15b、T18 |
 | D56 | T14a | `config.invalidate`、`key.revoked` 走 Pub/Sub，不保证送达：吊销有 60 秒缓存过期兜底，但租户并发配额的变更丢失后，runtime 的 `max_running` 要等下一次变更才更新；需要一个定期对账（按 control-plane 的配额刷新已有计数行）或改用 Stream | T27 |
-| D57 | T14a | 平台管理员来自配置 `meridian.control-plane.platform-admins`（主体标识列表）；接 OIDC 后是否改为按 IdP 的组或角色声明映射，由 T14b 与 Q2（企业 IdP 类型）一起决定 | T14b |
+| D57 | T14a | 平台管理员来自配置 `meridian.control-plane.platform-admins`（主体标识列表）；Q2 已决（ADR-0043）：T14b 再支持按组或角色声明配置 | T14b |
 
 ## 技术债
 

@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.17 |
+| 版本 | v1.18 |
 | 日期 | 2026-11-09 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -71,7 +71,7 @@ AgentMeridian（简称 Meridian）是部署在企业内的通用智能体平台�
 | 沙箱出网代理 | Envoy（Lua 过滤器回调 runtime 做域名授权，ADR-0038） | Envoy v1.40 |
 | 文档解析 | Apache Tika、PDFBox、POI；复杂 PDF 用 Python 服务（Docling、MinerU） | — |
 | 可观测 | OpenTelemetry、Langfuse（自托管）、Prometheus、Grafana、Loki | — |
-| 身份 | OIDC（Keycloak 或企业 IdP） | — |
+| 身份 | OIDC（只认标准协议，不绑定具体 IdP；参考实现 Keycloak，ADR-0043） | — |
 | 控制台 | React 19、TypeScript、Vite、TanStack Router 与 Query、shadcn/ui、Tailwind CSS 4、motion、xyflow、xterm.js、Monaco、ECharts | 立项时锁定 |
 | 部署 | Kubernetes、Helm；本地开发用 Docker Compose | — |
 
@@ -1009,7 +1009,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 | 调用方 | 方式 |
 |---|---|
 | 业务系统 | `Authorization: Bearer mk_live_…`。只存 SHA-256 哈希；各服务经 control-plane 内部接口 `POST /internal/v1/api-keys:verify` 按哈希校验，结果（含无效）缓存 60 秒，吊销经 Pub/Sub `key.revoked` 广播 Key ID 立即失效（ADR-0042） |
-| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目；服务端按该用户在项目中的角色授权。T14b 之前只有 `dev`、`test` profile 接受开发期控制台令牌；成员按令牌中的主体标识识别，角色只来自 control-plane 的角色绑定（ADR-0042） |
+| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目；服务端按该用户在项目中的角色授权。T14b 之前只有 `dev`、`test` profile 接受开发期控制台令牌；成员按令牌中的主体标识识别，角色只来自 control-plane 的角色绑定（ADR-0042）。签发方、受众与客户端是配置项；用户标识默认取 `sub`、可配置为其他稳定声明，平台管理员可按主体标识或组声明配置（ADR-0043） |
 | 服务之间 | control-plane 签发的服务 JWT（RS256，5 分钟有效，带 audience），经 `security.servicejwt` 的 `ServiceCredentialResolver` 校验 `/internal/` 下的请求；T14b 之前只有 `dev`、`test` profile 接受开发期的静态服务凭据（ADR-0033） |
 | 外部 MCP 客户端 | API Key；MCP 规范的 OAuth 在二期支持 |
 
@@ -1466,6 +1466,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.13 | 2026-11-08 | T12a：会话沙箱的获取、注入、回收与快照保留、产物同步、技能投影的细则；`sandbox` 档平台工具的文件系统（路径翻译与沙箱绑定）；`bash` 的复合命令规则、超时、输出上限与审计，"记住此决定"对 `bash` 记命令原文；`sessions` 的沙箱列与 `sandbox_outputs`；沙箱 vCPU 秒的计量；`ToolLedgerPort`、`SandboxDriver` 加方法（ADR-0037） |
 | v1.14 | 2026-11-08 | T12b：沙箱出网的授权回调改用 Envoy 的 Lua 过滤器，技术基线一行随之修改（ADR-0038）；沙箱出网的按 IP 找会话、白名单语法、缓存的跨节点失效、接口、网络策略与两种拓扑，指标增加 `meridian_egress_authorize_seconds`，本地 kind 的 Pod 网段（ADR-0039） |
 | v1.16 | 2026-11-09 | R1：「引擎装配」表新增 `disableAtPathExpansion()` 与 `toolExecutionConfig(...)`；SSE 连接先发 `:open` 注释；执行到一半被置回队列的消息轮被中断时带中断请求执行；父轮次被置回或取消时结束仍在运行的子线程；「非功能需求」写回 P7 实测值；Q6 已决（ADR-0041） |
+| v1.18 | 2026-11-09 | Q2 已决：身份只认标准 OIDC，声明映射可配置，SAML、LDAP 经 Keycloak 转接，Keycloak 作为参考实现与可选组件（ADR-0043） |
 | v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
 | v1.15 | 2026-11-09 | T13：`ThreadRegistryPort` 的线程事件与停止原因；`PolicyMiddleware` 的拉起名额；子智能体的执行组件、子线程上下文、终态与停止原因、超时与中断、配置项、审计与删除的落地约定；崩溃恢复中子线程不恢复、父线程只看本线程的调用（ADR-0040） |
 
@@ -1474,7 +1475,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | 编号 | 问题 | 影响 | 截止 |
 |---|---|---|---|
 | Q1 | Maven groupId 与 Java 包根 | 已决：`cn.refinex.meridian` | — |
-| Q2 | 企业 IdP 类型（自建 Keycloak 还是对接现有） | 控制台登录；M0 结束时未决，是 T14b 开工的前提 | T14b 开工前 |
+| Q2 | 企业 IdP 类型（自建 Keycloak 还是对接现有） | 已决：平台只认标准 OIDC，已有 IdP 改配置接入；Keycloak 作为参考实现，用于本地开发、测试与没有 IdP 的部署（ADR-0043） | — |
 | Q3 | 首批接入的模型供应商与私有化推理服务 | 模型目录、价格表；M0 只接入了 OpenAI 兼容类型（DashScope 走兼容端点，登记事项 D25），是 T15a 开工的前提 | T15a 开工前 |
 | Q4 | 沙箱镜像预装的工具清单 | 已决（一期基线）：`sandbox-runtime/README.md` 的预装清单，内置技能 `docx` 在其上运行（T11、T12a）；新技能需要的工具随镜像版本追加 | — |
 | Q5 | 批次级 checkpoint 是否可行（P3） | 已决：可行并默认开启（`docs/poc/P03-批次checkpoint.md`，ADR-0028） | — |
