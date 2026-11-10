@@ -3,7 +3,9 @@
 # 端口只绑定 127.0.0.1，并避开 5432、6379、9000 等常被本机其他服务占用的默认端口。
 # app profile（T14a）：control-plane、runtime 与脚本化模型服务，镜像由 scripts/dev/build-images.sh 用 Jib 构建；
 #   docker compose -f deploy/compose/compose.yaml --profile app up -d，端到端检查用 scripts/dev/app-smoke.sh。
-# 可观测（observability）、身份（auth）等可选组件由后续任务以 profile 加入，T18 在 app 中加入 knowledge 与 doc-parser（架构设计「本地开发」）。
+# auth profile（T14b，ADR-0043、ADR-0044）：Keycloak，导入开发 realm deploy/keycloak/meridian-dev-realm.json；
+#   docker compose -f deploy/compose/compose.yaml --env-file deploy/compose/.env --profile auth up -d keycloak
+# 可观测（observability）等可选组件由后续任务以 profile 加入，T18 在 app 中加入 knowledge 与 doc-parser（架构设计「本地开发」）。
 name: agent-meridian
 
 services:
@@ -81,6 +83,30 @@ services:
       - mc alias set meridian http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing "meridian/$$MERIDIAN_S3_BUCKET"
     restart: "no"
 
+  # ---- auth profile（T14b）：OIDC 的参考实现 Keycloak（开发模式，数据在容器内，重建即回到 realm 文件的状态）----
+  keycloak:
+    profiles: [auth, app]
+    image: quay.io/keycloak/keycloak:26.4.7
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?在 .env 中设置 KEYCLOAK_ADMIN_PASSWORD}
+      # 令牌的 iss 固定为宿主访问的地址：开发脚本、浏览器与容器内的服务看到同一个签发方；容器内的服务经 keycloak:8080 取公钥
+      KC_HOSTNAME: http://localhost:${MERIDIAN_KEYCLOAK_PORT:-18082}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ../keycloak/meridian-dev-realm.json:/opt/keycloak/data/import/meridian-dev-realm.json:ro
+    ports:
+      - "127.0.0.1:${MERIDIAN_KEYCLOAK_PORT:-18082}:8080"
+    healthcheck:
+      # 管理端口 9000 的就绪检查；镜像中没有 curl，用 bash 的 /dev/tcp
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\r\n\r\n' >&3 && grep -q UP <&3"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 20s
+
   # ---- app profile（T14a）：不接真实模型、不连沙箱集群 ----
   control-plane:
     profiles: [app]
@@ -97,8 +123,14 @@ services:
       MERIDIAN_REDIS_PORT: "6379"
       MERIDIAN_APP_PASSWORD: ${MERIDIAN_APP_PASSWORD}
       MERIDIAN_MIGRATOR_PASSWORD: ${MERIDIAN_MIGRATOR_PASSWORD}
-      MERIDIAN_DEV_SERVICE_CREDENTIAL: ${MERIDIAN_DEV_SERVICE_CREDENTIAL:?在 .env 中设置 MERIDIAN_DEV_SERVICE_CREDENTIAL}
-      MERIDIAN_DEV_CONSOLE_TOKEN: ${MERIDIAN_DEV_CONSOLE_TOKEN:?在 .env 中设置 MERIDIAN_DEV_CONSOLE_TOKEN}
+      MERIDIAN_RUNTIME_CLIENT_SECRET: ${MERIDIAN_RUNTIME_CLIENT_SECRET:?在 .env 中设置 MERIDIAN_RUNTIME_CLIENT_SECRET}
+      MERIDIAN_EGRESS_PROXY_CLIENT_SECRET: ${MERIDIAN_EGRESS_PROXY_CLIENT_SECRET:?在 .env 中设置 MERIDIAN_EGRESS_PROXY_CLIENT_SECRET}
+      MERIDIAN_SERVICE_TOKEN_KEY_DIR: /var/lib/meridian/service-token-keys
+      MERIDIAN_OIDC_ISSUER: http://localhost:${MERIDIAN_KEYCLOAK_PORT:-18082}/realms/meridian-dev
+      MERIDIAN_OIDC_JWKS_URI: http://keycloak:8080/realms/meridian-dev/protocol/openid-connect/certs
+    volumes:
+      # 服务 JWT 的签名密钥（ADR-0044）：重建容器后沿用，已签发的令牌仍能校验
+      - service-token-keys:/var/lib/meridian/service-token-keys
     ports:
       - "127.0.0.1:${MERIDIAN_CONTROL_PLANE_PORT:-18081}:18081"
     healthcheck:
@@ -126,8 +158,10 @@ services:
       MERIDIAN_REDIS_PORT: "6379"
       MERIDIAN_APP_PASSWORD: ${MERIDIAN_APP_PASSWORD}
       MERIDIAN_MIGRATOR_PASSWORD: ${MERIDIAN_MIGRATOR_PASSWORD}
-      MERIDIAN_DEV_SERVICE_CREDENTIAL: ${MERIDIAN_DEV_SERVICE_CREDENTIAL}
+      MERIDIAN_RUNTIME_CLIENT_SECRET: ${MERIDIAN_RUNTIME_CLIENT_SECRET}
       MERIDIAN_CONTROL_PLANE_URL: http://control-plane:18081
+      MERIDIAN_OIDC_ISSUER: http://localhost:${MERIDIAN_KEYCLOAK_PORT:-18082}/realms/meridian-dev
+      MERIDIAN_OIDC_JWKS_URI: http://keycloak:8080/realms/meridian-dev/protocol/openid-connect/certs
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MERIDIAN_S3_BUCKET: ${MERIDIAN_S3_BUCKET:-meridian}
@@ -153,6 +187,7 @@ services:
       - "127.0.0.1:${MERIDIAN_SCRIPTED_MODEL_PORT:-18090}:18090"
 
 volumes:
+  service-token-keys:
   postgres-data:
   redis-data:
   minio-data:

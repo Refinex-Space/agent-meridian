@@ -1,0 +1,129 @@
+{
+  "realm": "meridian-dev",
+  "displayName": "AgentMeridian（开发）",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 900,
+  "groups": [
+    { "name": "meridian-platform-admins" }
+  ],
+  "clients": [
+    {
+      "clientId": "meridian-console",
+      "name": "AgentMeridian 控制台",
+      "description": "控制台登录：授权码加 PKCE（S256），公开客户端，不能用口令直接换令牌",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:5173/*", "http://127.0.0.1:5173/*"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "protocolMappers": [
+        {
+          "name": "meridian-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "meridian",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "meridian-dev-cli",
+      "name": "开发脚本与集成测试",
+      "description": "只在开发 realm 中存在：开发脚本与集成测试用口令直接换取令牌（直接授权），令牌与控制台客户端的形状相同",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "meridian-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "meridian",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "username": "dev-admin",
+      "enabled": true,
+      "email": "dev-admin@meridian.local",
+      "emailVerified": true,
+      "firstName": "Dev",
+      "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "meridian-dev", "temporary": false }],
+      "groups": ["/meridian-platform-admins"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "username": "dev-developer",
+      "enabled": true,
+      "email": "dev-developer@meridian.local",
+      "emailVerified": true,
+      "firstName": "Dev",
+      "lastName": "Developer",
+      "credentials": [{ "type": "password", "value": "meridian-dev", "temporary": false }]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000003",
+      "username": "dev-viewer",
+      "enabled": true,
+      "email": "dev-viewer@meridian.local",
+      "emailVerified": true,
+      "firstName": "Dev",
+      "lastName": "Viewer",
+      "credentials": [{ "type": "password", "value": "meridian-dev", "temporary": false }]
+    }
+  ]
+}

@@ -40,6 +40,10 @@
         <jsoup.version>1.22.2</jsoup.version>
         <!-- web_search 适配器的 HTTP 模拟（ADR-0035）：WireMock 3.13.2（2025-11-14），独立打包版自带 Jetty，不影响应用类路径 -->
         <wiremock.version>3.13.2</wiremock.version>
+        <!-- 服务 JWT 的签发与校验、OIDC access token 的校验（ADR-0044）：Nimbus JOSE + JWT 10.9.1（2026-05-31），Spring Security 也基于它 -->
+        <nimbus-jose-jwt.version>10.9.1</nimbus-jose-jwt.version>
+        <!-- 集成测试的 Keycloak（ADR-0044）：testcontainers-keycloak 4.4.0（2026-10-01），基于 Testcontainers 2.0.5 -->
+        <testcontainers-keycloak.version>4.4.0</testcontainers-keycloak.version>
 
         <!-- 与根 POM 的 spotless-maven-plugin.version 保持一致 -->
         <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
@@ -229,6 +233,16 @@
                 <groupId>org.wiremock</groupId>
                 <artifactId>wiremock-standalone</artifactId>
                 <version>${wiremock.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nimbusds</groupId>
+                <artifactId>nimbus-jose-jwt</artifactId>
+                <version>${nimbus-jose-jwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.dasniko</groupId>
+                <artifactId>testcontainers-keycloak</artifactId>
+                <version>${testcontainers-keycloak.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.openapitools.openapidiff</groupId>

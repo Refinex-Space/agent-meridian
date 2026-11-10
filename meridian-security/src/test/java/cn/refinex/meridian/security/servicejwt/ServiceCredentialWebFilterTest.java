@@ -2,8 +2,10 @@ package cn.refinex.meridian.security.servicejwt;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import cn.refinex.meridian.common.error.CommonErrorCode;
+import cn.refinex.meridian.common.error.ForbiddenException;
 import cn.refinex.meridian.common.error.MeridianException;
-import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -17,8 +19,9 @@ import reactor.test.StepVerifier;
 class ServiceCredentialWebFilterTest {
 
     private final ServiceCredentialWebFilter filter = new ServiceCredentialWebFilter(
-            new ServiceCredentialAuthenticator(new DevServiceCredentialResolver(new DevServiceCredentialProperties(
-                    true, List.of(new DevServiceCredentialProperties.Credential("svc_dev_a", "knowledge"))))));
+            new ServiceCredentialAuthenticator(credential -> "jwt_for_knowledge".equals(credential)
+                    ? Optional.of(new ServicePrincipal("knowledge"))
+                    : Optional.empty()));
 
     @ParameterizedTest
     @ValueSource(strings = {"/internal;a=b/v1/egress:authorize", "/%69nternal/v1/embeddings", "/internal;x/v1/rerank"})
@@ -38,7 +41,7 @@ class ServiceCredentialWebFilterTest {
         MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/internal/v1/rerank"));
 
         assertThat(org.assertj.core.api.Assertions.catchThrowable(
-                        () -> ServiceCredentialAuthorization.require(exchange)))
+                        () -> ServiceCredentialAuthorization.require(exchange, "knowledge")))
                 .isInstanceOfSatisfying(
                         MeridianException.class,
                         e -> assertThat(e.errorCode()).isEqualTo(ServiceCredentialErrorCode.UNAUTHENTICATED));
@@ -47,12 +50,28 @@ class ServiceCredentialWebFilterTest {
     @Test
     void validCredentialsPassAndRecordTheCallingService() {
         MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/internal/v1/rerank")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer svc_dev_a"));
+                .header(HttpHeaders.AUTHORIZATION, "Bearer jwt_for_knowledge"));
 
         StepVerifier.create(filter.filter(exchange, ex -> Mono.empty())).verifyComplete();
 
         assertThat((ServicePrincipal) exchange.getAttribute(ServiceCredentialWebFilter.PRINCIPAL_ATTRIBUTE))
                 .isEqualTo(new ServicePrincipal("knowledge"));
+        assertThat(ServiceCredentialAuthorization.require(exchange, "runtime", "knowledge"))
+                .isEqualTo(new ServicePrincipal("knowledge"));
+    }
+
+    @Test
+    void handlersRejectCallersThatAreNotListed() {
+        // 每个内部接口只接受列明的调用方：出网代理的令牌不能调用 Embedding（ADR-0044）
+        MockServerWebExchange exchange =
+                MockServerWebExchange.from(MockServerHttpRequest.post("/internal/v1/embeddings"));
+        exchange.getAttributes()
+                .put(ServiceCredentialWebFilter.PRINCIPAL_ATTRIBUTE, new ServicePrincipal("egress-proxy"));
+
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(
+                        () -> ServiceCredentialAuthorization.require(exchange, "knowledge")))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class, e -> assertThat(e.errorCode()).isEqualTo(CommonErrorCode.FORBIDDEN));
     }
 
     @Test

@@ -66,8 +66,7 @@ class ApiKeyAutoConfigurationTest {
     void withAControlPlaneUrlKeysAreVerifiedByTheControlPlane() {
         runner.withPropertyValues(
                         "spring.profiles.active=dev",
-                        "meridian.security.service-client.control-plane-url=http://127.0.0.1:1",
-                        "meridian.security.service-client.credential=svc_dev_test_secret")
+                        "meridian.security.service-client.control-plane-url=http://127.0.0.1:1")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context.getBean(ApiKeyResolver.class)).isInstanceOf(ControlPlaneApiKeyResolver.class);

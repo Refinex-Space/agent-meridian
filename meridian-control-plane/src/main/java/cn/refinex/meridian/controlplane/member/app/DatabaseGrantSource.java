@@ -5,6 +5,7 @@ import cn.refinex.meridian.controlplane.config.ControlPlaneProperties;
 import cn.refinex.meridian.controlplane.member.infra.RoleBindingRepository;
 import cn.refinex.meridian.controlplane.tenant.app.TenantService;
 import cn.refinex.meridian.controlplane.web.Scopes;
+import cn.refinex.meridian.security.oidc.ConsoleUser;
 import cn.refinex.meridian.security.rbac.Grant;
 import cn.refinex.meridian.security.rbac.GrantSource;
 import java.util.HashSet;
@@ -12,7 +13,7 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * 角色绑定的来源（{@link GrantSource} 的实现，ADR-0042）：平台管理员来自配置，租户内的角色来自 {@code cp.role_bindings}。已删除的
+ * 角色绑定的来源（{@link GrantSource} 的实现，ADR-0042）：平台管理员来自配置（主体标识列表，或令牌中的组，ADR-0043），租户内的角色来自 {@code cp.role_bindings}。已删除的
  * 租户中没有任何角色，删除之后的一切管理操作都被拒绝。
  */
 @Component
@@ -21,6 +22,7 @@ public class DatabaseGrantSource implements GrantSource {
     private final RoleBindingRepository bindings;
     private final TenantService tenants;
     private final Set<String> platformAdmins;
+    private final Set<String> platformAdminGroups;
 
     /**
      * 创建来源。
@@ -34,12 +36,14 @@ public class DatabaseGrantSource implements GrantSource {
         this.bindings = bindings;
         this.tenants = tenants;
         this.platformAdmins = Set.copyOf(properties.platformAdmins());
+        this.platformAdminGroups = Set.copyOf(properties.platformAdminGroups());
     }
 
     @Override
-    public Set<Grant> grants(String subject, String tenantId) {
+    public Set<Grant> grants(ConsoleUser user, String tenantId) {
+        String subject = user.subject();
         Set<Grant> grants = new HashSet<>();
-        if (platformAdmins.contains(subject)) {
+        if (platformAdmins.contains(subject) || user.groups().stream().anyMatch(platformAdminGroups::contains)) {
             grants.add(Grant.platformAdmin());
         }
         if (tenantId != null && tenants.exists(tenantId)) {

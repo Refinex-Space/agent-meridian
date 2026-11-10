@@ -61,7 +61,7 @@ class ApiKeyLifecycleIT extends ControlPlaneTestBase {
         TenantFixture fixture = TenantFixture.create(client);
         String body = verifyBody(fixture.get("key_plaintext"));
 
-        Reply verified = client.internal("POST", "/internal/v1/api-keys:verify", SERVICE_CREDENTIAL, body);
+        Reply verified = client.internal("POST", "/internal/v1/api-keys:verify", serviceToken(), body);
         assertThat(verified.status()).isEqualTo(200);
         assertThat(verified.text("api_key_id")).isEqualTo(fixture.get("key"));
         assertThat(verified.text("tenant_id")).isEqualTo(fixture.get("tenant"));
@@ -80,14 +80,14 @@ class ApiKeyLifecycleIT extends ControlPlaneTestBase {
         assertThat(client.internal("POST", "/internal/v1/api-keys:verify", "svc_wrong", body)
                         .status())
                 .isEqualTo(401);
-        assertThat(client.internal("POST", "/internal/v1/api-keys:verify", SERVICE_CREDENTIAL, verifyBody("mk_live_x"))
+        assertThat(client.internal("POST", "/internal/v1/api-keys:verify", serviceToken(), verifyBody("mk_live_x"))
                         .status())
                 .isEqualTo(404);
         // 控制台令牌不能调用内部接口，服务凭据也不能调用管理接口
         assertThat(client.internal("POST", "/internal/v1/api-keys:verify", token("owner"), body)
                         .status())
                 .isEqualTo(401);
-        assertThat(client.admin("GET", "/admin/v1/tenants", SERVICE_CREDENTIAL, null)
+        assertThat(client.admin("GET", "/admin/v1/tenants", serviceToken(), null)
                         .status())
                 .isEqualTo(401);
     }
@@ -114,7 +114,7 @@ class ApiKeyLifecycleIT extends ControlPlaneTestBase {
         assertThat(client.internal(
                                 "POST",
                                 "/internal/v1/api-keys:verify",
-                                SERVICE_CREDENTIAL,
+                                serviceToken(),
                                 verifyBody(fixture.get("key_plaintext")))
                         .status())
                 .isEqualTo(404);
@@ -147,7 +147,7 @@ class ApiKeyLifecycleIT extends ControlPlaneTestBase {
             assertThat(client.internal(
                                     "POST",
                                     "/internal/v1/api-keys:verify",
-                                    SERVICE_CREDENTIAL,
+                                    serviceToken(),
                                     verifyBody(fixture.get("key_plaintext")))
                             .status())
                     .isEqualTo(404);

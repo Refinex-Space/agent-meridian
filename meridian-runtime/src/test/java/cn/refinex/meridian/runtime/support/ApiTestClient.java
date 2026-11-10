@@ -28,6 +28,7 @@ public final class ApiTestClient {
 
     private final WebTestClient client;
     private final String apiKey;
+    private final Map<String, String> defaultHeaders;
 
     /**
      * 创建客户端。
@@ -36,11 +37,23 @@ public final class ApiTestClient {
      * @param apiKey API Key 明文；可为空，表示不带认证
      */
     public ApiTestClient(int port, String apiKey) {
+        this(port, apiKey, Map.of());
+    }
+
+    /**
+     * 创建带固定请求头的客户端，例如控制台用户的 OIDC 令牌加 {@code Meridian-Project}（ADR-0044）。
+     *
+     * @param port runtime 的端口
+     * @param bearer {@code Authorization: Bearer} 的值（API Key 或 OIDC 令牌）；可为空
+     * @param defaultHeaders 每个请求都带的请求头
+     */
+    public ApiTestClient(int port, String bearer, Map<String, String> defaultHeaders) {
         this.client = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + port)
                 .responseTimeout(Duration.ofSeconds(30))
                 .build();
-        this.apiKey = apiKey;
+        this.apiKey = bearer;
+        this.defaultHeaders = Map.copyOf(defaultHeaders);
     }
 
     /**
@@ -284,7 +297,8 @@ public final class ApiTestClient {
             String idempotencyKey,
             Map<String, String> extraHeaders,
             boolean validateRequest) {
-        Map<String, String> headers = new LinkedHashMap<>(extraHeaders);
+        Map<String, String> headers = new LinkedHashMap<>(defaultHeaders);
+        headers.putAll(extraHeaders);
         if (apiKey != null) {
             headers.putIfAbsent(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
         }

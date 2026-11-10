@@ -1,82 +1,98 @@
 package cn.refinex.meridian.security.servicejwt;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import cn.refinex.meridian.testsupport.auth.TestTokenIssuer;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
 
-/** {@link ServiceCredentialAutoConfiguration}：开发期服务凭据只能在 dev、test profile 启用，没有来源时一律拒绝（T09b-A02）。 */
+/** {@link ServiceCredentialAutoConfiguration}：配置了服务名与公钥地址才接受服务 JWT，没有来源时一律拒绝（ADR-0044）。 */
 class ServiceCredentialAutoConfigurationTest {
 
-    private static final String[] DEV_CREDENTIAL = {
-        "meridian.security.dev-service-credentials.enabled=true",
-        "meridian.security.dev-service-credentials.credentials[0].credential=svc_dev_test_secret",
-        "meridian.security.dev-service-credentials.credentials[0].service=knowledge"
-    };
+    private static TestTokenIssuer issuer;
 
     private final ReactiveWebApplicationContextRunner runner = new ReactiveWebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(ServiceCredentialAutoConfiguration.class));
 
-    @Test
-    void devCredentialsWorkInTheDevAndTestProfiles() {
-        for (String profile : new String[] {"dev", "test"}) {
-            runner.withPropertyValues(DEV_CREDENTIAL)
-                    .withPropertyValues("spring.profiles.active=" + profile)
-                    .run(context -> {
-                        assertThat(context).hasNotFailed();
-                        ServiceCredentialResolver resolver = context.getBean(ServiceCredentialResolver.class);
-                        assertThat(resolver).isInstanceOf(DevServiceCredentialResolver.class);
-                        assertThat(resolver.resolve("svc_dev_test_secret")).contains(new ServicePrincipal("knowledge"));
-                        assertThat(resolver.resolve("svc_other")).isEmpty();
-                        assertThat(context).hasSingleBean(ServiceCredentialWebFilter.class);
-                    });
-        }
+    @BeforeAll
+    static void startIssuer() {
+        issuer = TestTokenIssuer.start().client("runtime", "runtime-secret");
+    }
+
+    @AfterAll
+    static void stopIssuer() {
+        issuer.close();
     }
 
     @Test
-    void enablingDevCredentialsOutsideDevAndTestFailsTheStartup() {
-        runner.withPropertyValues(DEV_CREDENTIAL)
-                .withPropertyValues("spring.profiles.active=prod")
-                .run(context -> assertThat(context)
-                        .getFailure()
-                        .rootCause()
-                        .isInstanceOf(IllegalStateException.class)
-                        .hasMessageContaining("只能在 dev 或 test profile 中启用"));
-    }
-
-    @Test
-    void outgoingDevCredentialIsOnlyAllowedInTheDevAndTestProfiles() {
+    void withAServiceNameAndJwksTheVerifierAcceptsTokensForThisService() {
         runner.withPropertyValues(
-                        "spring.profiles.active=dev", "meridian.security.service-client.credential=svc_dev_out")
-                .run(context -> assertThat(
-                                context.getBean(ServiceCredentialProvider.class).credential())
-                        .isEqualTo("svc_dev_out"));
+                        "meridian.security.service-jwt.service=runtime",
+                        "meridian.security.service-jwt.jwks-url=" + issuer.jwksUrl())
+                .run(context -> {
+                    ServiceCredentialResolver resolver = context.getBean(ServiceCredentialResolver.class);
+                    assertThat(resolver).isInstanceOf(ServiceJwtVerifier.class);
+                    assertThat(resolver.resolve(issuer.serviceToken("knowledge", "runtime")))
+                            .contains(new ServicePrincipal("knowledge"));
+                    assertThat(resolver.resolve(issuer.serviceToken("knowledge", "control-plane")))
+                            .isEmpty();
+                    assertThat(context).hasSingleBean(ServiceCredentialWebFilter.class);
+                });
+    }
+
+    @Test
+    void theJwksDefaultsToTheControlPlane() {
         runner.withPropertyValues(
-                        "spring.profiles.active=prod", "meridian.security.service-client.credential=svc_dev_out")
-                .run(context -> assertThat(context)
-                        .getFailure()
-                        .rootCause()
-                        .isInstanceOf(IllegalStateException.class)
-                        .hasMessageContaining("只能在 dev 或 test profile 中设置"));
+                        "meridian.security.service-jwt.service=runtime",
+                        "meridian.security.service-client.control-plane-url=" + issuer.url())
+                .run(context -> assertThat(context.getBean(ServiceCredentialResolver.class)
+                                .resolve(issuer.serviceToken("knowledge", "runtime")))
+                        .contains(new ServicePrincipal("knowledge")));
     }
 
     @Test
-    void withoutAnOutgoingCredentialCallsFailBeforeBeingSent() {
-        runner.withPropertyValues("spring.profiles.active=prod").run(context -> {
+    void withoutAnyConfigurationEveryCredentialIsRejected() {
+        runner.run(context -> {
             assertThat(context).hasNotFailed();
-            ServiceCredentialProvider provider = context.getBean(ServiceCredentialProvider.class);
-            org.assertj.core.api.Assertions.assertThatThrownBy(provider::credential)
-                    .isInstanceOf(IllegalStateException.class);
-        });
-    }
-
-    @Test
-    void withoutAnyCredentialSourceEveryCredentialIsRejected() {
-        runner.withPropertyValues("spring.profiles.active=prod").run(context -> {
-            assertThat(context).hasNotFailed();
-            assertThat(context.getBean(ServiceCredentialResolver.class).resolve("svc_dev_test_secret"))
+            assertThat(context.getBean(ServiceCredentialResolver.class)
+                            .resolve(issuer.serviceToken("knowledge", "runtime")))
                     .isEmpty();
         });
+    }
+
+    @Test
+    void outgoingTokensAreExchangedWithTheClientSecret() {
+        runner.withPropertyValues(
+                        "meridian.security.service-jwt.service=runtime",
+                        "meridian.security.service-jwt.client-secret=runtime-secret",
+                        "meridian.security.service-client.control-plane-url=" + issuer.url())
+                .run(context -> {
+                    ServiceCredentialProvider provider = context.getBean(ServiceCredentialProvider.class);
+                    assertThat(provider).isInstanceOf(ServiceTokenClient.class);
+                    String token = provider.credential("control-plane");
+                    assertThat(ServiceJwtVerifierTest.verifier(issuer, "control-plane")
+                                    .resolve(token))
+                            .contains(new ServicePrincipal("runtime"));
+                });
+    }
+
+    @Test
+    void withoutAClientSecretCallsFailBeforeBeingSent() {
+        runner.withPropertyValues(
+                        "meridian.security.service-jwt.service=runtime",
+                        "meridian.security.service-client.control-plane-url=" + issuer.url())
+                .run(context -> assertThatThrownBy(() ->
+                                context.getBean(ServiceCredentialProvider.class).credential("control-plane"))
+                        .isInstanceOf(IllegalStateException.class));
+    }
+
+    @Test
+    void theClientSecretIsNotPrinted() {
+        assertThat(new ServiceJwtProperties("runtime", "iss", "top-secret", null, null).toString())
+                .doesNotContain("top-secret");
     }
 }

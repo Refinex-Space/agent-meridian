@@ -68,6 +68,17 @@
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
+        <!-- 认证夹具（ADR-0044）：TestTokenIssuer 用 Nimbus 签名；KeycloakRealm 用 Keycloak 的 Testcontainers 模块（启动、导入 realm），
+             用户经管理 REST API 创建 -->
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.dasniko</groupId>
+            <artifactId>testcontainers-keycloak</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>

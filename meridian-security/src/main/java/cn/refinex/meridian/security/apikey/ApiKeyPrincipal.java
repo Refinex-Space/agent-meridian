@@ -16,7 +16,8 @@ import java.util.Set;
  * @param rateLimitPerMinute 每分钟请求上限（令牌桶的容量与每分钟补充量，ADR-0042）；可为空，表示不限流（开发期 API Key）
  */
 public record ApiKeyPrincipal(
-        String apiKeyId, String tenantId, String projectId, Set<ApiKeyScope> scopes, Integer rateLimitPerMinute) {
+        String apiKeyId, String tenantId, String projectId, Set<ApiKeyScope> scopes, Integer rateLimitPerMinute)
+        implements PublicApiPrincipal {
 
     /**
      * 创建主体。
@@ -45,14 +46,14 @@ public record ApiKeyPrincipal(
         this(apiKeyId, tenantId, projectId, scopes, null);
     }
 
-    /**
-     * 是否有某个作用域。
-     *
-     * @param scope 作用域
-     * @return 有时为 true
-     */
-    public boolean hasScope(ApiKeyScope scope) {
-        return scopes.contains(scope);
+    @Override
+    public String rateLimitBucket() {
+        return "apikey:{" + apiKeyId + "}";
+    }
+
+    @Override
+    public String describe() {
+        return "apiKeyId=" + apiKeyId;
     }
 
     /**
@@ -60,6 +61,7 @@ public record ApiKeyPrincipal(
      *
      * @return 平台上下文
      */
+    @Override
     public PlatformContext toContext() {
         return PlatformContext.builder()
                 .tenantId(tenantId)

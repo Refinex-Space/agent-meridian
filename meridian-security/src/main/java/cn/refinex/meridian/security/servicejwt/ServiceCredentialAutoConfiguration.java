@@ -1,7 +1,10 @@
 package cn.refinex.meridian.security.servicejwt;
 
-import java.util.Arrays;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.time.Clock;
 import java.util.Optional;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -10,45 +13,44 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
- * 服务凭据的自动配置：入站的解析器、认证器与两种 Web 栈的过滤器，出站的凭据来源与服务间调用客户端（ADR-0042）。
+ * 服务 JWT 的自动配置：入站的校验器、认证器与两种 Web 栈的过滤器，出站的签发客户端与服务间调用客户端（ADR-0044）。
  *
- * <p>解析器的选择与 API Key 相同：应用提供了 {@link ServiceCredentialResolver}（T14b 的服务 JWT）时用它；否则启用了开发期服务凭据时用
- * {@link DevServiceCredentialResolver}，它只允许在 {@code dev}、{@code test} profile 启用，其他 profile 中启用直接让启动失败；都没有时
- * 一律拒绝，内部接口不会在没有认证来源时被放行。
+ * <p>校验器的选择：应用提供了 {@link ServiceCredentialResolver} 时用它（control-plane 用进程内的密钥集）；否则配置了本服务名与
+ * JWKS 地址（或 control-plane 地址）时用 {@link ServiceJwtVerifier#remote}；都没有时一律拒绝，内部接口不会在没有认证来源时被放行。
+ * 出站：配置了本服务名、客户端密钥与 control-plane 地址时用 {@link ServiceTokenClient}；否则调用其他服务的请求在发出前失败。
  */
 @AutoConfiguration
-@EnableConfigurationProperties({DevServiceCredentialProperties.class, ServiceClientProperties.class})
+@EnableConfigurationProperties({ServiceClientProperties.class, ServiceJwtProperties.class})
 public class ServiceCredentialAutoConfiguration {
 
-    /** 允许启用开发期服务凭据的 profile。 */
-    static final String[] DEV_PROFILES = {"dev", "test"};
-
     /**
-     * 服务凭据解析器。
+     * 服务 JWT 校验器。
      *
-     * @param properties 开发期服务凭据配置
-     * @param environment 环境，检查当前 profile
-     * @return 开发期解析器，或拒绝一切的解析器
-     * @throws IllegalStateException 在 {@code dev}、{@code test} 之外的 profile 启用开发期服务凭据时
+     * @param jwt 服务 JWT 配置
+     * @param client 服务间调用配置，取 control-plane 地址
+     * @return 校验器，或拒绝一切的解析器
+     * @throws IllegalStateException JWKS 地址不合法时
      */
     @Bean
     @ConditionalOnMissingBean
     public ServiceCredentialResolver serviceCredentialResolver(
-            DevServiceCredentialProperties properties, Environment environment) {
-        if (!properties.enabled()) {
-            // T14b 之前生产环境没有服务凭据来源：一律拒绝
+            ServiceJwtProperties jwt, ServiceClientProperties client) {
+        String jwksUrl = jwt.jwksUrl() != null && !jwt.jwksUrl().isBlank()
+                ? jwt.jwksUrl()
+                : client.hasControlPlane() ? client.controlPlaneUrl() + ServiceJwts.JWKS_PATH : null;
+        if (!jwt.hasService() || jwksUrl == null) {
+            // 不知道自己是谁或公钥在哪：内部接口一律拒绝
             return credential -> Optional.empty();
         }
-        if (!environment.matchesProfiles(DEV_PROFILES)) {
-            throw new IllegalStateException(
-                    "开发期服务凭据（meridian.security.dev-service-credentials.enabled）只能在 dev 或 test profile 中启用，当前 profile："
-                            + Arrays.toString(environment.getActiveProfiles()));
+        try {
+            return ServiceJwtVerifier.remote(
+                    URI.create(jwksUrl).toURL(), jwt.issuer(), jwt.service(), jwt.jwksCacheTtl());
+        } catch (MalformedURLException | IllegalArgumentException e) {
+            throw new IllegalStateException("服务 JWT 的 JWKS 地址不合法：" + jwksUrl, e);
         }
-        return new DevServiceCredentialResolver(properties);
     }
 
     /**
@@ -76,31 +78,28 @@ public class ServiceCredentialAutoConfiguration {
     }
 
     /**
-     * 出站服务凭据。应用提供了 {@link ServiceCredentialProvider}（T14b 的服务 JWT）时用它；否则用开发期静态凭据，它与入站的开发期凭据一样
-     * 只允许在 {@code dev}、{@code test} profile 设置；都没有时，调用其他服务的请求在发出前失败。
+     * 出站服务凭据：向 control-plane 换取的服务 JWT。
      *
-     * @param properties 服务间调用的配置
-     * @param environment 环境，检查当前 profile
+     * @param jwt 服务 JWT 配置
+     * @param client 服务间调用配置
+     * @param clock 时钟；没有时用系统时钟
      * @return 凭据来源
-     * @throws IllegalStateException 在 {@code dev}、{@code test} 之外的 profile 设置了开发期出站凭据时
      */
     @Bean
     @ConditionalOnMissingBean
     public ServiceCredentialProvider serviceCredentialProvider(
-            ServiceClientProperties properties, Environment environment) {
-        String credential = properties.credential();
-        if (credential == null || credential.isBlank()) {
-            return () -> {
-                throw new IllegalStateException(
-                        "没有出站服务凭据：开发与测试设置 meridian.security.service-client.credential，T14b 起使用服务 JWT");
+            ServiceJwtProperties jwt, ServiceClientProperties client, ObjectProvider<Clock> clock) {
+        if (!jwt.hasService() || !jwt.hasClientSecret() || !client.hasControlPlane()) {
+            return audience -> {
+                throw new IllegalStateException("没有出站服务凭据：配置 meridian.security.service-jwt.service、client-secret 与"
+                        + " meridian.security.service-client.control-plane-url 后才能调用 " + audience);
             };
         }
-        if (!environment.matchesProfiles(DEV_PROFILES)) {
-            throw new IllegalStateException(
-                    "开发期出站服务凭据（meridian.security.service-client.credential）只能在 dev 或 test profile 中设置，当前 profile："
-                            + Arrays.toString(environment.getActiveProfiles()));
-        }
-        return () -> credential;
+        return new ServiceTokenClient(
+                ServiceRestClients.builder(client.controlPlaneUrl(), client).build(),
+                jwt.service(),
+                jwt.clientSecret(),
+                clock.getIfAvailable(Clock::systemUTC));
     }
 
     /**

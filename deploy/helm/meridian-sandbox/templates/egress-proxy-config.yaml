@@ -2,6 +2,8 @@
 出网代理的 Envoy 配置（架构设计「沙箱出网」，ADR-0038）：明文 HTTP 的转发代理与 CONNECT 隧道，动态转发代理按目标主机解析与连接。
 每个请求先经 Lua 过滤器回调 runtime 的 /internal/v1/egress:authorize（源 IP 取 TCP 对端地址、目标取 :authority），只有 200 放行，
 其他状态码、超时与错误一律 403（失败即拒绝）。代理不终止 TLS、不注入凭据（ADR-0017）。
+回调带服务 JWT（ADR-0044）：代理是服务客户端 egress-proxy，用客户端密钥向 control-plane 的 /oauth2/token 换取 audience=runtime 的
+令牌，按 worker 缓存（Lua 全局状态在每个 worker 内跨请求保留），剩余不足 60 秒时重新换取；换取失败同样拒绝出网。
 
 超时与连接上限的理由：
 - request_headers_timeout：读完请求头的上限，慢速请求头（slowloris）占不住连接。
@@ -93,7 +95,47 @@ data:
                             inline_string: |
                               -- 出网授权回调（ADR-0038）：每个 HTTP 或 CONNECT 请求调用一次 runtime，只有 200 放行。
                               -- 检查请求从头构造，沙箱的请求头不会被转发给 runtime。
-                              local authorization = "Bearer " .. (os.getenv("MERIDIAN_EGRESS_AUTHZ_CREDENTIAL") or "")
+                              -- 回调的服务 JWT（ADR-0044）：用客户端密钥换取，本 worker 内缓存到过期前 60 秒
+                              local client_secret = os.getenv("MERIDIAN_EGRESS_CLIENT_SECRET") or ""
+                              local basic = nil
+                              local token = nil
+                              local token_refresh_at = 0
+
+                              -- RFC 6749 2.3.1：客户端 ID 与密钥先做表单编码，再做 Basic 认证
+                              local function form_encode(value)
+                                return (string.gsub(value, "[^%w%-%._~]", function(c)
+                                  return string.format("%%%02X", string.byte(c))
+                                end))
+                              end
+
+                              local function service_token(handle)
+                                local now = os.time()
+                                if token ~= nil and now < token_refresh_at then
+                                  return token
+                                end
+                                if basic == nil then
+                                  basic = "Basic " .. handle:base64Escape("egress-proxy:" .. form_encode(client_secret))
+                                end
+                                local ok, headers, body = pcall(handle.httpCall, handle, "meridian_control_plane", {
+                                  [":method"] = "POST",
+                                  [":path"] = "/oauth2/token",
+                                  [":authority"] = "meridian-control-plane",
+                                  ["content-type"] = "application/x-www-form-urlencoded",
+                                  ["authorization"] = basic,
+                                }, "grant_type=client_credentials&audience=runtime", {{ $authz.timeoutMs }})
+                                if not ok or headers == nil or headers[":status"] ~= "200" or body == nil then
+                                  handle:logWarn("egress proxy could not obtain a service token")
+                                  return nil
+                                end
+                                local issued = string.match(body, '"access_token"%s*:%s*"([^"]+)"')
+                                local expires_in = tonumber(string.match(body, '"expires_in"%s*:%s*(%d+)') or "0")
+                                if issued == nil or expires_in <= 0 then
+                                  return nil
+                                end
+                                token = issued
+                                token_refresh_at = now + math.max(expires_in - 60, math.floor(expires_in / 2))
+                                return token
+                              end
 
                               -- 目标来自沙箱：控制字符、引号与反斜杠一律转义为 \u00XX，保证请求体是合法的 JSON
                               local function json_string(value)
@@ -108,13 +150,17 @@ data:
                                 local source = string.match(address, "^%[?(.-)%]?:%d+$") or address
                                 local target = handle:headers():get(":authority") or ""
                                 local body = '{"source_ip":' .. json_string(source) .. ',"target":' .. json_string(target) .. '}'
-                                local ok, headers = pcall(handle.httpCall, handle, "meridian_runtime", {
+                                local jwt = service_token(handle)
+                                local ok, headers = false, nil
+                                if jwt ~= nil then
+                                  ok, headers = pcall(handle.httpCall, handle, "meridian_runtime", {
                                   [":method"] = "POST",
                                   [":path"] = "/internal/v1/egress:authorize",
                                   [":authority"] = "meridian-runtime",
                                   ["content-type"] = "application/json",
-                                  ["authorization"] = authorization,
+                                  ["authorization"] = "Bearer " .. jwt,
                                 }, body, {{ $authz.timeoutMs }})
+                                end
                                 if not ok or headers == nil or headers[":status"] ~= "200" then
                                   handle:respond(
                                     { [":status"] = "403", ["content-type"] = "text/plain; charset=utf-8" },
@@ -201,5 +247,28 @@ data:
                           port_value: {{ $authz.cluster.port }}
                           {{- else }}
                           {{- fail (printf "egressProxy.authz.topology 只能是 cluster 或 host：%s" $authz.topology) }}
+                          {{- end }}
+        # 换取服务 JWT 的上游 control-plane（ADR-0044）：拓扑与 runtime 相同
+        - name: meridian_control_plane
+          type: STRICT_DNS
+          connect_timeout: 1s
+          {{- if eq $authz.topology "host" }}
+          dns_lookup_family: V4_ONLY
+          {{- else }}
+          dns_lookup_family: V4_PREFERRED
+          {{- end }}
+          load_assignment:
+            cluster_name: meridian_control_plane
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          {{- if eq $authz.topology "host" }}
+                          address: {{ $authz.host.address }}
+                          port_value: {{ $authz.controlPlane.host.port }}
+                          {{- else }}
+                          address: {{ $authz.controlPlane.cluster.service }}
+                          port_value: {{ $authz.controlPlane.cluster.port }}
                           {{- end }}
 {{- end }}

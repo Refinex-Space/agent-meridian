@@ -54,9 +54,11 @@ class ControlPlaneApiKeyResolverTest {
         });
         server.start();
         ServiceRestClients clients = new ServiceRestClients(
-                new ServiceClientProperties(null, null, Duration.ofSeconds(2), Duration.ofSeconds(5)), () -> "svc_out");
+                new ServiceClientProperties(null, Duration.ofSeconds(2), Duration.ofSeconds(5)), audience -> "jwt_out");
         resolver = new ControlPlaneApiKeyResolver(
-                clients.create("http://127.0.0.1:" + server.getAddress().getPort()), clock, nanos::get);
+                clients.create("http://127.0.0.1:" + server.getAddress().getPort(), "control-plane"),
+                clock,
+                nanos::get);
     }
 
     @AfterEach
@@ -74,7 +76,7 @@ class ControlPlaneApiKeyResolverTest {
         assertThat(principal.scopes()).containsExactly(ApiKeyScope.SESSIONS_READ);
         assertThat(principal.rateLimitPerMinute()).isEqualTo(600);
         assertThat(requests).singleElement().satisfies(request -> {
-            assertThat(request).startsWith("Bearer svc_out ");
+            assertThat(request).startsWith("Bearer jwt_out ");
             assertThat(request).contains(ApiKeyHashes.sha256(KEY)).doesNotContain(KEY);
         });
 

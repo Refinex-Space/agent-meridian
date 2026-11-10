@@ -87,6 +87,28 @@ public final class AdminClient {
         return send(INTERNAL, method, path, body, headers);
     }
 
+    /**
+     * 向令牌端点换取服务 JWT（ADR-0044），按内部接口规范校验。
+     *
+     * @param service 服务名；为空时不带 Basic 认证
+     * @param secret 客户端密钥
+     * @param audience 目标服务
+     * @return 响应
+     */
+    public Reply serviceToken(String service, String secret, String audience) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        if (service != null) {
+            headers.put(
+                    "Authorization",
+                    "Basic "
+                            + java.util.Base64.getEncoder()
+                                    .encodeToString((service + ":" + secret)
+                                            .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        }
+        headers.put("Content-Type", "application/x-www-form-urlencoded");
+        return send(INTERNAL, "POST", "/oauth2/token", "grant_type=client_credentials&audience=" + audience, headers);
+    }
+
     private Reply send(
             OpenApiInteractionValidator validator,
             String method,
@@ -97,7 +119,7 @@ public final class AdminClient {
                 .method(
                         method,
                         body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
-        if (body != null) {
+        if (body != null && !headers.containsKey("Content-Type")) {
             builder.header("Content-Type", "application/json");
         }
         headers.forEach(builder::header);
@@ -114,7 +136,8 @@ public final class AdminClient {
         SimpleRequest.Builder request = new SimpleRequest.Builder(Request.Method.valueOf(method), uri.getRawPath());
         headers.forEach(request::withHeader);
         if (body != null) {
-            request.withContentType("application/json").withBody(body);
+            request.withContentType(headers.getOrDefault("Content-Type", "application/json"))
+                    .withBody(body);
         }
         if (uri.getRawQuery() != null) {
             for (String pair : uri.getRawQuery().split("&")) {

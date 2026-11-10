@@ -13,6 +13,13 @@ spring:
 meridian:
   persistence:
     schema: rt
+  security:
+    service-jwt:
+      # 本服务名：入站服务 JWT 的 aud，出站换取令牌的客户端 ID（ADR-0044）；客户端密钥部署时配置
+      service: runtime
+    oidc:
+      # 控制台用户带 Meridian-Project 调用公开 API（ADR-0044）：部署时配置 issuer
+      audience: meridian
   runtime:
     dispatch:
       # 以下为架构设计「一轮执行的生命周期」规定的默认值，写在这里便于查看；节点 ID 留空时按主机名生成

@@ -75,7 +75,7 @@ public class IdempotentRequests {
                 exchange.getRequest().getPath().pathWithinApplication().value(),
                 request == null ? new byte[0] : FINGERPRINT.writeValueAsBytes(request));
         return Blocking.call(() -> idempotency.execute(
-                        PlatformContexts.current().apiKeyId(),
+                        PlatformContexts.current().actor(),
                         idempotencyKey,
                         fingerprint,
                         () -> new StoredResponse(

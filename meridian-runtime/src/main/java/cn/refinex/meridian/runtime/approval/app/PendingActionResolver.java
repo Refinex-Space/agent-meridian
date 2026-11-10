@@ -95,7 +95,7 @@ public class PendingActionResolver {
      *
      * @param action 被回应的动作
      * @param response 回应事件
-     * @param decidedBy 做出决定的主体（API Key ID）；可为空
+     * @param decidedBy 做出决定的主体（API Key ID，或 {@code user:} 加控制台用户，ADR-0044）；可为空
      */
     public void respond(StoredPendingAction action, UserEvent response, String decidedBy) {
         ActionConclusion conclusion = ActionConclusion.of(response);

@@ -17,6 +17,10 @@ spring:
 meridian:
   persistence:
     schema: cp
+  security:
+    oidc:
+      # 控制台用户的 OIDC（ADR-0043）：部署时配置 issuer；用户标识默认取 sub，组取 groups
+      audience: meridian
   control-plane:
     tenants:
       # 新租户的默认配额：并发配额默认 20（架构设计「认领」，ADR-0027），事件保留 365 天（「数据保留」）
@@ -25,8 +29,12 @@ meridian:
     api-keys:
       # 创建 API Key 时不给出上限的默认值（ADR-0042）
       default-rate-limit-per-minute: 600
-    # 平台管理员的主体标识（ADR-0042）；部署时按身份提供方配置
+    # 平台管理员（ADR-0042、ADR-0043）：主体标识列表，或令牌中组声明的取值；部署时按身份提供方配置
     platform-admins: []
+    platform-admin-groups: []
+    # 服务 JWT 的签发（ADR-0044）：部署时配置 key-directory（生产改用密钥管理系统，T28）与各服务的客户端
+    service-tokens:
+      clients: []
 
 management:
   endpoints:

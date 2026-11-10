@@ -1,5 +1,5 @@
 # 角色矩阵（架构设计「授权」，ADR-0042）：每个角色对每类管理操作的允许（A，2xx）与拒绝（D，403 access.forbidden）。
-# T14a 用开发期令牌驱动（RoleMatrixIT），T14b 接上 OIDC 后复用同一张表。
+# RoleMatrixIT 以 Keycloak 签发的 OIDC 令牌驱动（T14b，T14a 时是开发期令牌），每列是一个 Keycloak 用户。
 # 列：操作（operationId，# 后是同一操作的变体）| 方法 | 路径 | 请求体 | platform owner admin developer viewer approver outsider
 # 路径与请求体中的占位符由夹具替换：{tenant} {project}（各项目级角色绑定的项目）{other_project} {spare_member}
 # {spare_binding}（spare 的项目级绑定）{owner2_member} {owner2_binding}（第二位所有者）{key}（{project} 下的 API Key）

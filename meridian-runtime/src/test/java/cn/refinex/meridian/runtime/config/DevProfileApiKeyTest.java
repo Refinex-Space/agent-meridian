@@ -38,7 +38,8 @@ class DevProfileApiKeyTest {
                 .withPropertyValues(
                         "spring.profiles.active=dev",
                         "meridian.security.service-client.control-plane-url=http://127.0.0.1:18081",
-                        "meridian.security.service-client.credential=svc_dev")
+                        "meridian.security.service-jwt.service=runtime",
+                        "meridian.security.service-jwt.client-secret=dev-runtime-client-secret")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context.getBean(ApiKeyResolver.class))

@@ -20,7 +20,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * 内部接口规范 {@code meridian-internal-v1.yaml} 的校验（T09b、T12b、T14a）：按 OpenAPI 3.1 解析无错误，端点与架构设计「知识库架构」
+ * 内部接口规范 {@code meridian-internal-v1.yaml} 的校验（T09b、T12b、T14a、T14b）：按 OpenAPI 3.1 解析无错误，端点与架构设计「知识库架构」
  * 「沙箱出网」引用的内部接口一致，全部要求服务凭据，写作约束与公开 API 相同。
  */
 class InternalOpenApiSpecTest {
@@ -37,7 +37,14 @@ class InternalOpenApiSpecTest {
             "POST /internal/v1/rerank",
             "POST /internal/v1/egress:authorize",
             "POST /internal/v1/api-keys:verify",
-            "GET /internal/v1/tenants/{tenant_id}/quotas");
+            "GET /internal/v1/tenants/{tenant_id}/quotas",
+            "POST /internal/v1/project-access:resolve",
+            "POST /oauth2/token",
+            "GET /oauth2/jwks");
+
+    /** 不用服务 JWT 认证的端点（ADR-0044）：令牌端点用客户端凭据，JWKS 是公钥、不需要认证。 */
+    private static final Map<String, List<String>> OWN_SECURITY =
+            Map.of("POST /oauth2/token", List.of("ServiceClientAuth"), "GET /oauth2/jwks", List.of());
 
     private static final Pattern SNAKE_CASE = Pattern.compile("^[a-z][a-z0-9_]*$");
 
@@ -67,7 +74,17 @@ class InternalOpenApiSpecTest {
                 .satisfies(requirement -> assertThat(requirement).containsOnlyKeys("ServiceAuth"));
         operations().forEach((key, operation) -> {
             assertThat(operation.getOperationId()).as(key).isNotBlank();
-            assertThat(operation.getSecurity()).as(key + " 沿用全局的服务凭据").isNull();
+            if (OWN_SECURITY.containsKey(key)) {
+                assertThat(operation.getSecurity())
+                        .as(key)
+                        .flatMap(requirement -> List.copyOf(requirement.keySet()))
+                        .containsExactlyElementsOf(OWN_SECURITY.get(key));
+            } else {
+                assertThat(key.substring(key.indexOf(' ') + 1))
+                        .as("服务 JWT 只保护 /internal/")
+                        .startsWith("/internal/");
+                assertThat(operation.getSecurity()).as(key + " 沿用全局的服务凭据").isNull();
+            }
         });
     }
 

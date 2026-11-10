@@ -58,7 +58,7 @@ public final class PermissionInterceptor implements HandlerInterceptor {
                     + (permission.level() == Permission.Level.PROJECT ? " 与 project_id" : "") + "："
                     + method.getShortLogMessage());
         }
-        AccessContext context = new AccessContext(user, tenantId, grants.grants(user.subject(), tenantId));
+        AccessContext context = new AccessContext(user, tenantId, grants.grants(user, tenantId));
         context.require(permission, projectId);
         request.setAttribute(AccessContext.ATTRIBUTE, context);
         return true;

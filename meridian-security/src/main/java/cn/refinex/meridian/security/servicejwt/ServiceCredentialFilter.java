@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
- * MVC 服务（control-plane、knowledge）的内部接口过滤器：{@code /internal/} 下的每个请求都要带服务凭据，认证后把调用方服务写入请求
+ * MVC 服务（control-plane、knowledge）的内部接口过滤器：{@code /internal/} 下的每个请求都要带服务 JWT，认证后把调用方服务写入请求
  * 属性。与 WebFlux 的 {@link ServiceCredentialWebFilter} 共用 {@link ServiceCredentialAuthenticator}；不写 {@code PlatformContext}，
  * 处理器按请求声明的租户建立上下文。
  */
@@ -29,17 +29,19 @@ public final class ServiceCredentialFilter extends PrefixAuthenticationFilter<Se
     }
 
     /**
-     * 内部接口处理器的认证检查（MVC 版 {@link ServiceCredentialAuthorization#require}）：过滤器之外的第二道保护，失败即关闭。
+     * 内部接口处理器的认证与调用方检查（MVC 版 {@link ServiceCredentialAuthorization#require}）：过滤器之外的第二道保护，失败即关闭。
      *
      * @param request 当前请求
+     * @param caller 允许的调用方服务名
+     * @param otherCallers 其他允许的调用方服务名
      * @return 调用方服务
      * @throws MeridianException 请求没有经过认证时（{@code auth.unauthenticated}）
+     * @throws cn.refinex.meridian.common.error.ForbiddenException 调用方不在允许之列时（{@code access.forbidden}）
      */
-    public static ServicePrincipal require(HttpServletRequest request) {
-        if (request.getAttribute(PRINCIPAL_ATTRIBUTE) instanceof ServicePrincipal principal) {
-            return principal;
-        }
-        throw new MeridianException(ServiceCredentialErrorCode.UNAUTHENTICATED, "内部接口需要服务凭据");
+    public static ServicePrincipal require(HttpServletRequest request, String caller, String... otherCallers) {
+        ServicePrincipal principal =
+                request.getAttribute(PRINCIPAL_ATTRIBUTE) instanceof ServicePrincipal found ? found : null;
+        return ServiceCredentialAuthorization.check(principal, caller, otherCallers);
     }
 
     @Override

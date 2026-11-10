@@ -1,6 +1,6 @@
 # 本地开发：连接 scripts/dev/up.sh 启动的 compose（端口见 deploy/compose/.env.example）。
-# 口令与开发期令牌只从环境变量读取：MERIDIAN_APP_PASSWORD、MERIDIAN_MIGRATOR_PASSWORD、MERIDIAN_DEV_SERVICE_CREDENTIAL、
-# MERIDIAN_DEV_CONSOLE_TOKEN。
+# 口令与客户端密钥只从环境变量读取：MERIDIAN_APP_PASSWORD、MERIDIAN_MIGRATOR_PASSWORD、MERIDIAN_RUNTIME_CLIENT_SECRET、
+# MERIDIAN_EGRESS_PROXY_CLIENT_SECRET。控制台用户经 Compose 的 auth profile（Keycloak，realm meridian-dev）登录。
 server:
   port: ${MERIDIAN_CONTROL_PLANE_PORT:18081}
 
@@ -19,21 +19,25 @@ spring:
 
 meridian:
   control-plane:
-    # 开发期控制台用户 dev-admin 同时是平台管理员，可以创建租户
-    platform-admins: [dev-admin]
+    # 开发 realm 中 meridian-platform-admins 组的成员（dev-admin）是平台管理员，可以创建租户（ADR-0043）
+    platform-admin-groups: [meridian-platform-admins]
+    service-tokens:
+      # 服务 JWT 的签名密钥（ADR-0044）：本机运行写在仓库的 deploy/compose/data（已忽略），Compose 中是命名卷
+      key-directory: ${MERIDIAN_SERVICE_TOKEN_KEY_DIR:deploy/compose/data/service-token-keys}
+      clients:
+        - service: runtime
+          secret: ${MERIDIAN_RUNTIME_CLIENT_SECRET}
+          audiences: [control-plane]
+        # kind 中的沙箱出网代理：只能换取 runtime 的令牌，用于出网授权回调（D38）
+        - service: egress-proxy
+          secret: ${MERIDIAN_EGRESS_PROXY_CLIENT_SECRET}
+          audiences: [runtime]
   security:
-    dev-console-users:
-      # 开发期控制台令牌（T14a）：只在 dev、test profile 允许启用，T14b 起改为 OIDC
-      enabled: true
-      users:
-        - token: ${MERIDIAN_DEV_CONSOLE_TOKEN}
-          subject: dev-admin
-    dev-service-credentials:
-      # 内部接口的开发期服务凭据：runtime 校验 API Key、读取配额时使用；T14b 起改为服务 JWT
-      enabled: true
-      credentials:
-        - credential: ${MERIDIAN_DEV_SERVICE_CREDENTIAL}
-          service: runtime
+    oidc:
+      # Compose 的 auth profile；容器内访问 Keycloak 的地址与 iss 不同时设置 MERIDIAN_OIDC_JWKS_URI
+      issuer: ${MERIDIAN_OIDC_ISSUER:http://localhost:18082/realms/meridian-dev}
+      audience: meridian
+      jwks-uri: ${MERIDIAN_OIDC_JWKS_URI:}
 
 management:
   endpoint:

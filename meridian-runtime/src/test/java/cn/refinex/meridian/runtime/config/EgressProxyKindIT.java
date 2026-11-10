@@ -22,6 +22,7 @@ import cn.refinex.meridian.runtime.support.DbAssertions;
 import cn.refinex.meridian.runtime.support.TestSessions;
 import cn.refinex.meridian.runtime.support.TestSessions.TestSession;
 import cn.refinex.meridian.testsupport.SpringContainerProperties;
+import cn.refinex.meridian.testsupport.auth.TestTokenIssuer;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
@@ -59,14 +60,16 @@ import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * P14 出网控制在本机 kind 集群上的端到端验证（T12b-A01）：集群中的 Envoy 出网代理经 {@code host.docker.internal:18080} 回调本测试
- * 启动的 runtime（宿主拓扑，{@code values-kind.yaml}），沙箱是从 agent-sandbox 预热池认领的真实 gVisor Pod，白名单内外的目标是
+ * 启动的 runtime（宿主拓扑，{@code values-kind.yaml}）；回调带的服务 JWT 由代理用客户端密钥在 {@code host.docker.internal:18081}
+ * 换取（T14b，ADR-0044），这里由本测试启动的 {@link TestTokenIssuer} 代替 control-plane，runtime 经它的 JWKS 校验；沙箱是从 agent-sandbox 预热池认领的真实 gVisor Pod，白名单内外的目标是
  * {@code deploy/kind/egress-echo.yaml} 中的 {@code allowed-echo} 与 {@code denied-echo}。
  *
  * <p>四条：白名单内的域名经代理可以访问（明文 HTTP 与 CONNECT 隧道）；其他域名被拒；沙箱删除后同 IP 的新 Pod 不继承旧授权（在 30 秒
  * 缓存期内）；绕过代理的直连被 NetworkPolicy 阻断。每条的命令与输出写进日志，供 {@code docs/poc/P14-出网控制.md} 引用。
  *
  * <p>前提：kind 集群 {@code meridian} 已按根 {@code CLAUDE.md} 的环境脚本建好，并用 {@code scripts/dev/deploy-sandbox.sh} 部署了
- * 沙箱 chart（含出网代理、凭据 Secret 与两个目标服务）；宿主的 18080 端口空闲（不要同时运行 {@code run-runtime.sh --server.port=18080}）。
+ * 沙箱 chart（含出网代理、凭据 Secret 与两个目标服务）；宿主的 18080、18081 端口空闲（不要同时运行 {@code run-runtime.sh --server.port=18080} 与
+ * {@code run-control-plane.sh}）。
  * 运行：{@code ./mvnw -Pkind -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false
  * -Dit.test=EgressProxyKindIT}。
  */
@@ -85,8 +88,14 @@ class EgressProxyKindIT {
     /** 沙箱模板中的代理地址（{@code values.yaml} 的 {@code egressProxy.url}）。 */
     static final String PROXY_URL = "http://meridian-egress-proxy." + NAMESPACE + ".svc.cluster.local:10000";
 
-    /** 出网代理回调 runtime 用的凭据（{@code deploy-sandbox.sh} 创建的 Secret）。 */
-    static final String CREDENTIAL_SECRET = "meridian-egress-proxy-credential";
+    /** {@code values-kind.yaml} 中 {@code egressProxy.authz.controlPlane.host.port}：代理经 {@code host.docker.internal} 换取令牌。 */
+    static final int CONTROL_PLANE_PORT = 18081;
+
+    /** 出网代理的客户端密钥（{@code deploy-sandbox.sh} 创建的 Secret）。 */
+    static final String CLIENT_SECRET = "meridian-egress-proxy-client";
+
+    /** 代替 control-plane 的令牌签发方：监听全部地址，集群中的代理经宿主地址访问。 */
+    private static final TestTokenIssuer TOKENS = startTokenIssuer();
 
     static final String ALLOWED = "allowed-echo.meridian-egress-test.svc.cluster.local";
     static final String DENIED = "denied-echo.meridian-egress-test.svc.cluster.local";
@@ -129,11 +138,7 @@ class EgressProxyKindIT {
         registry.add("meridian.runtime.sandbox.enabled", () -> "true");
         registry.add("meridian.runtime.sandbox.kube-context", () -> KUBE_CONTEXT);
         registry.add("meridian.runtime.dev-agent-config.directory", () -> CONFIG.toString());
-        registry.add("meridian.security.dev-service-credentials.enabled", () -> "true");
-        registry.add(
-                "meridian.security.dev-service-credentials.credentials[0].credential",
-                EgressProxyKindIT::proxyCredential);
-        registry.add("meridian.security.dev-service-credentials.credentials[0].service", () -> "egress-proxy");
+        registry.add("meridian.security.service-jwt.jwks-url", TOKENS::jwksUrl);
     }
 
     @AfterEach
@@ -149,6 +154,7 @@ class EgressProxyKindIT {
 
     @AfterAll
     static void disconnect() {
+        TOKENS.close();
         if (kube != null) {
             kube.close();
         }
@@ -166,6 +172,9 @@ class EgressProxyKindIT {
         // 1. 白名单内的域名可以访问：明文 HTTP 经代理转发，CONNECT 隧道（HTTPS 的走法，curl -p 对明文也建隧道）
         assertThat(inSandbox(sandbox, curl("", "http://" + ALLOWED + "/"))).isEqualTo("200 allowed-echo");
         assertThat(inSandbox(sandbox, tunnel("http://" + ALLOWED + "/"))).isEqualTo("200/200 allowed-echo");
+        // 代理的回调带服务 JWT：它用客户端密钥换取过令牌（runtime 只接受 egress-proxy 的有效令牌，T14b）
+        assertThat(TOKENS.tokenRequests()).as("出网代理换取服务 JWT 的次数").isPositive();
+        log.info("P14 出网代理换取服务 JWT {} 次", TOKENS.tokenRequests());
 
         // 2. 其他域名被拒：明文 HTTP 得到代理的 403，CONNECT 隧道建立失败（代理回 403）
         assertThat(inSandbox(sandbox, curl("", "http://" + DENIED + "/"))).startsWith("403 ");
@@ -289,15 +298,22 @@ class EgressProxyKindIT {
         return kube;
     }
 
-    static String proxyCredential() {
-        Secret secret = kube().secrets()
-                .inNamespace(NAMESPACE)
-                .withName(CREDENTIAL_SECRET)
-                .get();
-        if (secret == null) {
-            throw new IllegalStateException("缺少 Secret " + CREDENTIAL_SECRET + "，先运行 scripts/dev/deploy-sandbox.sh");
+    static TestTokenIssuer startTokenIssuer() {
+        try {
+            return TestTokenIssuer.start(java.net.InetAddress.getByName("0.0.0.0"), CONTROL_PLANE_PORT)
+                    .client("egress-proxy", proxyClientSecret());
+        } catch (java.net.UnknownHostException e) {
+            throw new IllegalStateException(e);
         }
-        return new String(Base64.getDecoder().decode(secret.getData().get("credential")), StandardCharsets.UTF_8);
+    }
+
+    static String proxyClientSecret() {
+        Secret secret =
+                kube().secrets().inNamespace(NAMESPACE).withName(CLIENT_SECRET).get();
+        if (secret == null) {
+            throw new IllegalStateException("缺少 Secret " + CLIENT_SECRET + "，先运行 scripts/dev/deploy-sandbox.sh");
+        }
+        return new String(Base64.getDecoder().decode(secret.getData().get("client-secret")), StandardCharsets.UTF_8);
     }
 
     static String echoPodIp() {

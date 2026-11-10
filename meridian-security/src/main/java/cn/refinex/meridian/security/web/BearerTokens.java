@@ -4,7 +4,7 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * 从 {@code Authorization} 请求头取出 {@code Bearer} 令牌：API Key、服务凭据与控制台用户令牌共用的解析规则。
+ * 从 {@code Authorization} 请求头取出 {@code Bearer} 令牌：API Key、服务 JWT 与控制台用户令牌共用的解析规则。
  */
 public final class BearerTokens {
 
@@ -28,5 +28,18 @@ public final class BearerTokens {
             return Optional.empty();
         }
         return Optional.of(token);
+    }
+
+    /**
+     * 令牌是否是 JWS 紧凑序列化的形状（三段，以点分隔，各段非空）。公开 API 据此区分 OIDC 令牌与 API Key（ADR-0044），服务 JWT
+     * 的校验据此跳过明显不是 JWT 的值；只看形状，不代表签名有效。
+     *
+     * @param token 令牌
+     * @return 是 JWT 的形状时为 true
+     */
+    public static boolean looksLikeJwt(String token) {
+        int first = token.indexOf('.');
+        int second = first < 0 ? -1 : token.indexOf('.', first + 1);
+        return first > 0 && second > first + 1 && second < token.length() - 1 && token.indexOf('.', second + 1) < 0;
     }
 }

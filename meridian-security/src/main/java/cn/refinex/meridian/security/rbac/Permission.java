@@ -39,7 +39,13 @@ public enum Permission {
     /** 创建、修改、吊销 API Key。 */
     API_KEY_WRITE(Level.PROJECT),
     /** 处理待处理动作（审批）。 */
-    PENDING_ACTION_DECIDE(Level.PROJECT);
+    PENDING_ACTION_DECIDE(Level.PROJECT),
+    /** 公开 API：读取会话、事件与事件流（作用域 {@code sessions:read}，ADR-0044）。 */
+    SESSION_READ(Level.PROJECT),
+    /** 公开 API：创建会话、发送事件，即 Playground（作用域 {@code sessions:write}，ADR-0044）。 */
+    SESSION_WRITE(Level.PROJECT),
+    /** 公开 API：模型直通（作用域 {@code models:invoke}，ADR-0044）。 */
+    MODEL_INVOKE(Level.PROJECT);
 
     /** 判定层级。 */
     public enum Level {

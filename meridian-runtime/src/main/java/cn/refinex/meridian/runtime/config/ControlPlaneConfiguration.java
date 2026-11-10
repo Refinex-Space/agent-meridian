@@ -10,6 +10,7 @@ import cn.refinex.meridian.runtime.web.ApiKeyRevocationListener;
 import cn.refinex.meridian.security.apikey.ApiKeyResolver;
 import cn.refinex.meridian.security.apikey.ControlPlaneApiKeyResolver;
 import cn.refinex.meridian.security.servicejwt.ServiceClientProperties;
+import cn.refinex.meridian.security.servicejwt.ServiceJwts;
 import cn.refinex.meridian.security.servicejwt.ServiceRestClients;
 import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -41,7 +42,7 @@ public class ControlPlaneConfiguration {
         if (!serviceClient.hasControlPlane()) {
             return tenantId -> dispatch.defaultTenantMaxRunning();
         }
-        return new ControlPlaneTenantQuotas(clients.create(serviceClient.controlPlaneUrl()));
+        return new ControlPlaneTenantQuotas(clients.create(serviceClient.controlPlaneUrl(), ServiceJwts.CONTROL_PLANE));
     }
 
     /**

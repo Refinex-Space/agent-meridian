@@ -21,9 +21,9 @@ class PermissionInterceptorTest {
 
     private final List<String> lookups = new ArrayList<>();
 
-    private final PermissionInterceptor interceptor = new PermissionInterceptor((subject, tenantId) -> {
-        lookups.add(subject + "@" + tenantId);
-        return "dev".equals(subject) ? Set.of(new Grant(Role.PROJECT_DEVELOPER, "prj_a")) : Set.of();
+    private final PermissionInterceptor interceptor = new PermissionInterceptor((user, tenantId) -> {
+        lookups.add(user.subject() + "@" + tenantId);
+        return "dev".equals(user.subject()) ? Set.of(new Grant(Role.PROJECT_DEVELOPER, "prj_a")) : Set.of();
     });
 
     @Test

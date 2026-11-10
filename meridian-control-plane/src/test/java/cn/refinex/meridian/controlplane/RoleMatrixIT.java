@@ -22,8 +22,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * 角色矩阵的表驱动测试（T14a-A02）：{@code rbac/role-matrix.psv} 中每个角色对每类管理操作的允许与拒绝，经真实的 HTTP、过滤器、
- * 拦截器与用例执行。写操作每次用新建的租户，读操作共用一个；允许时要求 2xx，拒绝时要求 403 {@code access.forbidden}。
+ * 角色矩阵的表驱动测试（T14a-A02、T14b-A04）：{@code rbac/role-matrix.psv} 中每个角色对每类管理操作的允许与拒绝，以 Keycloak 签发的
+ * OIDC 令牌经真实的 HTTP、OIDC 校验、过滤器、拦截器与用例执行（用户标识取 {@code preferred_username}，平台管理员按组判定）。写操作每次用新建的租户，读操作共用一个；允许时要求 2xx，拒绝时要求 403 {@code access.forbidden}。
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RoleMatrixIT extends ControlPlaneTestBase {
@@ -76,7 +76,9 @@ class RoleMatrixIT extends ControlPlaneTestBase {
     @Test
     void requestsWithoutAConsoleTokenAreUnauthenticated() {
         Reply missing = client().admin("GET", "/admin/v1/tenants", null, null);
-        Reply wrong = client().admin("GET", "/admin/v1/tenants", "tok-nobody", null);
+        // JWT 形状但签名、签发方都不对的令牌
+        Reply wrong = client().admin(
+                        "GET", "/admin/v1/tenants", "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJub2JvZHkifQ.c2lnbmF0dXJl", null);
 
         assertThat(missing.status()).isEqualTo(401);
         assertThat(missing.text("code")).isEqualTo("auth.unauthenticated");

@@ -10,13 +10,17 @@ info:
     同一项目内按 `end_user_id` 区分终端用户，跨项目不可见，即使 `end_user_id` 相同。API Key 的作用域决定能调用哪些接口：
     读接口需要 `sessions:read`，写接口需要 `sessions:write`，模型直通需要 `models:invoke`，每个操作的 `security` 列出所需作用域。
 
+    控制台（例如 Playground）以登录用户的 OIDC access token 代替 API Key 调用，同时用请求头 `Meridian-Project: <项目 ID>`
+    指定项目；缺少该头返回 400 `auth.project_required`。用户的作用域由他在该项目中的角色决定（项目开发者与租户所有者有上面
+    三个作用域，其他角色只有 `sessions:read`）；项目不存在或用户在其中没有角色时返回 403 `access.forbidden`。
+
     **约定。**
     - 字段名 snake_case；时间为 RFC 3339 UTC，例如 `2026-11-07T08:30:12.345Z`。
     - 列表接口用游标分页：`?limit=&after=`，返回 `{data, has_more, next_cursor}`；`next_cursor` 原样传给下一次请求的 `after`。
     - 所有 POST 支持 `Idempotency-Key` 请求头：24 小时内同键同请求体返回首次的结果（响应带 `Idempotent-Replayed: true`），
       同键不同请求体返回 409 `idempotency.key_reused`，首次请求仍在处理时返回 409 `idempotency.in_progress`。
     - 错误一律为 RFC 9457 `application/problem+json`，扩展字段 `code`（`<领域>.<原因>`）与 `request_id`。
-    - 限流按 API Key 计（令牌桶，容量与每分钟补充量是该 Key 的每分钟上限）：每个响应带 `RateLimit-Limit`（上限）、
+    - 限流按 API Key 计（令牌桶，容量与每分钟补充量是该 Key 的每分钟上限；控制台用户按用户计）：每个响应带 `RateLimit-Limit`（上限）、
       `RateLimit-Remaining`（剩余请求数）、`RateLimit-Reset`（多少秒后补满）；超限返回 429 `rate_limit.exceeded` 与
       `Retry-After`（秒）。
     - 每个响应带 `X-Request-Id`；请求可传入 `X-Request-Id`（不超过 128 个字符的字母、数字与 `._:-`）与 W3C `traceparent`，
@@ -681,7 +685,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: API Key
-      description: 项目下的 API Key，带作用域（`sessions:read`、`sessions:write` 等）。
+      description: 项目下的 API Key，带作用域（`sessions:read`、`sessions:write` 等）；控制台用户以 OIDC access token 加 `Meridian-Project` 头代替。
 
   headers:
     XRequestId:

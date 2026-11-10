@@ -7,7 +7,9 @@ public enum ConsoleAuthErrorCode implements ErrorCode {
     /** 请求没有 {@code Authorization: Bearer}，或格式不对。 */
     UNAUTHENTICATED("auth.unauthenticated", 401, "未认证"),
     /** 令牌无效、已过期，或当前环境没有控制台身份来源。 */
-    INVALID_CONSOLE_TOKEN("auth.invalid_console_token", 401, "控制台令牌无效");
+    INVALID_CONSOLE_TOKEN("auth.invalid_console_token", 401, "控制台令牌无效"),
+    /** 控制台用户调用公开 API 时没有用 {@code Meridian-Project} 指定项目（ADR-0044）。 */
+    PROJECT_REQUIRED("auth.project_required", 400, "需要指定项目");
 
     private final String code;
     private final int status;

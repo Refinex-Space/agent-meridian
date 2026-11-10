@@ -2,6 +2,7 @@ package cn.refinex.meridian.security.apikey;
 
 import cn.refinex.meridian.security.servicejwt.ServiceClientProperties;
 import cn.refinex.meridian.security.servicejwt.ServiceCredentialAutoConfiguration;
+import cn.refinex.meridian.security.servicejwt.ServiceJwts;
 import cn.refinex.meridian.security.servicejwt.ServiceRestClients;
 import java.time.Clock;
 import java.util.Arrays;
@@ -28,7 +29,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  */
 @AutoConfiguration(
         after = ServiceCredentialAutoConfiguration.class,
-        afterName = "org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration")
+        // 控制台用户认证（oidc 包）以名字引用：apikey 包不依赖 oidc 包
+        afterName = {
+            "cn.refinex.meridian.security.oidc.ConsoleAuthAutoConfiguration",
+            "org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration"
+        })
 @EnableConfigurationProperties(DevApiKeyProperties.class)
 public class ApiKeyAutoConfiguration {
 
@@ -61,7 +66,8 @@ public class ApiKeyAutoConfiguration {
         }
         if (serviceClient.hasControlPlane()) {
             return new ControlPlaneApiKeyResolver(
-                    clients.create(serviceClient.controlPlaneUrl()), clock.getIfAvailable(Clock::systemUTC));
+                    clients.create(serviceClient.controlPlaneUrl(), ServiceJwts.CONTROL_PLANE),
+                    clock.getIfAvailable(Clock::systemUTC));
         }
         if (!properties.enabled()) {
             // 没有 API Key 来源：一律拒绝
@@ -83,17 +89,20 @@ public class ApiKeyAutoConfiguration {
     }
 
     /**
-     * WebFlux 服务的认证过滤器。
+     * WebFlux 服务的公开 API 认证过滤器。
      *
-     * @param authenticator 认证器
+     * @param authenticator API Key 认证器
+     * @param consoleAuthenticator 控制台用户的认证；没有配置 OIDC 时不存在，只接受 API Key
      * @param rateLimiter 限流器；没有 Redis 时不存在，不限流
      * @return 过滤器
      */
     @Bean
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.REACTIVE)
     public ApiKeyWebFilter apiKeyWebFilter(
-            ApiKeyAuthenticator authenticator, ObjectProvider<ApiKeyRateLimiter> rateLimiter) {
-        return new ApiKeyWebFilter(authenticator, rateLimiter.getIfAvailable());
+            ApiKeyAuthenticator authenticator,
+            ObjectProvider<ConsoleTokenAuthenticator> consoleAuthenticator,
+            ObjectProvider<ApiKeyRateLimiter> rateLimiter) {
+        return new ApiKeyWebFilter(authenticator, consoleAuthenticator.getIfAvailable(), rateLimiter.getIfAvailable());
     }
 
     /** 应用有 Redis 时启用按 Key 限流（ADR-0042）。 */

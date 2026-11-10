@@ -3,9 +3,10 @@
 #   1. dev-api-key.sh 经管理 API 新建租户（并发配额 4）、项目与 API Key；
 #   2. 用这个 Key 在 runtime 上创建会话、发送消息，脚本化模型回答后会话回到 idle；
 #   3. rt.tenant_concurrency 的 max_running 等于配额（不手工插入任何数据），改配额后随之更新；
-#   4. 吊销 Key 后 1 秒内 runtime 拒绝它。
+#   4. 吊销 Key 后 1 秒内 runtime 拒绝它；
+#   5. 控制台用户（Keycloak 的 dev-admin，新租户的所有者）带 Meridian-Project 调用 runtime 公开 API，内部调用全程是服务 JWT（T14b）。
 # 前提：scripts/dev/build-images.sh；docker compose -f deploy/compose/compose.yaml --env-file <.env 或 .env.example> --profile app up -d
-# （全部服务健康）。连接信息读 deploy/compose/.env，不存在时读 .env.example；Key 明文只写进临时文件，结束时删除。
+# （全部服务健康，app profile 含 Keycloak）。连接信息读 deploy/compose/.env，不存在时读 .env.example；Key 明文只写进临时文件，结束时删除。
 # 用法：scripts/dev/app-smoke.sh；任一步失败以非 0 退出。只打印 ID 与状态，不打印 Key 明文与令牌。
 set -euo pipefail
 
@@ -33,7 +34,7 @@ echo "${output}"
 tenant_id="$(sed -n 's/^tenant_id=//p' <<<"${output}")"
 project_id="$(sed -n 's/^project_id=//p' <<<"${output}")"
 key="$(cat "${key_file}")"
-token="$(grep -E '^MERIDIAN_DEV_CONSOLE_TOKEN=' "${env_file}" | cut -d= -f2-)"
+token="$(scripts/dev/console-token.sh dev-admin)"
 auth=(-H "Authorization: Bearer ${key}" -H 'Content-Type: application/json')
 
 session_id="$(curl -sf --noproxy '*' "${auth[@]}" -X POST "${runtime}/v1/sessions" \
@@ -88,3 +89,12 @@ done
 elapsed="$(python3 -I -c "import time; print(round(time.time() - ${revoked_at}, 3))")"
 [[ "${code}" == "401" ]] || { echo "FAIL：吊销后 runtime 仍返回 ${code}" >&2; exit 1; }
 echo "PASS 吊销后 ${elapsed} 秒内 runtime 拒绝该 Key（401）"
+
+console=(-H "Authorization: Bearer ${token}" -H "Meridian-Project: ${project_id}")
+code="$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "${console[@]}" "${runtime}/v1/sessions")"
+[[ "${code}" == "200" ]] || { echo "FAIL：控制台用户带 Meridian-Project 列会话返回 ${code}" >&2; exit 1; }
+viewer="$(scripts/dev/console-token.sh dev-viewer)"
+code="$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${viewer}" \
+    -H "Meridian-Project: ${project_id}" "${runtime}/v1/sessions")"
+[[ "${code}" == "403" ]] || { echo "FAIL：不在项目中的用户返回 ${code}，期望 403" >&2; exit 1; }
+echo "PASS 控制台用户按项目角色调用公开 API（所有者 200，非成员 403）"

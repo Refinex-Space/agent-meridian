@@ -8,7 +8,8 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 
 /**
- * Redis 令牌桶实现的 {@link ApiKeyRateLimiter}（ADR-0042）：键 {@code ratelimit:apikey:{key_id}}，一次 Lua 脚本完成补充、扣减与
+ * Redis 令牌桶实现的 {@link ApiKeyRateLimiter}（ADR-0042、ADR-0044）：键 {@code ratelimit:} 加桶名（{@code apikey:{key_id}} 或
+ * {@code user:{主体}}），一次 Lua 脚本完成补充、扣减与
  * 剩余量计算，多节点共享同一个桶。时间取注入的 {@link Clock}（编码规范「时钟」），节点之间的时间倒退不补充令牌。
  *
  * <p>阻塞调用，WebFlux 中经 {@code Blocking} 执行。线程安全：无状态。
@@ -32,19 +33,19 @@ public final class RedisApiKeyRateLimiter implements ApiKeyRateLimiter {
     }
 
     /**
-     * 令牌桶的键。花括号是 Redis Cluster 的哈希标签，同一个 Key 的桶落在同一个槽。
+     * 令牌桶的键。
      *
-     * @param apiKeyId API Key ID
+     * @param bucket 桶名，见 {@link PublicApiPrincipal#rateLimitBucket()}
      * @return Redis 键
      */
-    public static String key(String apiKeyId) {
-        return "ratelimit:apikey:{" + apiKeyId + "}";
+    public static String key(String bucket) {
+        return "ratelimit:" + bucket;
     }
 
     @Override
-    public RateLimitDecision consume(String apiKeyId, int limitPerMinute) {
+    public RateLimitDecision consume(String bucket, int limitPerMinute) {
         List<?> result = redis.execute(
-                SCRIPT, List.of(key(apiKeyId)), Long.toString(clock.millis()), Integer.toString(limitPerMinute));
+                SCRIPT, List.of(key(bucket)), Long.toString(clock.millis()), Integer.toString(limitPerMinute));
         boolean allowed = number(result, 0) == 1;
         long remaining = Math.max(0, number(result, 1));
         long resetSeconds = ceilSeconds(number(result, 2));

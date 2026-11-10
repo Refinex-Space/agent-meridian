@@ -208,7 +208,7 @@ public class EventIntake {
 
     /** 记录回应事件的结论，一轮的全部动作都有结论时生成恢复轮。 */
     private void respond(Session session, List<UserEvent> batch, Map<String, StoredPendingAction> actions) {
-        String decidedBy = PlatformContexts.current().apiKeyId();
+        String decidedBy = PlatformContexts.current().actor();
         Map<String, StoredPendingAction> turns = new LinkedHashMap<>();
         for (UserEvent event : batch) {
             String actionId = EventAdmission.actionIdOf(event);

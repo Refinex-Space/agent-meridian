@@ -4,7 +4,7 @@ import cn.refinex.meridian.common.error.MeridianException;
 import cn.refinex.meridian.security.web.BearerTokens;
 
 /**
- * 内部接口的服务凭据认证：解析 {@code Authorization: Bearer}，交给 {@link ServiceCredentialResolver}。WebFlux 与 MVC 的过滤器共用。
+ * 内部接口的服务 JWT 认证：解析 {@code Authorization: Bearer}，交给 {@link ServiceCredentialResolver}。WebFlux 与 MVC 的过滤器共用。
  *
  * <p>方法可能阻塞（取决于解析器），WebFlux 中经 {@code Blocking} 调用。线程安全：无状态。
  */

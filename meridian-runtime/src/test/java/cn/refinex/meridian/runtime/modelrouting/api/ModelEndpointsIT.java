@@ -391,7 +391,7 @@ class ModelEndpointsIT extends ApiTestBase {
 
         InternalResponse unauthenticated = internal("/internal/v1/embeddings", body, null);
         InternalResponse wrongCredential = internal("/internal/v1/embeddings", body, ApiTestKeys.KEY_A);
-        InternalResponse accepted = internal("/internal/v1/embeddings", body, ApiTestKeys.SERVICE_CREDENTIAL);
+        InternalResponse accepted = internal("/internal/v1/embeddings", body, ApiTestKeys.knowledgeToken());
 
         assertThat(unauthenticated.status()).isEqualTo(401);
         assertThat(unauthenticated.body().get("code").asString()).isEqualTo("auth.unauthenticated");
@@ -417,7 +417,7 @@ class ModelEndpointsIT extends ApiTestBase {
                 "/internal/v1/rerank",
                 "{\"tenant_id\": \"" + tenant + "\", \"model\": \"" + RERANK + "\", \"query\": \"住宿标准\", \"top_n\": 2,"
                         + " \"documents\": [\"报销需要发票\", \"差旅住宿标准为每晚 500 元\", \"住宿需要提前预订\"]}",
-                ApiTestKeys.SERVICE_CREDENTIAL);
+                ApiTestKeys.knowledgeToken());
 
         assertThat(response.status()).isEqualTo(200);
         JsonNode results = response.body().get("results");

@@ -1,4 +1,14 @@
 # 集成测试：数据源、Flyway 与 Redis 的连接由测试类的 @DynamicPropertySource 从 Testcontainers 注入（meridian-test-support）。
+# 控制台身份（T14b，ADR-0043）：Keycloak 的签发方由测试注入；这里是第二种声明配置——用户标识取 preferred_username、平台管理员
+# 按组判定。写在配置文件而不是 @DynamicPropertySource 中，测试类才能覆盖（OidcSubjectClaimIT 改回默认的 sub）
+meridian:
+  security:
+    oidc:
+      audience: meridian
+      user-id-claim: preferred_username
+  control-plane:
+    platform-admin-groups: [meridian-platform-admins]
+
 management:
   endpoint:
     health:

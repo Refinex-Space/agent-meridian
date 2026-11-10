@@ -8,6 +8,7 @@ import cn.refinex.meridian.controlplane.openapi.internal.InternalApiKeysApi;
 import cn.refinex.meridian.controlplane.web.Times;
 import cn.refinex.meridian.security.apikey.ApiKeyScope;
 import cn.refinex.meridian.security.servicejwt.ServiceCredentialFilter;
+import cn.refinex.meridian.security.servicejwt.ServiceJwts;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,7 +33,7 @@ public class InternalApiKeysApiController implements InternalApiKeysApi {
 
     @Override
     public ResponseEntity<ApiKeyVerification> verifyApiKey(ApiKeyVerifyRequest body) {
-        ServiceCredentialFilter.require(request);
+        ServiceCredentialFilter.require(request, ServiceJwts.RUNTIME, ServiceJwts.KNOWLEDGE);
         ApiKey key = verifier.verify(body.getKeyHash());
         return ResponseEntity.ok(new ApiKeyVerification(
                 key.id(),

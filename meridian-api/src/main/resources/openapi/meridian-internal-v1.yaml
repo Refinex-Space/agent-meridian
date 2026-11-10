@@ -2,16 +2,17 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Internal API
   version: 1.0.0
-  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，control-plane 提供 API Key 校验与租户配额。
+  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，control-plane 提供服务令牌、API Key 校验、租户配额与控制台用户的项目权限。
   description: |
     只供平台内部服务调用（knowledge 经 `meridian-model-client`，沙箱出网代理经 Envoy 的 Lua 过滤器，runtime 与 knowledge
     经 `meridian-security` 的服务间调用客户端访问 control-plane），不对业务系统开放，不随公开 API 发布。
 
-    **提供方。** 标签 `InternalModels`、`InternalEgress` 由 runtime 提供；`InternalApiKeys`、`InternalTenants` 由 control-plane
-    提供（ADR-0042）。各服务只生成并实现自己的标签。
+    **提供方。** 标签 `InternalModels`、`InternalEgress` 由 runtime 提供；`InternalServiceTokens`、`InternalApiKeys`、
+    `InternalTenants`、`InternalProjectAccess` 由 control-plane 提供（ADR-0042、ADR-0044）。各服务只生成并实现自己的标签。
 
-    **认证。** 请求带 `Authorization: Bearer <服务凭据>`。正式实现是 control-plane 签发的服务 JWT（T14b）；在那之前
-    只有 `dev`、`test` profile 接受开发期的静态服务凭据，其他 profile 一律拒绝。
+    **认证。** `/internal/` 下的请求带 `Authorization: Bearer <服务 JWT>`：control-plane 签发，RS256，有效 5 分钟，`aud` 是被调用
+    的服务名，`sub` 是调用方服务名。服务用自己的客户端密钥在 `POST /oauth2/token` 换取（OAuth2 客户端凭据模式），公钥在
+    `GET /oauth2/jwks`（ADR-0044）。每个内部接口只接受列明的调用方服务，其他服务的有效令牌得到 403 `access.forbidden`。
 
     **租户。** 模型类的内部调用代表某个租户与项目发起，请求体带 `tenant_id` 与 `project_id`，用量与预算按它们计入
     （架构设计「计量与预算」）。出网授权不带租户：runtime 按源 Pod IP 找到会话，租户与项目随之确定。
@@ -31,6 +32,10 @@ tags:
     description: control-plane 提供：按哈希校验 API Key（架构设计「认证」，ADR-0042）。
   - name: InternalTenants
     description: control-plane 提供：租户并发配额（架构设计「认领」中的租户并发计数行，ADR-0042）。
+  - name: InternalServiceTokens
+    description: control-plane 提供：服务 JWT 的签发与公钥（架构设计「认证」中"服务之间"一行，ADR-0044）。
+  - name: InternalProjectAccess
+    description: control-plane 提供：控制台用户在某个项目上能使用的公开 API 作用域（ADR-0044）。
 
 paths:
   /internal/v1/embeddings:
@@ -39,7 +44,7 @@ paths:
       tags: [InternalModels]
       summary: 文本向量
       description: |
-        知识库写入切片与检索查询时计算向量（架构设计「写入流程」「检索流程」），一次最多 64 条。超过供应商单次上限时拆成
+        调用方：`knowledge`。知识库写入切片与检索查询时计算向量（架构设计「写入流程」「检索流程」），一次最多 64 条。超过供应商单次上限时拆成
         多次供应商请求，每次各自限流、预扣与计量（计量项为 Embedding token）。
       requestBody:
         required: true
@@ -66,6 +71,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
         '404':
           $ref: '#/components/responses/ModelNotFound'
         '429':
@@ -81,7 +88,7 @@ paths:
       tags: [InternalModels]
       summary: 重排
       description: |
-        按与查询的相关度给候选文本打分并排序（架构设计「检索流程」第 4 步）。DashScope 走兼容格式的
+        调用方：`knowledge`。按与查询的相关度给候选文本打分并排序（架构设计「检索流程」第 4 步）。DashScope 走兼容格式的
         `compatible-api/v1/reranks` 端点；计量项为 rerank token。
       requestBody:
         required: true
@@ -110,6 +117,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
         '404':
           $ref: '#/components/responses/ModelNotFound'
         '429':
@@ -125,7 +134,7 @@ paths:
       tags: [InternalEgress]
       summary: 沙箱出网授权
       description: |
-        出网代理对沙箱的每个明文 HTTP 请求与 CONNECT 隧道调用一次（架构设计「沙箱出网」第 3 条，ADR-0038）。runtime 按源 IP
+        调用方：`egress-proxy`。出网代理对沙箱的每个明文 HTTP 请求与 CONNECT 隧道调用一次（架构设计「沙箱出网」第 3 条，ADR-0038）。runtime 按源 IP
         在 `rt.sessions.sandbox_pod_ip` 中找到会话与环境，按环境的白名单判定目标主机：`*.` 开头的条目匹配任意层级的子域名，
         其余条目逐字匹配；不限定端口。按源 IP 解析出的授权缓存 30 秒，会话的 Pod IP 被清空或改变时立即失效。
 
@@ -166,7 +175,7 @@ paths:
       tags: [InternalApiKeys]
       summary: 校验 API Key
       description: |
-        调用方计算 `Authorization: Bearer` 中明文的 SHA-256（小写十六进制），只传哈希。Key 有效时返回主体与限流参数；
+        调用方：`runtime`、`knowledge`。调用方计算 `Authorization: Bearer` 中明文的 SHA-256（小写十六进制），只传哈希。Key 有效时返回主体与限流参数；
         不存在、已吊销、已过期，或所属项目、租户已删除时 404 `api_key.not_found`。调用方把结果（含 404）缓存 60 秒，
         收到 Pub/Sub `key.revoked`（消息是 Key ID）时淘汰该 Key。
       requestBody:
@@ -198,6 +207,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
         '404':
           $ref: '#/components/responses/ApiKeyNotFound'
         default:
@@ -209,7 +220,7 @@ paths:
       tags: [InternalTenants]
       summary: 租户配额
       description: |
-        runtime 为租户创建并发计数行时读取 `max_concurrent_turns`；control-plane 修改配额后发布 Pub/Sub `config.invalidate`
+        调用方：`runtime`、`knowledge`。runtime 为租户创建并发计数行时读取 `max_concurrent_turns`；control-plane 修改配额后发布 Pub/Sub `config.invalidate`
         （`{"type":"tenant_quota","tenant_id":"ten_…"}`），runtime 收到后重新读取并更新计数行。已删除的租户 404 `tenant.not_found`。
       parameters:
         - name: tenant_id
@@ -233,8 +244,117 @@ paths:
                 max_concurrent_turns: 20
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
         '404':
           $ref: '#/components/responses/TenantNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/project-access:resolve:
+    post:
+      operationId: resolveProjectAccess
+      tags: [InternalProjectAccess]
+      summary: 控制台用户的项目权限
+      description: |
+        调用方：`runtime`、`knowledge`。控制台用户带 OIDC 令牌与 `Meridian-Project` 头调用公开 API 时，调用方按令牌中的用户标识
+        与项目查询该用户在公开 API 上的作用域：由该用户在项目所属租户中的角色绑定，按角色矩阵换算（ADR-0044）。用户没有角色时
+        `scopes` 为空；项目不存在或已删除时 404 `project.not_found`。调用方把结果缓存 60 秒。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectAccessRequest'
+            example:
+              subject: 7c1f0e52-6a1d-4c39-9f5b-2b8f4a1d9e60
+              project_id: prj_01JC8Z2B5D3F7H9K1M4P6R8T0V
+      responses:
+        '200':
+          description: 项目所属租户与该用户的作用域。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectAccess'
+              example:
+                tenant_id: ten_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
+                project_id: prj_01JC8Z2B5D3F7H9K1M4P6R8T0V
+                scopes: ['sessions:read', 'sessions:write', 'models:invoke']
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/ProjectNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /oauth2/token:
+    post:
+      operationId: issueServiceToken
+      tags: [InternalServiceTokens]
+      summary: 签发服务 JWT
+      description: |
+        OAuth2 客户端凭据模式（RFC 6749 4.4）：客户端以 HTTP Basic（`服务名:客户端密钥`）认证，`audience` 是要调用的服务名，
+        必须在该客户端登记的允许列表中。令牌 RS256，有效 5 分钟；客户端缓存它，剩余不足 60 秒时重新换取。错误仍是
+        problem+json：客户端认证失败 401 `auth.invalid_service_client`，目标服务不允许 403 `access.forbidden`。
+      security:
+        - ServiceClientAuth: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServiceTokenRequest'
+            example:
+              grant_type: client_credentials
+              audience: control-plane
+      responses:
+        '200':
+          description: 服务 JWT。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceToken'
+              example:
+                access_token: eyJraWQiOiJrXzAxIiwiYWxnIjoiUlMyNTYifQ.eyJzdWIiOiJydW50aW1lIn0.c2lnbmF0dXJl
+                token_type: Bearer
+                expires_in: 300
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidServiceClient'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /oauth2/jwks:
+    get:
+      operationId: getServiceJwks
+      tags: [InternalServiceTokens]
+      summary: 服务 JWT 的公钥
+      description: |
+        JWK Set（RFC 7517）：当前签名的密钥与上一把密钥。校验端缓存它，遇到未知的 `kid` 时立即刷新一次。不需要认证。
+      security: []
+      responses:
+        '200':
+          description: 公钥集合。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwkSet'
         default:
           $ref: '#/components/responses/InternalError'
 
@@ -243,8 +363,12 @@ components:
     ServiceAuth:
       type: http
       scheme: bearer
-      bearerFormat: 服务凭据
-      description: 平台服务的凭据：服务 JWT（T14b），之前为开发期的静态服务凭据（只在 `dev`、`test`）。
+      bearerFormat: JWT
+      description: control-plane 签发的服务 JWT（ADR-0044）。
+    ServiceClientAuth:
+      type: http
+      scheme: basic
+      description: 服务的客户端凭据，只用于 `POST /oauth2/token`：用户名是服务名，口令是客户端密钥。
 
   headers:
     XRequestId:
@@ -256,6 +380,33 @@ components:
   responses:
     ApiKeyNotFound:
       description: '`api_key.not_found`：Key 不存在、已吊销、已过期，或所属项目、租户已删除。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    CallerForbidden:
+      description: '`access.forbidden`：调用方服务不能调用本接口，或不能换取该目标服务的令牌。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InvalidServiceClient:
+      description: '`auth.invalid_service_client`：缺少 HTTP Basic 认证，或服务名与客户端密钥不匹配。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ProjectNotFound:
+      description: '`project.not_found`：项目不存在或已删除。'
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -284,7 +435,7 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     Unauthorized:
-      description: '`auth.unauthenticated`：缺少服务凭据；`auth.invalid_service_credential`：服务凭据无效。'
+      description: '`auth.unauthenticated`：缺少服务凭据；`auth.invalid_service_credential`：服务 JWT 无效、已过期或 `aud` 不是本服务。'
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -322,7 +473,8 @@ components:
     EgressDenied:
       description: |
         拒绝出网：`egress.not_allowlisted` 目标不在会话环境的白名单内；`egress.unknown_source` 源 IP 不属于任何持有沙箱的会话
-        （沙箱已删除、预热池中尚未认领，或多个会话记录了同一 IP）；`egress.invalid_target` 目标不是合法的主机与端口。
+        （沙箱已删除、预热池中尚未认领，或多个会话记录了同一 IP）；`egress.invalid_target` 目标不是合法的主机与端口；
+        `access.forbidden` 调用方不是 `egress-proxy`。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -377,6 +529,96 @@ components:
           description: 过期时间；为 null 表示不过期。调用方缓存的结果在过期后不再使用。
           type: [string, 'null']
           format: date-time
+    ProjectAccessRequest:
+      description: 查询控制台用户在项目上的作用域。
+      type: object
+      required: [subject, project_id]
+      additionalProperties: false
+      properties:
+        subject:
+          description: 用户标识：OIDC 令牌中按配置取出的声明（默认 `sub`），与成员的主体标识相同。
+          type: string
+          minLength: 1
+          maxLength: 255
+        project_id:
+          description: 项目 ID（prj_…），来自请求头 `Meridian-Project`。
+          type: string
+          minLength: 1
+          maxLength: 64
+    ProjectAccess:
+      description: 项目所属租户与该用户在公开 API 上的作用域。
+      type: object
+      required: [tenant_id, project_id, scopes]
+      properties:
+        tenant_id:
+          description: 项目所属租户 ID。
+          type: string
+        project_id:
+          description: 项目 ID。
+          type: string
+        scopes:
+          description: 作用域取值，与 API Key 的作用域相同，例如 `sessions:read`；用户在该项目没有角色时为空数组。
+          type: array
+          items:
+            type: string
+    ServiceTokenRequest:
+      description: 换取服务 JWT 的表单。
+      type: object
+      required: [grant_type, audience]
+      properties:
+        grant_type:
+          description: 固定为 `client_credentials`。
+          type: string
+        audience:
+          description: 要调用的服务名，例如 `control-plane`、`runtime`。
+          type: string
+    ServiceToken:
+      description: 服务 JWT。
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          description: JWT（RS256）。
+          type: string
+        token_type:
+          description: 固定为 `Bearer`。
+          type: string
+        expires_in:
+          description: 有效期秒数。
+          type: integer
+    JwkSet:
+      description: JWK Set（RFC 7517），只含 RSA 公钥。
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          description: 公钥，第一把是当前签名的密钥。
+          type: array
+          items:
+            $ref: '#/components/schemas/Jwk'
+    Jwk:
+      description: 一把 RSA 公钥（RFC 7518 6.3.1）。
+      type: object
+      required: [kty, kid, use, alg, n, e]
+      properties:
+        kty:
+          description: 固定为 `RSA`。
+          type: string
+        kid:
+          description: 密钥 ID，与 JWT 头的 `kid` 对应。
+          type: string
+        use:
+          description: 固定为 `sig`。
+          type: string
+        alg:
+          description: 固定为 `RS256`。
+          type: string
+        n:
+          description: 模数，base64url。
+          type: string
+        e:
+          description: 公钥指数，base64url。
+          type: string
     TenantQuota:
       description: 租户配额。
       type: object

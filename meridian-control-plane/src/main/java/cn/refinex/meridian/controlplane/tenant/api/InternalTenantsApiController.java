@@ -4,6 +4,7 @@ import cn.refinex.meridian.api.internal.model.TenantQuota;
 import cn.refinex.meridian.controlplane.openapi.internal.InternalTenantsApi;
 import cn.refinex.meridian.controlplane.tenant.app.TenantService;
 import cn.refinex.meridian.security.servicejwt.ServiceCredentialFilter;
+import cn.refinex.meridian.security.servicejwt.ServiceJwts;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,7 +29,7 @@ public class InternalTenantsApiController implements InternalTenantsApi {
 
     @Override
     public ResponseEntity<TenantQuota> getTenantQuotas(String tenantId) {
-        ServiceCredentialFilter.require(request);
+        ServiceCredentialFilter.require(request, ServiceJwts.RUNTIME, ServiceJwts.KNOWLEDGE);
         return ResponseEntity.ok(new TenantQuota(tenantId, tenants.get(tenantId).maxConcurrentTurns()));
     }
 }

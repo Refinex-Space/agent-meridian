@@ -36,6 +36,11 @@
             <artifactId>meridian-persistence</artifactId>
         </dependency>
         <!-- control-plane 是 Spring MVC 加虚拟线程的应用（架构设计「部署单元」），平台 API 用 Boot 默认的 Jackson 3 -->
+        <!-- 服务 JWT 的签名与 JWKS（ADR-0044） -->
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
@@ -130,7 +135,7 @@
                             <modelPackage>cn.refinex.meridian.api.internal.model</modelPackage>
                             <generateApis>true</generateApis>
                             <generateModels>false</generateModels>
-                            <apisToGenerate>InternalApiKeys,InternalTenants</apisToGenerate>
+                            <apisToGenerate>InternalApiKeys,InternalTenants,InternalServiceTokens,InternalProjectAccess</apisToGenerate>
                             <configOptions>
                                 <interfaceOnly>true</interfaceOnly>
                                 <skipDefaultInterface>true</skipDefaultInterface>

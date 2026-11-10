@@ -1,10 +1,11 @@
 /**
- * 服务之间调用的认证（架构设计「认证」中"服务之间"一行）：入站时 {@code /internal/} 下的请求要带服务凭据（WebFlux 与 MVC 各一个过滤器，
- * 共用 {@link cn.refinex.meridian.security.servicejwt.ServiceCredentialAuthenticator}）；出站时经
- * {@link cn.refinex.meridian.security.servicejwt.ServiceRestClients} 构造带超时与凭据的 {@code RestClient}。
+ * 服务之间调用的认证（架构设计「认证」中"服务之间"一行，ADR-0044）：入站时 {@code /internal/} 下的请求要带 control-plane 签发的服务
+ * JWT，由 {@link cn.refinex.meridian.security.servicejwt.ServiceJwtVerifier} 校验（WebFlux 与 MVC 各一个过滤器，共用
+ * {@link cn.refinex.meridian.security.servicejwt.ServiceCredentialAuthenticator}），处理器再按调用方服务名限定；出站时
+ * {@link cn.refinex.meridian.security.servicejwt.ServiceTokenClient} 用客户端密钥换取并缓存令牌，经
+ * {@link cn.refinex.meridian.security.servicejwt.ServiceRestClients} 构造带超时与令牌的 {@code RestClient}。
  *
- * <p>正式实现是 control-plane 签发的服务 JWT（T14b），经 {@link cn.refinex.meridian.security.servicejwt.ServiceCredentialResolver}
- * 与 {@link cn.refinex.meridian.security.servicejwt.ServiceCredentialProvider} 两个端口接入；T09b、T14a 先提供只在 {@code dev}、
- * {@code test} profile 生效的静态服务凭据。
+ * <p>签发（密钥、令牌端点、JWKS）在 control-plane；本包只有校验与签发客户端。允许的依赖：{@code meridian-common}、
+ * {@code meridian-api} 的内部 DTO、Spring Web、Nimbus JOSE + JWT。
  */
 package cn.refinex.meridian.security.servicejwt;

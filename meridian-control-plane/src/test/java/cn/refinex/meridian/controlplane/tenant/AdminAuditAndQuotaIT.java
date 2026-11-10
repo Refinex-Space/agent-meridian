@@ -66,7 +66,7 @@ class AdminAuditAndQuotaIT extends ControlPlaneTestBase {
         String tenantId = fixture.get("tenant");
         BlockingQueue<String> messages = new LinkedBlockingQueue<>();
 
-        assertThat(client.internal("GET", "/internal/v1/tenants/" + tenantId + "/quotas", SERVICE_CREDENTIAL, null)
+        assertThat(client.internal("GET", "/internal/v1/tenants/" + tenantId + "/quotas", serviceToken(), null)
                         .json()
                         .get("max_concurrent_turns")
                         .asInt())
@@ -89,12 +89,12 @@ class AdminAuditAndQuotaIT extends ControlPlaneTestBase {
                     "{\"max_concurrent_turns\":7,\"event_retention_days\":60}");
             assertThat(messages.poll(300, TimeUnit.MILLISECONDS)).isNull();
         }
-        assertThat(client.internal("GET", "/internal/v1/tenants/" + tenantId + "/quotas", SERVICE_CREDENTIAL, null)
+        assertThat(client.internal("GET", "/internal/v1/tenants/" + tenantId + "/quotas", serviceToken(), null)
                         .json()
                         .get("max_concurrent_turns")
                         .asInt())
                 .isEqualTo(7);
-        assertThat(client.internal("GET", "/internal/v1/tenants/ten_missing/quotas", SERVICE_CREDENTIAL, null)
+        assertThat(client.internal("GET", "/internal/v1/tenants/ten_missing/quotas", serviceToken(), null)
                         .status())
                 .isEqualTo(404);
     }

@@ -39,7 +39,9 @@ kind 集群的 Pod 网段不能与 Docker Desktop 的宿主地址重叠，否则
 
 ## 回调凭据
 
-代理以 `Authorization: Bearer <凭据>` 调用 runtime 的内部接口，凭据来自 Secret `egressProxy.authz.credentialSecret`（默认 `meridian-egress-proxy-credential`，键 `credential`），以环境变量注入 Envoy。chart 不创建这个 Secret。本机 kind 由 `deploy-sandbox.sh` 用 `deploy/compose/.env`（或 `.env.example`）中的 `MERIDIAN_DEV_SERVICE_CREDENTIAL` 创建，与 `dev` profile 的 runtime 接受的开发期服务凭据相同；T14b 引入服务 JWT 后改为正式的凭据方式。改了 Secret 要重启代理（`kubectl -n meridian-sandbox rollout restart deployment/meridian-egress-proxy`）。
+代理以 `Authorization: Bearer <服务 JWT>` 调用 runtime 的内部接口（ADR-0044）。代理是服务客户端 `egress-proxy`：Lua 过滤器用客户端密钥（HTTP Basic）向 control-plane 的 `POST /oauth2/token` 换取 `audience=runtime` 的令牌，按 Envoy worker 缓存到过期前 60 秒；换不到令牌时拒绝出网。control-plane 的地址与 runtime 同一拓扑：集群内经 `egressProxy.authz.controlPlane.cluster`，宿主经 `host.address` 加 `controlPlane.host.port`，网络策略随之放行。
+
+客户端密钥来自 Secret `egressProxy.authz.clientSecret`（默认 `meridian-egress-proxy-client`，键 `client-secret`），以环境变量注入 Envoy，必须与 control-plane 配置 `meridian.control-plane.service-tokens.clients` 中 `egress-proxy` 的密钥相同。chart 不创建这个 Secret。本机 kind 由 `deploy-sandbox.sh` 用 `deploy/compose/.env`（或 `.env.example`）中的 `MERIDIAN_EGRESS_PROXY_CLIENT_SECRET` 创建，与 `dev` profile 的 control-plane 读的是同一个变量。改了 Secret 要重启代理（`kubectl -n meridian-sandbox rollout restart deployment/meridian-egress-proxy`）。
 
 ## 其他 values
 

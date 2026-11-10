@@ -168,7 +168,7 @@ class ModelEndpointsLiveIT extends ApiTestBase {
     private JsonNode internal(String path, String body) {
         EntityExchangeResult<byte[]> result = client().post()
                 .uri(path)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + ApiTestKeys.SERVICE_CREDENTIAL)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + ApiTestKeys.knowledgeToken())
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .exchange()

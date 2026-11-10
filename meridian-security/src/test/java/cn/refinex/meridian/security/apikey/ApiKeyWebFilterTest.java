@@ -94,7 +94,7 @@ class ApiKeyWebFilterTest {
                     ? new RateLimitDecision(true, limit, limit - n, 30L * n, 0)
                     : new RateLimitDecision(false, limit, 0, 60, 30);
         };
-        ApiKeyWebFilter limited = new ApiKeyWebFilter(new ApiKeyAuthenticator(resolver), limiter);
+        ApiKeyWebFilter limited = new ApiKeyWebFilter(new ApiKeyAuthenticator(resolver), null, limiter);
 
         for (int i = 1; i <= 2; i++) {
             MockServerWebExchange ok = MockServerWebExchange.from(
@@ -123,7 +123,7 @@ class ApiKeyWebFilterTest {
     void limiterFailuresLetTheRequestThroughWithoutHeaders() {
         ApiKeyResolver resolver = key -> java.util.Optional.of(
                 new ApiKeyPrincipal("key_rl", "ten_1", "prj_a", java.util.Set.of(ApiKeyScope.SESSIONS_READ), 2));
-        ApiKeyWebFilter limited = new ApiKeyWebFilter(new ApiKeyAuthenticator(resolver), (keyId, limit) -> {
+        ApiKeyWebFilter limited = new ApiKeyWebFilter(new ApiKeyAuthenticator(resolver), null, (keyId, limit) -> {
             throw new IllegalStateException("Redis 不可用");
         });
         MockServerWebExchange exchange = MockServerWebExchange.from(
@@ -132,5 +132,81 @@ class ApiKeyWebFilterTest {
         StepVerifier.create(limited.filter(exchange, ex -> Mono.empty())).verifyComplete();
         assertThat(exchange.getResponse().getHeaders().containsHeader("RateLimit-Limit"))
                 .isFalse();
+    }
+
+    @Test
+    void jwtShapedTokensGoToTheConsoleAuthenticatorWithTheProjectHeader() {
+        // ADR-0044：OIDC 令牌加 Meridian-Project，按用户的桶限流，PlatformContext 带用户而不是 API Key
+        java.util.List<String> buckets = new java.util.ArrayList<>();
+        ApiKeyRateLimiter limiter = (bucket, limit) -> {
+            buckets.add(bucket);
+            return new RateLimitDecision(true, limit, limit - 1, 1, 0);
+        };
+        ConsoleTokenAuthenticator console = (token, project) -> new TestConsolePrincipal("alice", project);
+        ApiKeyWebFilter both =
+                new ApiKeyWebFilter(new ApiKeyAuthenticator(key -> java.util.Optional.empty()), console, limiter);
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/v1/sessions")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer eyJh.eyJz.c2ln")
+                .header(ApiKeyWebFilter.PROJECT_HEADER, "prj_a"));
+        AtomicReference<PlatformContext> seen = new AtomicReference<>();
+
+        StepVerifier.create(both.filter(
+                        exchange,
+                        ex -> PlatformContexts.currentReactive()
+                                .doOnNext(seen::set)
+                                .then()))
+                .verifyComplete();
+
+        assertThat(seen.get().userId()).isEqualTo("alice");
+        assertThat(seen.get().projectId()).isEqualTo("prj_a");
+        assertThat(buckets).containsExactly("user:{alice}");
+        assertThat(ApiKeyAuthorization.require(exchange, ApiKeyScope.SESSIONS_READ)
+                        .projectId())
+                .isEqualTo("prj_a");
+        // API Key 照常走 API Key 认证
+        MockServerWebExchange apiKey = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/v1/sessions").header(HttpHeaders.AUTHORIZATION, "Bearer mk_live_x"));
+        StepVerifier.create(both.filter(apiKey, ex -> Mono.empty()))
+                .expectErrorSatisfies(error ->
+                        assertThat(((MeridianException) error).errorCode()).isEqualTo(ApiKeyErrorCode.INVALID_API_KEY))
+                .verify();
+    }
+
+    /** 测试用的控制台用户主体（真实实现在 oidc 包）。 */
+    private record TestConsolePrincipal(String user, String projectId) implements PublicApiPrincipal {
+
+        @Override
+        public String tenantId() {
+            return "ten_1";
+        }
+
+        @Override
+        public java.util.Set<ApiKeyScope> scopes() {
+            return java.util.Set.of(ApiKeyScope.SESSIONS_READ);
+        }
+
+        @Override
+        public Integer rateLimitPerMinute() {
+            return 600;
+        }
+
+        @Override
+        public String rateLimitBucket() {
+            return "user:{" + user + "}";
+        }
+
+        @Override
+        public String describe() {
+            return user;
+        }
+
+        @Override
+        public PlatformContext toContext() {
+            return PlatformContext.builder()
+                    .tenantId("ten_1")
+                    .projectId(projectId)
+                    .userId(user)
+                    .build();
+        }
     }
 }

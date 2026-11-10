@@ -41,8 +41,8 @@ class EgressApiIT extends ApiTestBase {
         String ip = randomIp();
         TestSession session = sandboxSession(ip);
 
-        InternalResponse http = internal(PATH, body(ip, ALLOWED), ApiTestKeys.SERVICE_CREDENTIAL);
-        InternalResponse connect = internal(PATH, body(ip, ALLOWED + ":443"), ApiTestKeys.SERVICE_CREDENTIAL);
+        InternalResponse http = internal(PATH, body(ip, ALLOWED), ApiTestKeys.egressProxyToken());
+        InternalResponse connect = internal(PATH, body(ip, ALLOWED + ":443"), ApiTestKeys.egressProxyToken());
 
         assertThat(http.status()).isEqualTo(200);
         assertThat(http.body().get("session_id").asString()).isEqualTo(session.sessionId());
@@ -54,9 +54,9 @@ class EgressApiIT extends ApiTestBase {
         String ip = randomIp();
         sandboxSession(ip);
 
-        InternalResponse notAllowlisted = internal(PATH, body(ip, "pypi.org:443"), ApiTestKeys.SERVICE_CREDENTIAL);
-        InternalResponse unknownSource = internal(PATH, body(randomIp(), ALLOWED), ApiTestKeys.SERVICE_CREDENTIAL);
-        InternalResponse invalidTarget = internal(PATH, body(ip, "user@" + ALLOWED), ApiTestKeys.SERVICE_CREDENTIAL);
+        InternalResponse notAllowlisted = internal(PATH, body(ip, "pypi.org:443"), ApiTestKeys.egressProxyToken());
+        InternalResponse unknownSource = internal(PATH, body(randomIp(), ALLOWED), ApiTestKeys.egressProxyToken());
+        InternalResponse invalidTarget = internal(PATH, body(ip, "user@" + ALLOWED), ApiTestKeys.egressProxyToken());
 
         assertThat(notAllowlisted.status()).isEqualTo(403);
         assertThat(notAllowlisted.body().get("code").asString()).isEqualTo("egress.not_allowlisted");
@@ -69,12 +69,21 @@ class EgressApiIT extends ApiTestBase {
     @Test
     void malformedRequestsAndMissingCredentialsAreRejected() {
         InternalResponse missingTarget =
-                internal(PATH, "{\"source_ip\": \"10.250.0.1\"}", ApiTestKeys.SERVICE_CREDENTIAL, false);
+                internal(PATH, "{\"source_ip\": \"10.250.0.1\"}", ApiTestKeys.egressProxyToken(), false);
         InternalResponse unauthenticated = internal(PATH, body("10.250.0.1", ALLOWED), null);
         InternalResponse apiKey = internal(PATH, body("10.250.0.1", ALLOWED), ApiTestKeys.KEY_A);
 
         assertThat(missingTarget.status()).isEqualTo(400);
         assertThat(unauthenticated.status()).isEqualTo(401);
         assertThat(apiKey.status()).as("业务系统的 API Key 不能调用内部接口").isEqualTo(401);
+    }
+
+    @Test
+    void onlyTheEgressProxyMayAuthorizeEgress() {
+        // 其他服务的有效令牌（ADR-0044：每个内部接口只接受列明的调用方）
+        InternalResponse knowledge = internal(PATH, body("10.250.0.1", ALLOWED), ApiTestKeys.knowledgeToken());
+
+        assertThat(knowledge.status()).isEqualTo(403);
+        assertThat(knowledge.body().get("code").asString()).isEqualTo("access.forbidden");
     }
 }

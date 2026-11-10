@@ -1,5 +1,6 @@
 package cn.refinex.meridian.security.rbac;
 
+import cn.refinex.meridian.security.oidc.ConsoleUser;
 import java.util.Set;
 
 /**
@@ -12,9 +13,9 @@ public interface GrantSource {
     /**
      * 查找用户的角色绑定。
      *
-     * @param subject 用户的主体标识
+     * @param user 控制台用户：主体标识，以及令牌中的组（按组判定平台管理员，ADR-0043）
      * @param tenantId 租户 ID；为空表示请求不针对某个租户，只返回平台级角色
      * @return 角色绑定；没有时为空集合
      */
-    Set<Grant> grants(String subject, String tenantId);
+    Set<Grant> grants(ConsoleUser user, String tenantId);
 }

@@ -16,16 +16,16 @@ spring:
 meridian:
   security:
     service-client:
-      # API Key 经 control-plane 校验、租户配额从 control-plane 读取（T14a，ADR-0042）：先启动 scripts/dev/run-control-plane.sh。
-      # 出站的开发期服务凭据与入站相同，只在 dev、test profile 允许，T14b 起改为服务 JWT
+      # API Key 经 control-plane 校验、租户配额与控制台用户的项目权限从 control-plane 读取（ADR-0042、ADR-0044）：
+      # 先启动 scripts/dev/run-control-plane.sh
       control-plane-url: ${MERIDIAN_CONTROL_PLANE_URL:http://localhost:18081}
-      credential: ${MERIDIAN_DEV_SERVICE_CREDENTIAL}
-    dev-service-credentials:
-      # 内部接口的开发期服务凭据（T09b）：只在 dev、test profile 允许启用，T14b 起改为服务 JWT；明文从环境变量读取
-      enabled: true
-      credentials:
-        - credential: ${MERIDIAN_DEV_SERVICE_CREDENTIAL}
-          service: knowledge
+    service-jwt:
+      # 服务 JWT（ADR-0044）：用客户端密钥向 control-plane 换取，公钥读 control-plane 的 JWKS；密钥从环境变量读取
+      client-secret: ${MERIDIAN_RUNTIME_CLIENT_SECRET}
+    oidc:
+      # 控制台用户带 Meridian-Project 调用公开 API（Compose 的 auth profile）
+      issuer: ${MERIDIAN_OIDC_ISSUER:http://localhost:18082/realms/meridian-dev}
+      jwks-uri: ${MERIDIAN_OIDC_JWKS_URI:}
   persistence:
     objectstore:
       # scripts/dev/up.sh 启动的 MinIO 与创建的桶；凭据只从环境变量读取（compose 的 env 文件）

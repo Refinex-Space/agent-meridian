@@ -4,11 +4,14 @@ import static cn.refinex.meridian.security.rbac.Permission.API_KEY_READ;
 import static cn.refinex.meridian.security.rbac.Permission.API_KEY_WRITE;
 import static cn.refinex.meridian.security.rbac.Permission.MEMBER_READ;
 import static cn.refinex.meridian.security.rbac.Permission.MEMBER_WRITE;
+import static cn.refinex.meridian.security.rbac.Permission.MODEL_INVOKE;
 import static cn.refinex.meridian.security.rbac.Permission.PENDING_ACTION_DECIDE;
 import static cn.refinex.meridian.security.rbac.Permission.PROJECT_CREATE;
 import static cn.refinex.meridian.security.rbac.Permission.PROJECT_DELETE;
 import static cn.refinex.meridian.security.rbac.Permission.PROJECT_READ;
 import static cn.refinex.meridian.security.rbac.Permission.PROJECT_UPDATE;
+import static cn.refinex.meridian.security.rbac.Permission.SESSION_READ;
+import static cn.refinex.meridian.security.rbac.Permission.SESSION_WRITE;
 import static cn.refinex.meridian.security.rbac.Permission.TENANT_CREATE;
 import static cn.refinex.meridian.security.rbac.Permission.TENANT_LIST_ALL;
 import static cn.refinex.meridian.security.rbac.Permission.TENANT_QUOTA_UPDATE;
@@ -52,10 +55,22 @@ public final class RoleMatrix {
                         PROJECT_UPDATE,
                         PROJECT_DELETE,
                         API_KEY_READ,
-                        API_KEY_WRITE));
-        MATRIX.put(Role.PROJECT_DEVELOPER, EnumSet.of(TENANT_READ, PROJECT_READ, API_KEY_READ, API_KEY_WRITE));
-        MATRIX.put(Role.PROJECT_VIEWER, EnumSet.of(TENANT_READ, PROJECT_READ, API_KEY_READ));
-        MATRIX.put(Role.APPROVER, EnumSet.of(TENANT_READ, PROJECT_READ, PENDING_ACTION_DECIDE));
+                        API_KEY_WRITE,
+                        SESSION_READ));
+        // 项目开发者"可用 Playground"：公开 API 的读写与模型直通（ADR-0044）
+        MATRIX.put(
+                Role.PROJECT_DEVELOPER,
+                EnumSet.of(
+                        TENANT_READ,
+                        PROJECT_READ,
+                        API_KEY_READ,
+                        API_KEY_WRITE,
+                        SESSION_READ,
+                        SESSION_WRITE,
+                        MODEL_INVOKE));
+        // 观察者"只读，包括会话回放"
+        MATRIX.put(Role.PROJECT_VIEWER, EnumSet.of(TENANT_READ, PROJECT_READ, API_KEY_READ, SESSION_READ));
+        MATRIX.put(Role.APPROVER, EnumSet.of(TENANT_READ, PROJECT_READ, PENDING_ACTION_DECIDE, SESSION_READ));
     }
 
     private RoleMatrix() {}

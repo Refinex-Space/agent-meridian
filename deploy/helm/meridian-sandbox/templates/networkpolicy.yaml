@@ -74,7 +74,8 @@ spec:
 {{- if .Values.egressProxy.enabled }}
 ---
 {{- /*
-出网代理：入网只接受沙箱 Pod 的代理端口与 kubelet 的健康检查；出网只到集群 DNS、授权回调的 runtime（按拓扑二选一）、公网
+出网代理：入网只接受沙箱 Pod 的代理端口与 kubelet 的健康检查；出网只到集群 DNS、授权回调的 runtime 与换取服务 JWT 的
+control-plane（按拓扑二选一）、公网
 （排除私网、链路本地、CGNAT、回环），以及 values 中列出的集群内命名空间（本机 kind 的 P14 目标服务）。
 */}}
 apiVersion: networking.k8s.io/v1
@@ -114,6 +115,16 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .cluster.port }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .controlPlane.cluster.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .controlPlane.cluster.podLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .controlPlane.cluster.port }}
     {{- else if eq .topology "host" }}
     - to:
         - ipBlock:
@@ -121,6 +132,8 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .host.port }}
+        - protocol: TCP
+          port: {{ .controlPlane.host.port }}
     {{- else }}
     {{- fail (printf "egressProxy.authz.topology 只能是 cluster 或 host：%s" .topology) }}
     {{- end }}

@@ -1,6 +1,6 @@
 {{- /*
 出网代理（Envoy）的部署与服务（架构设计「沙箱出网」）。沙箱模板中的 HTTP_PROXY、HTTPS_PROXY 指向服务 meridian-egress-proxy；
-配置见 egress-proxy-config.yaml，回调 runtime 的服务凭据来自 values 中的 Secret（chart 不创建它）。
+配置见 egress-proxy-config.yaml，换取服务 JWT 的客户端密钥来自 values 中的 Secret（chart 不创建它，ADR-0044）。
 以非 root、只读根文件系统、去掉全部 capabilities 运行，符合命名空间的 Pod Security restricted；不挂载 ServiceAccount 令牌。
 */}}
 {{- if .Values.egressProxy.enabled }}
@@ -53,11 +53,11 @@ spec:
             - {{ $p.logLevel }}
             - --disable-hot-restart
           env:
-            - name: MERIDIAN_EGRESS_AUTHZ_CREDENTIAL
+            - name: MERIDIAN_EGRESS_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ $p.authz.credentialSecret.name }}
-                  key: {{ $p.authz.credentialSecret.key }}
+                  name: {{ $p.authz.clientSecret.name }}
+                  key: {{ $p.authz.clientSecret.key }}
           ports:
             - { name: proxy, containerPort: {{ $p.port }}, protocol: TCP }
             - { name: health, containerPort: {{ $p.healthPort }}, protocol: TCP }

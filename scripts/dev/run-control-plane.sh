@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 以 dev profile 在本机启动 control-plane（端口 18081），连接 scripts/dev/up.sh 启动的 PostgreSQL 与 Redis。
-# 口令与开发期令牌读取 deploy/compose/.env，不存在时使用 .env.example（与 up.sh 一致），只传给 Java 进程，不打印。
-# 用法：scripts/dev/run-control-plane.sh [Spring Boot 参数]；Ctrl+C 停止。管理 API 用 MERIDIAN_DEV_CONSOLE_TOKEN（主体 dev-admin）。
+# 口令与客户端密钥读取 deploy/compose/.env，不存在时使用 .env.example（与 up.sh 一致），只传给 Java 进程，不打印。
+# 用法：scripts/dev/run-control-plane.sh [Spring Boot 参数]；Ctrl+C 停止。管理 API 的令牌用 scripts/dev/console-token.sh（需要 auth profile）。
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

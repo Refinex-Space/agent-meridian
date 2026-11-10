@@ -12,7 +12,7 @@ public final class ApiKeyAuthorization {
     private ApiKeyAuthorization() {}
 
     /**
-     * 要求当前请求的 API Key 有某个作用域。
+     * 要求当前请求的主体（API Key，或带 {@code Meridian-Project} 的控制台用户）有某个作用域。
      *
      * @param exchange 当前请求
      * @param scope 所需作用域
@@ -20,14 +20,13 @@ public final class ApiKeyAuthorization {
      * @throws ForbiddenException 缺少作用域时（{@code auth.insufficient_scope}）
      * @throws MeridianException 请求没有经过认证时（{@code auth.unauthenticated}），说明路径不在认证范围内
      */
-    public static ApiKeyPrincipal require(ServerWebExchange exchange, ApiKeyScope scope) {
-        ApiKeyPrincipal principal = exchange.getAttribute(ApiKeyWebFilter.PRINCIPAL_ATTRIBUTE);
+    public static PublicApiPrincipal require(ServerWebExchange exchange, ApiKeyScope scope) {
+        PublicApiPrincipal principal = exchange.getAttribute(ApiKeyWebFilter.PRINCIPAL_ATTRIBUTE);
         if (principal == null) {
             throw new MeridianException(ApiKeyErrorCode.UNAUTHENTICATED, "请求没有经过认证");
         }
         if (!principal.hasScope(scope)) {
-            throw new ForbiddenException(
-                    ApiKeyErrorCode.INSUFFICIENT_SCOPE, "API Key 缺少作用域 " + scope.value() + "，无法执行该操作");
+            throw new ForbiddenException(ApiKeyErrorCode.INSUFFICIENT_SCOPE, "缺少作用域 " + scope.value() + "，无法执行该操作");
         }
         return principal;
     }

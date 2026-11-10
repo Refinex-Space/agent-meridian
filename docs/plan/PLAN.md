@@ -178,12 +178,12 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 T14b（ADR-0044）：
 
 - [x] 开工：基线 `verify.sh` 通过；ADR-0044（补充）
-- [ ] 1. 依赖与 `meridian-security`：Nimbus；服务 JWT 校验（`ServiceJwtVerifier`）与签发客户端（`ServiceTokenClient`）；OIDC 校验（`OidcTokenVerifier`，声明映射）；公开 API 的 OIDC 分流（`Meridian-Project`、`ProjectAccessResolver`、按用户限流）；`rbac` 的公开 API 作用域；移除开发期服务凭据与控制台令牌
-- [ ] 2. control-plane：`servicetoken`（`/oauth2/token`、`/oauth2/jwks`、目录密钥与轮换）、`project-access:resolve`、按组的平台管理员、调用方限定；内部接口规范
-- [ ] 3. runtime：服务 JWT 配置、调用方限定、`PlatformContext.userId` 与 `actor()`、OIDC 公开 API
-- [ ] 4. 本地 Keycloak：Compose `auth` profile、realm 文件、test-support 的 Keycloak 夹具
-- [ ] 5. 测试：RoleMatrixIT 改由 OIDC 驱动（A04）、OIDC 访问管理 API 与公开 API（A01）、服务 JWT（A02）
-- [ ] 6. 出网代理（D38）：Lua 换取服务 JWT、chart、`deploy-sandbox.sh`、`EgressProxyKindIT`
+- [x] 1. 依赖与 `meridian-security`：Nimbus；服务 JWT 校验（`ServiceJwtVerifier`）与签发客户端（`ServiceTokenClient`）；OIDC 校验（`OidcTokenVerifier`，声明映射）；公开 API 的 OIDC 分流（`Meridian-Project`、`ProjectAccessResolver`、按用户限流）；`rbac` 的公开 API 作用域；移除开发期服务凭据与控制台令牌
+- [x] 2. control-plane：`servicetoken`（`/oauth2/token`、`/oauth2/jwks`、目录密钥与轮换）、`project-access:resolve`、按组的平台管理员、调用方限定；内部接口规范
+- [x] 3. runtime：服务 JWT 配置、调用方限定、`PlatformContext.userId` 与 `actor()`、OIDC 公开 API
+- [x] 4. 本地 Keycloak：Compose `auth` profile、realm 文件、test-support 的 Keycloak 夹具
+- [x] 5. 测试：RoleMatrixIT 改由 OIDC 驱动（A04）、OIDC 访问管理 API 与公开 API（A01）、服务 JWT（A02）
+- [ ] 6. 出网代理（D38）：Lua 换取服务 JWT、chart、`deploy-sandbox.sh`、`EgressProxyKindIT`（代码与 `envoy --mode validate` 已完成，kind 实测待做）
 - [ ] 7. 开发脚本与文档（`.env.example`、`dev-api-key.sh`、`app-smoke.sh`、架构设计、CLAUDE.md）；A03 代码搜索
 - [ ] 8. 收尾：`verify.sh`（A05）、验收记录、会话日志
 
@@ -267,7 +267,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D36 | T11 | 2.0.4 的扩展把快照归档整个读进内存（`byte[]`），100 MB 工作区的快照或恢复在 runtime 侧占用约同等大小的堆；runtime 的堆与并发回收数要按工作区上限估算 | R1 已评估（回收器逐个处理，同一时刻一个快照在内存，6 GiB 堆下不构成约束，P7）；并发回收与更大工作区的配置给 T28 |
 | D37 | T12a | 无人管理的沙箱：获取沙箱的事务在认领之后失败时会删除新沙箱，但 runtime 进程在认领之后、提交之前崩溃时，带会话标签 `meridian.refinex.cn/session-id` 的 `SandboxClaim` 没有记进任何会话，一直占用资源；需要一个按标签比对 `rt.sessions.sandbox_state` 的清理作业（也覆盖已删除会话的残留） | T17a（会话删除与保留作业）或 T28（部署运维） |
 | D33 | T10b | `KnowledgePrefetchMiddleware` 前置检索注入的切片同样是外部内容，要用 `SourceTags`（`knowledge_search` 来源）包标签，并带 `ContextCompositionMiddleware` 的注入标记 | T19 |
-| D38 | T12b | 出网代理（Envoy 的 Lua 过滤器）回调 runtime 的 `/internal/v1/egress:authorize` 用开发期静态服务凭据（Secret `meridian-egress-proxy-credential`，本机取 `MERIDIAN_DEV_SERVICE_CREDENTIAL`，`dev`、`test` 之外不被接受）；Envoy 不能签发服务 JWT，T14b 要为代理另定凭据方式（例如 control-plane 为 `egress-proxy` 签发的长期凭据，或由边车刷新 JWT 写入文件、Lua 每次读取），并决定是否按调用方服务限定内部接口 | T14b |
+| D38 | T12b | 出网代理（Envoy 的 Lua 过滤器）回调 runtime 的 `/internal/v1/egress:authorize` 用开发期静态服务凭据（Secret `meridian-egress-proxy-credential`，本机取 `MERIDIAN_DEV_SERVICE_CREDENTIAL`，`dev`、`test` 之外不被接受）；Envoy 不能签发服务 JWT，T14b 要为代理另定凭据方式（例如 control-plane 为 `egress-proxy` 签发的长期凭据，或由边车刷新 JWT 写入文件、Lua 每次读取），并决定是否按调用方服务限定内部接口 | T14b（已落地：代理是服务客户端 `egress-proxy`，Lua 用客户端密钥换取服务 JWT 并按 worker 缓存；内部接口按调用方限定，ADR-0044） |
 | D39 | T12b | 沙箱的网络策略放行集群 DNS（解析代理的服务名），CoreDNS 会把任意外部域名的查询转发出去，沙箱可以用 DNS 查询外带数据（DNS 隧道）；可选做法：CoreDNS 对沙箱网段只解析 `cluster.local`、沙箱改用固定 ClusterIP 的代理地址不放行 DNS，或 DNS 出口加策略（ADR-0039） | T37 |
 | D40 | T12b | 出网代理的可观测与运维：管理接口只绑定 127.0.0.1，`/stats/prometheus` 没有被采集；访问日志（JSON，含源 IP、目标、状态码）只在容器标准输出；下线时不排空（SIGTERM 即退出，进行中的隧道被切断）；生产的沙箱节点池污点（`meridian.io/sandbox=true:NoSchedule`）在沙箱模板与代理上都还没有容忍配置 | T27（指标与日志）、T28（排空与节点池） |
 | D41 | T13 | 子线程的事件经 `EventSinkPort` 逐条在各自的事务中写入（每条锁一次轮次行与会话行），事件量大、并行的子智能体会放大数据库写入；需要在容量测试中计入，必要时按批写入 | R1 未测量（P7 没有子智能体负载）；改为 T29 的压测项 |
@@ -286,7 +286,8 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D54 | R1 | 工程质量（审查）：Q-M1 token 估算在 runtime 与 engine 重复；Q-M2 重试退避重复且 `VectorModelService` 缺上限；Q-M3 `app` 依赖具体 `infra`、跨上下文依赖对方的 `infra`（修订规范或加 ArchUnit 规则）；Q-L1、L2、L3 摘要、Map 拷贝、输出上限常量重复；Q-L5 配置默认值双写；Q-L6 `application-test.yml` 在 `src/main`；Q-L8 三处无超时的 `.block()`；Q-L9 `Optional` 作参数；Q-L11 两处丢 cause；Q-L12 靠 `sleep` 的静默断言；Q-L13 `md_to_docx.py` 与执行服务符号链接的测试缺口；Q-L14 test-support 的 enforcer 多放行、`ScriptedOpenAiServer` 的 `Instant.now()` | R2（Q-M3 的规范决定），重复实现在 T17b 收口时处理，Q-L6 给 T28 |
 | D55 | T14a | MVC 服务的公开 API 还没有 API Key 过滤器与按 Key 限流：`meridian-security` 只有 WebFlux 版（`ApiKeyWebFilter`）；control-plane 的 `/v1/agents`（T15b）、knowledge 的 `/v1/knowledge-bases*`（T18）上线前要加 MVC 版，复用 `ApiKeyAuthenticator`、`ApiKeyRateLimiter`，并订阅 `key.revoked` 淘汰缓存 | T15b、T18 |
 | D56 | T14a | `config.invalidate`、`key.revoked` 走 Pub/Sub，不保证送达：吊销有 60 秒缓存过期兜底，但租户并发配额的变更丢失后，runtime 的 `max_running` 要等下一次变更才更新；需要一个定期对账（按 control-plane 的配额刷新已有计数行）或改用 Stream | T27 |
-| D57 | T14a | 平台管理员来自配置 `meridian.control-plane.platform-admins`（主体标识列表）；Q2 已决（ADR-0043）：T14b 再支持按组或角色声明配置 | T14b |
+| D57 | T14a | 平台管理员来自配置 `meridian.control-plane.platform-admins`（主体标识列表）；Q2 已决（ADR-0043）：T14b 再支持按组或角色声明配置 | T14b（已落地：`meridian.control-plane.platform-admin-groups` 按令牌的组声明判定，ADR-0044） |
+| D58 | T14b | 服务 JWT 的生产部署（部署文档待办）：签名密钥从密钥管理系统加载（实现 `servicetoken.app.SigningKeySource`；开发实现 `DirectorySigningKeys` 只适合单副本或共享卷）、多副本 control-plane 共用同一组密钥、定期轮换的触发方式（`rotate()` 目前只有测试调用）；各服务的客户端密钥由 Secret 管理系统下发与更换；接入商业 IdP（Entra ID 的 `oid` 与组 ID、Okta 的组声明）的配置说明 | T28（Helm 与部署文档）、T26（接入说明） |
 
 ## 技术债
 

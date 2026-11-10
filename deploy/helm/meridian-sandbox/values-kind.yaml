@@ -36,6 +36,10 @@ egressProxy:
     # scripts/dev/run-runtime.sh --server.port=18080；EgressProxyKindIT 的 runtime 也监听这个端口
     host:
       port: 18080
+    # scripts/dev/run-control-plane.sh 的端口；EgressProxyKindIT 在这个端口启动代替 control-plane 的令牌签发方
+    controlPlane:
+      host:
+        port: 18081
   upstream:
     namespaces:
       - meridian-egress-test

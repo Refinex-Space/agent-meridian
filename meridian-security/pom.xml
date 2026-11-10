@@ -71,6 +71,12 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- 服务 JWT 与 OIDC 令牌的签名校验、JWKS 缓存（ADR-0044） -->
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+        </dependency>
+
         <!-- 令牌桶脚本的集成测试：Testcontainers 的 Redis 与 Lettuce 客户端 -->
         <dependency>
             <groupId>cn.refinex.meridian</groupId>
