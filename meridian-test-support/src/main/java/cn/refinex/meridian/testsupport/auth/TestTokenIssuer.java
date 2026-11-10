@@ -95,8 +95,13 @@ public final class TestTokenIssuer implements AutoCloseable {
      * @return URL
      */
     public String url() {
-        return "http://" + server.getAddress().getAddress().getHostAddress() + ":"
-                + server.getAddress().getPort();
+        InetAddress bound = server.getAddress().getAddress();
+        // 监听全部地址时，本机经回环地址访问
+        String host = bound.isAnyLocalAddress() ? "127.0.0.1" : bound.getHostAddress();
+        if (host.contains(":")) {
+            host = "[" + host + "]";
+        }
+        return "http://" + host + ":" + server.getAddress().getPort();
     }
 
     /**

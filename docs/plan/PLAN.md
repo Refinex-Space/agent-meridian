@@ -183,7 +183,7 @@ T14b（ADR-0044）：
 - [x] 3. runtime：服务 JWT 配置、调用方限定、`PlatformContext.userId` 与 `actor()`、OIDC 公开 API
 - [x] 4. 本地 Keycloak：Compose `auth` profile、realm 文件、test-support 的 Keycloak 夹具
 - [x] 5. 测试：RoleMatrixIT 改由 OIDC 驱动（A04）、OIDC 访问管理 API 与公开 API（A01）、服务 JWT（A02）
-- [ ] 6. 出网代理（D38）：Lua 换取服务 JWT、chart、`deploy-sandbox.sh`、`EgressProxyKindIT`（代码与 `envoy --mode validate` 已完成，kind 实测待做）
+- [x] 6. 出网代理（D38）：Lua 换取服务 JWT、chart、`deploy-sandbox.sh`、`EgressProxyKindIT`（kind 实测通过）
 - [ ] 7. 开发脚本与文档（`.env.example`、`dev-api-key.sh`、`app-smoke.sh`、架构设计、CLAUDE.md）；A03 代码搜索
 - [ ] 8. 收尾：`verify.sh`（A05）、验收记录、会话日志
 
