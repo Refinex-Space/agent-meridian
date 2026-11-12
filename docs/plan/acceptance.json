@@ -1175,57 +1175,57 @@
       "id": "T15b-A01",
       "task": "T15b",
       "description": "通过管理 API 创建供应商账号、模型、凭据、智能体、发布版本、环境后，业务方用 API Key 创建会话并完成一轮真实对话（`-Plive`，`qwen-plus`），全程不读 `dev-config/`。验证：端到端集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "runtime `./mvnw -Plive -pl meridian-runtime -am verify -Dit.test=AgentConfigLiveIT`：1 个通过——`agent-config.source`、`catalog-source` 都是 control-plane，开发配置目录与供应商目录都指向不存在的路径；StubControlPlane 按内部接口规范返回已发布版本、环境修订、qwen-plus 模型与凭据（DASHSCOPE_API_KEY 只经 secrets:resolve 交给 runtime）；业务方 API Key 按智能体 ID 创建会话，绑定发布的版本，生产装配的 Worker 完成一轮真实对话（ses_01M77F44KZETRYZZZNSJX551R3，回答 41 个字符，usage 1075/18；usage 消息 upstream_model=qwen-plus、usage_source=provider、agent_version_id 为发布的版本），捕获的日志不含密钥。管理 API 一侧的真实进程链路 `scripts/dev/agent-smoke.sh --dashscope`（up.sh、Keycloak、run-control-plane.sh，runtime 以 MERIDIAN_RUNTIME_AGENT_CONFIG_SOURCE=control-plane、MERIDIAN_RUNTIME_CATALOG_SOURCE=control-plane 启动且两个开发目录指向不存在的路径）：经管理 API 建凭据、供应商账号、qwen-plus 模型、环境、智能体、版本并发布，control-plane 的 GET /v1/agents 用同一个 API Key 看到它，runtime 会话 ses_01M77EME69V6FWHEYVVJCG0PCX 绑定 agv_01M77EME0F3PTVHQTNVB46JDT4 并完成一轮（回答 29 个字符，usage 1074/16），逐项 PASS；runtime 日志中 dev-config 出现 0 次，runtime 与 control-plane 日志中密钥的值出现 0 次。"
     },
     {
       "id": "T15b-A02",
       "task": "T15b",
       "description": "JSON Schema 与 `ResolvedAgentSpec` 一致性测试通过；发布时的六项校验都有失败用例。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "runtime `-Dtest=AgentSpecSchemaTest`：3 个通过——由 `agent-spec.schema.json` 的 examples 生成的示例通过 networknt 校验并经 `ResolvedAgentSpec` 往返不变；每个记录组件都有对应的 Schema 属性、反之亦然；平台工具名与各枚举取值与平台常量相同。control-plane `-Dit.test=AgentVersionIT`（5 个通过）的 `publishRejectsEachOfTheSixReferenceAndToolsetViolationsWithFieldErrors`：六项校验逐项给出失败用例与字段错误——1 模型不存在、不是对话模型；2 未知的平台工具（保存草稿即被 Schema 拒绝，字段 spec.tools.0）、声明了子智能体却没有 spawn_subagent；3 子智能体的工具不是父智能体的子集（平台工具、未挂载的 MCP 工具）；4 知识库不存在；5 MCP 服务不存在、启用的工具不在探测到的清单中；6 技能版本不存在；全部满足时发布成功。`AgentConfigDomainTest` 9 个通过（`AgentSpecRules` 与 `ResolvedAgentSpec` 的构造校验一致等）。"
     },
     {
       "id": "T15b-A03",
       "task": "T15b",
       "description": "已发布的版本不可修改；版本对比接口返回差异。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "control-plane `-Dit.test=AgentVersionIT` 的 `publishedVersionsAreImmutableAndTheComparisonListsTheChanges`：已发布版本的修改、删除、再次发布都是 409 `agent.version_published`；草稿可以修改；版本对比按 JSON 指针返回新增、删除、修改（system_prompt 的 before/after 正确，草稿缺少的发布时快照字段列为删除），发布后与自身对比没有差异；发布发出 `config.invalidate`（agent）。`AgentConfigDomainTest.diffWalksObjectsAndArraysByPositionAndEscapesPointers` 覆盖对比算法（数组按位置、指针转义）。"
     },
     {
       "id": "T15b-A04",
       "task": "T15b",
       "description": "配置失效：发布新版本、修改环境后，runtime 在通知后立即使用新配置创建新会话；运行中的会话继续使用原版本。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "runtime `-Dit.test=AgentConfigSessionIT`（5 个通过；生产装配，开发目录不存在，缓存设为 10 分钟）的 `newSessionsUseANewlyPublishedVersionAndRevisionImmediatelyWhileRunningSessionsKeepTheirs`：发布 v2 与环境修订 2 后，没有通知时新会话仍是缓存中的 v1；发布 `config.invalidate`（agent、environment）后新会话立即绑定 v2 与修订 2，请求带 v2 的提示词；创建于 v1 的运行中会话下一轮仍用 v1 的提示词，agent_version_id 与 environment_revision 不变。control-plane `AgentResourcesIT.environmentChangesCreateRevisionsAndOldRevisionsStayReadable`：修改环境产生新修订并发出通知，只改名字不产生修订，旧修订仍可读取。"
     },
     {
       "id": "T15b-A05",
       "task": "T15b",
       "description": "项目级权限策略与\"记住此决定\"的项目级规则存于 control-plane，并在 runtime 的权限合成中生效。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "control-plane `-Dit.test=AgentResourcesIT`（5 个通过）的 `policyLayersAndRememberedDecisionsAreServedToRuntime`：租户与项目两层策略经管理 API 写入 `cp.permission_rules`，经内部接口给 runtime；\"记住此决定\"写为 source=remembered，相同的规则返回已有的一条，发出 `config.invalidate`（permission_policy）；重复的策略 409 `permission_rule.already_exists`。runtime `AgentConfigSessionIT.projectPoliciesAndRememberedDecisionsLiveInControlPlaneAndTakePartInSynthesis`（`PolicyStorePort` 是 `ControlPlanePolicyStore`）：智能体没有放行 write_file 时要确认，批准并记住后 control-plane 收到 write_file allow 的项目规则；同项目的另一个会话不再确认，permission=allowed；租户策略改为 deny 并通知后 permission=denied（压过项目的 allow）。"
     },
     {
       "id": "T15b-A06",
       "task": "T15b",
       "description": "MCP 服务注册时探测并保存工具清单；在智能体版本中引用后，会话中出现 `mcp__` 工具，凭据来自凭据库。验证：集成测试（进程内 MCP 服务）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "control-plane `AgentResourcesIT.mcpRegistrationProbesWithTheStoredCredentialAndSavesTheToolList`（进程内 `TestMcpServer`）：登记时以凭据库中的凭据探测，保存工具清单与按工具的副作用（create_ticket=non_idempotent、lookup_order=none），探测请求都带该 Bearer 令牌，响应不含令牌；令牌错误时 400 `mcp_server.probe_failed` 且不保存；云元数据地址被拒绝（字段 url）；为不存在的工具标注副作用被拒绝。runtime `AgentConfigSessionIT.mcpToolsOfAPublishedVersionAppearInTheSessionWithTheCredentialFromTheSecretStore`：会话中出现并调用 `mcp__crm__lookup_order`，`agent.mcp_tool_result` 含 MCP 服务的结果，凭据经 secrets:resolve 解析，MCP 服务收到的每个请求都带凭据库中的 Bearer 令牌。"
     },
     {
       "id": "T15b-A07",
       "task": "T15b",
       "description": "`GET /v1/agents` 用 API Key 只能看到本项目已发布的智能体；租户级系统提示词出现在请求的租户层；联网搜索后端按租户设置切换。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "control-plane `AgentVersionIT.publicApiListsOnlyThisProjectsPublishedAgentsForSessionReaders`：GET /v1/agents 用 API Key 只列本项目已发布的智能体（不含只有草稿的、别的项目的），带 RateLimit-*（D55）；草稿 `agent.not_found`、别的项目 404、错误的 Key `auth.invalid_api_key`、只有 sessions:write 的 Key `auth.insufficient_scope`；控制台用户带 Meridian-Project 按角色放行或 403。`AgentResourcesIT.tenantSettingsAreServedToRuntimeAndWebSearchCredentialsMustBeTenantLevel`：租户设置经内部接口下发，联网搜索凭据必须存在且是租户级。runtime `AgentConfigSessionIT.tenantPromptAndWebSearchBackendFollowTenantSettingsIncludingForRunningSessions`：请求体中租户提示词位于租户层（`# Organization instructions` 之后、紧接 `# Agent instructions`）；web_search 打到租户设置的后端甲；改设置并通知 tenant_settings 后，同一会话的下一轮使用新的租户提示词与后端乙（该租户的实例被淘汰，D32）。"
     },
     {
       "id": "T15b-A08",
       "task": "T15b",
       "description": "技能包上传、版本化、在会话中被加载（docx 技能）。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "control-plane `AgentResourcesIT.builtinDocxSkillUploadsVersionsAndServesItsFilesFromObjectStorage`：上传仓库内置的 `skills/builtin/docx`（SKILL.md 与 scripts/md_to_docx.py）建技能并上传第 2 版，文件存于 MinIO 的 `cp/skills/{租户}/{项目}/{技能}/v{n}/` 且内容一致，内部接口返回文件内容；frontmatter 改名、缺少 frontmatter、路径逃逸都是 400，重名 `skill.name_taken`。runtime `AgentConfigSessionIT.theBuiltinDocxSkillFromControlPlaneIsListedAndLoadsInASession`：docx 技能的说明出现在系统提示词的技能清单中，会话中 load_skill_through_path 读到 SKILL.md 正文。"
     },
     {
       "id": "T15b-A09",

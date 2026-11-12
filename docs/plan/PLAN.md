@@ -181,9 +181,9 @@ T15b（开工 2026-11-11，基线 `scripts/dev/verify.sh` 通过）：
 - [x] 2. control-plane：迁移 `V0003`、智能体与版本（发布不可变、六项校验、版本对比）、环境（修订历史）、技能包（frontmatter 校验、对象存储、版本化）、MCP 服务（端点校验、探测并保存工具清单、每个工具的副作用）、权限规则（租户与项目、记住此决定）、租户设置的下发与 D61、`config.invalidate`、`KnowledgeCatalogClient` 开发实现
 - [x] 3. control-plane 公开接口：MVC 版 API Key 过滤器与限流（D55）、`GET /v1/agents`
 - [x] 4. engine：MCP 每个工具的副作用、按智能体版本淘汰实例（D32）
-- [ ] 5. runtime：control-plane 的 `AgentConfigProvider`、`PolicyStorePort`、租户设置（缓存、失效、兜底过期），文件实现只在 dev、test
-- [ ] 6. 验收测试：A02（Schema 一致性与六项校验）、A03、A04、A05、A06、A07、A08
-- [ ] 7. A01 端到端（`-Plive`，qwen-plus，不读 `dev-config/`）
+- [x] 5. runtime：control-plane 的 `AgentConfigProvider`、`PolicyStorePort`、租户设置（缓存、失效、兜底过期），文件实现只在 dev、test
+- [x] 6. 验收测试：A02（Schema 一致性与六项校验）、A03、A04、A05、A06、A07、A08
+- [x] 7. A01 端到端（`-Plive`，qwen-plus，不读 `dev-config/`）
 - [ ] 8. 收尾：ADR、架构设计、模块 CLAUDE.md、登记事项、A09 `verify.sh`、验收记录
 
 ## 控制台设计轨道
@@ -246,11 +246,11 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D15 | T06 | 节点下线最长等待 60 秒（`meridian.runtime.worker.shutdown-timeout`，AgentScope 在 45 秒时强制中断），Pod 的 `terminationGracePeriodSeconds` 必须大于它 | T28 |
 | D16 | T07 | 回应事件（`user.tool_confirmation`、`user.custom_tool_result`、`user.recovery_confirmation`）与 `user.interrupt` 只校验并持久化：动作没有标为已回应（T08 之前同一动作可被再次回应，列表仍显示 pending），中断没有写 `interrupt_requested_at`；见 `EventIntake` 的 `TODO(T08)` | T08（已落地：回应标为已回应并在全部回应后生成恢复轮，中断按线程状态处理，`DeliveryMatrixIT`、`ApprovalFlowIT`） |
 | D17 | T07 | `traceparent` 只在响应中回显并写入请求日志的 MDC（`trace_id`），没有传到轮次执行：Worker 的 `turn` span 不是调用方追踪的子 span（ADR-0030 第 7 条） | T27 |
-| D18 | T07 | `FileAgentConfigProvider` 不按项目隔离：任何项目的 API Key 都能用开发配置中的智能体与环境创建会话；`AgentConfigProvider` 新增的 `currentAgentVersion`、`currentEnvironment` 同样需要按项目解析 | T15b |
+| D18 | T07 | `FileAgentConfigProvider` 不按项目隔离：任何项目的 API Key 都能用开发配置中的智能体与环境创建会话；`AgentConfigProvider` 新增的 `currentAgentVersion`、`currentEnvironment` 同样需要按项目解析 | T15b（已落地：`ControlPlaneAgentConfigProvider` 在绑定了 `PlatformContext` 时要求智能体、版本、环境属于该项目，否则与不存在相同；`file` 来源只允许 dev、test profile，ADR-0047，`AgentConfigSessionIT`） |
 | D19 | T07 | SSE 读取 Redis Stream 用每节点一个 100 毫秒间隔的不阻塞 `XREAD` 轮询（ADR-0030 第 4 条），实时延迟上限与单节点 Redis 负载需要在容量验证中核对 | R1（已核对，关闭：推送延迟 p50 约 60 至 90 毫秒、连接池不排队时 p99 105 至 193 毫秒，Redis CPU 5% 以内，P7） |
 | D20 | T07 | Hibernate Validator 第一次校验失败时在 Netty 事件循环上读取消息资源包（每个进程一次，测试中由 BlockHound 放行）；需要时可在启动时预热 | T27 |
 | D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a 部分完成：`PlatformTool.generateSuggestions` 给出内容级建议（文件工具为路径，`bash` 为每段的命令前缀）。T12a 部分完成：`bash` 改为记住这一条命令（规则内容为命令原文，ADR-0037），不再放行整个工具。剩余：内核随动作带出建议、runtime 按它保存，要给 `session.status_requires_action` 的动作与 `pending_actions` 加字段（公开事件载荷），建议 T19b（控制台待处理动作页展示建议规则）一并处理 |
-| D22 | T08 | 租户与项目策略的开发实现在 `rt.permission_rules`，租户层没有写入接口；项目级"记住此决定"写入 runtime。平台安全规则使权限上下文永远不平凡，`DEFAULT` 模式下没有命中 allow 的工具都要确认：智能体版本的默认配置要显式放行工具（`unattended` 会话中的 `BYPASS` 智能体同样变为 `DONT_ASK`） | T15b |
+| D22 | T08 | 租户与项目策略的开发实现在 `rt.permission_rules`，租户层没有写入接口；项目级"记住此决定"写入 runtime。平台安全规则使权限上下文永远不平凡，`DEFAULT` 模式下没有命中 allow 的工具都要确认：智能体版本的默认配置要显式放行工具（`unattended` 会话中的 `BYPASS` 智能体同样变为 `DONT_ASK`） | T15b（已落地：租户与项目策略在 `cp.permission_rules`，两层管理 API，"记住此决定"经内部接口写入 control-plane；runtime 的生产实现 `ControlPlanePolicyStore`，`DatabasePolicyStore` 只在 `agent-config.source=file`；工具放行由版本规格的 `permission_policy` 显式给出，ADR-0047，`AgentResourcesIT`、`AgentConfigSessionIT`） |
 | D23 | T09a | 开发期的模型目录（`dev-config/providers`）与凭据解析（`EnvironmentSecretResolver`）不按项目授权：任何项目的智能体都能使用目录中的模型；`ModelGateway.resolve` 的"未授权给该项目"由 control-plane 的目录实现 | T15a（已落地：模型属于租户、租户内全部项目可用，别的租户的模型与不存在相同；凭据解析校验租户与项目；文件实现只允许 dev、test profile，ADR-0045，`ControlPlaneCatalogIT`） |
 | D24 | T09a | 预算以 token（输入加输出）计，Redis 计数不分周期；软阈值告警、按价格表换算金额、预扣记录过期（1 小时）后未结算部分的修正、四级计数与账本的每小时对账都未实现（ADR-0032 第 6 条） | T16 |
 | D25 | T09a | `ModelGateway.Provider` 中只有 OpenAI 兼容类型有底层客户端（DashScope 走 `compatible-mode/v1`）；Anthropic、Gemini 的 2.0.4 模型类需要引入 `anthropic-java`、`google-genai`，DashScope 原生与 Ollama 同样未接入，扩展点是 `ProviderClientFactory`。供应商账号管理只能开放已实现的类型 | T15a（已落地：Q3 定为 OpenAI 兼容、Anthropic、Gemini；后两者用平台适配器，ADR-0046，`ProviderAdaptersIT`；DashScope 原生与 Ollama 原生不做，私有化推理服务走 OpenAI 兼容端点） |
@@ -260,7 +260,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D29 | T10a | harness 的 `WorkspaceContextMiddleware` 把受保护路径 `AGENTS.md`（智能体层的系统提示词）注入系统提示词的 `<agents_context>`，与装配时的 `sysPrompt` 重复，每次请求多一份提示词 | T10b（已落地：装配时 `disableWorkspaceContext()`，智能体层只经 `sysPrompt` 进入，当前时间以 `<platform_context>` 消息注入，ADR-0035） |
 | D30 | T10a | 工作区（`rt.workspace_entries` 与对象存储 `rt/{tenant}/{session}/workspace/`）要在删除会话时按命名空间前缀与对象前缀清除；目前没有会话数据的清除作业 | T17a |
 | D31 | T10a | `RemoteFilesystem` 的 `ls`、`glob`、`grep` 每次逐页读出整个会话命名空间（大文件也从对象存储读出），会话文件多时延迟与对象存储读取量上升；可在 `WorkspaceStorePort` 增加按前缀只读元数据的查询，或启用 `WorkspaceIndex` | R1 未测量（P7 的智能体没有文件工具）；改为 T29 的压测项 |
-| D32 | T10b | 租户提示词在装配时读取并随智能体实例缓存（键不含租户设置），租户设置变更后实例淘汰前不生效；MCP 端点允许内网地址，登记时应校验端点（拒绝链路本地与元数据地址）| T15b（配置失效时淘汰该租户的实例；控制面登记 MCP 服务时校验端点） |
+| D32 | T10b | 租户提示词在装配时读取并随智能体实例缓存（键不含租户设置），租户设置变更后实例淘汰前不生效；MCP 端点允许内网地址，登记时应校验端点（拒绝链路本地与元数据地址）| T15b（已落地：收到 `tenant_settings` 通知时经 `AgentEngine.evictAgentVersions` 淘汰该租户的实例，正在执行的本轮结束后关闭；登记 MCP 服务时按 `EndpointPolicy` 校验端点并探测工具清单，ADR-0047） |
 | D34 | T11 | sandbox-router 以 `--authz-mode=allow-all` 运行：能访问 router 的调用方可以操作沙箱命名空间中的任意沙箱，目前只靠 NetworkPolicy 把 router 的入网限制在 runtime 的命名空间；生产部署时评估 `scoped-token` 或 `tokenreview` | T28 |
 | D35 | T11 | 快照对象（`rt/snapshots/{tenant}/{project}/{session}/`）没有清除：从快照恢复后旧快照仍留在对象存储，删除会话时也要按前缀清除；`SnapshotStorePort` 目前没有删除方法 | T12a 已落地回收部分：每个会话至多保留一个快照，新快照提交后删除被取代的旧快照（恢复后保留用过的快照，作为沙箱意外消失时的恢复来源）；`SandboxService.deleteSessionSandbox` 按前缀清除快照与产物（runtime 直接用对象存储，端口不加删除方法，ADR-0037）。T17a：删除会话时调用它 |
 | D36 | T11 | 2.0.4 的扩展把快照归档整个读进内存（`byte[]`），100 MB 工作区的快照或恢复在 runtime 侧占用约同等大小的堆；runtime 的堆与并发回收数要按工作区上限估算 | R1 已评估（回收器逐个处理，同一时刻一个快照在内存，6 GiB 堆下不构成约束，P7）；并发回收与更大工作区的配置给 T28 |
@@ -281,16 +281,19 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D50 | R1 | 沙箱与出网后续（审查）：C-10 回收先快照再删除再提交的失败代价、`sandbox_last_used_at` 取轮次开始时间、`findIdle` 不过滤已删除会话；C-11 `DatabaseSandboxStates.save`/`clear` 未接入出网撤销、删除与归档不淘汰出网缓存（最多 30 秒）；S-F4 产物在列出之后被后台进程继续写大、`readOutput` 整文件进堆（需要给 `SandboxDriver` 加带上限的读取） | T17a（C-10、C-11），T37（S-F4） |
 | D51 | R1 | 安全加固（审查）：S-F5 自定义工具的 `input_schema` 不校验（灾难性回溯、远程 `$ref`）；S-F7 SSE 没有每 Key 连接上限、Key 吊销后连接保持；S-F8 `none` 档工作区没有配额、单文件上限按字符数；S-F13 来源标签的转义只覆盖 ASCII 空白；S-F14 批准时改写的入参是否重走规则；S-F15 审计与账本保存完整命令与入参、没有脱敏；S-F3 代理在 Envoy 层拒绝回环与未指定地址的上游 | T37 |
 | D52 | R1 | 供应商接入前的校验（审查）：S-F11 `user.message` 的 `image.url` 不限协议，Anthropic、Ollama 的转换器会读本机文件或下载；S-F10 `SecretResolver` 不校验密钥属于调用方租户，供应商与搜索的 `base_url` 没有 SSRF 校验 | T15a（已落地：`image.url` 只接受 http(s)；凭据解析校验租户；`common.net.EndpointPolicy` 在写入供应商账号、模型、联网搜索后端时与 runtime 读取目录时校验端点；Gemini 适配器拒绝 URL 媒体，ADR-0045、ADR-0046） |
-| D53 | R1 | AgentScope 集成后续（审查）：A-F5 装配自检失败不 `close` 智能体、MCP 资源在后续工具构造失败时不关；A-F6 `AgentEventDisposition` 与 `TurnEventMapper` 两张表各自独立；A-F7 `plan_write` 不经账本；A-F8 MCP 服务重启后的重连语义；A-F9 幂等键依赖供应商的 `tool_use_id`；A-F10 `HarnessAgent.close()` 在 commonPool 上等待 | T15b（A-F5、A-F8 随 MCP 配置分发），T19（A-F8 验证），T27（A-F10），其余 R2 复查 |
+| D53 | R1 | AgentScope 集成后续（审查）：A-F5 装配自检失败不 `close` 智能体、MCP 资源在后续工具构造失败时不关；A-F6 `AgentEventDisposition` 与 `TurnEventMapper` 两张表各自独立；A-F7 `plan_write` 不经账本；A-F8 MCP 服务重启后的重连语义；A-F9 幂等键依赖供应商的 `tool_use_id`；A-F10 `HarnessAgent.close()` 在 commonPool 上等待 | T15b（A-F5 已落地：装配自检或后续工具构造失败时关闭已建的智能体与 MCP 客户端，提交 81510f7），T19（A-F8：MCP 连接仍在装配时建立、随实例缓存，服务重启后的重连语义未处理），T27（A-F10），其余 R2 复查 |
 | D54 | R1 | 工程质量（审查）：Q-M1 token 估算在 runtime 与 engine 重复；Q-M2 重试退避重复且 `VectorModelService` 缺上限；Q-M3 `app` 依赖具体 `infra`、跨上下文依赖对方的 `infra`（修订规范或加 ArchUnit 规则）；Q-L1、L2、L3 摘要、Map 拷贝、输出上限常量重复；Q-L5 配置默认值双写；Q-L6 `application-test.yml` 在 `src/main`；Q-L8 三处无超时的 `.block()`；Q-L9 `Optional` 作参数；Q-L11 两处丢 cause；Q-L12 靠 `sleep` 的静默断言；Q-L13 `md_to_docx.py` 与执行服务符号链接的测试缺口；Q-L14 test-support 的 enforcer 多放行、`ScriptedOpenAiServer` 的 `Instant.now()` | R2（Q-M3 的规范决定），重复实现在 T17b 收口时处理，Q-L6 给 T28 |
-| D55 | T14a | MVC 服务的公开 API 还没有 API Key 过滤器与按 Key 限流：`meridian-security` 只有 WebFlux 版（`ApiKeyWebFilter`）；control-plane 的 `/v1/agents`（T15b）、knowledge 的 `/v1/knowledge-bases*`（T18）上线前要加 MVC 版，复用 `ApiKeyAuthenticator`、`ApiKeyRateLimiter`，并订阅 `key.revoked` 淘汰缓存 | T15b、T18 |
+| D55 | T14a | MVC 服务的公开 API 还没有 API Key 过滤器与按 Key 限流：`meridian-security` 只有 WebFlux 版（`ApiKeyWebFilter`）；control-plane 的 `/v1/agents`（T15b）、knowledge 的 `/v1/knowledge-bases*`（T18）上线前要加 MVC 版，复用 `ApiKeyAuthenticator`、`ApiKeyRateLimiter`，并订阅 `key.revoked` 淘汰缓存 | T15b（control-plane 已落地：`meridian-security` 的 `PublicApiAdmission` 由 WebFlux `ApiKeyWebFilter` 与 MVC `ApiKeyFilter` 共用，control-plane 用进程内的 `ApiKeyResolver`，吊销立即生效，`ApiKeyFilterTest`），T18（knowledge） |
 | D56 | T14a | `config.invalidate`、`key.revoked` 走 Pub/Sub，不保证送达：吊销有 60 秒缓存过期兜底，但租户并发配额的变更丢失后，runtime 的 `max_running` 要等下一次变更才更新；需要一个定期对账（按 control-plane 的配额刷新已有计数行）或改用 Stream | T27 |
 | D57 | T14a | 平台管理员来自配置 `meridian.control-plane.platform-admins`（主体标识列表）；Q2 已决（ADR-0043）：T14b 再支持按组或角色声明配置 | T14b（已落地：`meridian.control-plane.platform-admin-groups` 按令牌的组声明判定，ADR-0044） |
 | D58 | T14b | 服务 JWT 的生产部署（部署文档待办）：签名密钥从密钥管理系统加载（实现 `servicetoken.app.SigningKeySource`；开发实现 `DirectorySigningKeys` 只适合单副本或共享卷）、多副本 control-plane 共用同一组密钥、定期轮换的触发方式（`rotate()` 目前只有测试调用）；各服务的客户端密钥由 Secret 管理系统下发与更换；接入商业 IdP（Entra ID 的 `oid` 与组 ID、Okta 的组声明）的配置说明 | T28（Helm 与部署文档）、T26（接入说明） |
 | D59 | T15a | 凭据库的生产部署：`key-encryption=vault` 的地址、令牌与命名空间由 Secret 管理系统下发，Transit 密钥的轮换周期与 `rewrap`；从 `local` 切到 `vault`（或换主密钥）后旧的数据密钥解不开，需要一个重新包装数据密钥的迁移作业；`provider-endpoints.private-networks` 按私有化推理服务所在网段收窄（ADR-0045） | T28（部署文档与 Helm） |
 | D60 | T15a | Anthropic、Gemini 适配器只经 MockWebServer 验证（本机没有两家的真实密钥），没有 `-Plive`；扩展思考（Anthropic 的 thinking、Gemini 的 thinking budget）与提示词缓存的计量没有真实数据核对（ADR-0046） | T23（连通性测试接入真实账号时补跑），T30 复查 2.1 |
-| D61 | T15a | 联网搜索后端的端点只在 control-plane 写入租户设置时校验，runtime 侧的租户设置仍读开发配置、没有再校验；`tenant_settings.web_search.secret_id` 没有校验凭据存在且是租户级 | T15b（租户设置改由 control-plane 下发时一并处理） |
+| D61 | T15a | 联网搜索后端的端点只在 control-plane 写入租户设置时校验，runtime 侧的租户设置仍读开发配置、没有再校验；`tenant_settings.web_search.secret_id` 没有校验凭据存在且是租户级 | T15b（已落地：runtime 读取租户设置时按地址策略再校验联网搜索端点，不允许时按未配置处理；control-plane 写入时校验 `secret_id` 存在且是租户级，ADR-0047） |
 | D62 | T15a | 端点校验与实际连接之间的 DNS 重绑定：control-plane 写入时、runtime 刷新目录时各解析一次，供应商客户端连接时再由 JDK、OkHttp 解析，两次之间换了地址校验不到；以网络策略为最终边界（ADR-0045） | T37 |
+| D63 | T15b | `dev-config/` 的剩余用途只有测试与本地开发：`test` profile 的 `agent-config.source`、`catalog-source` 为 `file`（测试夹具读 `dev-config/agents`、`dev-config/providers`）；`dev` profile 默认 `file`（`run-runtime.sh`、Compose `app` 的 runtime 挂载 `dev-config/`）；预算限额 `dev-config/budgets`。其他 profile 选 `file` 时启动失败，生产只经 control-plane | T16（预算限额改由 control-plane 下发），T28（生产 chart 不挂载 `dev-config/`） |
+| D64 | T15b | `TODO(T18)`：发布时知识库的存在性由 control-plane 的 `ConfiguredKnowledgeCatalog` 按配置 `meridian.control-plane.knowledge.dev-knowledge-base-ids` 判定，没有经 knowledge 服务校验存在且属于该项目 | T18 |
+| D65 | T15b | 引用检查只统计未删除智能体的已发布版本：智能体软删除后，绑定其版本的会话仍可运行，但它引用的模型、凭据、MCP 服务、技能可以被删除，这些会话的下一轮解析失败（ADR-0047 第 4 条） | R2（评审是否要求删除智能体前先结束会话，或引用检查改为统计未删除的会话） |
 
 ## 技术债
 
