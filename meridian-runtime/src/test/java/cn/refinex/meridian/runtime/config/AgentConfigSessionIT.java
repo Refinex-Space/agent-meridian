@@ -363,7 +363,9 @@ class AgentConfigSessionIT {
 
             String session = createSession(tenant.api(), agentId, environmentId);
             converse(tenant.api(), session, "#script:web-search");
-            assertThat(lastBodyContaining("租户提示词一：回答使用简体中文。")).isTrue();
+            assertThat(lastBodyContaining(tenantLayer("租户提示词一：回答使用简体中文。")))
+                    .as("租户提示词在租户层：平台基础提示词之后、智能体层之前")
+                    .isTrue();
             assertThat(path(first)).startsWith("/search?q=");
             assertThat(toolResult(tenant.api(), session).toString()).contains("来自后端甲");
 
@@ -371,7 +373,7 @@ class AgentConfigSessionIT {
             invalidate("tenant_settings", tenant.id(), tenant.id());
             // 同一个会话的下一轮：租户提示词随实例缓存，通知时淘汰了该租户的实例（D32）
             converse(tenant.api(), session, "#script:web-search");
-            assertThat(lastBodyContaining("租户提示词二：回答使用英文。")).isTrue();
+            assertThat(lastBodyContaining(tenantLayer("租户提示词二：回答使用英文。"))).isTrue();
             assertThat(path(second)).startsWith("/search?q=");
             assertThat(first.getRequestCount()).isEqualTo(1);
         }
@@ -519,6 +521,11 @@ class AgentConfigSessionIT {
         await().atMost(WAIT)
                 .untilAsserted(
                         () -> assertThat(eventTypes(api, sessionId).getLast()).isEqualTo("session.status_idle"));
+    }
+
+    /** 请求体（JSON，换行转义为反斜杠加 n）中租户层的片段：租户层标题、租户提示词，其后紧接智能体层（{@code PlatformPrompt}）。 */
+    private static String tenantLayer(String tenantPrompt) {
+        return "# Organization instructions\\n\\n" + tenantPrompt + "\\n\\n# Agent instructions";
     }
 
     private static boolean lastBodyContaining(String text) {

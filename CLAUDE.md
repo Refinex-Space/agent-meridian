@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-M0（内核与运行时核心，T01–T13）有条件完成，R1 的结论与进入 M1 的前提见 `docs/poc/M0-总结.md`；当前是 M1 控制面与治理（T14a 起）。已实现的是 control-plane 的租户体系（租户、项目、成员与角色、API Key、限流、租户并发配额，T14a）、身份（OIDC 控制台用户、服务 JWT 的签发，T14b）与凭据库、供应商账号、模型目录、价格表（T15a，runtime 的模型调用经内部接口解析）、runtime（会话、事件与 SSE、调度与租约、崩溃恢复、投递与待处理动作、权限合成、模型路由与计量、平台工具、会话沙箱与出网、子智能体）、engine-agentscope、common、persistence、security、OpenAPI 规范、沙箱镜像与 chart；knowledge、model-client 还是空骨架，console 尚未建立。每个任务交付了什么、对应哪个 ADR，见 `docs/plan/PLAN.md` 的会话日志与 `docs/adr/README.md`。
+M0（内核与运行时核心，T01–T13）有条件完成，R1 的结论与进入 M1 的前提见 `docs/poc/M0-总结.md`；当前是 M1 控制面与治理（T14a 起）。已实现的是 control-plane 的租户体系（租户、项目、成员与角色、API Key、限流、租户并发配额，T14a）、身份（OIDC 控制台用户、服务 JWT 的签发，T14b）与凭据库、供应商账号、模型目录、价格表（T15a，runtime 的模型调用经内部接口解析）、智能体与版本、环境、技能、MCP 服务、权限策略、租户设置及其分发（T15b，runtime 的智能体配置经内部接口读取，`config.invalidate` 通知失效）、runtime（会话、事件与 SSE、调度与租约、崩溃恢复、投递与待处理动作、权限合成、模型路由与计量、平台工具、会话沙箱与出网、子智能体）、engine-agentscope、common、persistence、security、OpenAPI 规范、沙箱镜像与 chart；knowledge、model-client 还是空骨架，console 尚未建立。每个任务交付了什么、对应哪个 ADR，见 `docs/plan/PLAN.md` 的会话日志与 `docs/adr/README.md`。
 
 ## 交付流程
 
@@ -53,6 +53,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
 - `scripts/dev/run-runtime.sh [Spring 参数]`：以 `dev` profile 在本机启动 runtime（先 `up.sh` 与 `run-control-plane.sh`：API Key 经 control-plane 校验），健康检查 `/actuator/health`。
 - `scripts/dev/dev-api-key.sh`：以 `dev-admin` 经管理 API 建开发租户（所有者也是 `dev-admin`）与项目、签发不限流的 API Key，写入 `deploy/compose/.env` 的 `MERIDIAN_DEV_API_KEY`（压测脚本读它）。
 - 凭据与模型目录（T15a）：`dev` 的 runtime 默认读 `dev-config/providers`；`MERIDIAN_RUNTIME_CATALOG_SOURCE=control-plane scripts/dev/run-runtime.sh --server.port=18080` 改为经 control-plane 解析，`scripts/dev/catalog-smoke.sh [--dashscope]` 经管理 API 建凭据、供应商账号、价格表与模型并调用（逐项 PASS）。凭据库的开发主密钥在 `deploy/compose/data/secret-master-key`（丢了它库中的凭据就解不开）。
+- 智能体配置（T15b）：`dev` 的 runtime 默认读 `dev-config/agents`（`dev-config/` 只用于测试与本地开发）；`MERIDIAN_RUNTIME_AGENT_CONFIG_SOURCE=control-plane` 改为经 control-plane 读取。`scripts/dev/agent-smoke.sh [--dashscope]` 经管理 API 建模型、环境、智能体并发布，再在 runtime 跑一轮会话（两个来源都切到 control-plane 的启动参数见脚本头部注释）。
 - Compose `app` profile（control-plane、runtime、脚本化模型服务与 Keycloak）：`scripts/dev/build-images.sh`（Jib 构建 `agent-meridian/*:dev`）后 `docker compose -f deploy/compose/compose.yaml --env-file deploy/compose/.env --profile app up -d`（没有 `.env` 时用 `.env.example`），端口 18081、18080、18090；`scripts/dev/app-smoke.sh` 跑通一轮会话、改配额、吊销 Key、控制台用户带 `Meridian-Project` 调公开 API 并逐项输出 PASS。
 - kind 沙箱集群（集群名默认 `meridian`，上下文 `kind-meridian`），按顺序：
   1. `scripts/dev/kind-gvisor.sh meridian`：创建带 Calico（执行 NetworkPolicy）与 gVisor 运行时的集群。
