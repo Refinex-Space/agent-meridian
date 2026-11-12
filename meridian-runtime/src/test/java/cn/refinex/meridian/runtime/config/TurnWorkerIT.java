@@ -83,6 +83,7 @@ class TurnWorkerIT {
                         "span.model_request_start",
                         "agent.message",
                         "span.model_request_end",
+                        "session.usage",
                         "session.status_idle");
         assertThat(events.subList(1, events.size()))
                 .allSatisfy(e -> assertThat(e.turnId()).isEqualTo(turnId));

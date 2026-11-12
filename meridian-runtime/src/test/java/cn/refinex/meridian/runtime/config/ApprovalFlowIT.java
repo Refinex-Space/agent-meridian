@@ -136,7 +136,8 @@ class ApprovalFlowIT {
             assertThat(block.getOutput().toString()).contains("不需要写");
         });
         assertThat(types(fixture.events(node, session)))
-                .endsWith("agent.message", "span.model_request_end", "session.status_idle");
+                .as("每轮结束时在终态之前写 session.usage（ADR-0050）")
+                .endsWith("agent.message", "span.model_request_end", "session.usage", "session.status_idle");
     }
 
     @Test
