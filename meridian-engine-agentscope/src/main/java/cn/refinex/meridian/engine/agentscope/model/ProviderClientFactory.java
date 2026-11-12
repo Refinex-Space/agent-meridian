@@ -11,9 +11,9 @@ import io.agentscope.core.model.Model;
  * <p>底层客户端按"供应商账号加模型"缓存（{@link ProviderClients}），所以 {@link #create} 构造的实例<b>不含凭据</b>；
  * 凭据与端点在每次调用时经 {@link #callOptions} 放进本次调用的选项，用完即弃（架构原则第 6 条）。
  *
- * <p>2.0.4 中 OpenAI 兼容（{@code agentscope-extensions-model-openai}）由 {@link OpenAiCompatibleClientFactory} 实现；
- * Anthropic、Gemini 的模型类在 2.0.4 的扩展模块中存在，但分别引入 {@code anthropic-java}、{@code google-genai} SDK，
- * 需要时按本接口加入实现。
+ * <p>实现：OpenAI 兼容（2.0.4 的 {@code OpenAIChatModel}）由 {@link OpenAiCompatibleClientFactory}；Anthropic、Gemini 由
+ * {@link AnthropicClientFactory}、{@link GeminiClientFactory} 构造平台适配器，复用 2.0.4 的 formatter 与响应解析器（ADR-0046：2.0.4
+ * 的这两个模型类只能在构造时给凭据、SDK 自带重试）。DashScope 原生与 Ollama 没有实现。
  */
 public interface ProviderClientFactory {
 

@@ -99,6 +99,8 @@
                                         <include>io.agentscope:agentscope-harness</include>
                                         <include>io.agentscope:agentscope-extensions-sandbox-kubernetes</include>
                                         <include>io.agentscope:agentscope-extensions-model-openai</include>
+                                        <include>io.agentscope:agentscope-extensions-model-anthropic</include>
+                                        <include>io.agentscope:agentscope-extensions-model-gemini</include>
                                     </includes>
                                 </bannedDependencies>
                             </rules>

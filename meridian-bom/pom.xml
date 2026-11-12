@@ -191,6 +191,17 @@
                 <artifactId>agentscope-extensions-model-openai</artifactId>
                 <version>${agentscope.version}</version>
             </dependency>
+            <!-- Anthropic 与 Gemini 的 formatter 与响应解析器（ADR-0046），SDK 版本由它们锁定：anthropic-java 2.52.0、google-genai 1.45.0 -->
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-model-anthropic</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-model-gemini</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
 
             <!-- 不在 Boot 管理范围内的测试与工具依赖 -->
             <dependency>

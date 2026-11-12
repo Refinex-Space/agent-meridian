@@ -1,6 +1,8 @@
 package cn.refinex.meridian.runtime.config;
 
 import cn.refinex.meridian.engine.agentscope.assembly.ModelFactory;
+import cn.refinex.meridian.engine.agentscope.model.AnthropicClientFactory;
+import cn.refinex.meridian.engine.agentscope.model.GeminiClientFactory;
 import cn.refinex.meridian.engine.agentscope.model.OpenAiCompatibleClientFactory;
 import cn.refinex.meridian.engine.agentscope.model.ProviderClients;
 import cn.refinex.meridian.engine.agentscope.model.ProviderHttpTransport;
@@ -40,13 +42,17 @@ public class ModelFactoryAutoConfiguration {
     /**
      * 底层客户端的登记与缓存，智能体的模型与直通接口共享。
      *
-     * @param transport 供应商 HTTP 传输
+     * @param transport 供应商 HTTP 传输（OpenAI 兼容）
+     * @param clock 时钟（Anthropic 的 {@code retry-after}，ADR-0046）
      * @return 登记表
      */
     @Bean
     @ConditionalOnMissingBean
-    public ProviderClients providerClients(ProviderHttpTransport transport) {
-        return new ProviderClients(List.of(new OpenAiCompatibleClientFactory(transport)));
+    public ProviderClients providerClients(ProviderHttpTransport transport, Clock clock) {
+        return new ProviderClients(List.of(
+                new OpenAiCompatibleClientFactory(transport),
+                new AnthropicClientFactory(clock),
+                new GeminiClientFactory(clock)));
     }
 
     /**

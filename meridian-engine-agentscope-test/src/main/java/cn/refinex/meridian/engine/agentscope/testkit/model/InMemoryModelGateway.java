@@ -58,6 +58,17 @@ public final class InMemoryModelGateway implements ModelGateway {
     }
 
     /**
+     * 登记一个完整的路由（供应商类型、端点与凭据由测试给出，例如指向 MockWebServer 的 Anthropic、Gemini 路由）。
+     *
+     * @param route 路由
+     * @return 本网关
+     */
+    public InMemoryModelGateway route(ModelRoute route) {
+        routes.put(route.modelId(), route);
+        return this;
+    }
+
+    /**
      * 设置预算上限（token）；为空表示不限。
      *
      * @param limit 上限

@@ -38,6 +38,14 @@
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-model-openai</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-anthropic</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-gemini</artifactId>
+        </dependency>
         <!-- 智能体实例缓存的容量与空闲淘汰（架构设计「引擎装配」），版本由 Spring Boot 管理 -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
@@ -70,6 +78,8 @@
                                         <include>io.agentscope:agentscope-harness</include>
                                         <include>io.agentscope:agentscope-extensions-sandbox-kubernetes</include>
                                         <include>io.agentscope:agentscope-extensions-model-openai</include>
+                                        <include>io.agentscope:agentscope-extensions-model-anthropic</include>
+                                        <include>io.agentscope:agentscope-extensions-model-gemini</include>
                                     </includes>
                                 </bannedDependencies>
                             </rules>

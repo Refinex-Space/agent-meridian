@@ -877,7 +877,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 - 首包之后的错误不重试、不切换模型，本轮以 `session.error` 结束：连接中断、5xx 一类仍按可重试处理，其余按终止处理。
 - 其余 4xx（认证失败、参数错误）抛 `ProviderRejectedException`，以 `session.error`（`terminal`）结束。
 - 结算：流完成、出错、被取消都会结算（`Flux.usingWhen`）。供应商报告了用量按报告结算；没有报告（被取消、首包之后出错）时按字符数估算的输入与已收到的输出结算并标为估算；首包之前失败只释放预扣、不写用量记录。估算输入 token 按 ASCII 每 3 个字符、其余字符每个 1 个 token，误差方向偏多（ADR-0032）。
-- 供应商 HTTP 走平台的 `ProviderHttpTransport`：2.0.4 自带的传输在流式路径上丢弃响应头，拿不到 `Retry-After`。底层客户端按"供应商账号加模型"缓存且不含凭据，凭据与端点在每次调用的选项中给出（ADR-0032）；Gemini 的 SDK 只能在构造时给密钥，适配器内部按凭据指纹缓存 SDK 客户端，写入 5 分钟后关闭。Anthropic、Gemini 的 SDK 异常转成带状态码的传输异常、`retry-after` 记到本次尝试，分类与 OpenAI 兼容相同；Gemini 不接受 URL 图片（不在 runtime 内下载），以终止错误结束（ADR-0046）。
+- 供应商 HTTP 走平台的 `ProviderHttpTransport`：2.0.4 自带的传输在流式路径上丢弃响应头，拿不到 `Retry-After`。底层客户端按"供应商账号加模型"缓存且不含凭据，凭据与端点在每次调用的选项中给出（ADR-0032）；Gemini 的 SDK 只能在构造时给密钥，适配器内部按凭据指纹缓存 SDK 客户端，写入 5 分钟后关闭。Anthropic、Gemini 的 SDK 异常转成带状态码的传输异常（Anthropic 的 `retry-after` 记到本次尝试，Gemini 的 SDK 异常不带响应头），分类与 OpenAI 兼容相同；Gemini 不接受 URL 图片（不在 runtime 内下载），以终止错误结束（ADR-0046）。
 - `RateLimitTimeoutException` 和可重试的供应商错误，产生 `session.error`（`retry_status=retryable`），平台按"置回队列的三种情况"重新排队。
 - `BudgetExceededException` 以 `budget_exceeded` 结束本轮。
 

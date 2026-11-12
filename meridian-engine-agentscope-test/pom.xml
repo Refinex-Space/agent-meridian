@@ -36,6 +36,12 @@
             <artifactId>agentscope-harness</artifactId>
         </dependency>
 
+        <!-- Anthropic、Gemini 适配器的模拟供应商（T15a，ADR-0046）；版本在 meridian-bom -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>mockwebserver3</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
@@ -83,6 +89,8 @@
                                         <include>io.agentscope:agentscope-harness</include>
                                         <include>io.agentscope:agentscope-extensions-sandbox-kubernetes</include>
                                         <include>io.agentscope:agentscope-extensions-model-openai</include>
+                                        <include>io.agentscope:agentscope-extensions-model-anthropic</include>
+                                        <include>io.agentscope:agentscope-extensions-model-gemini</include>
                                     </includes>
                                 </bannedDependencies>
                             </rules>

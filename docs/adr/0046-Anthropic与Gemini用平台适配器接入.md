@@ -31,7 +31,7 @@ Q3 定了首批供应商为 OpenAI 兼容、Anthropic、Gemini（ADR-0045）。�
 2. **凭据。** Anthropic：SDK 客户端按"账号、模型、端点"构造一次，不带凭据，每次调用用 `withOptions` 派生一个带 `x-api-key` 请求头的视图（共用连接池），用完即弃。Gemini：SDK 要求构造时给密钥，适配器内部按凭据的 SHA-256 指纹缓存 SDK 客户端，写入 5 分钟后过期并关闭（与 runtime 凭据明文的缓存上限一致）；`ProviderClients` 缓存的适配器实例本身不含凭据。
 3. **只尝试一次。** Anthropic 的 `maxRetries(0)`，Gemini 的 `HttpRetryOptions.attempts(1)`；超时由平台设置（与 OpenAI 兼容的传输相同的连接与读取上限），重试只在 `RoutedModel`。
 4. **调度。** SDK 的阻塞流在 `Blocking.scheduler()`（虚拟线程）上迭代与关闭，不用 `boundedElastic`。
-5. **错误分类。** 适配器把 SDK 的状态码异常转成 `HttpTransportException(状态码)`（不带响应体，消息中不含凭据），把 `retry-after` 头记到本次尝试的 `ProviderResponseObserver`；SDK 的 I/O 异常转成可重试的传输异常。`ProviderErrors` 的分类与 OpenAI 兼容类型一致。
+5. **错误分类。** 适配器把 SDK 的状态码异常转成 `HttpTransportException(状态码)`（不带响应体，消息中不含凭据）；Anthropic 的 `retry-after` 头记到本次尝试的 `ProviderResponseObserver`，`google-genai` 的 `ApiException` 不带响应头，Gemini 只按指数退避；SDK 的 I/O 异常转成可重试的传输异常。`ProviderErrors` 的分类与 OpenAI 兼容类型一致。
 6. **图片地址。** 入口只接受 `http(s)` 的 `image.url`（ADR-0045）：Anthropic 把它作为 URL 来源交给供应商下载；Gemini 适配器遇到 URL 来源的图片或数据块以 `ProviderRejectedException`（终止）结束本次调用，不在 runtime 内下载。平台文件中的图片随 T17b 以内联数据交给模型。
 7. **范围。** `ModelGateway.Provider` 中的 `DASHSCOPE`、`OLLAMA` 仍没有实现，control-plane 只允许创建 `openai_compatible`、`anthropic`、`gemini` 三种供应商账号；Embedding 与 rerank 只在 OpenAI 兼容账号下（ADR-0045）。
 
@@ -39,5 +39,5 @@ Q3 定了首批供应商为 OpenAI 兼容、Anthropic、Gemini（ADR-0045）。�
 
 - 架构设计「模型调用」第 1 步与错误处理：Anthropic、Gemini 由平台适配器复用 2.0.4 的 formatter 与解析器；凭据、重试、调度、错误分类的约定同上。技术基线的模型一行补两个扩展构件。版本号递增。
 - 代码：`meridian-bom`（两个构件）、`meridian-engine-agentscope`（POM 与 enforcer 放行、两个工厂与适配器、`ProviderClientFactory` 的说明）、runtime 的 `ModelFactoryAutoConfiguration` 登记两个工厂。
-- 验证：`meridian-engine-agentscope-test` 中用 MockWebServer 模拟两家的流式接口：文本与工具调用的流、用量、每次调用的凭据头、500 只请求一次、429 的 `retry-after`、401 为拒绝、Gemini 拒绝 URL 图片。本机没有两家的真实密钥，没有 `-Plive` 验证，接入真实账号后补跑（T23 的连通性测试）。
+- 验证：`meridian-engine-agentscope-test` 的 `model.ProviderAdaptersIT` 用 MockWebServer 模拟两家的流式接口，经真实的 `RoutedModel`：文本与工具调用的流、用量、每次调用的凭据头（同一个底层客户端换凭据）、5xx 时请求数等于平台的 1 加 2 次重试（SDK 不重试）、Anthropic 429 的 `retry-after`、4xx 为拒绝、Gemini 拒绝 URL 图片且不发请求。本机没有两家的真实密钥，没有 `-Plive` 验证，接入真实账号后补跑（T23 的连通性测试）。
 - 风险：2.1 升级时两个 formatter 与解析器的签名可能变化（T30 复查）；Gemini 每 5 分钟、每个凭据新建一次 SDK 客户端，多一次 TLS 握手。

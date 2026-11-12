@@ -185,7 +185,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 - [x] 4. 凭据库：信封加密、`KeyEncryptionService`（本地主密钥、Vault Transit）、管理 API（写入、轮换、删除、列表与引用方）、`/internal/v1/secrets:resolve`（服务 JWT、租户校验、审计、最后使用时间）
 - [x] 5. 供应商账号、模型、价格表的管理 API 与内部解析接口；删除被引用的资源返回冲突；`config.invalidate` 发布（control-plane 全部 IT 390 个通过；顺带修了租户设置带联网搜索后端时 500 的规范问题）
 - [x] 6. runtime：基于 control-plane 的 `SecretResolver` 与模型目录（缓存、失效通知、兜底过期、租户校验），文件实现只留 dev/test；用量消息带价格表版本（`ControlPlaneCatalogIT`、`-Plive` 的 `ControlPlaneCatalogLiveIT` 通过；端点策略允许显式放行保留段，本机 fake-ip 解析到 198.18.0.0/15）
-- [ ] 7. engine：Anthropic、Gemini 适配器与错误分类（D25），模拟服务测试
+- [x] 7. engine：Anthropic、Gemini 适配器与错误分类（D25），模拟服务测试（`ProviderAdaptersIT` 8 个通过）
 - [ ] 8. 验收测试：A01（明文不可读、密文、租户数据密钥、审计、日志与事件扫描）、A02（Vault Testcontainers）、A03（scripted 与 `-Plive`）、A04（价格表版本）、A05（失效与冲突）
 - [ ] 9. 收尾：`verify.sh`、模块与根 `CLAUDE.md`、架构与规范文档、`acceptance.json`、`PLAN.md`
 
