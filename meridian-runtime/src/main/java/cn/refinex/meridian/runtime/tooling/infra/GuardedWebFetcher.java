@@ -2,8 +2,8 @@ package cn.refinex.meridian.runtime.tooling.infra;
 
 import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.common.error.ForbiddenException;
+import cn.refinex.meridian.common.net.AddressPolicy;
 import cn.refinex.meridian.engine.spi.port.WebFetchPort;
-import cn.refinex.meridian.runtime.tooling.domain.AddressPolicy;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;

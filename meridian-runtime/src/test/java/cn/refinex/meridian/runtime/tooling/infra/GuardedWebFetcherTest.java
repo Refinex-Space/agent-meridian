@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import cn.refinex.meridian.common.error.ForbiddenException;
+import cn.refinex.meridian.common.net.AddressPolicy;
 import cn.refinex.meridian.engine.spi.port.WebFetchPort;
-import cn.refinex.meridian.runtime.tooling.domain.AddressPolicy;
 import io.netty.resolver.AbstractAddressResolver;
 import io.netty.resolver.AddressResolver;
 import io.netty.resolver.AddressResolverGroup;

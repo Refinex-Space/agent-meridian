@@ -343,6 +343,19 @@ class SessionApiIT extends ApiTestBase {
                 Map.of());
         assertProblem(badImage, 400, "request.validation_failed");
         assertThat(badImage.body().get("errors").get(0).get("field").asString()).isEqualTo("events[0].content[0]");
+
+        // D52：本机路径与其他协议的图片地址在入口拒绝，不会交给模型转换器读本机文件
+        for (String url :
+                new String[] {"file:///etc/passwd", "/etc/passwd", "jar:file:/x.jar!/a.png", "http:///a.png"}) {
+            ApiResponse localImage = api.sendEvents(
+                    sessionId,
+                    "{\"events\":[{\"type\":\"user.message\",\"content\":[{\"type\":\"image\",\"url\":\"" + url
+                            + "\"}]}]}",
+                    null);
+            assertProblem(localImage, 400, "request.validation_failed");
+            assertThat(localImage.body().get("errors").get(0).get("field").asString())
+                    .isEqualTo("events[0].content[0].url");
+        }
     }
 
     @Test

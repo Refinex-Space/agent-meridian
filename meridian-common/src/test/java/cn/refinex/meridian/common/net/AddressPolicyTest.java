@@ -1,14 +1,15 @@
-package cn.refinex.meridian.runtime.tooling.domain;
+package cn.refinex.meridian.common.net;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import cn.refinex.meridian.common.net.AddressPolicy.AddressClass;
 import java.net.InetAddress;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** SSRF 地址策略的表驱动测试（T10b-A01）：IP 分类与各种 IP 写法。 */
+/** SSRF 地址策略的表驱动测试（T10b-A01、T15a）：web_fetch 的判定、地址类别与各种 IP 写法。 */
 class AddressPolicyTest {
 
     @ParameterizedTest(name = "{0} 被拒绝：{1}")
@@ -111,5 +112,39 @@ class AddressPolicyTest {
     @ValueSource(strings = {"256.0.0.1", "1.2.3.4.5", "08.0.0.1", "4294967296", "1.2.65536", "[::g]"})
     void ambiguousNumericHostsAreRejected(String host) {
         assertThatThrownBy(() -> AddressPolicy.literal(host)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @ParameterizedTest(name = "{0} 属于 {1}")
+    @CsvSource(
+            delimiter = '|',
+            value = {
+                "10.1.2.3               | PRIVATE",
+                "172.20.0.1             | PRIVATE",
+                "192.168.0.1            | PRIVATE",
+                "100.64.0.1             | PRIVATE",
+                "fd12:3456::1           | PRIVATE",
+                "::ffff:10.0.0.1        | PRIVATE",
+                "64:ff9b::a00:1         | PRIVATE",
+                "127.0.0.1              | LOOPBACK",
+                "::1                    | LOOPBACK",
+                "169.254.0.1            | LINK_LOCAL",
+                "fe80::1                | LINK_LOCAL",
+                "169.254.169.254        | METADATA",
+                "100.100.100.200        | METADATA",
+                "fd00:ec2::254          | METADATA",
+                "::ffff:169.254.169.254 | METADATA",
+                "0.0.0.0                | UNSPECIFIED",
+                "::                     | UNSPECIFIED",
+                "224.0.0.1              | MULTICAST",
+                "ff02::1                | MULTICAST",
+                "192.0.0.192            | RESERVED",
+                "255.255.255.255        | RESERVED",
+                "2001:0:4136:e378::1    | RESERVED",
+                "8.8.8.8                | PUBLIC",
+                "2606:4700:4700::1111   | PUBLIC"
+            })
+    void classifiesAddresses(String address, AddressClass expected) throws Exception {
+        assertThat(AddressPolicy.classify(InetAddress.getByName(address.strip())))
+                .isEqualTo(expected);
     }
 }

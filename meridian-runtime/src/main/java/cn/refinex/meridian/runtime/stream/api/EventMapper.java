@@ -24,8 +24,11 @@ import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
 import cn.refinex.meridian.engine.spi.event.UserEvent;
 import cn.refinex.meridian.runtime.stream.app.EventEnvelopes;
 import cn.refinex.meridian.runtime.stream.domain.StoredEvent;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 事件的 DTO 映射。请求中的用户事件转为 engine-spi 的 {@link UserEvent}；存储的事件按信封 JSON 解析为响应 DTO，
@@ -118,10 +121,32 @@ final class EventMapper {
                             "图片块的 url 与 file_id 必须恰好给出一个",
                             List.of(new FieldViolation(field, "url 与 file_id 必须恰好给出一个")));
                 }
+                if (image.getUrl() != null && !isHttpUrl(image.getUrl())) {
+                    throw new ValidationException(
+                            CommonErrorCode.VALIDATION_FAILED,
+                            "图片块的 url 只能是 http 或 https 地址",
+                            List.of(new FieldViolation(field + ".url", "只能是带主机的 http 或 https 地址")));
+                }
                 yield new MessageContent.Image(image.getUrl(), image.getFileId(), image.getMediaType());
             }
             case FileBlock file ->
                 new MessageContent.FileRef(file.getFileId(), file.getFilename(), file.getMediaType());
         };
+    }
+
+    /**
+     * 图片地址只能是带主机的 http、https 绝对地址（ADR-0045 第 6 条，登记事项 D52）：AgentScope 的部分模型转换器把其他写法当作本机
+     * 路径读取。
+     */
+    private static boolean isHttpUrl(String url) {
+        try {
+            URI uri = new URI(url.strip());
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            return (scheme.equals("http") || scheme.equals("https"))
+                    && uri.getRawAuthority() != null
+                    && !uri.getRawAuthority().isBlank();
+        } catch (URISyntaxException e) {
+            return false;
+        }
     }
 }
