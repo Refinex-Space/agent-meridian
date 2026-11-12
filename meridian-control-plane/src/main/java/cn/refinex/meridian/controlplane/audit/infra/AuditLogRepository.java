@@ -4,6 +4,7 @@ import cn.refinex.meridian.common.json.JsonMappers;
 import cn.refinex.meridian.common.page.Cursor;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.controlplane.audit.domain.AuditEntry;
+import cn.refinex.meridian.controlplane.audit.domain.AuditFilter;
 import cn.refinex.meridian.persistence.jdbc.JdbcValues;
 import cn.refinex.meridian.persistence.tenant.TenantScope;
 import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
@@ -35,7 +36,7 @@ public class AuditLogRepository extends TenantScopedRepository {
      * @param page 分页参数
      * @return 最多 {@code page.fetchSize()} 条
      */
-    public List<AuditEntry> search(Filter filter, PageRequest page) {
+    public List<AuditEntry> search(AuditFilter filter, PageRequest page) {
         Cursor after = page.after();
         return sql("""
                         SELECT * FROM cp.audit_logs
@@ -89,26 +90,4 @@ public class AuditLogRepository extends TenantScopedRepository {
                 rs.getString("session_id"),
                 JsonMappers.lenient().readValue(rs.getString("details"), Map.class));
     }
-
-    /**
-     * 查询条件；为空的条件不参与过滤。
-     *
-     * @param from 起始时间（含）
-     * @param to 结束时间（不含）
-     * @param action 动作
-     * @param actor 操作者
-     * @param resourceType 资源类型
-     * @param resourceId 资源 ID
-     * @param projectId 项目 ID
-     * @param sessionId 会话 ID
-     */
-    public record Filter(
-            Instant from,
-            Instant to,
-            String action,
-            String actor,
-            String resourceType,
-            String resourceId,
-            String projectId,
-            String sessionId) {}
 }

@@ -7,6 +7,7 @@ import cn.refinex.meridian.common.error.ValidationException;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.common.page.PageResult;
 import cn.refinex.meridian.controlplane.audit.domain.AuditEntry;
+import cn.refinex.meridian.controlplane.audit.domain.AuditFilter;
 import cn.refinex.meridian.controlplane.audit.infra.AuditLogRepository;
 import cn.refinex.meridian.controlplane.web.Scopes;
 import java.time.Clock;
@@ -44,7 +45,7 @@ public class AuditQuery {
      * @param page 分页参数
      * @return 一页审计，从新到旧
      */
-    public PageResult<AuditEntry> search(String tenantId, AuditLogRepository.Filter filter, PageRequest page) {
+    public PageResult<AuditEntry> search(String tenantId, AuditFilter filter, PageRequest page) {
         Instant to = filter.to() == null ? clock.instant() : filter.to();
         Instant from = filter.from() == null ? to.minus(DEFAULT_RANGE) : filter.from();
         if (!from.isBefore(to)) {
@@ -53,15 +54,7 @@ public class AuditQuery {
                     "起始时间必须早于结束时间",
                     List.of(new FieldViolation("from", "起始时间必须早于结束时间")));
         }
-        AuditLogRepository.Filter bounded = new AuditLogRepository.Filter(
-                from,
-                to,
-                filter.action(),
-                filter.actor(),
-                filter.resourceType(),
-                filter.resourceId(),
-                filter.projectId(),
-                filter.sessionId());
+        AuditFilter bounded = filter.between(from, to);
         return PlatformContexts.call(
                 Scopes.tenant(tenantId),
                 () -> PageResult.of(repository.search(bounded, page), page, AuditLogRepository::cursorOf));

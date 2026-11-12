@@ -6,7 +6,7 @@ import cn.refinex.meridian.api.admin.model.AuditLogPage;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.controlplane.audit.app.AuditQuery;
 import cn.refinex.meridian.controlplane.audit.domain.AuditEntry;
-import cn.refinex.meridian.controlplane.audit.infra.AuditLogRepository;
+import cn.refinex.meridian.controlplane.audit.domain.AuditFilter;
 import cn.refinex.meridian.controlplane.openapi.admin.AuditLogsApi;
 import cn.refinex.meridian.controlplane.web.Times;
 import cn.refinex.meridian.security.rbac.Permission;
@@ -46,7 +46,7 @@ public class AuditLogsApiController implements AuditLogsApi {
             String after) {
         var page = audits.search(
                 tenantId,
-                new AuditLogRepository.Filter(
+                new AuditFilter(
                         from == null ? null : Times.instant(from),
                         to == null ? null : Times.instant(to),
                         action,
