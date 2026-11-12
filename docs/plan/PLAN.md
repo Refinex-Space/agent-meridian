@@ -81,7 +81,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | a9db160 |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 4c867bf |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 已完成 | f5de788 |
-| T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 未开始 | — |
+| T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 进行中 | — |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 未开始 | — |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 未开始 | — |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 未开始 | — |
@@ -175,7 +175,16 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T17a（开工基线 `scripts/dev/verify.sh` 通过，2026-11-12）：
+
+- [ ] ADR-0049、架构设计与规范（Webhook、会话清理、事件归档与保留）
+- [ ] control-plane：`cp.webhooks`、管理接口、内部接口（订阅与签名密钥、租户保留天数）
+- [ ] runtime：Webhook 投递（订阅事件写入、投递器、签名、退避、投递记录与重投接口）（A01）
+- [ ] runtime：会话删除的清理作业（数据库、对象存储、kind 沙箱、审计、可重试）（A02）
+- [ ] runtime：事件归档与透明读取（列表与 SSE 补发）（A03）
+- [ ] runtime：事件保留（租户配置、到期删除事件与归档文件、审计）（A04）
+- [ ] 登记事项 D30、D35、D37（删除会话的残留部分）、D42、D50 C-10/C-11，评估 D48、D49
+- [ ] 收尾：模块 `CLAUDE.md`、文档、`acceptance.json`、`verify.sh`（A05）
 
 ## 控制台设计轨道
 
