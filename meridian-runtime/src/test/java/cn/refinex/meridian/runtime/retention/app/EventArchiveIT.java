@@ -24,6 +24,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * 事件归档（T17a-A03，ADR-0049）：会话 90 天无活动后，事件写进对象存储的归档文件、数据库中删除；{@code GET /v1/sessions/{id}/events}
@@ -94,7 +95,8 @@ class EventArchiveIT extends ApiTestBase {
                 .containsExactly(1L, 2L, 3L, 4L, 5L, 6L, 7L);
         List<SseTestClient.Frame> frames = stream(sessionId, "", null);
         for (int i = 0; i < 5; i++) {
-            assertThat(json(frames.get(i).data())).isEqualTo(before.get(i));
+            // SSE 帧的时间由 Instant 序列化（保留 6 位小数），列表接口经 OffsetDateTime（去掉末尾的 0）：按时刻比较
+            assertThat(normalized(json(frames.get(i).data()))).isEqualTo(normalized(before.get(i)));
         }
 
         // 再次归档：合并旧文件与数据库中的新事件，删除旧文件
@@ -155,6 +157,13 @@ class EventArchiveIT extends ApiTestBase {
 
     private static JsonNode json(String text) {
         return cn.refinex.meridian.common.json.JsonMappers.lenient().readTree(text);
+    }
+
+    /** 事件信封的副本，{@code created_at} 换成规范的时刻表示，其余字段原样。 */
+    private static JsonNode normalized(JsonNode event) {
+        ObjectNode copy = (ObjectNode) event.deepCopy();
+        copy.put("created_at", Instant.parse(event.get("created_at").asString()).toString());
+        return copy;
     }
 
     /** 可控时钟。 */

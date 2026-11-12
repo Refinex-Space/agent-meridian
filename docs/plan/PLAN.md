@@ -82,7 +82,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 4c867bf |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 已完成 | f5de788 |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 已完成 | 9aa41da |
-| T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 未开始 | — |
+| T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 进行中 | — |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 未开始 | — |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 未开始 | — |
 | T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 未开始 | — |
@@ -175,7 +175,17 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T17b（开工基线：`verify.sh` 中 `EventArchiveIT` 偶发失败，SSE 与列表接口的 `created_at` 小数位表示不同，先修测试的比较）：
+
+- [ ] 基线：`EventArchiveIT` 按时刻比较 `created_at`
+- [ ] 设计：ADR-0050、架构设计、`meridian-v1.yaml`（文件、工作区、`session.usage`、`/v1/responses`）
+- [ ] 文件：`rt.files`、上传与查询、服务端检测 MIME、文件名规范化、大小上限
+- [ ] 文件引用：发送事件时校验与补全，轮次开始放进工作区（两档），翻译为工作区路径（D07）
+- [ ] 工作区 API：两档、受保护路径、路径穿越
+- [ ] `session.usage`：每轮结束，本轮与会话累计，与账本一致
+- [ ] `/v1/responses` 子集（D26 一并评估）
+- [ ] D54 中留给 T17b 的重复实现
+- [ ] 验收 A01–A05，收尾
 
 ## 控制台设计轨道
 
