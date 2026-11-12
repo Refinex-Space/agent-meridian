@@ -124,7 +124,12 @@ class AdminOpenApiSpecTest {
             "GET /admin/v1/tenants/{tenant_id}/budget-alerts",
             "GET /admin/v1/tenants/{tenant_id}/usage",
             "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/usage",
-            "GET /admin/v1/tenants/{tenant_id}/audit-logs");
+            "GET /admin/v1/tenants/{tenant_id}/audit-logs",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/webhooks",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/webhooks",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/webhooks/{webhook_id}",
+            "PUT /admin/v1/tenants/{tenant_id}/projects/{project_id}/webhooks/{webhook_id}",
+            "DELETE /admin/v1/tenants/{tenant_id}/projects/{project_id}/webhooks/{webhook_id}");
 
     private static final Set<PathItem.HttpMethod> WRITES = Set.of(
             PathItem.HttpMethod.POST, PathItem.HttpMethod.PUT, PathItem.HttpMethod.PATCH, PathItem.HttpMethod.DELETE);

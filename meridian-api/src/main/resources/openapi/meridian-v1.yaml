@@ -48,6 +48,8 @@ tags:
     description: 智能体（只读）：本项目已发布的智能体与它们当前的版本，创建会话时引用。由 control-plane 提供（ADR-0047）。
   - name: Usage
     description: 用量：本项目的用量按天、模型、智能体、API Key 聚合，与账本一致。由 control-plane 提供（ADR-0048）。
+  - name: Webhooks
+    description: Webhook 投递记录：查询与手动重投。Webhook 的配置在管理 API（ADR-0049）。
 
 paths:
   /v1/sessions:
@@ -807,6 +809,128 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /v1/webhook-deliveries:
+    get:
+      operationId: listWebhookDeliveries
+      tags: [Webhooks]
+      summary: 列出 Webhook 投递记录
+      description: |
+        列出本项目的投递记录，新创建的在前；条件之间是"且"。每个 Webhook 每个事件一条记录，手动重投另生成一条。记录保留 30 天，会话被
+        删除并清理后，它的记录随之删除。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+        - name: webhook_id
+          in: query
+          description: 只列出该 Webhook 的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: session_id
+          in: query
+          description: 只列出该会话的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: status
+          in: query
+          description: 只列出该状态的记录。
+          schema:
+            $ref: '#/components/schemas/WebhookDeliveryStatus'
+      responses:
+        '200':
+          description: 投递记录列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDeliveryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/webhook-deliveries/{delivery_id}:
+    parameters:
+      - $ref: '#/components/parameters/DeliveryId'
+    get:
+      operationId: getWebhookDelivery
+      tags: [Webhooks]
+      summary: 查看 Webhook 投递记录
+      security:
+        - ApiKeyAuth: [sessions:read]
+      responses:
+        '200':
+          description: 投递记录。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDelivery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WebhookDeliveryNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/webhook-deliveries/{delivery_id}:redeliver:
+    parameters:
+      - $ref: '#/components/parameters/DeliveryId'
+    post:
+      operationId: redeliverWebhookDelivery
+      tags: [Webhooks]
+      summary: 手动重投
+      description: |
+        以原记录的 Webhook 与事件生成一条新的投递记录并立即进入投递（`redelivery_of` 指向原记录），请求体与事件 `id` 不变，接收方按
+        事件 `id` 去重。新记录按当前的 Webhook 配置投递，同样按退避重试，24 小时内最多 8 次。
+      security:
+        - ApiKeyAuth: [sessions:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 新的投递记录，状态为 `pending`。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDelivery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WebhookDeliveryNotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -833,6 +957,13 @@ components:
         minimum: 1
 
   parameters:
+    DeliveryId:
+      name: delivery_id
+      in: path
+      required: true
+      description: 投递记录 ID（whd_…）。
+      schema:
+        type: string
     SessionId:
       name: session_id
       in: path
@@ -917,6 +1048,15 @@ components:
             $ref: '#/components/schemas/Problem'
     Forbidden:
       description: '`auth.insufficient_scope`：API Key 缺少该操作所需的作用域。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    WebhookDeliveryNotFound:
+      description: '`webhook_delivery.not_found`：投递记录不存在、已过保留期，或不属于当前项目。'
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -1025,6 +1165,77 @@ components:
             $ref: '#/components/schemas/Problem'
 
   schemas:
+    WebhookDeliveryStatus:
+      description: 投递状态：`pending` 等待投递或重试，`succeeded` 接收方返回了 2xx，`failed` 重试用尽、过了截止时间或 Webhook 已删除、停用。
+      type: string
+      enum: [pending, succeeded, failed]
+    WebhookDelivery:
+      description: 一个 Webhook 对一个事件的投递记录。
+      type: object
+      required: [id, webhook_id, session_id, event_id, event_type, status, attempts, next_attempt_at, last_attempt_at,
+                 last_response_status, last_error, redelivery_of, created_at, completed_at]
+      properties:
+        id:
+          description: 投递记录 ID（whd_…）。
+          type: string
+        webhook_id:
+          description: Webhook ID（whk_…）。
+          type: string
+        session_id:
+          description: 事件所属的会话。
+          type: string
+        event_id:
+          description: 事件 ID（evt_…），接收方据此去重。
+          type: string
+        event_type:
+          description: 事件类型。
+          type: string
+        status:
+          $ref: '#/components/schemas/WebhookDeliveryStatus'
+        attempts:
+          description: 已尝试的次数，至多 8。
+          type: integer
+        next_attempt_at:
+          description: 下一次尝试的时间；不再尝试时为 null。
+          type: [string, 'null']
+          format: date-time
+        last_attempt_at:
+          description: 最近一次尝试的时间；还没有尝试时为 null。
+          type: [string, 'null']
+          format: date-time
+        last_response_status:
+          description: 最近一次尝试收到的 HTTP 状态码；没有收到响应（连接失败、超时、地址被拒绝）时为 null。
+          type: [integer, 'null']
+        last_error:
+          description: 最近一次失败的原因；成功或还没有尝试时为 null。
+          type: [string, 'null']
+        redelivery_of:
+          description: 手动重投时为原记录 ID；否则为 null。
+          type: [string, 'null']
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        completed_at:
+          description: 成功或最终失败的时间；仍在投递时为 null。
+          type: [string, 'null']
+          format: date-time
+    WebhookDeliveryPage:
+      description: 一页投递记录。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookDelivery'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
     Problem:
       description: RFC 9457 错误响应，扩展字段 `code` 与 `request_id`。
       type: object

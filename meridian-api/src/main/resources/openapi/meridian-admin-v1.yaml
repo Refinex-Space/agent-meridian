@@ -55,6 +55,8 @@ tags:
     description: 用量报表：按账本明细聚合，成本按记录中的价格表版本计算（ADR-0048）。
   - name: AuditLogs
     description: 审计日志：只追加，按时间、操作者、资源、动作检索（ADR-0048）。
+  - name: Webhooks
+    description: 项目的 Webhook：会话状态变化时 runtime 向业务系统推送事件，签名密钥只在创建时返回一次；投递记录与重投在公开 API（ADR-0049）。
 
 paths:
   /admin/v1/tenants:
@@ -2763,6 +2765,150 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/webhooks:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: createWebhook
+      tags: [Webhooks]
+      summary: 创建 Webhook
+      description: |
+        地址只允许 http、https，按地址策略校验：链路本地与云元数据地址始终拒绝，内网与回环地址只在平台放行的网段内允许（企业内的
+        接收方由平台配置放行）。签名密钥由平台生成，**只在本响应中出现一次**（幂等重放同样返回）；之后无法再读出，丢失时删除后重建。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+            example:
+              url: https://crm.example.com/hooks/meridian
+              events: [session.status_idle, session.status_requires_action]
+              description: CRM 工单回写
+              enabled: true
+      responses:
+        '201':
+          description: 已创建，带签名密钥明文。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedWebhook'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listWebhooks
+      tags: [Webhooks]
+      summary: 列出 Webhook
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: Webhook 列表，按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/webhooks/{webhook_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WebhookId'
+    get:
+      operationId: getWebhook
+      tags: [Webhooks]
+      summary: 查看 Webhook
+      responses:
+        '200':
+          $ref: '#/components/responses/WebhookOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateWebhook
+      tags: [Webhooks]
+      summary: 修改 Webhook
+      description: |
+        整体替换地址、订阅的事件、说明与是否启用，签名密钥不变。之后的每次投递都按新配置（最长 60 秒后各 runtime 节点生效）；停用后
+        尚未成功的投递以失败结束。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/WebhookOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteWebhook
+      tags: [Webhooks]
+      summary: 删除 Webhook
+      description: |
+        删除后不再产生新的投递，尚未成功的投递以失败结束；已有的投递记录仍可在公开 API 查询，直到过了保留期。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ConsoleAuth:
@@ -2938,6 +3084,13 @@ components:
       in: path
       required: true
       description: 权限规则 ID（prl_…）。
+      schema:
+        type: string
+    WebhookId:
+      name: webhook_id
+      in: path
+      required: true
+      description: Webhook ID（whk_…）。
       schema:
         type: string
 
@@ -3270,6 +3423,17 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/McpServer'
+    WebhookOk:
+      description: Webhook（不含签名密钥）。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Webhook'
     McpServerOk:
       description: MCP 服务。
       headers:
@@ -4973,6 +5137,135 @@ components:
           type: string
         side_effect:
           $ref: '#/components/schemas/SideEffect'
+    WebhookEventType:
+      description: 可订阅的事件类型（架构设计「Webhook」）。
+      type: string
+      enum: [session.status_idle, session.status_requires_action, session.error, session.status_terminated]
+    WebhookRequest:
+      description: Webhook 的内容（创建，或整体替换）。
+      type: object
+      required: [url, events]
+      additionalProperties: false
+      properties:
+        url:
+          description: 接收方地址，http 或 https，不带用户信息。
+          type: string
+          minLength: 1
+          maxLength: 2048
+        events:
+          description: 订阅的事件类型，至少一个，不重复。
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        description:
+          description: 说明；可空。
+          type: [string, 'null']
+          maxLength: 500
+        enabled:
+          description: 是否启用，默认启用。
+          type: boolean
+    Webhook:
+      description: 项目的 Webhook。签名密钥不在其中。
+      type: object
+      required: [id, tenant_id, project_id, url, events, description, enabled, created_by, created_at, updated_at]
+      properties:
+        id:
+          description: Webhook ID（whk_…）。
+          type: string
+        tenant_id:
+          description: 租户 ID。
+          type: string
+        project_id:
+          description: 项目 ID。
+          type: string
+        url:
+          description: 接收方地址。
+          type: string
+        events:
+          description: 订阅的事件类型。
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        description:
+          description: 说明；没有时为 null。
+          type: [string, 'null']
+        enabled:
+          description: 是否启用。
+          type: boolean
+        created_by:
+          description: 创建者的主体标识。
+          type: string
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    CreatedWebhook:
+      description: 新建的 Webhook，带签名密钥明文（只出现这一次）。
+      type: object
+      required: [id, tenant_id, project_id, url, events, description, enabled, created_by, created_at, updated_at, signing_secret]
+      properties:
+        id:
+          description: Webhook ID（whk_…）。
+          type: string
+        tenant_id:
+          description: 租户 ID。
+          type: string
+        project_id:
+          description: 项目 ID。
+          type: string
+        url:
+          description: 接收方地址。
+          type: string
+        events:
+          description: 订阅的事件类型。
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        description:
+          description: 说明；没有时为 null。
+          type: [string, 'null']
+        enabled:
+          description: 是否启用。
+          type: boolean
+        created_by:
+          description: 创建者的主体标识。
+          type: string
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+        signing_secret:
+          description: |
+            签名密钥（whsec_…）。接收方用它校验 `Meridian-Signature: t={ts},v1={hex}`：`v1` 是以密钥对 `{ts}.{请求体原文}` 计算的
+            HMAC-SHA256 的十六进制，`ts` 是 Unix 秒。
+          type: string
+    WebhookPage:
+      description: 一页 Webhook。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/Webhook'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
     McpServerPage:
       description: 一页 MCP 服务。
       type: object

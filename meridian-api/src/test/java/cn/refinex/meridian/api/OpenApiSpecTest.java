@@ -51,7 +51,10 @@ class OpenApiSpecTest {
             "POST /v1/embeddings",
             "GET /v1/agents",
             "GET /v1/agents/{agent_id}",
-            "GET /v1/usage");
+            "GET /v1/usage",
+            "GET /v1/webhook-deliveries",
+            "GET /v1/webhook-deliveries/{delivery_id}",
+            "POST /v1/webhook-deliveries/{delivery_id}:redeliver");
 
     /** 架构设计「事件」的事件类型清单中，持久化的 agent、session、span 与 user 四个域。 */
     private static final Set<String> EXPECTED_SESSION_EVENTS = Set.of(

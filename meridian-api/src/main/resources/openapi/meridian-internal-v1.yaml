@@ -9,7 +9,7 @@ info:
 
     **提供方。** 标签 `InternalModels`、`InternalEgress` 由 runtime 提供；`InternalServiceTokens`、`InternalApiKeys`、
     `InternalTenants`、`InternalProjectAccess`、`InternalSecrets`、`InternalModelCatalog`、`InternalAgentConfig`、
-    `InternalPermissionRules` 由 control-plane 提供（ADR-0042、ADR-0044、ADR-0045、ADR-0047）。各服务只生成并实现自己的标签。
+    `InternalPermissionRules`、`InternalWebhooks` 由 control-plane 提供（ADR-0042、ADR-0044、ADR-0045、ADR-0047、ADR-0049）。各服务只生成并实现自己的标签。
 
     **认证。** `/internal/` 下的请求带 `Authorization: Bearer <服务 JWT>`：control-plane 签发，RS256，有效 5 分钟，`aud` 是被调用
     的服务名，`sub` 是调用方服务名。服务用自己的客户端密钥在 `POST /oauth2/token` 换取（OAuth2 客户端凭据模式），公钥在
@@ -45,6 +45,8 @@ tags:
     description: control-plane 提供：已发布的智能体版本、环境修订与技能内容，runtime 据此装配引擎（ADR-0047）。
   - name: InternalPermissionRules
     description: control-plane 提供：租户与项目策略，以及“记住此决定”写入的项目级规则（ADR-0047）。
+  - name: InternalWebhooks
+    description: control-plane 提供：项目的 Webhook 订阅与签名密钥，runtime 据此投递（架构设计「Webhook」，ADR-0049）。
 
 paths:
   /internal/v1/embeddings:
@@ -230,7 +232,8 @@ paths:
       summary: 租户配额
       description: |
         调用方：`runtime`、`knowledge`。runtime 为租户创建并发计数行时读取 `max_concurrent_turns`；control-plane 修改配额后发布 Pub/Sub `config.invalidate`
-        （`{"type":"tenant_quota","tenant_id":"ten_…"}`），runtime 收到后重新读取并更新计数行。已删除的租户 404 `tenant.not_found`。
+        （`{"type":"tenant_quota","tenant_id":"ten_…"}`），runtime 收到后重新读取并更新计数行。runtime 的事件保留清理每次读取
+        `event_retention_days`（ADR-0049）。已删除的租户 404 `tenant.not_found`。
       parameters:
         - name: tenant_id
           in: path
@@ -251,6 +254,7 @@ paths:
               example:
                 tenant_id: ten_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
                 max_concurrent_turns: 20
+                event_retention_days: 365
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -607,6 +611,45 @@ paths:
                 $ref: '#/components/schemas/InternalPermissionRule'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/ProjectNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/projects/{project_id}/webhooks:
+    get:
+      operationId: listInternalProjectWebhooks
+      tags: [InternalWebhooks]
+      summary: 项目的 Webhook 与签名密钥
+      description: |
+        调用方：`runtime`。投递器按项目读取订阅（含停用的，投递时停用即失败），按创建顺序，不分页。响应带签名密钥明文与
+        `Cache-Control: no-store`。runtime 缓存 60 秒，收到 `config.invalidate` 的 `webhook` 消息淘汰该租户的缓存。项目不存在或已删除时
+        404 `project.not_found`。
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 项目 ID（prj_…）。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 项目的全部 Webhook。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Cache-Control:
+              description: 固定为 `no-store`。
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalWebhookList'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1330,7 +1373,7 @@ components:
     TenantQuota:
       description: 租户配额。
       type: object
-      required: [tenant_id, max_concurrent_turns]
+      required: [tenant_id, max_concurrent_turns, event_retention_days]
       properties:
         tenant_id:
           description: 租户 ID。
@@ -1338,6 +1381,49 @@ components:
         max_concurrent_turns:
           description: 并发配额：该租户同时执行的轮次上限。
           type: integer
+        event_retention_days:
+          description: 会话事件的保留天数，至少 1（架构设计「数据保留」）。
+          type: integer
+          minimum: 1
+    InternalWebhookList:
+      description: 项目的 Webhook。
+      type: object
+      required: [data]
+      properties:
+        data:
+          description: Webhook，按创建顺序。
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalWebhook'
+    InternalWebhook:
+      description: 一个 Webhook 的投递配置。
+      type: object
+      required: [id, tenant_id, project_id, url, events, enabled, signing_secret]
+      properties:
+        id:
+          description: Webhook ID（whk_…）。
+          type: string
+        tenant_id:
+          description: 租户 ID。
+          type: string
+        project_id:
+          description: 项目 ID。
+          type: string
+        url:
+          description: 接收方地址（http 或 https）。
+          type: string
+        events:
+          description: 订阅的事件类型。
+          type: array
+          items:
+            type: string
+            enum: [session.status_idle, session.status_requires_action, session.error, session.status_terminated]
+        enabled:
+          description: 是否启用；停用的 Webhook 不扇出新的投递，已有的投递以失败结束。
+          type: boolean
+        signing_secret:
+          description: 签名密钥明文（whsec_…），用于计算 `Meridian-Signature`。
+          type: string
     Problem:
       description: RFC 9457 错误响应，扩展字段 `code` 与 `request_id`，与公开 API 相同。
       type: object
