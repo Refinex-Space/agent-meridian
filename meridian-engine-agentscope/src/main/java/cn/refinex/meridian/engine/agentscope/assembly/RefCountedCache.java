@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -95,6 +96,16 @@ final class RefCountedCache<K, V extends AutoCloseable> implements AutoCloseable
         // 视作一次访问：一轮执行得再久，结束后也重新计算空闲时间
         cache.getIfPresent(lease.entry.key);
         lease.entry.release();
+    }
+
+    /**
+     * 移除键满足条件的全部条目：空闲的实例立即关闭，正在使用的实例在归还后关闭，之后的 {@link #acquire} 装配新实例。
+     *
+     * @param condition 键的条件
+     */
+    void invalidateIf(Predicate<? super K> condition) {
+        cache.asMap().keySet().removeIf(condition);
+        cache.cleanUp();
     }
 
     /** 立即执行到期淘汰等维护工作。Caffeine 的维护是惰性的，测试中用它推进状态。 */

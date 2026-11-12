@@ -60,6 +60,14 @@ public interface AgentEngine {
     Mono<Set<String>> reservedToolNames(String agentVersionId, String environmentId, long environmentRevision);
 
     /**
+     * 淘汰本节点上这些智能体版本的智能体实例（含子智能体）：空闲的立即关闭，正在执行的在本轮结束后关闭，下一轮按当前配置重新装配。
+     * 装配时读进实例的配置变了（租户提示词，D32）时由 runtime 调用；智能体版本与环境修订本身不可变，不需要淘汰（ADR-0047）。
+     *
+     * @param agentVersionIds 智能体版本 ID
+     */
+    void evictAgentVersions(Set<String> agentVersionIds);
+
+    /**
      * 节点下线：以 SYSTEM 来源中断全部执行并等待状态保存，最长等待 timeout（架构设计「崩溃恢复」中的"节点优雅下线"）。
      *
      * @param timeout 最长等待时间

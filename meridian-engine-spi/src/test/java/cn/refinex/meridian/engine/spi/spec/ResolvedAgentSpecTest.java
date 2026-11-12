@@ -27,6 +27,26 @@ class ResolvedAgentSpecTest {
     }
 
     @Test
+    void mcpToolSideEffectFallsBackToServerLevelThenNonIdempotent() {
+        McpServerSpec annotated = new McpServerSpec(
+                "mcp_1",
+                "crm",
+                "https://mcp.example.com/crm",
+                McpServerSpec.McpTransport.SSE,
+                null,
+                SideEffect.IDEMPOTENT,
+                java.util.Map.of("lookup_order", SideEffect.NONE),
+                Set.of());
+        assertThat(annotated.sideEffectOf("lookup_order")).isEqualTo(SideEffect.NONE);
+        assertThat(annotated.sideEffectOf("create_ticket")).isEqualTo(SideEffect.IDEMPOTENT);
+
+        McpServerSpec unannotated = new McpServerSpec(
+                "mcp_1", "crm", "https://mcp.example.com/crm", McpServerSpec.McpTransport.SSE, null, null, null);
+        assertThat(unannotated.sideEffectOf("create_ticket")).isEqualTo(SideEffect.NON_IDEMPOTENT);
+        assertThat(unannotated.toolSideEffects()).isEmpty();
+    }
+
+    @Test
     void rejectsUnknownPlatformTool() {
         assertThatThrownBy(() -> spec(50, Set.of("shell_execute"), List.of(), List.of()))
                 .isInstanceOf(IllegalArgumentException.class)

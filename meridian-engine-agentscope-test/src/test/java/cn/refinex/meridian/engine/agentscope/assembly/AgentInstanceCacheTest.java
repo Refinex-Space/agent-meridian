@@ -115,4 +115,32 @@ class AgentInstanceCacheTest {
         assertThat(fresh.assembled()).isNotSameAs(evicted);
         cache.release(fresh);
     }
+
+    @Test
+    void evictingAgentVersionsRetiresOnlyTheirInstancesAndClosesAfterRelease() {
+        ResolvedAgentSpec target =
+                TestSpecs.agent().agentVersionId("agv_target").build();
+        ResolvedAgentSpec other = TestSpecs.agent().agentVersionId("agv_other").build();
+        AgentHandle busy = cache.acquire(target, TestSpecs.noneEnvironment());
+        AgentHandle idle = cache.acquire(
+                target, new EnvironmentSpec("env_test_none", 2, EnvironmentSpec.Tier.NONE, null, List.of()));
+        cache.release(idle);
+        AgentHandle untouched = cache.acquire(other, TestSpecs.noneEnvironment());
+        List<StaticToolProvider.TrackedResource> resources = assembly.tools().resources();
+        assertThat(resources).hasSize(3);
+
+        cache.evictAgentVersions(Set.of("agv_target"));
+
+        assertThat(resources.get(1).closeCount()).as("空闲的实例立即关闭").isEqualTo(1);
+        assertThat(resources.get(0).closeCount()).as("正在执行的实例归还后才关闭").isZero();
+        cache.release(busy);
+        assertThat(resources.get(0).closeCount()).isEqualTo(1);
+        assertThat(resources.get(2).closeCount()).as("其他版本不受影响").isZero();
+
+        AgentHandle reassembled = cache.acquire(target, TestSpecs.noneEnvironment());
+        assertThat(reassembled.assembled()).isNotSameAs(busy.assembled());
+        AgentHandle same = cache.acquire(other, TestSpecs.noneEnvironment());
+        assertThat(same.assembled()).isSameAs(untouched.assembled());
+        List.of(reassembled, untouched, same).forEach(cache::release);
+    }
 }

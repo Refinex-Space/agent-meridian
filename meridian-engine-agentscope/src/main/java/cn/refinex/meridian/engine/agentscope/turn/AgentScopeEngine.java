@@ -310,6 +310,12 @@ public final class AgentScopeEngine implements AgentEngine {
     }
 
     @Override
+    public void evictAgentVersions(Set<String> agentVersionIds) {
+        instances.evictAgentVersions(agentVersionIds);
+        log.info("智能体实例已按版本淘汰 agentVersions={}", agentVersionIds.size());
+    }
+
+    @Override
     public Mono<Void> shutdown(Duration timeout) {
         Objects.requireNonNull(timeout, "timeout");
         return Blocking.run(() -> {

@@ -64,9 +64,9 @@ final class McpPlatformTool extends PlatformTool {
                         McpConnector.toolName(server, tool.name()),
                         description(server, tool),
                         inputSchema(tool.inputSchema()),
-                        server.sideEffect(),
+                        server.sideEffectOf(tool.name()),
                         RuleSyntax.none(),
-                        server.sideEffect() == SideEffect.NONE),
+                        server.sideEffectOf(tool.name()) == SideEffect.NONE),
                 services);
         this.server = server;
         this.remoteName = tool.name();

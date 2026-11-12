@@ -16,8 +16,9 @@ import java.util.regex.Pattern;
  * @param url 服务端点，必须是 http 或 https；必填
  * @param transport 传输方式；必填
  * @param headerSecretIds 需要注入的请求头：头名 → 凭据 ID（{@code sec_…}）；可为空映射
- * @param sideEffect 管理员注册时标注的副作用等级，作用于该服务的全部工具；未标注（null）时按 {@code non_idempotent} 处理：
- *     平台不知道外部工具有没有副作用，按最保守的等级记账、不重放
+ * @param sideEffect 管理员注册时标注的服务级副作用等级，作用于没有单独标注的工具；未标注（null）时按 {@code non_idempotent}
+ *     处理：平台不知道外部工具有没有副作用，按最保守的等级记账、不重放
+ * @param toolSideEffects 管理员按工具单独标注的副作用等级：工具名（不含前缀）→ 等级；可为空映射（ADR-0047）
  * @param enabledTools 启用的工具名（不含前缀）；空集合表示启用该服务的全部工具
  */
 public record McpServerSpec(
@@ -27,6 +28,7 @@ public record McpServerSpec(
         McpTransport transport,
         Map<String, String> headerSecretIds,
         SideEffect sideEffect,
+        Map<String, SideEffect> toolSideEffects,
         Set<String> enabledTools) {
 
     /** 服务名的格式：与平台工具名一样只用小写字母、数字、下划线，避免 {@code mcp__} 前缀的解析歧义。 */
@@ -51,7 +53,40 @@ public record McpServerSpec(
         }
         sideEffect = sideEffect == null ? SideEffect.NON_IDEMPOTENT : sideEffect;
         headerSecretIds = headerSecretIds == null ? Map.of() : Map.copyOf(headerSecretIds);
+        toolSideEffects = toolSideEffects == null ? Map.of() : Map.copyOf(toolSideEffects);
         enabledTools = enabledTools == null ? Set.of() : Set.copyOf(enabledTools);
+    }
+
+    /**
+     * 创建没有按工具标注副作用等级的 MCP 服务配置。
+     *
+     * @param mcpServerId MCP 服务 ID
+     * @param name 服务名
+     * @param url 服务端点
+     * @param transport 传输方式
+     * @param headerSecretIds 请求头 → 凭据 ID
+     * @param sideEffect 服务级副作用等级
+     * @param enabledTools 启用的工具名
+     */
+    public McpServerSpec(
+            String mcpServerId,
+            String name,
+            String url,
+            McpTransport transport,
+            Map<String, String> headerSecretIds,
+            SideEffect sideEffect,
+            Set<String> enabledTools) {
+        this(mcpServerId, name, url, transport, headerSecretIds, sideEffect, Map.of(), enabledTools);
+    }
+
+    /**
+     * 一个工具的副作用等级：有单独标注时取它，否则取服务级的等级。
+     *
+     * @param tool 服务端的工具名（不含前缀）
+     * @return 副作用等级
+     */
+    public SideEffect sideEffectOf(String tool) {
+        return toolSideEffects.getOrDefault(tool, sideEffect);
     }
 
     /** MCP 服务的传输方式。 */

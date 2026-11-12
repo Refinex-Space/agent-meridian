@@ -4,7 +4,9 @@ import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import com.github.benmanes.caffeine.cache.Ticker;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
 
@@ -78,6 +80,19 @@ public final class AgentInstanceCache implements AutoCloseable {
      */
     public void release(AgentHandle handle) {
         cache.release(handle.lease());
+    }
+
+    /**
+     * 移除这些智能体版本的全部实例（含子智能体）：空闲的立即关闭，正在使用的在归还后关闭，下一轮重新装配。配置失效时调用，例如租户提示词
+     * 变了（它随实例缓存，D32）。
+     *
+     * @param agentVersionIds 智能体版本 ID
+     */
+    public void evictAgentVersions(Collection<String> agentVersionIds) {
+        Set<String> targets = Set.copyOf(agentVersionIds);
+        if (!targets.isEmpty()) {
+            cache.invalidateIf(key -> targets.contains(key.agentVersionId()));
+        }
     }
 
     /** 移除全部实例：空闲的立即关闭，正在使用的在归还后关闭。节点下线时调用。 */
