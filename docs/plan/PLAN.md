@@ -82,7 +82,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 4c867bf |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 已完成 | f5de788 |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 已完成 | 9aa41da |
-| T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 进行中 | — |
+| T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 已完成 | b7df25f |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 未开始 | — |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 未开始 | — |
 | T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 未开始 | — |
@@ -175,18 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T17b（开工基线：`verify.sh` 中 `EventArchiveIT` 偶发失败，SSE 与列表接口的 `created_at` 小数位表示不同，先修测试的比较）：
-
-- [x] 基线：`EventArchiveIT` 按时刻比较 `created_at`（d3876d2）
-- [x] 设计：ADR-0050、架构设计、`meridian-v1.yaml`（文件、工作区、`session.usage`、`/v1/responses`）
-- [x] 文件：`rt.files`、上传与查询、服务端检测 MIME、文件名规范化、大小上限
-- [x] 文件引用：发送事件时校验与补全，轮次开始放进工作区（两档），翻译为工作区路径（D07）
-- [x] 工作区 API：两档、受保护路径、路径穿越
-- [x] `session.usage`：每轮结束，本轮与会话累计，与账本一致
-- [x] `/v1/responses` 子集（D26 一并评估）
-- [x] D54 中留给 T17b 的重复实现（Q-M1 `common.text.TextTokens`、Q-M2 `ProviderRetryPolicy`、Q-L1 `common.crypto.Sha256`、Q-L3 `PlatformTool.MAX_OUTPUT_CHARS`；Q-L2 不改）
-- [x] 集成测试与契约测试：A01 `FileReferenceWorkerIT`、A02 `WorkspaceApiIT`/`FilesApiIT`、A03 `SessionUsageIT`、A04 `ModelEndpointsIT` 的 Responses 部分（全部通过）
-- [ ] 验收 A01–A05，收尾
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -471,6 +460,14 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：只推送主线程与会话级的事件（D42）；投递经 outbox 解耦，接收方按事件 ID 去重；清理等待该会话的投递至多 12 小时；归档按会话一个文件、再次归档合并后删除旧文件，读取在可重复读的只读事务中取指针与数据库事件；保留清理按会话记下已清理的截止时间，避免反复扫描；Webhook 管理复用 `API_KEY_READ`、`API_KEY_WRITE` 两个操作类别
 - 顺带修复：runtime 测试的 BlockHound 放行 `VirtualThread#submitRunContinuation`（事件循环唤醒虚拟线程时 `ForkJoinPool` 竞争下短暂 park，被拦截后虚拟线程永不再运行，`WebhookDeliveryIT` 偶发永久挂起）；测试 PostgreSQL 的 `max_connections` 调到 300（缓存的 Spring 上下文增多后连接用尽）
 - 遗留：D37 存活会话的无主 claim（T28）、D48 与 D49（R2）、D50 C-10 其余（R2）与 S-F4（T37）、D71（归档整份读入内存，T28）、D72（签名密钥轮换与投递记录的时间过滤，T19b）、D73（清理与删除通知投递的先后，R2）；kind 集群 `meridian` 保留给 T28、T29（不用时 `kind delete cluster --name meridian` 释放内存）
+
+### 2026-11-12 T17b 已完成（提交 b7df25f）
+
+- 交付：文件资源（runtime 迁移 `V0011` 的 `rt.files`，`file` 上下文：`POST /v1/files` 的 multipart 上传、Tika 4.2.0 按内容检测媒体类型、文件名规范化、大小上限 `meridian.runtime.files.max-size` 同时限制 multipart；`GET /v1/files/{id}`、`/content` 带检测类型与 `attachment`；`files:write` 映射到 `SESSION_WRITE`）；引用：`FileReferenceResolver` 在发送事件时校验引用属于本项目、补全文件名与检测类型，引用文件的消息按 queue 投递；`TurnFileStager` 在调用内核前把文件放到 `uploads/{file_id}/{filename}`（none 档 `WorkspaceStorePort`，sandbox 档新增的 `SandboxDriver.writeFiles`），`TurnContext.workspaceFiles` 交给内核翻译为工作区路径（D07）；工作区 API（`GET/PUT …/workspace/files/{path}`、`workspace:list`，none 档读写与智能体同一份存储，sandbox 档只读 `outputs/` 副本，受保护路径 403，路径规则 400，`workspace_entries.content_size`）；`session.usage`（`rt.turn_usage` 与 outbox `usage` 同事务累加，`TurnFinisher` 在 idle、requires_action 的终态之前写本轮、按模型与会话累计）；`POST /v1/responses` 子集（`ResponsesMapper`，与对话补全共用 `ModelInvoker`、首信号与聚合）；engine-spi 的 `WorkspaceFiles`；ADR-0050，架构设计 v1.24
+- 验收：A01–A05 全部 passing（`FileReferenceWorkerIT`、`WorkspaceApiIT`、`FilesApiIT`、`SessionUsageIT`、`ModelEndpointsIT`，`SessionApiContractIT` 覆盖 24 个操作，`verify.sh` 通过）
+- 决策：文件在轮次开始时放置而不是上传时；路径经 `TurnContext` 交给内核，不写进事件；steer 中的文件降级为 queue；`session.usage` 的 `model_id` 改为可选（事件从未产生过，openapi-diff 判为兼容）；不支持的 Responses 参数在 schema 中列出以便逐项报错；D26 维持子集
+- 顺带修复：开工基线 `EventArchiveIT` 偶发失败（SSE 与列表接口的 `created_at` 小数位表示不同，按时刻比较，表示的不一致登记 D76）；D54 的重复实现收口（Q-M1、Q-M2、Q-L1、Q-L3）
+- 遗留：D74（上传文件没有删除与保留期）、D75（按 ID 引用的图片不作为视觉输入）、D76（时间的文本表示）、D77（事件中的 delivery 是请求值）；D66 在本任务的全量检查中又出现一次（`SubagentSessionIT` 的请求 ID 生成被 BlockHound 判为阻塞，重跑通过）
 
 ## 计划变更记录
 

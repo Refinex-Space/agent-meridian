@@ -1364,8 +1364,8 @@
       "id": "T17b-A05",
       "task": "T17b",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh 退出码 0：spotless:check 与全部模块的编译、单元测试、集成测试（runtime 单元测试 302 个、集成测试 296 个，全部通过）、架构测试、enforcer、覆盖率、POM 版本检查通过，sandbox-runtime 的 ruff、mypy 与 pytest（23 passed）通过（HEAD b7df25f）"
     },
     {
       "id": "T18-A01",
