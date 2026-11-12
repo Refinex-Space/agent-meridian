@@ -179,7 +179,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 前提已定（本会话中用户确认）：Q3 首批供应商为 OpenAI 兼容、Anthropic、Gemini；端点校验合并两种策略（始终拒绝回环、链路本地、元数据等地址，私有网段默认放行、平台可收窄到指定网段）；Anthropic、Gemini 用平台薄适配器（复用 2.0.4 的 formatter 与响应解析器，变更型 ADR 已获确认）。
 
-- [ ] 1. ADR：凭据、供应商与模型目录的补充约定；Anthropic、Gemini 适配器的变更；架构设计同步（Q3 已决、ID 前缀、端口与表）
+- [x] 1. ADR：凭据、供应商与模型目录的补充约定（ADR-0045）；Anthropic、Gemini 适配器的变更（ADR-0046，用户已确认）；架构设计 v1.20
 - [ ] 2. D52：`AddressPolicy` 移到 `common.net` 并增加供应商端点策略；`image.url` 只允许 http(s)
 - [ ] 3. control-plane 迁移：`secrets`、`secret_data_keys`、`provider_accounts`、`models`、`price_books`、`price_book_versions`
 - [ ] 4. 凭据库：信封加密、`KeyEncryptionService`（本地主密钥、Vault Transit）、管理 API（写入、轮换、删除、列表与引用方）、`/internal/v1/secrets:resolve`（服务 JWT、租户校验、审计、最后使用时间）

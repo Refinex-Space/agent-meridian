@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.19 |
-| 日期 | 2026-11-09 |
+| 版本 | v1.20 |
+| 日期 | 2026-11-11 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
 
@@ -60,7 +60,7 @@ AgentMeridian（简称 Meridian）是部署在企业内的通用智能体平台�
 |---|---|---|
 | JDK | Eclipse Temurin | 25 LTS |
 | 应用框架 | Spring Boot | 4.1.2 |
-| 智能体内核 | AgentScope Java core、harness，以及 `agentscope-extensions-sandbox-kubernetes` | 2.0.4 |
+| 智能体内核 | AgentScope Java core、harness，以及 `agentscope-extensions-sandbox-kubernetes`；模型扩展 `agentscope-extensions-model-openai`、`-anthropic`、`-gemini`（后两者带来 `anthropic-java` 2.52.0、`google-genai` 1.45.0，ADR-0046） | 2.0.4 |
 | MCP | MCP Java SDK（随 AgentScope） | 0.17.2 |
 | JSON | 平台 API 用 Jackson 3（Boot 默认）；AgentScope 内部用 Jackson 2.21 | — |
 | 主存储 | PostgreSQL + pgvector；中文全文检索用 zhparser | PostgreSQL 17，pgvector 0.8 |
@@ -297,7 +297,7 @@ erDiagram
     TURN ||--o{ PENDING_ACTION : raises
 ```
 
-**项目是隔离和授权的基本单位。** API Key、智能体、知识库、凭据、会话都挂在项目下；租户是计费和管理的单位。
+**项目是隔离和授权的基本单位。** API Key、智能体、知识库、凭据、会话都挂在项目下；租户是计费和管理的单位。供应商账号、模型目录、价格表是租户级资源，租户内的全部项目都可以使用；凭据属于租户，可以再限定到一个项目，租户级凭据供租户级资源（供应商账号、租户设置）与全部项目使用（ADR-0045）。
 
 ### 核心概念
 
@@ -331,6 +331,7 @@ erDiagram
 | `sec` | 凭据 | `fil` | 文件 |
 | `skl` | 技能 | `mcp` | MCP 服务 |
 | `mbr` | 成员 | `rbd` | 角色绑定 |
+| `prb` | 价格表 | | |
 
 ## 数据架构
 
@@ -373,7 +374,7 @@ erDiagram
 
 `turns` 上有一个部分唯一索引：`UNIQUE (thread_id) WHERE status IN ('queued','running','awaiting_action')`。所以每个线程同时最多一个未结束的轮次，插入用 `ON CONFLICT DO NOTHING`。
 
-**control-plane（schema `cp`）**：`tenants`（含并发配额 `max_concurrent_turns`、事件保留天数 `event_retention_days`；租户与项目软删除，删除时吊销其下的 API Key）、`tenant_settings`（租户级系统提示词、联网搜索后端等）、`projects`、`members`（按身份提供方的主体标识 `subject` 识别）、`role_bindings`（`role`、租户级角色的 `project_id` 为空）、`api_keys`（只存 SHA-256 哈希和 `mk_live_` 之后随机部分的前 8 位，带作用域、每分钟上限、过期与吊销时间）、`provider_accounts`、`models`、`price_books`、`secrets`（信封加密的密文）、`agents`、`agent_versions`（`spec jsonb`，发布后只读）、`environments`（带 `revision`）、`skills`、`skill_versions`、`mcp_servers`、`budgets`、`webhooks`。另有两张按月分区的表，主键都是 `(id, occurred_at)`，`occurred_at` 取自消息载荷，重投时落在同一分区，保证幂等：
+**control-plane（schema `cp`）**：`tenants`（含并发配额 `max_concurrent_turns`、事件保留天数 `event_retention_days`；租户与项目软删除，删除时吊销其下的 API Key）、`tenant_settings`（租户级系统提示词、联网搜索后端等）、`projects`、`members`（按身份提供方的主体标识 `subject` 识别）、`role_bindings`（`role`、租户级角色的 `project_id` 为空）、`api_keys`（只存 SHA-256 哈希和 `mk_live_` 之后随机部分的前 8 位，带作用域、每分钟上限、过期与吊销时间）、`provider_accounts`（类型、端点、凭据引用、RPM 与 TPM）、`models`（上下文窗口、能力、备用模型、价格表）、`price_books` 与 `price_book_versions`（版本只追加、发布即生效）、`secrets`（信封加密的密文，可空的 `project_id`）、`secret_data_keys`（按租户的数据密钥，由主密钥包装）（ADR-0045）、`agents`、`agent_versions`（`spec jsonb`，发布后只读）、`environments`（带 `revision`）、`skills`、`skill_versions`、`mcp_servers`、`budgets`、`webhooks`。另有两张按月分区的表，主键都是 `(id, occurred_at)`，`occurred_at` 取自消息载荷，重投时落在同一分区，保证幂等：
 
 - `usage_records`。
 - `audit_logs`，只追加。
@@ -865,7 +866,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 
 `RoutedModel` 是平台自研的 `ChatModelBase` 子类，每个智能体版本一个实例，内部持有主模型和可选的备用模型配置。每次调用 `doStream` 时，它从 Reactor Context 取出 `PlatformContext`，依次执行以下步骤。Reactor Context 能传到 `doStream`，压缩器内部的模型调用也在同一条订阅链上，已在 v2.0.4 核实。
 
-1. 通过 `ModelGateway` 解析供应商账号和凭据。用 AgentScope 对应的模型类（OpenAI 兼容、Anthropic、Gemini、DashScope、Ollama）构造底层客户端，按"供应商账号加模型"缓存。
+1. 通过 `ModelGateway` 解析供应商账号和凭据：目录取自 control-plane 的 `GET /internal/v1/models/{model_id}`（缓存 60 秒，`config.invalidate` 立即淘汰），模型必须属于调用方租户；端点按「凭据」一节的地址策略再校验一次；凭据经 `secrets:resolve` 取得（ADR-0045）。OpenAI 兼容类型用 AgentScope 的 `OpenAIChatModel` 构造底层客户端；Anthropic、Gemini 用平台适配器，复用 2.0.4 的 formatter 与响应解析器，SDK 客户端由平台构造（不重试、阻塞流在虚拟线程上迭代，ADR-0046）；按"供应商账号加模型"缓存。DashScope 原生、Ollama 原生没有实现（私有化推理服务走 OpenAI 兼容端点）。
 2. 限流：按"供应商账号加模型"的 RPM 与 TPM，用 Redis 令牌桶等待，最长 30 秒。超时抛 `RateLimitTimeoutException`。
 3. 预算预扣：按"估算输入 token 加 `max_tokens`"在 Redis 预扣。失败时抛 `BudgetExceededException`。
 4. 调用底层模型，在流结束时按 `ChatUsage` 结算预扣，并通过 `ModelGateway` 写用量记录。
@@ -876,7 +877,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 - 首包之后的错误不重试、不切换模型，本轮以 `session.error` 结束：连接中断、5xx 一类仍按可重试处理，其余按终止处理。
 - 其余 4xx（认证失败、参数错误）抛 `ProviderRejectedException`，以 `session.error`（`terminal`）结束。
 - 结算：流完成、出错、被取消都会结算（`Flux.usingWhen`）。供应商报告了用量按报告结算；没有报告（被取消、首包之后出错）时按字符数估算的输入与已收到的输出结算并标为估算；首包之前失败只释放预扣、不写用量记录。估算输入 token 按 ASCII 每 3 个字符、其余字符每个 1 个 token，误差方向偏多（ADR-0032）。
-- 供应商 HTTP 走平台的 `ProviderHttpTransport`：2.0.4 自带的传输在流式路径上丢弃响应头，拿不到 `Retry-After`。底层客户端按"供应商账号加模型"缓存且不含凭据，凭据与端点在每次调用的选项中给出。T09a 实现 OpenAI 兼容类型（含 DashScope 的 `compatible-mode/v1`）；Anthropic、Gemini 等经同一扩展点 `ProviderClientFactory` 加入（ADR-0032）。
+- 供应商 HTTP 走平台的 `ProviderHttpTransport`：2.0.4 自带的传输在流式路径上丢弃响应头，拿不到 `Retry-After`。底层客户端按"供应商账号加模型"缓存且不含凭据，凭据与端点在每次调用的选项中给出（ADR-0032）；Gemini 的 SDK 只能在构造时给密钥，适配器内部按凭据指纹缓存 SDK 客户端，写入 5 分钟后关闭。Anthropic、Gemini 的 SDK 异常转成带状态码的传输异常、`retry-after` 记到本次尝试，分类与 OpenAI 兼容相同；Gemini 不接受 URL 图片（不在 runtime 内下载），以终止错误结束（ADR-0046）。
 - `RateLimitTimeoutException` 和可重试的供应商错误，产生 `session.error`（`retry_status=retryable`），平台按"置回队列的三种情况"重新排队。
 - `BudgetExceededException` 以 `budget_exceeded` 结束本轮。
 
@@ -1026,6 +1027,8 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 | 项目观察者 | 只读，包括会话回放和用量 |
 | 审批人 | 处理本项目的待处理动作 |
 
+模型目录（供应商账号、模型、价格表）与凭据是租户级的操作类别：`MODEL_WRITE`、`SECRET_READ`、`SECRET_WRITE` 只有所有者与租户管理员，`MODEL_READ` 另给项目开发者与项目观察者（ADR-0045）。
+
 另有**平台管理员**，由 control-plane 配置给出主体标识或令牌中的组，不属于任何租户：创建租户（同时指定首个所有者）、查看租户、修改租户配额。配额是平台资源的分配，租户所有者不能改自己的配额。
 
 授权是声明式的：角色矩阵（角色 × 操作类别）只在 `security.rbac` 中定义，管理 API 的处理器方法标注所需的操作类别，MVC 拦截器按路径中的租户与项目查该用户的角色绑定后判定；`/admin/` 下没有标注的处理器一律拒绝。租户级角色作用于租户下的全部项目，项目级角色只作用于绑定的项目，在租户级的只读操作上也算租户成员；授予或撤销租户所有者另需所有者权限，租户至少保留一位所有者（ADR-0042）。
@@ -1053,8 +1056,9 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 
 ### 凭据
 
-- **存储**：信封加密，主密钥在 KMS 或 Vault，数据密钥按租户区分，密文存 `cp.secrets`。
-- **取用**：runtime 用服务 JWT 调用 `/internal/v1/secrets:resolve` 取明文，只在内存缓存 5 分钟。
+- **存储**：信封加密，主密钥在 KMS 或 Vault，数据密钥按租户区分，密文存 `cp.secrets`。主密钥经 `KeyEncryptionService` 包装数据密钥（开发用本地文件，生产用 Vault Transit）；凭据值用 AES-256-GCM 加密，附加认证数据绑定租户、凭据 ID 与版本。管理 API 只能写入、轮换、删除，任何接口都读不出明文（ADR-0045）。
+- **取用**：runtime 用服务 JWT 调用 `/internal/v1/secrets:resolve` 取明文，只在内存缓存 5 分钟；租户必须一致，项目级凭据另要求项目一致；每次解析写审计 `secret.resolved` 并更新最后使用时间。凭据、供应商账号、模型、价格表变更后经 `config.invalidate` 立即淘汰 runtime 的缓存。
+- **端点**：供应商的 `base_url` 只允许 `http(s)`；链路本地、云元数据、未指定、组播与保留地址始终拒绝，回环只在开发与测试放行，私有网段落在平台配置的网段内才放行（默认全部私有网段，生产按推理服务所在网段收窄）。control-plane 写入时、runtime 读取目录时各校验一次，DNS 重绑定以网络策略为最终边界（ADR-0045）。
 - **禁止出现的位置**：提示词、事件、日志、错误信息、追踪属性。日志框架配置脱敏过滤器，CI 运行 gitleaks。
 
 ### 智能体安全
@@ -1184,7 +1188,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 ## 计量与预算
 
 - **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天。沙箱 vCPU 秒是沙箱存活时间乘以规格的 vCPU 数，在每轮结束、回收与删除会话时分段记录，用量种类 `sandbox_vcpu_seconds`（ADR-0037）。
-- **账本**：每条记录带租户、项目、API Key、智能体版本、会话、线程、轮次、模型、价格表版本。价格表有版本，调价不影响历史记录。
+- **账本**：每条记录带租户、项目、API Key、智能体版本、会话、线程、轮次、模型、价格表版本。价格表有版本，调价不影响历史记录：版本发布即生效、不可修改，runtime 的用量消息在结算时带上模型当前的 `price_book_id` 与 `price_book_version`，计价按记录中的版本（ADR-0045）。
 - **预算**：分租户、项目、API Key、会话四级，每级有软阈值（告警）和硬阈值（停止）。
 - **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。Redis 计数以 token（输入加输出）计，四级计数都记（没有限额的级别也记，供对账），键带租户哈希标签；用量记录经 outbox 的 `usage` 主题投递，输入、输出、缓存读、缓存写、推理 token 分别记，带调用用途（推理、压缩、Embedding、rerank）；Embedding 与 rerank 的记录种类分别为 `embedding_tokens`、`rerank_tokens`（ADR-0033）。T16 之前限额来自开发配置，没有配置的级别不限（ADR-0032）。
 - **对账**：Redis 中的预算计数每小时与账本对账一次，以账本为准。
@@ -1473,6 +1477,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.19 | 2026-11-09 | T14b：服务 JWT 的换取（客户端凭据模式）、JWKS、密钥与轮换、按调用方限定内部接口；控制台用户经 `Meridian-Project` 调用公开 API 的作用域来源与限流；`PlatformContext` 增加控制台用户；出网代理的回调凭据；技术基线补 Nimbus；本地开发的 `auth` profile（ADR-0044） |
 | v1.18 | 2026-11-09 | Q2 已决：身份只认标准 OIDC，声明映射可配置，SAML、LDAP 经 Keycloak 转接，Keycloak 作为参考实现与可选组件（ADR-0043） |
 | v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
+| v1.20 | 2026-11-11 | T15a：Q3 已决；凭据的归属、信封加密、内部解析接口与审计、供应商端点的地址策略、价格表版本与用量记录、ID 前缀 `prb`、模型目录与凭据的操作类别（ADR-0045）；Anthropic、Gemini 用平台适配器，技术基线补两个模型扩展（ADR-0046） |
 | v1.15 | 2026-11-09 | T13：`ThreadRegistryPort` 的线程事件与停止原因；`PolicyMiddleware` 的拉起名额；子智能体的执行组件、子线程上下文、终态与停止原因、超时与中断、配置项、审计与删除的落地约定；崩溃恢复中子线程不恢复、父线程只看本线程的调用（ADR-0040） |
 
 ## 待决问题
@@ -1481,7 +1486,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 |---|---|---|---|
 | Q1 | Maven groupId 与 Java 包根 | 已决：`cn.refinex.meridian` | — |
 | Q2 | 企业 IdP 类型（自建 Keycloak 还是对接现有） | 已决：平台只认标准 OIDC，已有 IdP 改配置接入；Keycloak 作为参考实现，用于本地开发、测试与没有 IdP 的部署（ADR-0043） | — |
-| Q3 | 首批接入的模型供应商与私有化推理服务 | 模型目录、价格表；M0 只接入了 OpenAI 兼容类型（DashScope 走兼容端点，登记事项 D25），是 T15a 开工的前提 | T15a 开工前 |
+| Q3 | 首批接入的模型供应商与私有化推理服务 | 已决：OpenAI 兼容（含 DashScope 兼容模式与 vLLM、SGLang 等私有化推理服务）、Anthropic、Gemini；私有化推理服务在内网时由平台配置放行的网段（ADR-0045、ADR-0046） | — |
 | Q4 | 沙箱镜像预装的工具清单 | 已决（一期基线）：`sandbox-runtime/README.md` 的预装清单，内置技能 `docx` 在其上运行（T11、T12a）；新技能需要的工具随镜像版本追加 | — |
 | Q5 | 批次级 checkpoint 是否可行（P3） | 已决：可行并默认开启（`docs/poc/P03-批次checkpoint.md`，ADR-0028） | — |
 | Q6 | 状态缓存清理后内存是否稳定（P11）；不稳定时定期重建引擎实例 | 已决：稳定，10 万个线程轮转后存活对象没有增长，不需要定期重建（`docs/poc/P11-内存.md`） | — |
