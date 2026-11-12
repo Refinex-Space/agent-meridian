@@ -13,7 +13,7 @@
 
 ## 包地图
 
-- 规范：`src/main/resources/openapi/meridian-v1.yaml`（随 jar 发布，契约测试从类路径读取）；内部接口 `meridian-internal-v1.yaml`（服务之间调用，DTO 在 `cn.refinex.meridian.api.internal.model`，`InternalOpenApiSpecTest` 校验，不做兼容性检查，ADR-0033）。
+- 规范：`src/main/resources/openapi/meridian-v1.yaml`（随 jar 发布，契约测试从类路径读取；`Agents` 标签由 control-plane 提供，其余由 runtime 提供，各自只生成自己的标签）；智能体规格的 JSON Schema `src/main/resources/schema/agent-spec.schema.json`（与 engine-spi 的 `ResolvedAgentSpec` 一一对应，runtime 的 `AgentSpecSchemaTest` 守住，ADR-0047）；内部接口 `meridian-internal-v1.yaml`（服务之间调用，DTO 在 `cn.refinex.meridian.api.internal.model`，`InternalOpenApiSpecTest` 校验，不做兼容性检查，ADR-0033）。
 - 生成的 DTO：`target/generated-sources/openapi` 下的 `cn.refinex.meridian.api.model`，不进源码树；判别器联合是 sealed 接口（`SessionEvent`、`StreamOnlyEvent`、`UserEventInput`、`ContentBlock`）。
 - 共用的生成选项在根 POM 的 `openapi-generator-maven-plugin` 的 `pluginManagement`；本模块的 execution 只生成模型，runtime 的 execution 只生成接口（`cn.refinex.meridian.runtime.openapi`）。
 
@@ -36,6 +36,7 @@
 
 ## 易错点
 
+- 改 `agent-spec.schema.json` 要同时改 `ResolvedAgentSpec` 及其嵌套记录（或反过来），每个叶子带 `examples`（一致性测试据此生成示例）；control-plane 用 networknt 2.0.1 按它校验，字段错误是 `spec.` 加点号路径。管理 API 中的规格是 `type: object` 的自由对象，结构只由这份 Schema 约束。
 - 生成的 DTO 中 `const` 判别属性是单值枚举 `TypeEnum`，联合接口的 `getType()` 返回 `Enum`；运行时按类型分派用 `switch` 模式匹配 sealed 接口，不比较 `getType()`。
 - 事件的 `data` 字段与 `rt.session_events.data` 的存储格式相同（ADR-0027）：改事件的字段要同时改 engine-spi 的事件记录与这里的 `*Data` schema，runtime 的契约测试按规范校验每种事件的样本。
 - `@JsonProperty` 写死了 snake_case 字段名，DTO 不依赖 ObjectMapper 的命名策略。

@@ -9,7 +9,7 @@
 
 ## 包地图
 
-- `engine`：`AgentEngine`（`runTurn`、`interrupt`、`shutdown`，T08 起另有 `retryToolCall` 与 `reservedToolNames`）、`TurnContext`（只带配置 ID 与修订号，配置经 `AgentConfigPort` 取；`interruptRequested` 让内核在第一次推理前停止）、`ThreadRef`、`RecoveryOrigin`（失败的 epoch、第几次恢复、`REPLAY_INPUT`/`RESUME_SAVED_STATE`）、`ToolRetry`（恢复确认的重试）。
+- `engine`：`AgentEngine`（`runTurn`、`interrupt`、`shutdown`，T08 起另有 `retryToolCall` 与 `reservedToolNames`，T15b 起另有 `evictAgentVersions`：租户设置变更时淘汰实例，ADR-0047）、`TurnContext`（只带配置 ID 与修订号，配置经 `AgentConfigPort` 取；`interruptRequested` 让内核在第一次推理前停止）、`ThreadRef`、`RecoveryOrigin`（失败的 epoch、第几次恢复、`REPLAY_INPUT`/`RESUME_SAVED_STATE`）、`ToolRetry`（恢复确认的重试）。
 - `engine.input`：`TurnInput` 四种输入（嵌套 record），`kind()` 给出 `rt.turns.kind`；`MessageContent`（文本、图片、文件引用）被用户消息、自定义工具结果、`agent.message` 共用。
 - `event`：`EngineEvent` 按域分为 `UserEvent`、`AgentOutputEvent`、`SessionEvent`、`SpanEvent`、`StreamEvent`，具体记录嵌套在域接口里；`EventType` 登记每种类型的取值、域与记录类，`type()` 由记录类反查。
 - `spec`：`ResolvedAgentSpec`（含 `SubagentSpec`、`McpServerSpec`、`SkillRef`、`KnowledgeSpec`、`CompactionSpec`；`grants(tool)` 判断工具集）、`SkillDefinition`（技能内容，T10a）、`EnvironmentSpec`、`PermissionPolicy`/`PermissionRule`、`CustomToolDeclaration`、`PlatformToolNames`。
@@ -22,7 +22,8 @@
 - 签名只出现平台类型，不依赖 AgentScope 与 Spring（ArchUnit 规则 12）；只依赖 common 与 reactor-core。
 - `EventType` 与架构设计「事件」清单逐一对应，`EventTypeCatalogTest` 直接解析 `docs/architecture/architecture.md` 比对；新增事件类型要同时改文档、`EventType` 与域接口。
 - 被 AgentScope 同步接口调用的端口（`AgentStateRepository`、`WorkspaceStorePort`、`LeaseRegistry`、`SnapshotStorePort`）是同步方法，其余返回 `Mono`/`Flux`；租户、项目、会话、epoch 从 `PlatformContext` 取（架构设计「端口」）。
-- `McpServerSpec.sideEffect` 缺省为 `NON_IDEMPOTENT`（ADR-0035）。
+- `McpServerSpec.sideEffect` 缺省为 `NON_IDEMPOTENT`（ADR-0035）；`toolSideEffects` 按工具单独标注，`sideEffectOf(tool)` 先取它（ADR-0047）。
+- `spec` 包的记录与 `meridian-api` 的 `schema/agent-spec.schema.json` 一一对应：改字段要同时改 Schema（runtime 的 `AgentSpecSchemaTest` 守住）。
 - 配置记录在构造时校验取值范围：`maxIters` ∈ [1, 200]、子智能体超时 ≤ 600 秒、子智能体工具是父智能体工具的子集、`sandbox` 档必须有规格。
 
 ## 易错点

@@ -16,6 +16,7 @@
 - `SpringContainerProperties`：`@DynamicPropertySource` 中调用 `postgres`、`redis`、`minio`。
 - `auth.KeycloakRealm`（ADR-0044）：Testcontainers 的 Keycloak 模块，导入 `deploy/keycloak/meridian-dev-realm.json`（从工作目录向上查找）；`issuer()`、`user(名字, 组…)`（经管理 REST API 创建，返回 `sub`，同名只建一次）、`token(名字)`（客户端 `meridian-dev-cli` 的口令换取）。启动后在容器内用 `kcadm.sh` 关掉 master realm 的 HTTPS 要求，否则宿主经端口映射调用管理 API 得到 `HTTPS required`。
 - `auth.TestTokenIssuer`（ADR-0044）：JDK HTTP 服务上的 `/oauth2/jwks`、`/oauth2/token`（`client(服务, 密钥)` 登记）、OIDC 发现文档；`serviceToken`、`sign`（任意声明）、`signWithForeignKey`、`rotate()`、`route(路径, 处理器)` 挂替身接口；执行器是虚拟线程（替身接口会回头读本服务的 JWKS）。
+- `mcp.TestMcpServer`（ADR-0047）：嵌入式 Tomcat 在回环地址的随机端口上注册 MCP SDK 0.17.2 的 Streamable HTTP（`/mcp`）与 SSE（`/sse`）传输，校验 `Authorization: Bearer {令牌}`，工具 `lookup_order`、`create_ticket`；`requests()` 记下每个请求的 `Authorization`。control-plane 的登记探测与 runtime 的会话测试共用。
 - `model.ScriptedOpenAiServer`：`builder().script(yaml).scriptsDirectory(dir).start()`（默认回环地址的随机端口）；`baseUrl()` 作供应商账号的 `base_url`，`rerankBaseUrl()` 作 rerank 模型的 `base_url`；`calls()` 记录每次请求（路径、脚本、步骤、是否流式；对话补全另有请求体原文 `body`，T10b 比较请求前缀用），断言重试次数用。`ScriptLoader` 解析 YAML，`ScriptedVectors` 是 Embedding 与 rerank 的确定算法。
 
 ## 脚本化模型服务
