@@ -2,7 +2,7 @@ package cn.refinex.meridian.runtime.modelrouting.infra;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import cn.refinex.meridian.runtime.modelrouting.domain.BudgetLevel;
+import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.runtime.modelrouting.domain.BudgetScope;
 import java.io.IOException;
 import java.nio.file.Files;

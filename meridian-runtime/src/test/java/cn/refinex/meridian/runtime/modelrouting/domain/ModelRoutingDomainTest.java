@@ -2,6 +2,7 @@ package cn.refinex.meridian.runtime.modelrouting.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.error.ErrorCodes;
 import org.junit.jupiter.api.Test;

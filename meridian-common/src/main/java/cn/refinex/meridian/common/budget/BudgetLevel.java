@@ -1,4 +1,4 @@
-package cn.refinex.meridian.runtime.modelrouting.domain;
+package cn.refinex.meridian.common.budget;
 
 import java.util.Locale;
 
@@ -14,12 +14,21 @@ public enum BudgetLevel {
     SESSION;
 
     /**
-     * 配置、Redis 键与指标标签中的取值。
+     * 配置、Redis 键、数据库与指标标签中的取值。
      *
      * @return 小写的常量名，例如 {@code api_key}
      */
     public String value() {
         return name().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 该级别的计数是否按自然月重置：租户、项目、API Key 按月，会话不分周期（ADR-0048 第 1 条）。
+     *
+     * @return 按月重置时为 true
+     */
+    public boolean monthly() {
+        return this != SESSION;
     }
 
     /**

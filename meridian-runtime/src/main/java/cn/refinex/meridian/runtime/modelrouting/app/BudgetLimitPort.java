@@ -1,6 +1,6 @@
 package cn.refinex.meridian.runtime.modelrouting.app;
 
-import cn.refinex.meridian.runtime.modelrouting.domain.BudgetLevel;
+import cn.refinex.meridian.common.budget.BudgetLevel;
 
 /**
  * 四级预算硬阈值的内部端口（架构设计「计量与预算」）。T09a 的开发实现读 {@code dev-config/budgets}

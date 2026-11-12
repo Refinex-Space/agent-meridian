@@ -5,6 +5,7 @@ import static cn.refinex.meridian.runtime.config.WorkerFixture.ofType;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.id.Ids;
 import cn.refinex.meridian.engine.agentscope.model.RoutedModel;
@@ -16,7 +17,6 @@ import cn.refinex.meridian.engine.spi.event.UserEvent.Delivery;
 import cn.refinex.meridian.engine.spi.spec.CompactionSpec;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import cn.refinex.meridian.runtime.dispatch.domain.TurnOutcome;
-import cn.refinex.meridian.runtime.modelrouting.domain.BudgetLevel;
 import cn.refinex.meridian.runtime.session.app.TurnResult;
 import cn.refinex.meridian.runtime.stream.domain.StoredEvent;
 import cn.refinex.meridian.runtime.support.DbAssertions;

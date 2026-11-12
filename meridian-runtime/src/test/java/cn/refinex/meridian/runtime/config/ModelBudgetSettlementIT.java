@@ -3,6 +3,7 @@ package cn.refinex.meridian.runtime.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.id.Ids;
@@ -11,7 +12,6 @@ import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
 import cn.refinex.meridian.engine.agentscope.testkit.model.StaticProviderClientFactory;
 import cn.refinex.meridian.engine.spi.error.ProviderRejectedException;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
-import cn.refinex.meridian.runtime.modelrouting.domain.BudgetLevel;
 import cn.refinex.meridian.runtime.support.RuntimeTestRedis;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;

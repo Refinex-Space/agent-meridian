@@ -1,7 +1,7 @@
 package cn.refinex.meridian.runtime.modelrouting.app;
 
+import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.engine.spi.event.TokenUsage;
-import cn.refinex.meridian.runtime.modelrouting.domain.BudgetLevel;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;

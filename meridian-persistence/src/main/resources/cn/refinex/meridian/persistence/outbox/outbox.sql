@@ -5,7 +5,9 @@ CREATE TABLE IF NOT EXISTS outbox (
     topic        text        NOT NULL,
     payload      jsonb       NOT NULL,
     created_at   timestamptz NOT NULL,
-    published_at timestamptz
+    published_at timestamptz,
+    claimed_until timestamptz,
+    attempts     integer     NOT NULL DEFAULT 0
 );
 
 -- Relay 只扫描未发布的消息，按 id（ULID，大致按时间）顺序取
@@ -17,3 +19,5 @@ COMMENT ON COLUMN outbox.topic IS '主题，即目标 Redis Stream 的键，例�
 COMMENT ON COLUMN outbox.payload IS '消息载荷（JSON，字段 snake_case），自带租户与项目';
 COMMENT ON COLUMN outbox.created_at IS '写入时间';
 COMMENT ON COLUMN outbox.published_at IS '发布时间；为空表示尚未发布';
+COMMENT ON COLUMN outbox.claimed_until IS 'Relay 的认领截止时间：认领后在事务外发布，过期未标记的由任一实例重新认领（ADR-0048）';
+COMMENT ON COLUMN outbox.attempts IS '发布失败的次数；达到上限后不再自动投递，等人工处理';

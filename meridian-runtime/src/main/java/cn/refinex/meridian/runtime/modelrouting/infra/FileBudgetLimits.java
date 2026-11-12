@@ -1,7 +1,7 @@
 package cn.refinex.meridian.runtime.modelrouting.infra;
 
+import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.runtime.modelrouting.app.BudgetLimitPort;
-import cn.refinex.meridian.runtime.modelrouting.domain.BudgetLevel;
 import cn.refinex.meridian.runtime.modelrouting.domain.BudgetScope;
 import java.nio.file.Path;
 import java.util.Map;

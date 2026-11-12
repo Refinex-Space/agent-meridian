@@ -3,6 +3,7 @@ package cn.refinex.meridian.runtime.config;
 import static cn.refinex.meridian.runtime.config.WorkerFixture.ofType;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.engine.agentscope.model.RoutedModel;
 import cn.refinex.meridian.engine.agentscope.testkit.assembly.TestSpecs;
 import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
@@ -14,7 +15,6 @@ import cn.refinex.meridian.engine.spi.spec.CompactionSpec;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import cn.refinex.meridian.runtime.dispatch.domain.RequeueReason;
 import cn.refinex.meridian.runtime.dispatch.domain.TurnOutcome;
-import cn.refinex.meridian.runtime.modelrouting.domain.BudgetLevel;
 import cn.refinex.meridian.runtime.modelrouting.domain.RateLimit;
 import cn.refinex.meridian.runtime.modelrouting.infra.RedisRateLimiter;
 import cn.refinex.meridian.runtime.session.app.TurnResult;

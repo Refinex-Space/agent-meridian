@@ -2,8 +2,8 @@ package cn.refinex.meridian.runtime.modelrouting.infra;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.common.id.Ids;
-import cn.refinex.meridian.runtime.modelrouting.domain.BudgetLevel;
 import cn.refinex.meridian.runtime.modelrouting.domain.BudgetScope;
 import cn.refinex.meridian.runtime.support.RuntimeTestRedis;
 import java.time.Duration;

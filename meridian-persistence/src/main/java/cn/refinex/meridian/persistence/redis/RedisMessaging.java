@@ -10,10 +10,14 @@ import java.util.function.Consumer;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.connection.MessageListener;
+import org.springframework.data.redis.connection.RedisStreamCommands.TrimOptions;
+import org.springframework.data.redis.connection.RedisStreamCommands.XTrimOptions;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.PendingMessages;
+import org.springframework.data.redis.connection.stream.PendingMessagesSummary;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.data.redis.connection.stream.StreamInfo;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.RedisCallback;
@@ -144,6 +148,49 @@ public final class RedisMessaging {
         return claimed == null
                 ? List.of()
                 : claimed.stream().map(RedisMessaging::toMessage).toList();
+    }
+
+    /**
+     * 裁剪全部消费组都已确认的条目（{@code XTRIM MINID}，登记事项 D04）：边界取每个组最小的待确认 ID，组内没有待确认消息时取它
+     * 最后投递的 ID，再取各组中最小的。边界之前的条目已被每个组确认，删除后不影响重投。Stream 或消费组不存在时什么都不做。
+     *
+     * @param stream Stream 的键
+     * @return 删除的条目数
+     */
+    public long trimAcknowledged(String stream) {
+        if (!Boolean.TRUE.equals(template.hasKey(stream))) {
+            return 0;
+        }
+        StreamInfo.XInfoGroups groups = template.opsForStream().groups(stream);
+        if (groups == null || groups.isEmpty()) {
+            return 0;
+        }
+        RecordId boundary = null;
+        for (StreamInfo.XInfoGroup group : groups) {
+            RecordId candidate;
+            if (group.pendingCount() != null && group.pendingCount() > 0) {
+                PendingMessagesSummary summary = template.opsForStream().pending(stream, group.groupName());
+                candidate = summary == null ? null : summary.minRecordId();
+            } else {
+                candidate = RecordId.of(group.lastDeliveredId());
+            }
+            if (candidate == null) {
+                return 0;
+            }
+            boundary = boundary == null || compare(candidate, boundary) < 0 ? candidate : boundary;
+        }
+        if (boundary == null || compare(boundary, RecordId.of("0-1")) < 0) {
+            return 0;
+        }
+        Long removed = template.opsForStream()
+                .trim(stream, XTrimOptions.trim(TrimOptions.minId(boundary).exact()));
+        return removed == null ? 0 : removed;
+    }
+
+    /** 按时间戳与序号比较两个条目 ID。 */
+    static int compare(RecordId a, RecordId b) {
+        int byTime = Long.compare(a.getTimestamp(), b.getTimestamp());
+        return byTime != 0 ? byTime : Long.compare(a.getSequence(), b.getSequence());
     }
 
     /**

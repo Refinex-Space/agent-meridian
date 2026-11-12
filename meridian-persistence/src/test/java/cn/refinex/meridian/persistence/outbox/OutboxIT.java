@@ -27,9 +27,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** T02-A05：回滚不发布、多实例并发只发布一次、消费方重复收到时幂等。 */
+/** T02-A05：回滚不发布、多实例并发只发布一次、消费方重复收到时幂等；T16（D49 C-12）：认领后在事务外发布，失败不阻塞队头。 */
 class OutboxIT {
 
     private static final Instant NOW = Instant.parse("2026-11-07T08:00:00Z");
@@ -101,17 +102,93 @@ class OutboxIT {
     }
 
     @Test
-    void failedPublishStopsTheBatchAndRetriesLater() {
+    void aFailingMessageDoesNotBlockTheMessagesBehindIt() {
         List<String> ids = transactions.execute(status -> IntStream.range(0, 3)
                 .mapToObj(i -> writer.append("audit", Map.of("seq", i)))
                 .toList());
         FlakyPublisher publisher = new FlakyPublisher(ids.get(1));
         OutboxRelay relay = relay(publisher, 10);
 
-        assertThat(relay.relayOnce()).isEqualTo(1);
-        publisher.healthy = true;
+        // D49 C-12：失败的消息只记一次失败，同批后面的照常发布
         assertThat(relay.relayOnce()).isEqualTo(2);
-        assertThat(publisher.published).extracting(OutboxMessage::id).containsExactlyElementsOf(ids);
+        assertThat(attempts(ids.get(1))).isEqualTo(1);
+        publisher.healthy = true;
+        assertThat(relay.relayOnce()).isEqualTo(1);
+        assertThat(publisher.published)
+                .extracting(OutboxMessage::id)
+                .containsExactly(ids.get(0), ids.get(2), ids.get(1));
+    }
+
+    @Test
+    void consecutiveFailuresEndTheBatchAndReleaseTheRest() {
+        List<String> ids = transactions.execute(status -> IntStream.range(0, 5)
+                .mapToObj(i -> writer.append("usage", Map.of("seq", i)))
+                .toList());
+        FlakyPublisher publisher = new FlakyPublisher(null);
+        OutboxRelay relay = relay(publisher, 10);
+
+        assertThat(relay.relayUntilDrained()).isZero();
+        assertThat(ids).extracting(this::attempts).containsExactly(1, 1, 1, 0, 0);
+        assertThat(jdbc.sql("SELECT count(*) FROM rt.outbox WHERE claimed_until IS NOT NULL")
+                        .query(Long.class)
+                        .single())
+                .isZero();
+        publisher.healthy = true;
+        assertThat(relay.relayUntilDrained()).isEqualTo(5);
+    }
+
+    @Test
+    void aMessageThatKeepsFailingIsNoLongerDelivered() {
+        String id = transactions.execute(status -> writer.append("audit", Map.of("seq", 0)));
+        FlakyPublisher publisher = new FlakyPublisher(id);
+        OutboxRelay relay = relay(publisher, 10);
+
+        for (int i = 0; i < OutboxRelay.MAX_ATTEMPTS; i++) {
+            assertThat(relay.relayOnce()).isZero();
+        }
+        publisher.healthy = true;
+        assertThat(relay.relayOnce()).isZero();
+        assertThat(attempts(id)).isEqualTo(OutboxRelay.MAX_ATTEMPTS);
+        assertThat(publisher.published).isEmpty();
+    }
+
+    @Test
+    void publishingHoldsNoTransactionAndNoRowLock() {
+        String id = transactions.execute(status -> writer.append("usage", Map.of("seq", 0)));
+        List<Boolean> observations = new ArrayList<>();
+        OutboxPublisher probe = message -> {
+            observations.add(TransactionSynchronizationManager.isActualTransactionActive());
+            // 另一个连接能立即锁住这一行：Relay 没有在发布期间持有行锁
+            transactions.executeWithoutResult(
+                    status -> observations.add(jdbc.sql("SELECT id FROM rt.outbox WHERE id = :id FOR UPDATE NOWAIT")
+                            .param("id", id)
+                            .query(String.class)
+                            .optional()
+                            .isPresent()));
+        };
+
+        assertThat(relay(probe, 10).relayOnce()).isEqualTo(1);
+        assertThat(observations).containsExactly(false, true);
+    }
+
+    @Test
+    void aClaimThatIsNeverMarkedExpiresAndTheMessageIsRedelivered() {
+        String id = transactions.execute(status -> writer.append("usage", Map.of("seq", 0)));
+        // 另一个实例认领后崩溃：认领截止时间还没到
+        jdbc.sql("UPDATE rt.outbox SET claimed_until = :until WHERE id = :id")
+                .param(
+                        "until",
+                        java.time.OffsetDateTime.ofInstant(
+                                NOW.plus(OutboxRelay.CLAIM_DURATION), java.time.ZoneOffset.UTC))
+                .param("id", id)
+                .update();
+        RecordingPublisher publisher = new RecordingPublisher();
+        OutboxRelay relay = relay(publisher, 10);
+
+        assertThat(relay.relayOnce()).isZero();
+        clock.advance(OutboxRelay.CLAIM_DURATION.plusSeconds(1));
+        assertThat(relay.relayOnce()).isEqualTo(1);
+        assertThat(publisher.published).extracting(OutboxMessage::id).containsExactly(id);
     }
 
     @Test
@@ -196,6 +273,13 @@ class OutboxIT {
                 .update();
     }
 
+    private int attempts(String id) {
+        return jdbc.sql("SELECT attempts FROM rt.outbox WHERE id = :id")
+                .param("id", id)
+                .query(Integer.class)
+                .single();
+    }
+
     private OutboxRelay relay(OutboxPublisher publisher, int batchSize) {
         return new OutboxRelay(dataSource, transactionManager, PersistenceFixtures.SCHEMA, publisher, clock, batchSize);
     }
@@ -238,7 +322,7 @@ class OutboxIT {
         }
     }
 
-    /** 在指定消息上失败，直到被标记为恢复。 */
+    /** 在指定消息上失败（为空时在所有消息上失败），直到被标记为恢复。 */
     static final class FlakyPublisher implements OutboxPublisher {
         final List<OutboxMessage> published = new ArrayList<>();
         private final String failingId;
@@ -250,7 +334,7 @@ class OutboxIT {
 
         @Override
         public void publish(OutboxMessage message) {
-            if (!healthy && message.id().equals(failingId)) {
+            if (!healthy && (failingId == null || message.id().equals(failingId))) {
                 throw new IllegalStateException("Redis 不可用");
             }
             published.add(message);

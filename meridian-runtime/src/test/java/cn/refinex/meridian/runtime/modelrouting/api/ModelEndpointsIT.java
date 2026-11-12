@@ -2,8 +2,8 @@ package cn.refinex.meridian.runtime.modelrouting.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.common.json.JsonMappers;
-import cn.refinex.meridian.runtime.modelrouting.domain.BudgetLevel;
 import cn.refinex.meridian.runtime.modelrouting.infra.RedisBudgetLedger;
 import cn.refinex.meridian.runtime.support.ApiTestBase;
 import cn.refinex.meridian.runtime.support.ApiTestClient;
