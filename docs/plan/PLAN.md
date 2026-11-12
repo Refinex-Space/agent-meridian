@@ -177,10 +177,10 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 T15b（开工 2026-11-11，基线 `scripts/dev/verify.sh` 通过）：
 
-- [ ] 1. 规范：`agent-spec.schema.json`（与 `ResolvedAgentSpec` 一一对应）、管理 API（智能体与版本、环境、技能、MCP 服务、权限规则）、内部接口（解析、环境、技能、权限规则、租户设置）、公开接口 `GET /v1/agents`
-- [ ] 2. control-plane：迁移 `V0003`、智能体与版本（发布不可变、六项校验、版本对比）、环境（修订历史）、技能包（frontmatter 校验、对象存储、版本化）、MCP 服务（端点校验、探测并保存工具清单、每个工具的副作用）、权限规则（租户与项目、记住此决定）、租户设置的下发与 D61、`config.invalidate`、`KnowledgeCatalogClient` 开发实现
-- [ ] 3. control-plane 公开接口：MVC 版 API Key 过滤器与限流（D55）、`GET /v1/agents`
-- [ ] 4. engine：MCP 每个工具的副作用、按智能体版本淘汰实例（D32）
+- [x] 1. 规范：`agent-spec.schema.json`（与 `ResolvedAgentSpec` 一一对应）、管理 API（智能体与版本、环境、技能、MCP 服务、权限规则）、内部接口（解析、环境、技能、权限规则、租户设置）、公开接口 `GET /v1/agents`
+- [x] 2. control-plane：迁移 `V0003`、智能体与版本（发布不可变、六项校验、版本对比）、环境（修订历史）、技能包（frontmatter 校验、对象存储、版本化）、MCP 服务（端点校验、探测并保存工具清单、每个工具的副作用）、权限规则（租户与项目、记住此决定）、租户设置的下发与 D61、`config.invalidate`、`KnowledgeCatalogClient` 开发实现
+- [x] 3. control-plane 公开接口：MVC 版 API Key 过滤器与限流（D55）、`GET /v1/agents`
+- [x] 4. engine：MCP 每个工具的副作用、按智能体版本淘汰实例（D32）
 - [ ] 5. runtime：control-plane 的 `AgentConfigProvider`、`PolicyStorePort`、租户设置（缓存、失效、兜底过期），文件实现只在 dev、test
 - [ ] 6. 验收测试：A02（Schema 一致性与六项校验）、A03、A04、A05、A06、A07、A08
 - [ ] 7. A01 端到端（`-Plive`，qwen-plus，不读 `dev-config/`）
