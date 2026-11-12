@@ -1336,29 +1336,29 @@
       "id": "T17b-A01",
       "task": "T17b",
       "description": "文件上传后在 `user.message` 中引用，智能体能在工作区读到该文件。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dit.test=FileReferenceWorkerIT：3 个用例通过。上传（文件名规范化为 `Q3 报告.md`、检测类型 text/markdown）→ `user.message` 引用（保存检测的类型，客户端声明的不采用）→ 轮次开始放到 `uploads/{file_id}/Q3 报告.md` → 模型收到工作区路径并用 `read_file` 读到内容，`rt.workspace_entries` 记下 `content_size`；别的项目的文件、非图片的图片块整批 400；sandbox 档经 `SandboxDriver.writeFiles` 写进沙箱（FakeSandboxDriver），不写平台存储"
     },
     {
       "id": "T17b-A02",
       "task": "T17b",
       "description": "工作区 API 在两个档位下的行为符合要求；写受保护路径被拒绝；路径穿越被拒绝。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "-Dit.test=WorkspaceApiIT：3 个用例通过（另有 FilesApiIT 2 个）。none 档 PUT、GET、列表（游标、前缀）与智能体同一份存储；受保护路径 AGENTS.md、skills/、subagents/、tools.json、MEMORY.md 写入 403 workspace.protected_path；`..`、`a/../../b`、`/abs`、`a/./b`、`a//b`、反斜杠、目录的写入与读取都是 400 workspace.invalid_path，且没有写入任何条目；超过上限 413 file.too_large；归档后 409 session.terminated；sandbox 档只读 outputs/ 副本，其他路径 404，写入 409 workspace.read_only；每次交互按 meridian-v1.yaml 校验"
     },
     {
       "id": "T17b-A03",
       "task": "T17b",
       "description": "每轮结束产生 `session.usage`，数值与账本一致。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "-Dit.test=SessionUsageIT：2 个用例通过。两轮会话（第一轮工具调用前后两次模型调用，带缓存与推理 token），每轮的 `session.usage` 紧挨在 `status_idle` 之前；本轮合计等于 outbox 中该轮 model_tokens 记录之和（280/24/180/0/4、30/2/0/0/0），会话累计等于该会话的账本合计（310/26/180/0/4），`models` 明细与调用次数正确；没有模型调用的一轮为零且不带 model_id；数据按 SessionUsageData schema 校验"
     },
     {
       "id": "T17b-A04",
       "task": "T17b",
       "description": "`/v1/responses` 子集的流式与非流式响应符合规范；不支持的参数返回明确错误。验证：契约测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "-Dit.test=ModelEndpointsIT：15 个用例通过（Responses 4 个）。非流式：instructions、developer、历史 assistant 消息翻译正确，`usage` 与用量记录一致，幂等重放；流式：response.created 至 response.completed 的顺序、sequence_number 连续、`event:` 与 type 相同、每个事件按 ResponseStreamEvent 校验；首包之前 503 problem+json，之后以 response.failed 结束；tools、previous_response_id、reasoning、store=true 返回 400 model.unsupported_parameter 并逐项列出字段，input_image、function_call_output 输入项同样处理，未知字段 400 request.invalid；SessionApiContractIT 覆盖全部 24 个操作"
     },
     {
       "id": "T17b-A05",

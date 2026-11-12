@@ -38,7 +38,8 @@ class ProjectAccessIT extends ControlPlaneTestBase {
         Reply developer = resolve("developer", project, token);
         assertThat(developer.status()).isEqualTo(200);
         assertThat(developer.text("tenant_id")).isEqualTo(fixture.get("tenant"));
-        assertThat(scopes(developer)).containsExactly("files:write", "models:invoke", "sessions:read", "sessions:write");
+        assertThat(scopes(developer))
+                .containsExactly("files:write", "models:invoke", "sessions:read", "sessions:write");
         assertThat(scopes(resolve("owner", project, token)))
                 .containsExactly("files:write", "models:invoke", "sessions:read", "sessions:write");
         assertThat(scopes(resolve("viewer", project, token))).containsExactly("sessions:read");
