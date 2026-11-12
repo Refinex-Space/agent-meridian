@@ -1238,64 +1238,64 @@
       "id": "T16-A01",
       "task": "T16",
       "description": "一轮真实或模拟的对话后，`usage_records` 中有对应记录，成本按价格表正确计算；重复投递不产生重复记录。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-control-plane -am verify -Dit.test=UsageLedgerIT`：Tests run: 5, Failures: 0。runtime 契约样本 model_tokens（输入 1200、缓存读 200、缓存写 100、输出 300、推理 50）经 Stream usage 入账，cost=0.001732（12 位小数）、币种 CNY、价格表版本 1；同一消息 ID 再投递两次仍只有 1 行，budget_usage 只累加一次；runtime 的 OutboxUsageContractTest 断言 ModelUsageMessage 等与样本一致。全量 verify.sh 中同样通过。Compose 真实链路（app-smoke.sh）未执行：构建镜像的命令被拒绝"
     },
     {
       "id": "T16-A02",
       "task": "T16",
       "description": "调整价格表后，新记录用新价格，历史记录不变。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`UsageLedgerIT.anotherPriceBookVersionPricesNewRecordsAndLeavesHistoryAlone`：经管理 API 发布价格表版本 2（单价翻倍）后，带版本 2 的新记录 cost=0.003464，调价前的记录仍为 0.001732"
     },
     {
       "id": "T16-A03",
       "task": "T16",
       "description": "四级预算：任一级达到硬阈值时 runtime 拒绝新的模型调用并以 `budget_exceeded` 结束；达到软阈值时产生告警。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "runtime `BudgetLimitsWorkerIT`（Tests run: 5, Failures: 0）：限额来自 Redis 哈希，租户、项目、API Key、会话任一级硬阈值 10 时轮次以 budget_exceeded 结束、错误为“<级别>预算不足”、没有发出模型请求；control-plane `BudgetIT.crossingTheSoftLimitRaisesOneAlertAndAnAudit`：项目软阈值 2000，第二条用量越过（3000）产生一条 soft_limit_reached 告警（第三条不重复），审计 budget.soft_limit_reached 可检索"
     },
     {
       "id": "T16-A04",
       "task": "T16",
       "description": "对账：人为制造 Redis 与账本不一致后，对账任务按账本修正并记录差异。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`BudgetIT.reconciliationCorrectsRedisToTheLedgerPlusLiveReservations`：账本 1500、Redis 计数改成 9999、进行中的预扣 300、账本里没有的计数 777；对账后计数为 1800 与 0，budget_corrections 记录 observed 9999 / inflight 300 / ledger 1500 / correction -8199 与 -777，指标 meridian.budget.reconciliation.corrections 增加，过期的预扣 ID 被移出集合；再次对账不再修正"
     },
     {
       "id": "T16-A05",
       "task": "T16",
       "description": "审计：管理操作、权限判定、待处理动作回应、凭据访问、沙箱命令都能在审计查询中检索到；`meridian_app` 角色无法更新或删除审计记录。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`AuditLogIT`（Tests run: 3, Failures: 0）：api_key.created（console_user/owner）、secret.resolved（service/runtime）可按动作、资源、操作者检索；runtime 契约样本的 permission.decided、pending_action.concluded（操作者 api_key）、sandbox.command、tool.executed、turn.finished 可按会话、资源、动作、时间检索，别的租户看不到；meridian_app 对 cp.audit_logs、其分区与 cp.usage_records 执行 UPDATE、DELETE、TRUNCATE 都是 permission denied"
     },
     {
       "id": "T16-A06",
       "task": "T16",
       "description": "`GET /v1/usage` 与管理报表的聚合结果与账本明细一致。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`UsageReportIT.reportsMatchTheLedgerDetails`：7 条明细（两个项目、两个模型、有无 API Key 与智能体、Embedding、沙箱、搜索、三天）；GET /v1/usage 的 6 种维度组合、租户报表（含 project 维度与项目过滤）与项目报表（观察者）都与测试直接从 usage_records 分组求和的结果逐行一致；非法维度与超过 366 天的范围返回 400 usage.invalid_query"
     },
     {
       "id": "T16-A07",
       "task": "T16",
       "description": "分区自动创建：时钟推进到月底时下个月分区已存在。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`UsageLedgerIT.nextMonthsPartitionsExistBeforeTheMonthStartsAndOldOnesAreDropped`：时钟 2027-02-28T23:59:59Z 执行分区维护后 usage_records_p2027_03、audit_logs_p2027_03 已存在，推进到 3 月只新建 4 月的两张；2020-01 的分区被 drop_expired_ledger_partitions 删除"
     },
     {
       "id": "T16-A08",
       "task": "T16",
       "description": "新租户在未设置预算前，模型调用以 `budget_exceeded` 被拒绝；设置后可用。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "runtime `BudgetLimitsWorkerIT.aTenantWithoutBudgetsIsRejectedUntilAnAdministratorSetsThem`：限额哈希为空时以 budget_exceeded（租户预算不足）结束，写入四级“不限”后下一轮 end_turn，用量记录带创建会话的 API Key；control-plane `BudgetIT.aNewTenantHasNoLimitsUntilAnAdministratorSetsThem`：新租户没有限额哈希，设置四级预算后哈希为 tenant=1000000、project:*=-1、api_key:*=-1、session:*=5000、project:{id}=100，修改、删除即时同步，删除哈希后全量同步恢复"
     },
     {
       "id": "T16-A09",
       "task": "T16",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`scripts/dev/verify.sh`：BUILD SUCCESS（全部模块的格式、编译、单元与集成测试、架构测试、enforcer、覆盖率，sandbox-runtime 23 passed），exit=0"
     },
     {
       "id": "T17a-A01",

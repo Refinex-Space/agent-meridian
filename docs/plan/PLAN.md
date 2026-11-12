@@ -80,7 +80,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 已完成 | ed57d00 |
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | a9db160 |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 4c867bf |
-| T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 进行中 | — |
+| T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 已完成 | 待填 |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 未开始 | — |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 未开始 | — |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 未开始 | — |
@@ -175,18 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T16 计量、预算与审计（开工 2026-11-12；基线 `verify.sh` 中 `SubagentSessionIT` 偶发失败、单独重跑通过，登记 D66）。设计见 ADR-0048。
-
-- [ ] ADR-0048、架构设计 v1.22
-- [x] persistence：outbox 认领后在事务外发布、失败不阻塞队头（D49 C-12）；`StreamConsumer`（消费组、认领重投、死信回调、`XTRIM MINID`，D04）；`common.budget`（级别与 Redis 键）
-- [x] cp 迁移 `V0004`：`usage_records`、`audit_logs`（按月分区、只追加）、`budgets`、`budget_usage`、`budget_alerts`、`budget_corrections`、`stream_dead_letters`、分区函数与权限、outbox 新列；rt `V0008`
-- [x] cp 用量消费者（按价格表版本计价、幂等、账本汇总、软阈值告警）与分区维护（A01、A02、A07）
-- [x] cp 审计消费者与查询接口；runtime 审计消息补操作者与资源（A05）
-- [x] cp 预算管理接口与 Redis 限额同步、默认零预算（A08 的 control-plane 侧）
-- [x] cp 对账任务（A04）
-- [x] cp 用量报表与 `GET /v1/usage`（A06）
-- [ ] runtime：限额来自 Redis、按月计数、预扣记录带键；联网搜索计量（A03、A08 的 runtime 侧）
-- [ ] 脚本与本地环境（dev 租户与 smoke 脚本设置预算）、文档与 CLAUDE.md、`verify.sh`（A09）
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -448,6 +437,14 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：A01–A09 全部 passing（`AgentVersionIT`、`AgentResourcesIT`、`AgentConfigDomainTest`、`AgentSpecSchemaTest`、`AgentConfigSessionIT`；`-Plive` 的 `AgentConfigLiveIT` 与真实链路 `agent-smoke.sh --dashscope` 都通过，全程不读 `dev-config/`）
 - 决策：一份 Schema，草稿省略发布时填写的字段；发布时快照 MCP 服务的登记配置，版本真正不可变；技能包以 JSON 上传；租户设置变更时按租户淘汰实例；解析类接口不按租户过滤，由 runtime 校验资源属于调用方项目；networknt 用 2.0.1（与 AgentScope 带来的 2.0.0 同坐标，3.x 换了 Jackson 3）
 - 遗留：D53 A-F8（MCP 重连语义，T19）、D55 的 knowledge 部分（T18）、D63（`dev-config/` 只剩测试与本地开发，预算限额 T16）、D64（`TODO(T18)` 知识库存在性）、D65（已删除智能体的版本不计入引用，R2）
+
+### 2026-11-12 T16 已完成（提交 待填）
+
+- 交付：control-plane 迁移 `V0004`（`usage_records`、`audit_logs` 按月分区、只追加，分区由迁移角色拥有的 `SECURITY DEFINER` 函数创建与删除；`budgets`、`budget_usage`、`budget_alerts`、`budget_corrections`、`stream_dead_letters`），`metering`（用量消费者按价格表版本计价、幂等入账、累加预算汇总；分区维护；用量报表与公开 `GET /v1/usage`）、`budget`（预算管理与 Redis 限额同步、软阈值告警、每小时对账）、`audit`（审计消费者归一化标准字段、审计查询）上下文；操作类别 `BUDGET_READ`、`BUDGET_WRITE`、`AUDIT_READ`、`USAGE_READ`，ID 前缀 `bdg`、`bal`；persistence 的 `OutboxRelay` 认领后在事务外发布、失败不阻塞队头（D49 C-12），`StreamConsumer` 与确认后裁剪（D04）；common 的 `budget`（级别与 Redis 键）、`audit.AuditActor`；runtime 的限额改读 Redis 哈希（没有设置为 0）、计数按月、预扣记录带计数键，会话记下创建它的 API Key（rt `V0009`），联网搜索计量，审计消息补操作者与资源，outbox 新列（rt `V0008`）；`meridian-test-support` 的 outbox 契约样本；开发租户与 smoke 脚本设置预算，`app-smoke.sh` 增加零预算、用量与审计的检查；ADR-0048，架构设计 v1.22
+- 验收：A01–A09 全部 passing（`UsageLedgerIT`、`UsageReportIT`、`BudgetIT`、`AuditLogIT`、runtime `BudgetLimitsWorkerIT` 与四个 outbox 契约测试，`verify.sh` 通过）；Compose 真实链路 `app-smoke.sh` 未执行（构建镜像的命令被拒绝），新步骤只做了语法检查
+- 决策：预算以 token 计（价格表可能多币种、沙箱与搜索没有单价），租户、项目、API Key 按自然月、会话不分周期；每级可设默认值，没有设置为 0；限额是每租户一个 Redis 哈希、提交后增量写入加 5 分钟全量重写；对账目标是账本加未过期预扣；审计消息统一标准字段，runtime 的平铺字段并入 `details`；`group_by` 用逗号分隔的字符串（契约校验库不支持 3.1 的数组查询参数）
+- 顺带修复：`OutboxIT` 中断言队头阻塞的用例改为断言新行为（D49 要求修掉该行为）
+- 遗留：D66（`SubagentSessionIT` 偶发 BlockHound 失败，R2）、D67（`sessions.budget_limit` 未使用）、D68（用量明细与 CSV，T19b）、D69（死信与停止投递的 outbox 消息没有处理工具）、D70（知识检索次数与存储量的计量，T18、T19）
 
 ## 计划变更记录
 
