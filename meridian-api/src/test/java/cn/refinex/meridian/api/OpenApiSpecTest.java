@@ -47,7 +47,14 @@ class OpenApiSpecTest {
             "GET /v1/sessions/{session_id}/threads",
             "GET /v1/sessions/{session_id}/threads/{thread_id}/stream",
             "GET /v1/sessions/{session_id}/pending-actions",
+            "GET /v1/sessions/{session_id}/workspace/files/{path}",
+            "PUT /v1/sessions/{session_id}/workspace/files/{path}",
+            "GET /v1/sessions/{session_id}/workspace:list",
+            "POST /v1/files",
+            "GET /v1/files/{file_id}",
+            "GET /v1/files/{file_id}/content",
             "POST /v1/chat/completions",
+            "POST /v1/responses",
             "POST /v1/embeddings",
             "GET /v1/agents",
             "GET /v1/agents/{agent_id}",
@@ -132,9 +139,13 @@ class OpenApiSpecTest {
         operations().forEach((key, operation) -> {
             assertThat(operation.getOperationId()).as(key).isNotBlank();
             assertThat(operation.getTags()).as(key).hasSize(1);
-            String expectedScope = key.startsWith("POST /v1/chat/") || key.startsWith("POST /v1/embeddings")
+            String expectedScope = key.startsWith("POST /v1/chat/")
+                            || key.startsWith("POST /v1/embeddings")
+                            || key.startsWith("POST /v1/responses")
                     ? "models:invoke"
-                    : key.startsWith("GET ") ? "sessions:read" : "sessions:write";
+                    : key.equals("POST /v1/files")
+                            ? "files:write"
+                            : key.startsWith("GET ") ? "sessions:read" : "sessions:write";
             assertThat(operation.getSecurity()).as(key).hasSize(1);
             assertThat(operation.getSecurity().getFirst()).as(key).containsEntry("ApiKeyAuth", List.of(expectedScope));
         });

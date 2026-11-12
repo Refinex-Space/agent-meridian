@@ -7,6 +7,7 @@ import cn.refinex.meridian.common.error.ValidationException;
 import cn.refinex.meridian.engine.spi.event.PendingAction;
 import cn.refinex.meridian.engine.spi.event.UserEvent;
 import cn.refinex.meridian.runtime.approval.domain.StoredPendingAction;
+import cn.refinex.meridian.runtime.file.domain.FileReferences;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -20,6 +21,7 @@ import java.util.Set;
  *       {@code tool_confirmation} 与 {@code plan_exit}，{@code user.custom_tool_result} 回应 {@code custom_tool_result}，
  *       {@code user.recovery_confirmation} 回应 {@code recovery_confirmation}；同一批里不能回应同一个动作两次。
  *   <li>跟在 {@code user.interrupt} 后面的消息一律按 queue 投递：AgentScope 忽略随中断传入的消息，steer 来不及注入当前轮。
+ *   <li>引用了平台文件的消息一律按 queue 投递：文件在轮次开始时才放进工作区，steer 注入当前轮时文件不在（ADR-0050）。
  *   <li>同一批里不能既有 {@code user.interrupt} 又有回应事件：等待回应时中断会把全部待处理动作视为拒绝，与同批的回应相互矛盾
  *       （曾在回应时因动作已有结论抛出 500 并回滚整批，R1 并发审查）。
  * </ul>
@@ -87,8 +89,8 @@ public final class EventAdmission {
     }
 
     /**
-     * 每个事件的实际投递方式：{@code user.message} 取其 {@code delivery}，跟在 {@code user.interrupt} 后面的降级为 queue；
-     * 其他事件为空。
+     * 每个事件的实际投递方式：{@code user.message} 取其 {@code delivery}，跟在 {@code user.interrupt} 后面的、引用了平台文件的降级为
+     * queue；其他事件为空。
      *
      * @param events 用户事件
      * @return 与 {@code events} 一一对应的投递方式，非消息事件为 {@code null}
@@ -99,7 +101,10 @@ public final class EventAdmission {
         for (UserEvent event : events) {
             switch (event) {
                 case UserEvent.Message message ->
-                    result.add(interrupted ? UserEvent.Delivery.QUEUE : message.delivery());
+                    result.add(
+                            interrupted || !FileReferences.of(message.content()).isEmpty()
+                                    ? UserEvent.Delivery.QUEUE
+                                    : message.delivery());
                 case UserEvent.Interrupt _ -> {
                     interrupted = true;
                     result.add(null);

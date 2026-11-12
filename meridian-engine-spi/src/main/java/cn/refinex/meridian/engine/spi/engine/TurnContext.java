@@ -29,6 +29,8 @@ import java.util.Objects;
  * @param interruptRequested 认领时本轮已有中断请求（{@code turns.interrupt_requested_at} 不为空）：等待回应时被中断而生成的
  *     恢复轮，或中断请求之后被恢复认领的轮次。内核先把本轮的输入（回应的结论、恢复说明）写进上下文，在第一次推理前按用户中断
  *     结束本轮（{@code stop_reason=interrupted}），见架构设计「消息投递」
+ * @param workspaceFiles 本轮输入引用的平台文件已放进工作区的位置：文件 ID（{@code fil_…}）→ 相对工作区根的路径，由 runtime 在调用内核之前
+ *     放置后填写（ADR-0050）；内核把引用翻译为这个路径。可为空映射，表示没有放置的文件
  */
 public record TurnContext(
         PlatformContext platform,
@@ -40,7 +42,8 @@ public record TurnContext(
         Map<String, PermissionPolicy> subagentPolicies,
         List<CustomToolDeclaration> customTools,
         RecoveryOrigin recovery,
-        boolean interruptRequested) {
+        boolean interruptRequested,
+        Map<String, String> workspaceFiles) {
 
     /**
      * 创建一轮的上下文。
@@ -66,6 +69,46 @@ public record TurnContext(
         }
         subagentPolicies = subagentPolicies == null ? Map.of() : Map.copyOf(subagentPolicies);
         customTools = customTools == null ? List.of() : List.copyOf(customTools);
+        workspaceFiles = workspaceFiles == null ? Map.of() : Map.copyOf(workspaceFiles);
+    }
+
+    /**
+     * 创建没有放置文件的一轮的上下文。
+     *
+     * @param platform 平台上下文
+     * @param endUserId 终端用户 ID；可为空
+     * @param agentVersionId 智能体版本 ID
+     * @param environmentId 环境 ID
+     * @param environmentRevision 环境修订号
+     * @param permissions 主线程的权限策略
+     * @param subagentPolicies 子智能体的权限策略；可为空
+     * @param customTools 自定义工具；可为空
+     * @param recovery 恢复说明的来源；可为空
+     * @param interruptRequested 认领时本轮已有中断请求
+     */
+    public TurnContext(
+            PlatformContext platform,
+            String endUserId,
+            String agentVersionId,
+            String environmentId,
+            long environmentRevision,
+            PermissionPolicy permissions,
+            Map<String, PermissionPolicy> subagentPolicies,
+            List<CustomToolDeclaration> customTools,
+            RecoveryOrigin recovery,
+            boolean interruptRequested) {
+        this(
+                platform,
+                endUserId,
+                agentVersionId,
+                environmentId,
+                environmentRevision,
+                permissions,
+                subagentPolicies,
+                customTools,
+                recovery,
+                interruptRequested,
+                Map.of());
     }
 
     /**
@@ -101,7 +144,29 @@ public record TurnContext(
                 subagentPolicies,
                 customTools,
                 recovery,
-                false);
+                false,
+                Map.of());
+    }
+
+    /**
+     * 带上已放置文件的副本。
+     *
+     * @param files 文件 ID → 相对工作区根的路径
+     * @return 新的上下文
+     */
+    public TurnContext withWorkspaceFiles(Map<String, String> files) {
+        return new TurnContext(
+                platform,
+                endUserId,
+                agentVersionId,
+                environmentId,
+                environmentRevision,
+                permissions,
+                subagentPolicies,
+                customTools,
+                recovery,
+                interruptRequested,
+                files);
     }
 
     /**

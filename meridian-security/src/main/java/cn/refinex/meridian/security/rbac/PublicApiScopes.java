@@ -8,7 +8,8 @@ import java.util.Set;
 
 /**
  * 控制台用户在公开 API 上的作用域（ADR-0044）：公开 API 的处理器按 API Key 的作用域检查，控制台用户没有 Key，作用域由他在项目中
- * 的角色按 {@link RoleMatrix} 换算。映射只在这里定义；{@code knowledge:*}、{@code files:write} 在对应能力上线时（T18、T17b）加入。
+ * 的角色按 {@link RoleMatrix} 换算。映射只在这里定义；{@code files:write} 与会话写入同一操作类别（T17b，ADR-0050），{@code knowledge:*}
+ * 在知识库上线时（T18）加入。
  */
 public final class PublicApiScopes {
 
@@ -18,6 +19,7 @@ public final class PublicApiScopes {
         PERMISSIONS.put(ApiKeyScope.SESSIONS_READ, Permission.SESSION_READ);
         PERMISSIONS.put(ApiKeyScope.SESSIONS_WRITE, Permission.SESSION_WRITE);
         PERMISSIONS.put(ApiKeyScope.MODELS_INVOKE, Permission.MODEL_INVOKE);
+        PERMISSIONS.put(ApiKeyScope.FILES_WRITE, Permission.SESSION_WRITE);
     }
 
     private PublicApiScopes() {}

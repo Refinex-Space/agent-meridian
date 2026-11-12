@@ -38,6 +38,22 @@ public record TokenUsage(
     }
 
     /**
+     * 两份用量逐项相加。
+     *
+     * @param other 另一份用量
+     * @return 和
+     * @throws ArithmeticException 任一项超出 {@code int} 范围时
+     */
+    public TokenUsage plus(TokenUsage other) {
+        return new TokenUsage(
+                Math.addExact(inputTokens, other.inputTokens),
+                Math.addExact(outputTokens, other.outputTokens),
+                Math.addExact(cachedTokens, other.cachedTokens),
+                Math.addExact(cacheCreationTokens, other.cacheCreationTokens),
+                Math.addExact(reasoningTokens, other.reasoningTokens));
+    }
+
+    /**
      * 总 token 数。
      *
      * @return 输入与输出之和

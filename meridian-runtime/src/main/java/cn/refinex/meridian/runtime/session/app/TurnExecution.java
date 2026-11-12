@@ -22,6 +22,7 @@ import cn.refinex.meridian.runtime.dispatch.app.LeaseListener;
 import cn.refinex.meridian.runtime.dispatch.domain.ClaimedTurn;
 import cn.refinex.meridian.runtime.dispatch.domain.LeaseLoss;
 import cn.refinex.meridian.runtime.dispatch.domain.RequeueReason;
+import cn.refinex.meridian.runtime.file.app.TurnFileStager;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxService;
 import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
 import cn.refinex.meridian.runtime.stream.domain.AppendResult;
@@ -46,6 +47,8 @@ import reactor.core.publisher.Sinks;
  *   <li>准备（{@link TurnPreparer}）：读取输入；恢复认领时先判定恢复方式；写 {@code session.status_running}。
  *   <li>{@code sandbox} 档先由 {@code SandboxService.prepare} 取得会话沙箱（可重试的失败自己写 {@code error(retryable)} 加
  *       {@code rescheduled}），终态之前 {@code afterTurn} 同步产物、计量 vCPU 秒（ADR-0037）。
+ *   <li>本轮输入引用的平台文件由 {@code TurnFileStager} 放进工作区，路径经 {@code TurnContext.workspaceFiles} 交给内核；可重试的失败
+ *       与沙箱获取失败相同（ADR-0050）。
  *   <li>调用 {@link AgentEngine#runTurn}。每个事件经租约条件写入 {@code session_events}，提交后由写入入口 XADD 到
  *       {@code ev:{session_id}}；只在流上的事件只发布。
  *   <li>终态事件到达后由 {@link TurnFinisher} 在一个事务里结束轮次（或置回队列）。
@@ -71,6 +74,7 @@ public final class TurnExecution {
     private final EventStreamPublisher publisher;
     private final TurnMetrics metrics;
     private final SandboxService sandboxes;
+    private final TurnFileStager files;
     private final Clock clock;
     private final Sinks.One<String> abandon = Sinks.one();
     private final AtomicReference<String> abandonCause = new AtomicReference<>();
@@ -89,8 +93,10 @@ public final class TurnExecution {
             EventStreamPublisher publisher,
             TurnMetrics metrics,
             SandboxService sandboxes,
+            TurnFileStager files,
             Clock clock) {
         this.sandboxes = sandboxes;
+        this.files = files;
         this.lease = lease;
         this.turn = lease.turn();
         this.preparer = preparer;
@@ -174,7 +180,10 @@ public final class TurnExecution {
                 yield prepareSandbox(ready)
                         .flatMap(sandbox -> sandbox.failure() != null
                                 ? rescheduleBeforeEngine(ready, sandbox.failure())
-                                : runEngine(ready, sandbox.handle()));
+                                : stageFiles(ready, sandbox.handle())
+                                        .flatMap(staged -> staged.failure() != null
+                                                ? rescheduleBeforeEngine(ready, staged.failure())
+                                                : runEngine(staged.ready(), sandbox.handle())));
             }
         };
     }
@@ -204,6 +213,32 @@ public final class TurnExecution {
                             error.errorCode().code(),
                             error);
                     return Mono.just(new SandboxPreparation(null, error));
+                });
+    }
+
+    /**
+     * 把本轮输入引用的平台文件放进工作区（ADR-0050），得到带 {@code workspaceFiles} 的上下文。对象存储或沙箱暂时不可用时不调用内核，
+     * 本轮与沙箱获取失败一样置回队列。
+     */
+    private Mono<FileStaging> stageFiles(Prepared.Ready ready, SandboxHandle sandbox) {
+        if (files == null) {
+            return Mono.just(new FileStaging(ready, null));
+        }
+        return Blocking.call(() -> {
+                    Map<String, String> staged = files.stage(ready.context(), ready.input(), sandbox);
+                    return new FileStaging(
+                            staged.isEmpty()
+                                    ? ready
+                                    : ready.withContext(ready.context().withWorkspaceFiles(staged)),
+                            null);
+                })
+                .onErrorResume(RetryableTurnException.class, error -> {
+                    log.warn(
+                            "本轮引用的文件暂时无法放进工作区，本轮置回队列 turnId={} code={}",
+                            turn.turnId(),
+                            error.errorCode().code(),
+                            error);
+                    return Mono.just(new FileStaging(ready, error));
                 });
     }
 
@@ -348,6 +383,14 @@ public final class TurnExecution {
      * @param failure 可重试的失败；成功时为 null
      */
     private record SandboxPreparation(SandboxHandle handle, RetryableTurnException failure) {}
+
+    /**
+     * 放置文件的结果。
+     *
+     * @param ready 带放置结果的准备结果；失败时为原来的
+     * @param failure 可重试的失败；成功时为 null
+     */
+    private record FileStaging(Prepared.Ready ready, RetryableTurnException failure) {}
 
     /** 续租结果的回调：在续租任务的虚拟线程上执行，只做不阻塞的操作。 */
     private final class Listener implements LeaseListener {

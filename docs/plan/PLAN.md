@@ -177,14 +177,15 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 T17b（开工基线：`verify.sh` 中 `EventArchiveIT` 偶发失败，SSE 与列表接口的 `created_at` 小数位表示不同，先修测试的比较）：
 
-- [ ] 基线：`EventArchiveIT` 按时刻比较 `created_at`
-- [ ] 设计：ADR-0050、架构设计、`meridian-v1.yaml`（文件、工作区、`session.usage`、`/v1/responses`）
+- [x] 基线：`EventArchiveIT` 按时刻比较 `created_at`（d3876d2）
+- [x] 设计：ADR-0050、架构设计、`meridian-v1.yaml`（文件、工作区、`session.usage`、`/v1/responses`）
 - [ ] 文件：`rt.files`、上传与查询、服务端检测 MIME、文件名规范化、大小上限
 - [ ] 文件引用：发送事件时校验与补全，轮次开始放进工作区（两档），翻译为工作区路径（D07）
 - [ ] 工作区 API：两档、受保护路径、路径穿越
 - [ ] `session.usage`：每轮结束，本轮与会话累计，与账本一致
 - [ ] `/v1/responses` 子集（D26 一并评估）
 - [ ] D54 中留给 T17b 的重复实现
+- [ ] 实现已提交（单测通过），集成测试与契约测试待写：A01 `FileReferenceWorkerIT`、A02 `WorkspaceApiIT`/`FilesApiIT`、A03 `SessionUsageIT`、A04 `ModelEndpointsIT` 的 Responses 部分
 - [ ] 验收 A01–A05，收尾
 
 ## 控制台设计轨道

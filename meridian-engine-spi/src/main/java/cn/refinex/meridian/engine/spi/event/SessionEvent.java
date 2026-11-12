@@ -106,12 +106,16 @@ public sealed interface SessionEvent extends EngineEvent {
     }
 
     /**
-     * {@code session.usage}：一次模型调用的用量，计入会话（子智能体的用量计入父会话）。
+     * {@code session.usage}：每轮结束时（终态事件之前）给出的模型用量，见架构设计「事件」（ADR-0050）。只计推理与压缩的调用，子智能体的
+     * 调用计入父轮次；数值与账本中本轮的 {@code model_tokens} 记录之和相同。
      *
-     * @param modelId 模型 ID（{@code mdl_…}）；必填
-     * @param usage token 用量；必填
+     * @param modelId 本轮用量（输入加输出）最多的模型 ID（{@code mdl_…}）；本轮没有模型调用时为空，事件中不出现
+     * @param usage 本轮合计；必填
+     * @param sessionUsage 会话到本轮为止的累计（含本轮）；必填
+     * @param models 本轮按模型的用量，按模型 ID 排序；可为空列表
      */
-    record Usage(String modelId, TokenUsage usage) implements SessionEvent {
+    record Usage(String modelId, TokenUsage usage, TokenUsage sessionUsage, List<ModelUsage> models)
+            implements SessionEvent {
 
         /**
          * 创建用量事件。
@@ -119,8 +123,33 @@ public sealed interface SessionEvent extends EngineEvent {
          * @throws NullPointerException 缺少必填字段时
          */
         public Usage {
-            Objects.requireNonNull(modelId, "modelId");
             Objects.requireNonNull(usage, "usage");
+            Objects.requireNonNull(sessionUsage, "sessionUsage");
+            models = models == null ? List.of() : List.copyOf(models);
+        }
+
+        /**
+         * 一个模型在本轮的用量。
+         *
+         * @param modelId 模型 ID；必填
+         * @param calls 本轮结算的调用次数，至少 1
+         * @param usage 用量；必填
+         */
+        public record ModelUsage(String modelId, int calls, TokenUsage usage) {
+
+            /**
+             * 创建模型用量。
+             *
+             * @throws NullPointerException 缺少必填字段时
+             * @throws IllegalArgumentException 调用次数小于 1 时
+             */
+            public ModelUsage {
+                Objects.requireNonNull(modelId, "modelId");
+                Objects.requireNonNull(usage, "usage");
+                if (calls < 1) {
+                    throw new IllegalArgumentException("调用次数至少为 1：" + calls);
+                }
+            }
         }
     }
 

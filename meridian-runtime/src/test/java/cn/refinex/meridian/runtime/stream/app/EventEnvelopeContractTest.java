@@ -136,7 +136,12 @@ class EventEnvelopeContractTest {
             case SESSION_STATUS_TERMINATED -> new SessionEvent.StatusTerminated(SessionEvent.TerminationReason.DELETED);
             case SESSION_ERROR ->
                 new SessionEvent.Error("model.provider_unavailable", "供应商不可用", SessionEvent.RetryStatus.RETRYABLE);
-            case SESSION_USAGE -> new SessionEvent.Usage("mdl_1", usage);
+            case SESSION_USAGE ->
+                new SessionEvent.Usage(
+                        "mdl_1",
+                        usage,
+                        usage.plus(usage),
+                        List.of(new SessionEvent.Usage.ModelUsage("mdl_1", 2, usage)));
             case SESSION_MESSAGE_CONSUMED -> new SessionEvent.MessageConsumed(List.of("evt_1", "evt_2"));
             case SESSION_THREAD_CREATED -> new SessionEvent.ThreadCreated("thr_2", "thr_1", "toolu_9", "researcher");
             case SESSION_THREAD_STATUS_RUNNING -> new SessionEvent.ThreadStatusRunning("thr_2");

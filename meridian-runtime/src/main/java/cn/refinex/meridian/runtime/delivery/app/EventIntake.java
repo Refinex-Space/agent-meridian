@@ -21,6 +21,7 @@ import cn.refinex.meridian.runtime.dispatch.app.TurnEnqueuer;
 import cn.refinex.meridian.runtime.dispatch.app.TurnTransitions;
 import cn.refinex.meridian.runtime.dispatch.domain.NewTurn;
 import cn.refinex.meridian.runtime.dispatch.infra.system.TurnLeaseRepository.ActiveTurn;
+import cn.refinex.meridian.runtime.file.app.FileReferenceResolver;
 import cn.refinex.meridian.runtime.session.app.SessionService;
 import cn.refinex.meridian.runtime.session.domain.Session;
 import cn.refinex.meridian.runtime.session.domain.SessionErrorCode;
@@ -84,6 +85,7 @@ public class EventIntake {
     private final PendingActionResolver resolver;
     private final NodeChannel nodeChannel;
     private final SessionEventWriter events;
+    private final FileReferenceResolver fileReferences;
     private final TransactionTemplate transactions;
 
     /**
@@ -99,6 +101,7 @@ public class EventIntake {
      * @param resolver 待处理动作的结论与恢复轮
      * @param nodeChannel 节点频道，中断时通知持有租约的节点
      * @param events 事件写入入口
+     * @param fileReferences 文件引用的校验与补全（ADR-0050）
      * @param transactions 事务模板（传播行为 REQUIRED）
      */
     public EventIntake(
@@ -112,6 +115,7 @@ public class EventIntake {
             PendingActionResolver resolver,
             NodeChannel nodeChannel,
             SessionEventWriter events,
+            FileReferenceResolver fileReferences,
             TransactionTemplate transactions) {
         this.sessions = sessions;
         this.threads = threads;
@@ -123,6 +127,7 @@ public class EventIntake {
         this.resolver = resolver;
         this.nodeChannel = nodeChannel;
         this.events = events;
+        this.fileReferences = fileReferences;
         this.transactions = transactions;
     }
 
@@ -133,11 +138,13 @@ public class EventIntake {
      * @param received 用户事件，按请求顺序，至少一个
      * @return 持久化后的事件，顺序与请求相同
      * @throws NotFoundException 会话不存在或不属于当前项目时（{@code session.not_found}）
+     * @throws cn.refinex.meridian.common.error.ValidationException 引用的文件不可用时
      * @throws cn.refinex.meridian.common.error.ConflictException 会话已终止（{@code session.terminated}），或回应事件与
      *     待处理动作的组合不合法（{@code event.*}）时
      */
     public List<StoredEvent> send(String sessionId, List<UserEvent> received) {
-        List<UserEvent> batch = List.copyOf(received);
+        // 文件引用先校验并补全（规范化的文件名、检测的媒体类型），保存的事件即智能体看到的引用
+        List<UserEvent> batch = List.copyOf(fileReferences.resolve(List.copyOf(received)));
         var actionIds = EventAdmission.respondedActionIds(batch);
         List<UserEvent.Delivery> deliveries = EventAdmission.deliveries(batch);
         List<StoredEvent> stored = transactions.execute(status -> {

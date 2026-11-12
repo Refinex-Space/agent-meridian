@@ -111,6 +111,18 @@ public class SessionLifecycleRepository extends SystemRepository {
     }
 
     /**
+     * 删除会话的用量累计（{@code rt.turn_usage} 不建会话外键，ADR-0050）。
+     *
+     * @param sessionId 会话 ID
+     * @return 删除的行数
+     */
+    public int deleteTurnUsage(String sessionId) {
+        return jdbc().sql("DELETE FROM rt.turn_usage WHERE session_id = :session_id")
+                .param("session_id", sessionId)
+                .update();
+    }
+
+    /**
      * 删除会话行：线程、轮次与输入、事件、收件箱、智能体状态、工具账本、待处理动作、会话级权限规则、产物清单、Webhook 的 outbox 与投递
      * 记录都经外键级联删除。
      *

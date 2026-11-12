@@ -5,7 +5,9 @@ import cn.refinex.meridian.engine.spi.engine.input.MessageContent;
 import cn.refinex.meridian.engine.spi.engine.input.TurnInput;
 import cn.refinex.meridian.engine.spi.event.EngineEvent;
 import cn.refinex.meridian.engine.spi.event.EventType;
+import cn.refinex.meridian.engine.spi.event.SessionEvent;
 import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.List;
@@ -37,6 +39,7 @@ public final class EngineJson {
             .enable(EnumFeature.WRITE_ENUMS_TO_LOWERCASE)
             .enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS)
             .addMixIn(MessageContent.class, MessageContentMixIn.class)
+            .addMixIn(SessionEvent.Usage.class, OmitNullsMixIn.class)
             .build();
 
     private EngineJson() {}
@@ -161,4 +164,8 @@ public final class EngineJson {
         @JsonSubTypes.Type(value = MessageContent.FileRef.class, name = "file")
     })
     private interface MessageContentMixIn {}
+
+    /** 没有值的字段不写出：{@code session.usage} 的 {@code model_id} 在本轮没有模型调用时不出现（ADR-0050）。 */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private interface OmitNullsMixIn {}
 }

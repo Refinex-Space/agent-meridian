@@ -13,6 +13,7 @@ import cn.refinex.meridian.engine.spi.event.PendingAction;
 import cn.refinex.meridian.engine.spi.event.SessionEvent;
 import cn.refinex.meridian.engine.spi.event.SessionEvent.RetryStatus;
 import cn.refinex.meridian.engine.spi.event.StopReason;
+import cn.refinex.meridian.engine.spi.event.TokenUsage;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
 import cn.refinex.meridian.runtime.approval.app.PendingActionResolver;
@@ -29,6 +30,7 @@ import cn.refinex.meridian.runtime.dispatch.domain.NewTurn;
 import cn.refinex.meridian.runtime.dispatch.domain.NodeId;
 import cn.refinex.meridian.runtime.dispatch.domain.RequeueReason;
 import cn.refinex.meridian.runtime.dispatch.domain.TurnOutcome;
+import cn.refinex.meridian.runtime.modelrouting.infra.system.TurnUsageRepository;
 import cn.refinex.meridian.runtime.session.domain.RecoveryDecision;
 import cn.refinex.meridian.runtime.session.domain.ToolCallRecord;
 import cn.refinex.meridian.runtime.session.domain.TurnEnding;
@@ -40,6 +42,7 @@ import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -90,6 +93,7 @@ public class TurnFinisher {
     private final ApprovalAudit approvalAudit;
     private final ThreadLockRepository threadLocks;
     private final OutboxWriter outbox;
+    private final TurnUsageRepository turnUsage;
     private final TransactionTemplate transactions;
     private final WorkerProperties properties;
     private final TurnMetrics metrics;
@@ -108,6 +112,7 @@ public class TurnFinisher {
      * @param approvalAudit 权限判定与动作结论的审计
      * @param threadLocks 线程咨询锁
      * @param outbox outbox 写入
+     * @param turnUsage 每轮的用量累计，结束时写 {@code session.usage}（ADR-0050）
      * @param transactions 事务模板（传播行为 REQUIRED）
      * @param properties 执行配置，取待处理动作的截止时长
      * @param metrics 指标
@@ -124,6 +129,7 @@ public class TurnFinisher {
             ApprovalAudit approvalAudit,
             ThreadLockRepository threadLocks,
             OutboxWriter outbox,
+            TurnUsageRepository turnUsage,
             TransactionTemplate transactions,
             WorkerProperties properties,
             TurnMetrics metrics,
@@ -138,6 +144,7 @@ public class TurnFinisher {
         this.approvalAudit = approvalAudit;
         this.threadLocks = threadLocks;
         this.outbox = outbox;
+        this.turnUsage = turnUsage;
         this.transactions = transactions;
         this.properties = properties;
         this.metrics = metrics;
@@ -287,7 +294,8 @@ public class TurnFinisher {
         }
         // 先入队再写事件（ADR-0027 第 3 条的锁顺序）
         String nextTurnId = mergeInbox(turn);
-        events.append(new EventBatch(turn.sessionId(), turn.threadId(), turn.turnId(), WriteFence.none(), terminal));
+        events.append(new EventBatch(
+                turn.sessionId(), turn.threadId(), turn.turnId(), WriteFence.none(), withUsage(turn, terminal)));
         audit(turn, agentVersionId, outcome, stopReason, nextTurnId);
         metrics.ended(outcome.value(), stopReason);
         log.info(
@@ -360,7 +368,7 @@ public class TurnFinisher {
                 turn.threadId(),
                 turn.turnId(),
                 WriteFence.none(),
-                List.of(new SessionEvent.StatusRequiresAction(withDeadline))));
+                withUsage(turn, List.of(new SessionEvent.StatusRequiresAction(withDeadline)))));
         audit(turn, agentVersionId, TurnOutcome.AWAITING_ACTION, null, null);
         metrics.ended(TurnOutcome.AWAITING_ACTION.value(), null);
         log.info("轮次等待回应 turnId={} actions={}", turn.turnId(), withDeadline.size());
@@ -400,7 +408,7 @@ public class TurnFinisher {
                     turn.threadId(),
                     turn.turnId(),
                     WriteFence.none(),
-                    List.of(new SessionEvent.StatusIdle(StopReason.TOOLS_DENIED))));
+                    withUsage(turn, List.of(new SessionEvent.StatusIdle(StopReason.TOOLS_DENIED)))));
             actions.forEach(
                     action -> approvalAudit.autoDenied(turn.sessionId(), turn.threadId(), turn.turnId(), action));
             audit(turn, agentVersionId, TurnOutcome.COMPLETED, StopReason.TOOLS_DENIED, nextTurnId);
@@ -412,6 +420,34 @@ public class TurnFinisher {
                     nextTurnId);
             return new TurnResult.Finished(turn.turnId(), TurnOutcome.COMPLETED, StopReason.TOOLS_DENIED);
         });
+    }
+
+    /**
+     * 终态事件之前加上 {@code session.usage}（ADR-0050）：本轮按模型的用量、合计与会话累计，读自与账本同一事务累加的
+     * {@code rt.turn_usage}。本轮的模型调用此时都已结算（{@code RoutedModel} 在流结束之前结算）。
+     */
+    private List<EngineEvent> withUsage(ClaimedTurn turn, List<? extends EngineEvent> terminal) {
+        List<TurnUsageRepository.ModelTurnUsage> models = turnUsage.byModel(turn.turnId());
+        TokenUsage total = models.stream()
+                .map(TurnUsageRepository.ModelTurnUsage::usage)
+                .reduce(new TokenUsage(0, 0, 0, 0, 0), TokenUsage::plus);
+        String topModel = models.stream()
+                .max(Comparator.comparingLong((TurnUsageRepository.ModelTurnUsage m) ->
+                                m.usage().totalTokens())
+                        .thenComparing(TurnUsageRepository.ModelTurnUsage::modelId, Comparator.reverseOrder()))
+                .map(TurnUsageRepository.ModelTurnUsage::modelId)
+                .orElse(null);
+        SessionEvent.Usage usage = new SessionEvent.Usage(
+                topModel,
+                total,
+                turnUsage.session(turn.sessionId()),
+                models.stream()
+                        .map(m -> new SessionEvent.Usage.ModelUsage(m.modelId(), m.calls(), m.usage()))
+                        .toList());
+        List<EngineEvent> result = new ArrayList<>(terminal.size() + 1);
+        result.add(usage);
+        result.addAll(terminal);
+        return result;
     }
 
     /** 是否为需要人工确认的动作（{@code tool_confirmation}、{@code plan_exit}）。 */

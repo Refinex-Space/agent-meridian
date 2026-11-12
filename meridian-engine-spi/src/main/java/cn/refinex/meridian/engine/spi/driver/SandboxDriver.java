@@ -3,6 +3,7 @@ package cn.refinex.meridian.engine.spi.driver;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec.SandboxSize;
 import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import reactor.core.publisher.Mono;
 
@@ -80,6 +81,15 @@ public interface SandboxDriver {
      * @return 是否重新写入了
      */
     Mono<Boolean> syncSkills(SandboxHandle handle, List<SkillDefinition> skills);
+
+    /**
+     * 把文件写进沙箱的工作区（ADR-0050）：轮次开始时放置本轮输入引用的上传文件。父目录不存在时自动创建，已存在的文件被覆盖。
+     *
+     * @param handle 沙箱句柄
+     * @param files 相对工作区根的路径（分隔符 {@code /}，不以 {@code /} 开头、不含 {@code ..} 段）→ 内容；可为空映射
+     * @return 写完后完成
+     */
+    Mono<Void> writeFiles(SandboxHandle handle, Map<String, byte[]> files);
 
     /**
      * 列出产物目录 {@value #OUTPUTS_DIR} 下的全部普通文件（不跟随符号链接），带大小与 SHA-256。

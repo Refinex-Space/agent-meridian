@@ -24,6 +24,7 @@ import cn.refinex.meridian.engine.spi.port.ThreadRegistryPort;
 import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
 import cn.refinex.meridian.runtime.dispatch.app.DispatchWakeups;
 import cn.refinex.meridian.runtime.dispatch.app.TurnClaimer;
+import cn.refinex.meridian.runtime.file.app.TurnFileStager;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxService;
 import cn.refinex.meridian.runtime.session.app.TurnFinisher;
 import cn.refinex.meridian.runtime.session.app.TurnMetrics;
@@ -199,6 +200,7 @@ public class EngineAutoConfiguration {
      * @param publisher 实时扇出
      * @param metrics 指标
      * @param sandboxes 会话沙箱服务
+     * @param files 上传文件的放置（ADR-0050）
      * @param clock 时钟
      * @return Worker
      */
@@ -212,8 +214,9 @@ public class EngineAutoConfiguration {
             EventStreamPublisher publisher,
             TurnMetrics metrics,
             SandboxService sandboxes,
+            TurnFileStager files,
             Clock clock) {
-        return new TurnWorker(claimer, preparer, finisher, engine, audit, publisher, metrics, sandboxes, clock);
+        return new TurnWorker(claimer, preparer, finisher, engine, audit, publisher, metrics, sandboxes, files, clock);
     }
 
     /**

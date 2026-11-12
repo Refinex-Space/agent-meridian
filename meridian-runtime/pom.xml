@@ -63,6 +63,11 @@
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-html2md-converter</artifactId>
         </dependency>
+        <!-- 上传文件与工作区文件的媒体类型按内容检测，不信任客户端声明（ADR-0050） -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+        </dependency>
         <!-- 出网授权按源 IP 缓存 30 秒（架构设计「沙箱出网」），命中率经 Micrometer 的 CaffeineCacheMetrics 导出；版本由 BOM 管理，
              engine-agentscope 已经依赖它 -->
         <dependency>
@@ -162,12 +167,12 @@
                             <generateApis>true</generateApis>
                             <generateModels>false</generateModels>
                             <!--
-                              ChatCompletion 映射为 Object：同一操作按请求体的 stream 返回 JSON 或 SSE，生成器只按第一种响应取签名，
-                              处理器返回 ChatCompletion 或 Flux<ServerSentEvent<String>>（ADR-0033）
+                              ChatCompletion、ModelResponse 映射为 Object：同一操作按请求体的 stream 返回 JSON 或 SSE，生成器只按第一种
+                              响应取签名，处理器返回 DTO 或 Flux<ServerSentEvent<String>>（ADR-0033、ADR-0050）
                             -->
-                            <schemaMappings>SseFrame=org.springframework.http.codec.ServerSentEvent&lt;String&gt;,ChatCompletion=java.lang.Object</schemaMappings>
+                            <schemaMappings>SseFrame=org.springframework.http.codec.ServerSentEvent&lt;String&gt;,ChatCompletion=java.lang.Object,ModelResponse=java.lang.Object</schemaMappings>
                             <!-- 智能体（Agents）由 control-plane 提供（ADR-0047），runtime 只生成自己的标签 -->
-                            <apisToGenerate>Sessions,Events,Threads,PendingActions,Models,Webhooks</apisToGenerate>
+                            <apisToGenerate>Sessions,Events,Threads,PendingActions,Models,Webhooks,Files,Workspace</apisToGenerate>
                             <configOptions>
                                 <reactive>true</reactive>
                                 <interfaceOnly>true</interfaceOnly>

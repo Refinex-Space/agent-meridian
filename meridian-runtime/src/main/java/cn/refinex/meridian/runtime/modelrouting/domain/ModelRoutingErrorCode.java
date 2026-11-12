@@ -9,7 +9,9 @@ public enum ModelRoutingErrorCode implements ErrorCode {
     /** 供应商凭据不存在或不可读。 */
     CREDENTIAL_UNAVAILABLE("model.credential_unavailable", 503, "模型供应商的凭据不可用"),
     /** 模型的种类与接口不符，例如用 Embedding 模型调用对话接口。 */
-    UNSUPPORTED_OPERATION("model.unsupported_operation", 400, "模型不支持该操作");
+    UNSUPPORTED_OPERATION("model.unsupported_operation", 400, "模型不支持该操作"),
+    /** {@code /v1/responses} 不支持的参数或输入项（ADR-0050），{@code errors} 逐项列出。 */
+    UNSUPPORTED_PARAMETER("model.unsupported_parameter", 400, "不支持的参数");
 
     private final String code;
     private final int status;

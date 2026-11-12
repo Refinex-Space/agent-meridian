@@ -88,11 +88,24 @@ final class SkillProjection {
      * @return tar 归档
      */
     static byte[] archive(Map<String, byte[]> files) {
+        Map<String, byte[]> entries = new LinkedHashMap<>();
+        files.forEach((path, content) -> entries.put(SandboxDriver.SKILLS_DIR + "/" + path, content));
+        return tar(entries);
+    }
+
+    /**
+     * 把文件打成 tar，条目路径即给出的路径（相对工作区根），在工作区根展开；不含目录条目，理由同 {@link #archive}。技能资源与上传文件
+     * （ADR-0050）共用。
+     *
+     * @param files 相对工作区根的路径 → 内容
+     * @return tar 归档
+     */
+    static byte[] tar(Map<String, byte[]> files) {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (TarArchiveOutputStream tar = new TarArchiveOutputStream(bytes)) {
             tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
             for (Map.Entry<String, byte[]> file : files.entrySet()) {
-                TarArchiveEntry entry = new TarArchiveEntry(SandboxDriver.SKILLS_DIR + "/" + file.getKey());
+                TarArchiveEntry entry = new TarArchiveEntry(file.getKey());
                 entry.setSize(file.getValue().length);
                 entry.setMode(0644);
                 tar.putArchiveEntry(entry);
@@ -101,7 +114,7 @@ final class SkillProjection {
             }
             tar.finish();
         } catch (IOException e) {
-            throw new UncheckedIOException("打包技能资源失败", e);
+            throw new UncheckedIOException("打包文件失败", e);
         }
         return bytes.toByteArray();
     }

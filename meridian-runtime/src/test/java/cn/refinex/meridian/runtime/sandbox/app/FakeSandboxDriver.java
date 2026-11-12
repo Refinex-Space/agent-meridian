@@ -34,6 +34,9 @@ public final class FakeSandboxDriver implements SandboxDriver {
     final Map<String, Map<String, byte[]>> snapshots = new ConcurrentHashMap<>();
     final List<String> calls = new CopyOnWriteArrayList<>();
     final List<List<SkillDefinition>> skillSyncs = new CopyOnWriteArrayList<>();
+    /** 经 {@code writeFiles} 写进各沙箱的文件：沙箱 ID → 相对工作区根的路径 → 内容（T17b）。 */
+    final Map<String, Map<String, byte[]>> written = new ConcurrentHashMap<>();
+
     private final AtomicInteger sequence = new AtomicInteger();
     private volatile String nextPodIp;
     private final ObjectStore objects;
@@ -180,6 +183,30 @@ public final class FakeSandboxDriver implements SandboxDriver {
             skillSyncs.add(List.copyOf(skills));
             return true;
         });
+    }
+
+    @Override
+    public Mono<Void> writeFiles(SandboxHandle handle, Map<String, byte[]> files) {
+        return Mono.fromRunnable(() -> {
+            Box box = box(handle);
+            calls.add("writeFiles:" + box.id());
+            written.computeIfAbsent(box.id(), id -> new ConcurrentHashMap<>()).putAll(files);
+            files.forEach((path, content) -> {
+                if (path.startsWith(OUTPUTS_DIR + "/")) {
+                    box.outputs().put(path.substring(OUTPUTS_DIR.length() + 1), content);
+                }
+            });
+        });
+    }
+
+    /**
+     * 经 {@code writeFiles} 写进沙箱的文件。
+     *
+     * @param sandboxId 沙箱 ID
+     * @return 相对工作区根的路径 → 内容；没有时为空映射
+     */
+    public Map<String, byte[]> written(String sandboxId) {
+        return written.getOrDefault(sandboxId, Map.of());
     }
 
     @Override

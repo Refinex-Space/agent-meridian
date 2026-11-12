@@ -24,6 +24,16 @@ sealed interface Prepared {
         public Ready {
             retries = retries == null ? List.of() : List.copyOf(retries);
         }
+
+        /**
+         * 换成另一个上下文（放置文件之后带上 {@code workspaceFiles}）。
+         *
+         * @param context 新的上下文
+         * @return 新的准备结果
+         */
+        Ready withContext(TurnContext context) {
+            return new Ready(context, input, agentVersionId, retries);
+        }
     }
 
     /**

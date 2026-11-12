@@ -6,6 +6,11 @@ spring:
     deserialization:
       # 公开 API 的请求体：未声明的字段返回 400，不静默忽略（编码规范「通用能力复用」中 JsonMappers.strict 的约定）
       fail-on-unknown-properties: true
+  webflux:
+    multipart:
+      # 上传文件（ADR-0050）：表单解析阶段就截断超过上限的文件部分（默认无上限，会把任意大的上传落到本机磁盘）
+      max-disk-usage-per-part: ${meridian.runtime.files.max-size:32MB}
+      max-parts: 4
   flyway:
     # 迁移以 meridian_migrator 执行（spring.flyway.user/password），脚本位置与 schema 由 meridian-persistence 的迁移约定设置
     enabled: true
@@ -21,6 +26,9 @@ meridian:
       # 控制台用户带 Meridian-Project 调用公开 API（ADR-0044）：部署时配置 issuer
       audience: meridian
   runtime:
+    files:
+      # 上传文件与工作区写入的大小上限（ADR-0050）
+      max-size: 32MB
     dispatch:
       # 以下为架构设计「一轮执行的生命周期」规定的默认值，写在这里便于查看；节点 ID 留空时按主机名生成
       lease-ttl: 30s

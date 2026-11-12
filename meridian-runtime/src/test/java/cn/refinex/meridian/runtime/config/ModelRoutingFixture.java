@@ -23,6 +23,7 @@ import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient;
 import cn.refinex.meridian.runtime.modelrouting.infra.RedisBudgetLedger;
 import cn.refinex.meridian.runtime.modelrouting.infra.RedisBudgetLimits;
 import cn.refinex.meridian.runtime.modelrouting.infra.RedisRateLimiter;
+import cn.refinex.meridian.runtime.modelrouting.infra.system.TurnUsageRepository;
 import cn.refinex.meridian.runtime.support.DbAssertions;
 import cn.refinex.meridian.runtime.support.RuntimeTestDatabase;
 import cn.refinex.meridian.runtime.support.RuntimeTestRedis;
@@ -99,7 +100,9 @@ final class ModelRoutingFixture implements AutoCloseable {
                 ledger,
                 new UsageRecorder(
                         new OutboxWriter(RuntimeTestDatabase.dataSource(), "rt", Clock.systemUTC()),
-                        RuntimeTestDatabase.transactions()),
+                        new TurnUsageRepository(RuntimeTestDatabase.dataSource()),
+                        RuntimeTestDatabase.transactions(),
+                        Clock.systemUTC()),
                 new ModelMetrics(registry),
                 ModelRoutingProperties.defaults(),
                 Clock.systemUTC());

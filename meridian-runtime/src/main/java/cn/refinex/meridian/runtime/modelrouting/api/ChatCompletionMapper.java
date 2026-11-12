@@ -265,6 +265,33 @@ final class ChatCompletionMapper {
         }
 
         /**
+         * 拼接后的文本。
+         *
+         * @return 文本；没有文本时为空串
+         */
+        String text() {
+            return text.toString();
+        }
+
+        /**
+         * 最后出现的用量。
+         *
+         * @return 用量；供应商没有报告时为空
+         */
+        TokenUsage usage() {
+            return usage;
+        }
+
+        /**
+         * 最后出现的结束原因。
+         *
+         * @return 结束原因；没有时为空
+         */
+        String finishReason() {
+            return finishReason;
+        }
+
+        /**
          * 组装非流式结果。
          *
          * @param completion 补全的公共字段

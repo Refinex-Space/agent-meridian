@@ -385,7 +385,8 @@ public final class AgentScopeEngine implements AgentEngine {
 
     private Flux<EngineEvent> execute(RunningTurn turn) {
         TurnEventMapper mapper = new TurnEventMapper(turn.mappingSettings(), blobs);
-        List<Msg> messages = withPlatformContext(turn.input(), TurnInputTranslator.messages(turn.input()));
+        List<Msg> messages = withPlatformContext(
+                turn.input(), TurnInputTranslator.messages(turn.input(), turn.ctx.workspaceFiles()));
         return Flux.defer(() -> turn.agent().streamEvents(messages, turn.runtimeContext()))
                 .doOnNext(turn::observe)
                 .concatMap(mapper::map)

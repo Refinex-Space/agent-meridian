@@ -288,6 +288,11 @@ class SessionPurgeIT extends ApiTestBase {
         }
 
         @Override
+        public Mono<Void> writeFiles(SandboxHandle handle, Map<String, byte[]> files) {
+            return fake.writeFiles(handle, files);
+        }
+
+        @Override
         public Mono<List<OutputFile>> listOutputs(SandboxHandle handle) {
             return fake.listOutputs(handle);
         }

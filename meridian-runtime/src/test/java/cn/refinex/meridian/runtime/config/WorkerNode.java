@@ -43,6 +43,13 @@ import cn.refinex.meridian.runtime.dispatch.app.NodeChannelListener;
 import cn.refinex.meridian.runtime.egress.app.EgressGrants;
 import cn.refinex.meridian.runtime.egress.app.EgressRevocations;
 import cn.refinex.meridian.runtime.egress.infra.system.SandboxAddressRepository;
+import cn.refinex.meridian.runtime.file.app.FileProperties;
+import cn.refinex.meridian.runtime.file.app.FileReferenceResolver;
+import cn.refinex.meridian.runtime.file.app.FileService;
+import cn.refinex.meridian.runtime.file.app.MediaTypes;
+import cn.refinex.meridian.runtime.file.app.TurnFileStager;
+import cn.refinex.meridian.runtime.file.infra.FileRepository;
+import cn.refinex.meridian.runtime.modelrouting.infra.system.TurnUsageRepository;
 import cn.refinex.meridian.runtime.sandbox.app.DatabaseSandboxStates;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxProperties;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxService;
@@ -82,6 +89,7 @@ import javax.sql.DataSource;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.util.unit.DataSize;
 import reactor.core.scheduler.Schedulers;
 
 /**
@@ -115,7 +123,8 @@ record WorkerNode(
         EventIntake intake,
         PendingActionResolver resolver,
         NodeChannelListener channelListener,
-        SandboxService sandboxes) {
+        SandboxService sandboxes,
+        FileService files) {
 
     /** 等待一次执行结束的上限。 */
     static final Duration RUN_TIMEOUT = Duration.ofSeconds(30);
@@ -308,6 +317,7 @@ record WorkerNode(
                 approvalAudit,
                 new ThreadLockRepository(dataSource),
                 new OutboxWriter(dataSource, "rt", spec.clock()),
+                new TurnUsageRepository(dataSource),
                 transactions,
                 spec.properties(),
                 metrics,
@@ -327,6 +337,28 @@ record WorkerNode(
                 permissions(dataSource, spec.clock()),
                 pendingActions,
                 transactions);
+        // 上传文件（T17b）：生产的放置与引用校验，none 档写 rt.workspace_entries，sandbox 档经驱动写进沙箱
+        FileRepository fileRepository = new FileRepository(dataSource);
+        FileService files = new FileService(
+                fileRepository,
+                RuntimeTestObjectStore.get(),
+                new MediaTypes(),
+                new FileProperties(DataSize.ofMegabytes(32)),
+                spec.clock());
+        TurnFileStager stager = new TurnFileStager(
+                fileRepository,
+                files,
+                new DatabaseWorkspaceStore(
+                        new WorkspaceEntryRepository(dataSource),
+                        RuntimeTestObjectStore.get(),
+                        transactions,
+                        spec.clock()),
+                new StaticListableBeanFactory(
+                                spec.sandbox() == null
+                                        ? Map.of()
+                                        : Map.of("driver", spec.sandbox().driver()))
+                        .getBeanProvider(SandboxDriver.class),
+                spec.clock());
         TurnWorker worker = new TurnWorker(
                 node.claimer(),
                 preparer,
@@ -336,6 +368,7 @@ record WorkerNode(
                 node.publisher(),
                 metrics,
                 sandboxes,
+                stager,
                 spec.clock());
         NodeChannel channel = new NodeChannel(RuntimeTestRedis.reactiveMessaging());
         EventIntake intake = new EventIntake(
@@ -349,6 +382,7 @@ record WorkerNode(
                 resolver,
                 channel,
                 node.events(),
+                new FileReferenceResolver(fileRepository),
                 transactions);
         return new WorkerNode(
                 node,
@@ -363,7 +397,8 @@ record WorkerNode(
                 intake,
                 resolver,
                 new NodeChannelListener(channel, node.renewer(), node.nodeId(), 0),
-                sandboxes);
+                sandboxes,
+                files);
     }
 
     private static List<AgentTool> allTools(Map<String, LedgerTool> ledgerTools, List<AgentTool> extraTools) {

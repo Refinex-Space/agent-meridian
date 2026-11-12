@@ -4,6 +4,7 @@ import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
 import cn.refinex.meridian.runtime.dispatch.app.ClaimResult;
 import cn.refinex.meridian.runtime.dispatch.app.TurnClaimer;
+import cn.refinex.meridian.runtime.file.app.TurnFileStager;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxService;
 import cn.refinex.meridian.runtime.stream.app.EventStreamPublisher;
 import java.time.Clock;
@@ -31,6 +32,7 @@ public final class TurnWorker {
     private final EventStreamPublisher publisher;
     private final TurnMetrics metrics;
     private final SandboxService sandboxes;
+    private final TurnFileStager files;
     private final Clock clock;
 
     /**
@@ -80,7 +82,36 @@ public final class TurnWorker {
             TurnMetrics metrics,
             SandboxService sandboxes,
             Clock clock) {
+        this(claimer, preparer, finisher, engine, audit, publisher, metrics, sandboxes, null, clock);
+    }
+
+    /**
+     * 创建完整的 Worker：另在调用内核之前把本轮输入引用的平台文件放进工作区（T17b，ADR-0050）。
+     *
+     * @param claimer 认领用例
+     * @param preparer 准备用例
+     * @param finisher 收尾用例
+     * @param engine 智能体内核
+     * @param audit 事件写入与权限判定审计
+     * @param publisher 只在流上的事件的发布
+     * @param metrics 指标
+     * @param sandboxes 会话沙箱服务；为 null 时不准备沙箱
+     * @param files 文件放置；为 null 时不放置（引用翻译为"文件不可用"）
+     * @param clock 时钟
+     */
+    public TurnWorker(
+            TurnClaimer claimer,
+            TurnPreparer preparer,
+            TurnFinisher finisher,
+            AgentEngine engine,
+            ApprovalAudit audit,
+            EventStreamPublisher publisher,
+            TurnMetrics metrics,
+            SandboxService sandboxes,
+            TurnFileStager files,
+            Clock clock) {
         this.sandboxes = sandboxes;
+        this.files = files;
         this.claimer = claimer;
         this.preparer = preparer;
         this.finisher = finisher;
@@ -102,7 +133,16 @@ public final class TurnWorker {
                 case ClaimResult.Claimed claimed -> {
                     metrics.claimed(claimed.lease().turn());
                     return Optional.of(new TurnExecution(
-                            claimed.lease(), preparer, finisher, engine, audit, publisher, metrics, sandboxes, clock));
+                            claimed.lease(),
+                            preparer,
+                            finisher,
+                            engine,
+                            audit,
+                            publisher,
+                            metrics,
+                            sandboxes,
+                            files,
+                            clock));
                 }
                 case ClaimResult.NoneAvailable _ -> {
                     return Optional.empty();

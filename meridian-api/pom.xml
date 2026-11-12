@@ -64,7 +64,7 @@
                             <generateApis>false</generateApis>
                             <generateModels>true</generateModels>
                             <!-- 3.1 的"二者之一"的原始类型（文本或数组）生成器处理不了，DTO 中用 Object，由 runtime 按类型分派 -->
-                            <schemaMappings>EmbeddingInput=java.lang.Object,EmbeddingVector=java.lang.Object</schemaMappings>
+                            <schemaMappings>EmbeddingInput=java.lang.Object,EmbeddingVector=java.lang.Object,ResponseInput=java.lang.Object,ResponseInputContent=java.lang.Object</schemaMappings>
                             <configOptions>
                                 <useSealed>true</useSealed>
                             </configOptions>

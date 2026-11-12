@@ -1,6 +1,7 @@
 package cn.refinex.meridian.engine.agentscope.fs;
 
 import cn.refinex.meridian.common.context.PlatformContext;
+import cn.refinex.meridian.engine.spi.port.WorkspaceFiles;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.harness.agent.filesystem.remote.store.NamespaceFactory;
 import java.util.List;
@@ -15,7 +16,7 @@ import java.util.List;
 public final class WorkspaceNamespaces {
 
     /** 没有终端用户时的占位段。 */
-    public static final String NO_END_USER = "_";
+    public static final String NO_END_USER = WorkspaceFiles.NO_END_USER;
 
     /** 生成命名空间的工厂，每次存储操作都调用。 */
     public static final NamespaceFactory FACTORY = WorkspaceNamespaces::of;
@@ -34,8 +35,7 @@ public final class WorkspaceNamespaces {
         if (platform == null || platform.projectId() == null || platform.sessionId() == null) {
             throw new IllegalStateException("访问工作区需要 RuntimeContext 中带项目与会话的 PlatformContext");
         }
-        String endUser =
-                platform.endUserId() == null || platform.endUserId().isBlank() ? NO_END_USER : platform.endUserId();
-        return List.of(platform.tenantId(), platform.projectId(), endUser, platform.sessionId());
+        return WorkspaceFiles.namespace(
+                platform.tenantId(), platform.projectId(), platform.endUserId(), platform.sessionId());
     }
 }

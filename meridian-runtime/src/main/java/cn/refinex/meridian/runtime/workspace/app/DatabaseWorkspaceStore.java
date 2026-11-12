@@ -2,6 +2,7 @@ package cn.refinex.meridian.runtime.workspace.app;
 
 import cn.refinex.meridian.common.id.Ids;
 import cn.refinex.meridian.common.json.JsonMappers;
+import cn.refinex.meridian.engine.spi.port.WorkspaceFiles;
 import cn.refinex.meridian.engine.spi.port.WorkspaceStorePort;
 import cn.refinex.meridian.persistence.objectstore.ObjectStore;
 import cn.refinex.meridian.runtime.workspace.infra.system.WorkspaceEntryRepository;
@@ -136,12 +137,13 @@ public class DatabaseWorkspaceStore implements WorkspaceStorePort {
     private Content store(List<String> namespace, Map<String, Object> value) {
         String json = JsonMappers.strict().writeValueAsString(value);
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        Long contentSize = WorkspaceFiles.contentSize(value).orElse(null);
         if (bytes.length <= INLINE_LIMIT_BYTES) {
-            return new Content(bytes.length, json, null);
+            return new Content(bytes.length, contentSize, json, null);
         }
         String objectKey = "rt/" + namespace.getFirst() + "/" + namespace.getLast() + "/workspace/" + Ids.newUlid();
         objects.put(objectKey, bytes, "application/json");
-        return new Content(bytes.length, null, objectKey);
+        return new Content(bytes.length, contentSize, null, objectKey);
     }
 
     private Item toItem(Row row) {

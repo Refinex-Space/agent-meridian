@@ -134,6 +134,7 @@ public class SessionPurger {
                     return false;
                 }
                 int workspace = sessions.deleteWorkspace(session.tenantId(), session.projectId(), session.sessionId());
+                sessions.deleteTurnUsage(session.sessionId());
                 sessions.deleteSession(session.sessionId());
                 outbox.append(
                         AUDIT_TOPIC,

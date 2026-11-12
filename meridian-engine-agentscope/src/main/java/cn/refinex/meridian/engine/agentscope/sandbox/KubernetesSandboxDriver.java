@@ -241,6 +241,23 @@ public final class KubernetesSandboxDriver implements SandboxDriver, SandboxAtta
     }
 
     @Override
+    public Mono<Void> writeFiles(SandboxHandle handle, Map<String, byte[]> files) {
+        Objects.requireNonNull(handle, "handle");
+        Objects.requireNonNull(files, "files");
+        if (files.isEmpty()) {
+            return Mono.empty();
+        }
+        // 路径由平台生成（uploads/{file_id}/{规范化的文件名}），这里再挡一次越出工作区的写法
+        files.keySet().forEach(path -> new OutputFile(path, 0, ""));
+        return guard(
+                Blocking.run(() -> {
+                    attach(handle.state()).hydrateWorkspace(new ByteArrayInputStream(SkillProjection.tar(files)));
+                    log.info("文件已写入沙箱 sandbox={} files={}", handle.sandboxId(), files.size());
+                }),
+                "写入文件失败");
+    }
+
+    @Override
     public Mono<List<OutputFile>> listOutputs(SandboxHandle handle) {
         Objects.requireNonNull(handle, "handle");
         return guard(

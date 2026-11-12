@@ -51,6 +51,8 @@
         <networknt-json-schema.version>2.0.1</networknt-json-schema.version>
         <!-- MCP 服务登记时的探测与测试用的进程内 MCP 服务（ADR-0047）：与 AgentScope 2.0.4 使用的 MCP Java SDK 同版本 -->
         <mcp-sdk.version>0.17.2</mcp-sdk.version>
+        <!-- 上传文件与工作区文件的媒体类型检测（ADR-0050）：Apache Tika 4.2.0（2026-10-25），技术基线的文档解析组件，T18 的解析沿用同一版本 -->
+        <tika.version>4.2.0</tika.version>
 
         <!-- 与根 POM 的 spotless-maven-plugin.version 保持一致 -->
         <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
@@ -246,6 +248,11 @@
                 <groupId>org.jsoup</groupId>
                 <artifactId>jsoup</artifactId>
                 <version>${jsoup.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tika.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.wiremock</groupId>

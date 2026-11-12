@@ -16,7 +16,11 @@ class PublicApiScopesTest {
 
     @Test
     void developersAndOwnersCanUseThePlaygroundOthersOnlyRead() {
-        Set<ApiKeyScope> all = Set.of(ApiKeyScope.SESSIONS_READ, ApiKeyScope.SESSIONS_WRITE, ApiKeyScope.MODELS_INVOKE);
+        Set<ApiKeyScope> all = Set.of(
+                ApiKeyScope.SESSIONS_READ,
+                ApiKeyScope.SESSIONS_WRITE,
+                ApiKeyScope.MODELS_INVOKE,
+                ApiKeyScope.FILES_WRITE);
 
         assertThat(scopes(new Grant(Role.TENANT_OWNER, null), "prj_a")).isEqualTo(all);
         assertThat(scopes(new Grant(Role.PROJECT_DEVELOPER, "prj_a"), "prj_a")).isEqualTo(all);

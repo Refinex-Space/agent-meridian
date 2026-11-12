@@ -38,16 +38,22 @@ class TurnInputTranslatorTest {
 
     @Test
     void newMessagesBecomeUserMessagesWithoutConfirmationsOrToolResults() {
-        List<Msg> messages = TurnInputTranslator.messages(new TurnInput.NewMessages(
-                List.of(
-                        new InboundMessage(
-                                "evt_1",
-                                List.of(
-                                        new MessageContent.Text("看图"),
-                                        new MessageContent.Image("https://e.com/a.png", null, "image/png"))),
-                        new InboundMessage(
-                                "evt_2", List.of(new MessageContent.FileRef("fil_1", "报告.pdf", "application/pdf")))),
-                null));
+        List<Msg> messages = TurnInputTranslator.messages(
+                new TurnInput.NewMessages(
+                        List.of(
+                                new InboundMessage(
+                                        "evt_1",
+                                        List.of(
+                                                new MessageContent.Text("看图"),
+                                                new MessageContent.Image("https://e.com/a.png", null, "image/png"))),
+                                new InboundMessage(
+                                        "evt_2",
+                                        List.of(
+                                                new MessageContent.FileRef("fil_1", "报告.pdf", "application/pdf"),
+                                                new MessageContent.Image(null, "fil_2", "image/png"),
+                                                new MessageContent.FileRef("fil_3", "未放置.txt", "text/plain")))),
+                        null),
+                Map.of("fil_1", "uploads/fil_1/报告.pdf", "fil_2", "uploads/fil_2/a.png"));
 
         assertThat(messages).hasSize(2).allSatisfy(m -> {
             assertThat(m.getRole()).isEqualTo(MsgRole.USER);
@@ -61,8 +67,13 @@ class TurnInputTranslatorTest {
                         ImageBlock.class,
                         image -> assertThat(((URLSource) image.getSource()).getUrl())
                                 .isEqualTo("https://e.com/a.png"));
-        assertThat(((TextBlock) messages.get(1).getContent().getFirst()).getText())
-                .isEqualTo("[文件 fil_1 报告.pdf (application/pdf)]");
+        assertThat(messages.get(1).getContent())
+                .as("平台文件翻译为工作区路径（ADR-0050），按文件 ID 引用的图片同样作为文件")
+                .extracting(block -> ((TextBlock) block).getText())
+                .containsExactly(
+                        "[Attached file 报告.pdf (application/pdf) is in the workspace at uploads/fil_1/报告.pdf]",
+                        "[Attached file (image/png) is in the workspace at uploads/fil_2/a.png]",
+                        "[Attached file 未放置.txt (text/plain) fil_3 is not available in the workspace]");
     }
 
     @Test
@@ -74,7 +85,7 @@ class TurnInputTranslatorTest {
                         new ToolConfirmation("call_2", "echo", Map.of("text", "b"), false, "不允许", List.of())),
                 null);
 
-        List<Msg> messages = TurnInputTranslator.messages(input);
+        List<Msg> messages = TurnInputTranslator.messages(input, Map.of());
 
         assertThat(messages).singleElement().satisfies(m -> {
             assertThat(m.getContent()).as("确认轮不带普通文本").isEmpty();
@@ -103,12 +114,15 @@ class TurnInputTranslatorTest {
 
     @Test
     void customToolResultsBecomeToolResultBlocksOnly() {
-        List<Msg> messages = TurnInputTranslator.messages(new TurnInput.CustomToolResults(
-                List.of(
-                        new CustomToolResult("call_c", "lookup_order", List.of(new MessageContent.Text("已发货")), false),
-                        new CustomToolResult(
-                                "call_d", "lookup_order", List.of(new MessageContent.Text("timeout")), true)),
-                null));
+        List<Msg> messages = TurnInputTranslator.messages(
+                new TurnInput.CustomToolResults(
+                        List.of(
+                                new CustomToolResult(
+                                        "call_c", "lookup_order", List.of(new MessageContent.Text("已发货")), false),
+                                new CustomToolResult(
+                                        "call_d", "lookup_order", List.of(new MessageContent.Text("timeout")), true)),
+                        null),
+                Map.of());
 
         assertThat(messages).singleElement().satisfies(m -> {
             assertThat(m.getRole()).isEqualTo(MsgRole.TOOL);
@@ -123,7 +137,7 @@ class TurnInputTranslatorTest {
 
     @Test
     void recoveryOnlyHasNoInput() {
-        assertThat(TurnInputTranslator.messages(new TurnInput.RecoveryOnly(new RecoveryNote(List.of()))))
+        assertThat(TurnInputTranslator.messages(new TurnInput.RecoveryOnly(new RecoveryNote(List.of())), Map.of()))
                 .isEmpty();
     }
 

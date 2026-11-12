@@ -2,17 +2,18 @@ openapi: 3.1.0
 info:
   title: AgentMeridian API
   version: 1.0.0
-  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作、SSE 事件流、OpenAI 兼容的模型直通、已发布的智能体与用量。
+  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作、SSE 事件流、文件与工作区、OpenAI 兼容的模型直通、已发布的智能体与用量。
   description: |
     业务系统通过本 API 使用平台上的智能体：创建会话、发送事件、订阅事件流、回应待处理动作。
 
     **认证。** 每个请求带 `Authorization: Bearer <API Key>`。API Key 属于一个项目，数据按"项目 + `end_user_id`"隔离：
     同一项目内按 `end_user_id` 区分终端用户，跨项目不可见，即使 `end_user_id` 相同。API Key 的作用域决定能调用哪些接口：
-    读接口需要 `sessions:read`，写接口需要 `sessions:write`，模型直通需要 `models:invoke`，每个操作的 `security` 列出所需作用域。
+    读接口需要 `sessions:read`，写接口需要 `sessions:write`，上传文件需要 `files:write`，模型直通需要 `models:invoke`，每个操作的
+    `security` 列出所需作用域。
 
     控制台（例如 Playground）以登录用户的 OIDC access token 代替 API Key 调用，同时用请求头 `Meridian-Project: <项目 ID>`
     指定项目；缺少该头返回 400 `auth.project_required`。用户的作用域由他在该项目中的角色决定（项目开发者与租户所有者有上面
-    三个作用域，其他角色只有 `sessions:read`）；项目不存在或用户在其中没有角色时返回 403 `access.forbidden`。
+    四个作用域，其他角色只有 `sessions:read`）；项目不存在或用户在其中没有角色时返回 403 `access.forbidden`。
 
     **约定。**
     - 字段名 snake_case；时间为 RFC 3339 UTC，例如 `2026-11-07T08:30:12.345Z`。
@@ -50,6 +51,10 @@ tags:
     description: 用量：本项目的用量按天、模型、智能体、API Key 聚合，与账本一致。由 control-plane 提供（ADR-0048）。
   - name: Webhooks
     description: Webhook 投递记录：查询与手动重投。Webhook 的配置在管理 API（ADR-0049）。
+  - name: Files
+    description: 文件：上传到项目的文件，在消息中按 `file_id` 引用，轮次开始时放进会话工作区（ADR-0050）。
+  - name: Workspace
+    description: 工作区：读写会话工作区中的文件；`sandbox` 档只读产物目录 `outputs/` 的副本（ADR-0050）。
 
 paths:
   /v1/sessions:
@@ -565,6 +570,249 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /v1/sessions/{session_id}/workspace/files/{path}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/WorkspacePath'
+    get:
+      operationId: getWorkspaceFile
+      tags: [Workspace]
+      summary: 读取工作区文件
+      description: |
+        读取会话工作区中的一个文件，响应体是文件内容，`Content-Type` 为服务端按内容检测的类型。
+
+        `none` 档读平台存储中的工作区（智能体用文件工具写的文件、轮次开始时放进来的上传文件）。`sandbox` 档只能读产物目录
+        `outputs/` 的副本：每轮结束时平台把沙箱中的 `outputs/` 同步到对象存储，读到的是最近一次同步的内容；其他路径返回 404。
+        受保护路径（`AGENTS.md`、`skills/`、`subagents/`、`tools.json`、`MEMORY.md`）由平台按智能体配置生成，不在工作区存储中。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      responses:
+        '200':
+          description: 文件内容。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/WorkspaceBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WorkspaceFileNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: putWorkspaceFile
+      tags: [Workspace]
+      summary: 写入工作区文件
+      description: |
+        把请求体原样写成工作区中的一个文件，已存在时覆盖。只支持 `none` 档；`sandbox` 档的工作区在沙箱中，经 API 只读
+        `outputs/` 的副本，写入返回 409 `workspace.read_only`。大小上限与上传文件相同（默认 32 MB），超过返回 413。
+
+        受保护路径对智能体与调用方都只读，写入返回 403 `workspace.protected_path`。会话已归档或删除时返回 409
+        `session.terminated`。轮次执行中写入的文件，智能体在下一次读取时看到。
+      security:
+        - ApiKeyAuth: [sessions:write]
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: 写入后的文件信息。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceFile'
+        '400':
+          $ref: '#/components/responses/WorkspaceBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/WorkspaceForbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '409':
+          $ref: '#/components/responses/WorkspaceConflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/sessions/{session_id}/workspace:list:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      operationId: listWorkspaceFiles
+      tags: [Workspace]
+      summary: 列出工作区文件
+      description: |
+        按路径的字节序列出工作区中的文件（不含目录），游标是上一页最后一个路径。`none` 档列出平台存储中的工作区，`sandbox` 档
+        列出 `outputs/` 副本中的文件（路径带 `outputs/` 前缀）。受保护路径不在其中。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+        - name: prefix
+          in: query
+          description: 只列出以它开头的路径，例如 `reports/`。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 1024
+      responses:
+        '200':
+          description: 文件列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceFilePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/files:
+    post:
+      operationId: uploadFile
+      tags: [Files]
+      summary: 上传文件
+      description: |
+        以 `multipart/form-data` 上传一个文件（字段 `file`），存入对象存储，属于 API Key 所在的项目。之后在 `user.message`
+        或 `user.custom_tool_result` 的 `file`、`image` 块中以 `file_id` 引用，轮次开始时平台把它放进会话工作区的
+        `uploads/{file_id}/{filename}`，智能体用文件工具读取。
+
+        `media_type` 由服务端按内容检测，不采用客户端声明的类型；`filename` 取表单中的文件名，去掉目录部分与控制字符、
+        保留扩展名并截短到 255 字节。大小上限默认 32 MB（部署可配置），超过返回 413 `file.too_large`；空文件返回 400。
+      security:
+        - ApiKeyAuth: [files:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UploadFileRequest'
+      responses:
+        '201':
+          description: 上传的文件。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedFile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/files/{file_id}:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+    get:
+      operationId: getFile
+      tags: [Files]
+      summary: 查看文件
+      security:
+        - ApiKeyAuth: [sessions:read]
+      responses:
+        '200':
+          description: 文件信息。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedFile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/FileNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/files/{file_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+    get:
+      operationId: getFileContent
+      tags: [Files]
+      summary: 下载文件内容
+      description: |
+        响应体是文件内容，`Content-Type` 为文件的 `media_type`，`Content-Disposition` 为 `attachment` 并带规范化后的文件名，
+        另带 `X-Content-Type-Options: nosniff`。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      responses:
+        '200':
+          description: 文件内容。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/FileNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
   /v1/chat/completions:
     post:
       operationId: createChatCompletion
@@ -668,6 +916,86 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EmbeddingList'
+        '400':
+          $ref: '#/components/responses/ModelBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ModelNotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/ModelTooManyRequests'
+        '502':
+          $ref: '#/components/responses/ModelProviderError'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/responses:
+    post:
+      operationId: createResponse
+      tags: [Models]
+      summary: 生成响应（OpenAI Responses 兼容的子集）
+      description: |
+        OpenAI Responses API 的子集，与 `/v1/chat/completions` 共用模型路由、限流、预算预扣与计量。平台不保存响应，每次请求
+        都是无状态的。
+
+        **支持的子集：**
+        - 输入：`input` 为一段文本（视为一条 `user` 消息），或消息数组；消息的 `role` 为 `user`、`assistant`、`system`、
+          `developer`（与 `system` 相同），`content` 为文本或 `input_text`、`output_text` 块的数组。`instructions` 作为
+          第一条系统消息。
+        - 参数：`model`、`max_output_tokens`、`temperature`、`stream`，`store` 只接受 `false`。
+        - 输出：一条 `message` 输出项，内容是一个 `output_text` 块；模型的思考内容不输出。`usage` 与计量记录一致。
+          结束原因为输出长度上限时 `status` 为 `incomplete`，`incomplete_details.reason` 为 `max_output_tokens`。
+
+        **不支持的参数**（`tools`、`tool_choice`、`parallel_tool_calls`、`previous_response_id`、`conversation`、
+        `reasoning`、`text`、`top_p`、`truncation`、`include`、`metadata`、`background`、`prompt`、`user`、
+        `service_tier`、`max_tool_calls`、`top_logprobs`、`stream_options`）返回 400 `model.unsupported_parameter`，
+        `errors` 中逐项列出；未列出的字段返回 400 `request.invalid`。不支持的输入项（图片、文件、函数调用及其结果、
+        推理项等）返回 400 `model.unsupported_parameter`。
+
+        **流式：** `stream` 为 `true` 时以 SSE 返回，每条消息的 `event:` 与 `data:` 中的 `type` 相同，`sequence_number` 从 0
+        递增：`response.created`、`response.in_progress`、`response.output_item.added`、`response.content_part.added`、
+        若干 `response.output_text.delta`、`response.output_text.done`、`response.content_part.done`、
+        `response.output_item.done`，最后是 `response.completed`（或 `response.incomplete`）。首包之前的错误（预算不足、
+        限流超时、供应商不可用）以对应状态码的 problem+json 返回；首包之后的错误以一条 `response.failed` 结束流，
+        `response.error` 给出错误码与说明。流式请求不支持 `Idempotency-Key`（返回 400）。
+      security:
+        - ApiKeyAuth: [models:invoke]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateResponseRequest'
+            example:
+              model: mdl_01JC8Z3C6E4G8J0L2N5Q7S9U1W
+              instructions: 回答控制在一句话以内。
+              input: 差旅报销需要哪些票据？
+              max_output_tokens: 256
+      responses:
+        '200':
+          description: |
+            非流式为 `ModelResponse`；流式为 SSE（`text/event-stream`），每条 `data:` 是一行 `ResponseStreamEvent` JSON。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelResponse'
+            text/event-stream:
+              schema:
+                type: array
+                format: event-stream
+                items:
+                  $ref: '#/components/schemas/ResponseStreamEvent'
         '400':
           $ref: '#/components/responses/ModelBadRequest'
         '401':
@@ -995,6 +1323,24 @@ components:
       schema:
         type: string
         minLength: 1
+    FileId:
+      name: file_id
+      in: path
+      required: true
+      description: 文件 ID（fil_…）。
+      schema:
+        type: string
+    WorkspacePath:
+      name: path
+      in: path
+      required: true
+      description: |
+        相对工作区根的文件路径，整体 URL 编码，`/` 编码为 `%2F`（例如 `reports%2Fq3.md`）。不能为空，不能以 `/` 开头，
+        不能含 `..`、`.` 段、空段或反斜杠。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 1024
     LastEventId:
       name: Last-Event-ID
       in: header
@@ -1121,10 +1467,65 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
 
+    FileNotFound:
+      description: '`file.not_found`：文件不存在，或不属于 API Key 所在的项目。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ContentTooLarge:
+      description: '`file.too_large`：内容超过大小上限（默认 32 MB），`detail` 给出上限。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    WorkspaceBadRequest:
+      description: '`workspace.invalid_path`：路径为空、以 `/` 开头、含 `..` 或 `.` 段、空段或反斜杠；`request.invalid`：请求格式错误。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    WorkspaceFileNotFound:
+      description: '`session.not_found`：会话不存在或不属于当前项目；`workspace.file_not_found`：文件不存在（`sandbox` 档还包括 `outputs/` 之外的路径）。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    WorkspaceForbidden:
+      description: '`auth.insufficient_scope`：API Key 缺少该操作所需的作用域；`workspace.protected_path`：受保护路径只读。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    WorkspaceConflict:
+      description: '`workspace.read_only`：`sandbox` 档的工作区经 API 只读；`session.terminated`：会话已归档或删除。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     ModelBadRequest:
       description: |
         请求不合法：`request.invalid`、`request.validation_failed`（见 `errors`）；`model.unsupported_operation`：模型的种类
-        与接口不符（例如用 Embedding 模型调用对话补全）。
+        与接口不符（例如用 Embedding 模型调用对话补全）；`model.unsupported_parameter`：`/v1/responses` 不支持的参数或输入项
+        （见 `errors`）。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -1619,7 +2020,11 @@ components:
           type: [string, 'null']
 
     ContentBlock:
-      description: 消息中的一个内容块。二进制内容不内联：图片与文件以 URL 或平台文件 ID（fil_…）引用。
+      description: |
+        消息中的一个内容块。二进制内容不内联：图片与文件以 URL 或平台文件 ID（fil_…，经 `POST /v1/files` 上传）引用。
+        发送事件时按文件 ID 引用的文件必须属于当前项目，平台补全 `filename`、把 `media_type` 改为服务端检测的类型后保存；
+        轮次开始时文件被放进工作区的 `uploads/{file_id}/{filename}`，智能体收到的是工作区路径（按文件 ID 引用的图片同样
+        作为文件放进工作区）。
       oneOf:
         - $ref: '#/components/schemas/TextBlock'
         - $ref: '#/components/schemas/ImageBlock'
@@ -1655,10 +2060,10 @@ components:
           type: [string, 'null']
           maxLength: 2048
         file_id:
-          description: 平台文件 ID（fil_…）；为 null 表示用 `url`。
+          description: 平台文件 ID（fil_…），文件的检测类型必须是图片；为 null 表示用 `url`。
           type: [string, 'null']
         media_type:
-          description: 媒体类型，例如 `image/png`；为 null 表示由来源推断。
+          description: 媒体类型，例如 `image/png`；为 null 表示由来源推断。按 `file_id` 引用时为服务端检测的类型。
           type: [string, 'null']
     FileBlock:
       description: 文件引用块。
@@ -1672,12 +2077,78 @@ components:
           description: 平台文件 ID（fil_…）。
           type: string
         filename:
-          description: 给模型看的文件名；为 null 表示用文件元数据中的名字。
+          description: 文件名，决定文件在工作区中的名字（经规范化）；为 null 表示用文件元数据中的名字。事件中保存的是规范化后的名字。
           type: [string, 'null']
         media_type:
-          description: 媒体类型，例如 `application/pdf`；为 null 表示用文件元数据中的类型。
+          description: 媒体类型。事件中保存的总是服务端检测的类型，请求中给出的值被忽略。
           type: [string, 'null']
 
+    UploadFileRequest:
+      description: 上传文件的表单。
+      type: object
+      required: [file]
+      properties:
+        file:
+          description: 文件内容；表单中的文件名经规范化后成为 `filename`。
+          type: string
+          format: binary
+    UploadedFile:
+      description: 上传到平台的文件，属于一个项目。
+      type: object
+      required: [id, filename, media_type, size_bytes, sha256, created_at]
+      properties:
+        id:
+          description: 文件 ID（fil_…）。
+          type: string
+        filename:
+          description: 规范化后的文件名，不含目录部分。
+          type: string
+        media_type:
+          description: 服务端按内容检测的媒体类型，例如 `application/pdf`、`text/plain`。
+          type: string
+        size_bytes:
+          description: 字节数。
+          type: integer
+          format: int64
+          minimum: 1
+        sha256:
+          description: 内容的 SHA-256（小写十六进制）。
+          type: string
+        created_at:
+          description: 上传时间。
+          type: string
+          format: date-time
+    WorkspaceFile:
+      description: 工作区中的一个文件。
+      type: object
+      required: [path, size_bytes, updated_at]
+      properties:
+        path:
+          description: 相对工作区根的路径，分隔符为 `/`。
+          type: string
+        size_bytes:
+          description: 字节数；为 null 表示平台没有记录大小（T17b 之前由智能体写入的文件）。
+          type: [integer, 'null']
+          format: int64
+        updated_at:
+          description: 最近一次写入（`sandbox` 档为最近一次同步）的时间。
+          type: string
+          format: date-time
+    WorkspaceFilePage:
+      description: 工作区文件列表的一页。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceFile'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
     SendEventsRequest:
       description: 发送事件的请求。
       type: object
@@ -1709,7 +2180,8 @@ components:
     Delivery:
       description: |
         投递方式（架构设计「消息投递」）：`queue`（默认）在线程运行中时排队，本轮结束后与其他排队消息合并成下一轮；
-        `steer` 在线程运行中时注入当前轮的下一次推理，来不及注入时降级为 `queue`。
+        `steer` 在线程运行中时注入当前轮的下一次推理，来不及注入时降级为 `queue`。引用了平台文件（`file_id`）的消息总按
+        `queue` 投递：文件在轮次开始时才放进工作区。
       type: string
       enum: [queue, steer]
     RememberScope:
@@ -2172,11 +2644,34 @@ components:
           minimum: 0
     SessionUsageData:
       type: object
-      required: [model_id, usage]
+      required: [usage, session_usage, models]
+      properties:
+        model_id:
+          description: 本轮用量（输入加输出）最多的模型 ID（mdl_…）；本轮没有模型调用时不出现。各模型的明细见 `models`。
+          type: string
+        usage:
+          description: 本轮的模型用量合计，含压缩与子智能体的调用；与账本中本轮 `model_tokens` 记录之和相同。
+          $ref: '#/components/schemas/TokenUsage'
+        session_usage:
+          description: 会话到本轮为止的模型用量累计（含本轮）。
+          $ref: '#/components/schemas/TokenUsage'
+        models:
+          description: 本轮按模型的用量，按模型 ID 排序；本轮没有模型调用时为空数组。
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelTokenUsage'
+    ModelTokenUsage:
+      description: 一个模型在本轮的用量。
+      type: object
+      required: [model_id, calls, usage]
       properties:
         model_id:
           description: 模型 ID（mdl_…）。
           type: string
+        calls:
+          description: 本轮结算的调用次数。
+          type: integer
+          minimum: 1
         usage:
           $ref: '#/components/schemas/TokenUsage'
     SessionMessageConsumedData:
@@ -2813,7 +3308,7 @@ components:
         data:
           $ref: '#/components/schemas/SessionErrorData'
     SessionUsageEvent:
-      description: 'session.usage：一次模型调用的用量，子智能体的用量计入父会话'
+      description: 'session.usage：每轮结束时（终态事件之前）给出本轮与会话累计的模型用量，子智能体的用量计入父轮次'
       type: object
       required: [id, seq, session_id, thread_id, turn_id, type, created_at, data]
       properties:
@@ -3447,6 +3942,309 @@ components:
         reasoning_tokens:
           description: 用于思考的输出 token。
           type: integer
+    CreateResponseRequest:
+      description: |
+        生成响应的请求，OpenAI Responses API 的子集。列在这里但标为"不支持"的参数给出时返回 400
+        `model.unsupported_parameter`；未列出的字段返回 400 `request.invalid`。
+      type: object
+      additionalProperties: false
+      required: [model, input]
+      properties:
+        model:
+          description: 平台模型目录中的对话模型 ID（mdl_…）。
+          type: string
+          minLength: 1
+        input:
+          $ref: '#/components/schemas/ResponseInput'
+        instructions:
+          description: 系统指令，作为第一条系统消息。
+          type: [string, 'null']
+        max_output_tokens:
+          description: 最大输出 token 数；不传时使用模型目录的默认值。预算按"估算输入加它"预扣。
+          type: [integer, 'null']
+          minimum: 1
+        temperature:
+          description: 采样温度。
+          type: [number, 'null']
+          minimum: 0
+          maximum: 2
+        stream:
+          description: 为 `true` 时以 SSE 流式返回。
+          type: [boolean, 'null']
+        store:
+          description: 平台不保存响应，只接受 `false`（或不传）；`true` 返回 400 `model.unsupported_parameter`。
+          type: [boolean, 'null']
+        tools:
+          description: 不支持。
+        tool_choice:
+          description: 不支持。
+        parallel_tool_calls:
+          description: 不支持。
+        previous_response_id:
+          description: 不支持（平台不保存响应，多轮对话由调用方在 `input` 中带上历史消息）。
+        conversation:
+          description: 不支持。
+        reasoning:
+          description: 不支持。
+        text:
+          description: 不支持（只输出纯文本）。
+        top_p:
+          description: 不支持。
+        truncation:
+          description: 不支持。
+        include:
+          description: 不支持。
+        metadata:
+          description: 不支持。
+        background:
+          description: 不支持。
+        prompt:
+          description: 不支持。
+        user:
+          description: 不支持。
+        service_tier:
+          description: 不支持。
+        max_tool_calls:
+          description: 不支持。
+        top_logprobs:
+          description: 不支持。
+        stream_options:
+          description: 不支持（流式事件总是以带 `usage` 的 `response.completed` 结束）。
+    ResponseInput:
+      description: |
+        一段文本（视为一条 `user` 消息），或 `ResponseInputMessage` 的数组（至少一条）。生成的 DTO 中是 `Object`
+        （ADR-0029 的多类型限制）。
+      oneOf:
+        - type: string
+          minLength: 1
+        - type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ResponseInputMessage'
+    ResponseInputMessage:
+      description: 一条输入消息。`type` 可以省略；`content` 为文本，或 `ResponseInputText` 的数组。
+      type: object
+      required: [role, content]
+      properties:
+        type:
+          description: 固定为 `message`。
+          type: string
+          enum: [message]
+        role:
+          description: 角色；`developer` 与 `system` 相同。
+          type: string
+          enum: [user, assistant, system, developer]
+        content:
+          $ref: '#/components/schemas/ResponseInputContent'
+    ResponseInputContent:
+      description: 文本，或 `ResponseInputText` 的数组（至少一块）。生成的 DTO 中是 `Object`。
+      oneOf:
+        - type: string
+        - type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ResponseInputText'
+    ResponseInputText:
+      description: 文本块；`assistant` 消息中的历史输出用 `output_text`。
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          description: 块类型。
+          type: string
+          enum: [input_text, output_text]
+        text:
+          description: 文本。
+          type: string
+    ModelResponse:
+      description: 非流式的响应，也是流式事件中 `response` 字段的内容。
+      type: object
+      required: [id, object, created_at, status, model, output, usage, incomplete_details, error]
+      properties:
+        id:
+          description: 响应 ID（resp_…）。
+          type: string
+        object:
+          description: 固定为 `response`。
+          type: string
+          enum: [response]
+        created_at:
+          description: 创建时间，Unix 秒。
+          type: integer
+          format: int64
+        status:
+          description: '`completed` 正常结束；`incomplete` 达到输出长度上限；`failed` 首包之后出错（只在流式出现）；`in_progress` 只在流式的开始事件中出现。'
+          type: string
+          enum: [completed, incomplete, failed, in_progress]
+        model:
+          description: 请求中的模型 ID。
+          type: string
+        output:
+          description: 输出项；完成时是一条助手消息，流式的开始事件中为空数组。
+          type: array
+          items:
+            $ref: '#/components/schemas/ResponseOutputMessage'
+        usage:
+          description: 用量；流式的开始事件、或供应商没有报告用量时为空（平台按估算计量）。
+          oneOf:
+            - $ref: '#/components/schemas/ResponseUsage'
+            - type: 'null'
+        incomplete_details:
+          description: '`status` 为 `incomplete` 时给出原因，其余为空。'
+          oneOf:
+            - $ref: '#/components/schemas/ResponseIncompleteDetails'
+            - type: 'null'
+        error:
+          description: '`status` 为 `failed` 时给出错误，其余为空。'
+          oneOf:
+            - $ref: '#/components/schemas/ResponseError'
+            - type: 'null'
+    ResponseOutputMessage:
+      description: 助手消息输出项。
+      type: object
+      required: [type, id, status, role, content]
+      properties:
+        type:
+          description: 固定为 `message`。
+          type: string
+          enum: [message]
+        id:
+          description: 输出项 ID（msg_…）。
+          type: string
+        status:
+          description: '`in_progress` 只在流式的增量过程中出现。'
+          type: string
+          enum: [in_progress, completed, incomplete]
+        role:
+          description: 固定为 `assistant`。
+          type: string
+          enum: [assistant]
+        content:
+          description: 内容块；流式的 `response.output_item.added` 中为空数组。
+          type: array
+          items:
+            $ref: '#/components/schemas/ResponseOutputText'
+    ResponseOutputText:
+      description: 输出文本块。
+      type: object
+      required: [type, text, annotations]
+      properties:
+        type:
+          description: 固定为 `output_text`。
+          type: string
+          enum: [output_text]
+        text:
+          description: 文本；流式的 `response.content_part.added` 中为空字符串。
+          type: string
+        annotations:
+          description: 标注，平台总是给出空数组。
+          type: array
+          items:
+            type: object
+    ResponseUsage:
+      description: 本次响应的用量，与计量记录一致。
+      type: object
+      required: [input_tokens, input_tokens_details, output_tokens, output_tokens_details, total_tokens]
+      properties:
+        input_tokens:
+          description: 输入 token。
+          type: integer
+        input_tokens_details:
+          $ref: '#/components/schemas/ResponseInputTokensDetails'
+        output_tokens:
+          description: 输出 token。
+          type: integer
+        output_tokens_details:
+          $ref: '#/components/schemas/ResponseOutputTokensDetails'
+        total_tokens:
+          description: 输入与输出之和。
+          type: integer
+    ResponseInputTokensDetails:
+      description: 输入 token 的明细。
+      type: object
+      required: [cached_tokens]
+      properties:
+        cached_tokens:
+          description: 命中提示词缓存的输入 token。
+          type: integer
+    ResponseOutputTokensDetails:
+      description: 输出 token 的明细。
+      type: object
+      required: [reasoning_tokens]
+      properties:
+        reasoning_tokens:
+          description: 用于推理的输出 token。
+          type: integer
+    ResponseIncompleteDetails:
+      description: 响应不完整的原因。
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          description: 固定为 `max_output_tokens`。
+          type: string
+          enum: [max_output_tokens]
+    ResponseError:
+      description: 流式响应首包之后的错误。
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          description: 平台错误码，例如 `model.provider_unavailable`。
+          type: string
+        message:
+          description: 错误说明，不含内部信息。
+          type: string
+    ResponseStreamEvent:
+      description: |
+        流式响应的一个事件，字段随 `type` 出现（没有值的字段不出现）：`response.created`、`response.in_progress`、
+        `response.completed`、`response.incomplete`、`response.failed` 带 `response`；`response.output_item.added`、
+        `response.output_item.done` 带 `output_index` 与 `item`；`response.content_part.added`、`response.content_part.done`
+        带 `item_id`、`output_index`、`content_index` 与 `part`；`response.output_text.delta` 带这三个序号与 `delta`；
+        `response.output_text.done` 带这三个序号与 `text`。
+      type: object
+      required: [type, sequence_number]
+      properties:
+        type:
+          description: 事件类型，与 SSE 的 `event:` 相同。
+          type: string
+          enum:
+            - response.created
+            - response.in_progress
+            - response.output_item.added
+            - response.content_part.added
+            - response.output_text.delta
+            - response.output_text.done
+            - response.content_part.done
+            - response.output_item.done
+            - response.completed
+            - response.incomplete
+            - response.failed
+        sequence_number:
+          description: 本次响应内的事件序号，从 0 开始递增。
+          type: integer
+          minimum: 0
+        response:
+          $ref: '#/components/schemas/ModelResponse'
+        output_index:
+          description: 输出项的序号，固定为 0。
+          type: integer
+        item_id:
+          description: 输出项 ID（msg_…）。
+          type: string
+        content_index:
+          description: 内容块的序号，固定为 0。
+          type: integer
+        item:
+          $ref: '#/components/schemas/ResponseOutputMessage'
+        part:
+          $ref: '#/components/schemas/ResponseOutputText'
+        delta:
+          description: 追加的文本。
+          type: string
+        text:
+          description: 本块的完整文本。
+          type: string
     CreateEmbeddingRequest:
       description: 文本向量请求，字段与 OpenAI Embeddings 一致的子集；未列出的字段返回 400。
       type: object

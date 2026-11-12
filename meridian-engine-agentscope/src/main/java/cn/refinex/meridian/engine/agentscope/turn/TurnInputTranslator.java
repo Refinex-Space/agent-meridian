@@ -34,7 +34,8 @@ import java.util.stream.Collectors;
  * <p>四种输入各自翻译为一种互不混合的消息：AgentScope 发现上下文中有待确认的调用时，直接进入确认分支、丢弃同批的
  * 普通消息（ADR-0016），所以审批结果与自定义工具结果都不与用户文本放在一起。
  * <ul>
- *   <li>{@code NewMessages}：每条用户消息一个 {@link UserMessage}。
+ *   <li>{@code NewMessages}：每条用户消息一个 {@link UserMessage}。按文件 ID 引用的平台文件翻译为一段文本，告诉模型文件在工作区中的路径
+ *       （runtime 在调用内核之前放置，{@code TurnContext.workspaceFiles}，ADR-0050）。
  *   <li>{@code Confirmations}：一条没有内容块的用户消息，元数据 {@link Msg#METADATA_CONFIRM_RESULTS} 中是在 Java 侧构造的
  *       {@link ConfirmResult} 实例（AgentScope 只认实例，不认反序列化出来的 Map）。
  *   <li>{@code CustomToolResults}：一条 {@link ToolResultMessage}，每个结果一个 {@link ToolResultBlock}。
@@ -49,16 +50,19 @@ public final class TurnInputTranslator {
      * 翻译输入。
      *
      * @param input 本轮输入
+     * @param workspaceFiles 已放进工作区的文件：文件 ID → 相对工作区根的路径
      * @return 调用 {@code streamEvents} 的消息；{@code RecoveryOnly} 时为空列表
      */
-    static List<Msg> messages(TurnInput input) {
+    static List<Msg> messages(TurnInput input, Map<String, String> workspaceFiles) {
         return switch (input) {
             case TurnInput.NewMessages m ->
-                m.messages().stream().map(TurnInputTranslator::userMessage).toList();
+                m.messages().stream()
+                        .map(message -> userMessage(message, workspaceFiles))
+                        .toList();
             case TurnInput.Confirmations c -> List.of(confirmations(c.confirmations()));
             case TurnInput.CustomToolResults r ->
                 List.of(new ToolResultMessage(r.results().stream()
-                        .map(TurnInputTranslator::toolResult)
+                        .map(result -> toolResult(result, workspaceFiles))
                         .toList()));
             case TurnInput.RecoveryOnly _ -> List.of();
         };
@@ -100,9 +104,9 @@ public final class TurnInputTranslator {
         return new ToolRequestConfig(tools, ToolMergeMode.MERGE_EXTERNAL_PRIORITY);
     }
 
-    private static Msg userMessage(InboundMessage message) {
+    private static Msg userMessage(InboundMessage message, Map<String, String> workspaceFiles) {
         return new UserMessage(message.content().stream()
-                .map(TurnInputTranslator::contentBlock)
+                .map(content -> contentBlock(content, workspaceFiles))
                 .toList());
     }
 
@@ -128,24 +132,35 @@ public final class TurnInputTranslator {
                 .build();
     }
 
-    private static ToolResultBlock toolResult(CustomToolResult result) {
+    private static ToolResultBlock toolResult(CustomToolResult result, Map<String, String> workspaceFiles) {
         return ToolResultBlock.builder()
                 .id(result.toolUseId())
                 .name(result.toolName())
                 .output(result.content().stream()
-                        .map(TurnInputTranslator::contentBlock)
+                        .map(content -> contentBlock(content, workspaceFiles))
                         .toList())
                 .state(result.error() ? ToolResultState.ERROR : ToolResultState.SUCCESS)
                 .build();
     }
 
     /**
-     * 把平台的内容块翻译为 AgentScope 的内容块，用户消息、steer 消息与自定义工具结果共用。
+     * 把平台的内容块翻译为 AgentScope 的内容块；steer 消息用它（引用平台文件的消息不会经 steer 投递，ADR-0050）。
      *
      * @param content 平台内容块
      * @return AgentScope 内容块
      */
     public static ContentBlock contentBlock(MessageContent content) {
+        return contentBlock(content, Map.of());
+    }
+
+    /**
+     * 把平台的内容块翻译为 AgentScope 的内容块，用户消息与自定义工具结果共用。
+     *
+     * @param content 平台内容块
+     * @param workspaceFiles 已放进工作区的文件：文件 ID → 相对工作区根的路径
+     * @return AgentScope 内容块
+     */
+    static ContentBlock contentBlock(MessageContent content, Map<String, String> workspaceFiles) {
         return switch (content) {
             case MessageContent.Text text ->
                 TextBlock.builder().text(text.text()).build();
@@ -157,20 +172,29 @@ public final class TurnInputTranslator {
                                 .mimeType(image.mediaType())
                                 .build())
                         .build();
-            // TODO(T17b): 轮次开始时把引用的文件放进工作区后，这里改为工作区路径
-            case MessageContent.Image image -> fileReference(image.fileId(), null, image.mediaType());
-            case MessageContent.FileRef file -> fileReference(file.fileId(), file.filename(), file.mediaType());
+            case MessageContent.Image image ->
+                fileReference(image.fileId(), null, image.mediaType(), workspaceFiles.get(image.fileId()));
+            case MessageContent.FileRef file ->
+                fileReference(file.fileId(), file.filename(), file.mediaType(), workspaceFiles.get(file.fileId()));
         };
     }
 
-    /** 平台文件以文本引用告诉模型；文件内容的放置由 T17b 负责。 */
-    private static ContentBlock fileReference(String fileId, String filename, String mediaType) {
-        StringBuilder text = new StringBuilder("[文件 ").append(fileId);
+    /**
+     * 平台文件以文本告诉模型：放进了工作区时给出路径，模型用文件工具读取；否则只给出文件 ID（不应出现，runtime 放置失败时本轮不会
+     * 调用内核）。英文，与平台提示词一致。
+     */
+    private static ContentBlock fileReference(String fileId, String filename, String mediaType, String path) {
+        StringBuilder text = new StringBuilder("[Attached file");
         if (filename != null) {
             text.append(' ').append(filename);
         }
         if (mediaType != null) {
             text.append(" (").append(mediaType).append(')');
+        }
+        if (path != null) {
+            text.append(" is in the workspace at ").append(path);
+        } else {
+            text.append(' ').append(fileId).append(" is not available in the workspace");
         }
         return TextBlock.builder().text(text.append(']').toString()).build();
     }
