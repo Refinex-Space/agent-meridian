@@ -78,7 +78,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 已完成 | 34b708c |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 已完成 | 251ed4e |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 已完成 | ed57d00 |
-| T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 未开始 | — |
+| T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 进行中 | — |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 未开始 | — |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 未开始 | — |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 未开始 | — |
@@ -175,7 +175,19 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+**T15a 凭据库、供应商、模型目录与价格表**（开工 2026-11-11，基线 `verify.sh` 通过）
+
+前提已定（本会话中用户确认）：Q3 首批供应商为 OpenAI 兼容、Anthropic、Gemini；端点校验合并两种策略（始终拒绝回环、链路本地、元数据等地址，私有网段默认放行、平台可收窄到指定网段）；Anthropic、Gemini 用平台薄适配器（复用 2.0.4 的 formatter 与响应解析器，变更型 ADR 已获确认）。
+
+- [ ] 1. ADR：凭据、供应商与模型目录的补充约定；Anthropic、Gemini 适配器的变更；架构设计同步（Q3 已决、ID 前缀、端口与表）
+- [ ] 2. D52：`AddressPolicy` 移到 `common.net` 并增加供应商端点策略；`image.url` 只允许 http(s)
+- [ ] 3. control-plane 迁移：`secrets`、`secret_data_keys`、`provider_accounts`、`models`、`price_books`、`price_book_versions`
+- [ ] 4. 凭据库：信封加密、`KeyEncryptionService`（本地主密钥、Vault Transit）、管理 API（写入、轮换、删除、列表与引用方）、`/internal/v1/secrets:resolve`（服务 JWT、租户校验、审计、最后使用时间）
+- [ ] 5. 供应商账号、模型、价格表的管理 API 与内部解析接口；删除被引用的资源返回冲突；`config.invalidate` 发布
+- [ ] 6. runtime：基于 control-plane 的 `SecretResolver` 与模型目录（缓存、失效通知、兜底过期、租户校验），文件实现只留 dev/test；用量消息带价格表版本
+- [ ] 7. engine：Anthropic、Gemini 适配器与错误分类（D25），模拟服务测试
+- [ ] 8. 验收测试：A01（明文不可读、密文、租户数据密钥、审计、日志与事件扫描）、A02（Vault Testcontainers）、A03（scripted 与 `-Plive`）、A04（价格表版本）、A05（失效与冲突）
+- [ ] 9. 收尾：`verify.sh`、模块与根 `CLAUDE.md`、架构与规范文档、`acceptance.json`、`PLAN.md`
 
 ## 控制台设计轨道
 
