@@ -106,6 +106,7 @@ BlockHound 需要 JVM 参数 `-XX:+AllowRedefinitionToAddDeleteMethods -XX:+Enab
 | NetworkPolicy | **本机可用** | kind 默认的 kindnet 不执行 NetworkPolicy（实测）；上面的脚本改用 Calico v3.33.0，`scripts/dev/kind-verify.sh` 实测拒绝全部出网后连接被阻断 |
 | 下载代理 | `MERIDIAN_DOWNLOAD_PROXY=http://127.0.0.1:7897` | 已写入本地配置。GitHub 发布物、gVisor 等慢速下载时使用；Maven、npm、PyPI 直连即可 |
 | `DASHSCOPE_API_KEY` | 已设置 | 见"真实模型测试" |
+| DNS | fake-ip 方式的透明代理，公网域名解析到 `198.18.0.0/15` | 供应商端点的地址策略默认拒绝这个保留段（ADR-0045）：两个服务的 `dev` 配置与 `ControlPlaneCatalogLiveIT` 显式放行它，其他环境不要照抄 |
 | GitHub CLI | 可用 | 不用于推送 |
 
 ### 代理的两个坑

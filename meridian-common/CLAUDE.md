@@ -1,6 +1,6 @@
 # meridian-common
 
-平台通用基础库：带前缀的 ULID、错误码与平台异常、游标分页、JSON 约定、时钟、`PlatformContext` 及其传递、`Blocking`。不含业务语义、HTTP 映射与数据访问。
+平台通用基础库：带前缀的 ULID、错误码与平台异常、游标分页、JSON 约定、时钟、`PlatformContext` 及其传递、`Blocking`、出站地址的 SSRF 策略。不含业务语义、HTTP 映射与数据访问。
 
 ## 命令
 
@@ -16,6 +16,8 @@
 - `time`：生产注入 `Clock.systemUTC()`，测试用 `MutableClock`。
 - `context`：`PlatformContexts` 同时提供 `ScopedValue`（`run`、`call`、`current`）与 Reactor Context（`write`、`find(view)`、`currentReactive`）两套读写。
 - `concurrent`：`Blocking.call/run` 在虚拟线程上执行阻塞调用，并把 Reactor Context 中的 `PlatformContext` 绑定为 `ScopedValue`。
+- `net`（T15a，ADR-0045）：`AddressPolicy.classify` 给地址分类（私有、回环、链路本地、云元数据、保留……），`isBlocked` 是 `web_fetch` 的"只放行公网"，`literal` 解析 IP 字面量的全部写法；`EndpointPolicy` 校验管理员配置的端点（`http(s)`、无用户信息，危险地址始终拒绝，私有与保留网段按配置放行，回环按开关）。
+- `error.ReferencedException`：资源仍被引用（409），`ProblemMapper` 输出 `references`。
 
 ## 不变量
 

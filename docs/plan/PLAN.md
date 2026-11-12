@@ -45,7 +45,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | 阶段 | 内容 | 任务 | 阶段门 | 状态 |
 |---|---|---|---|---|
 | 0 工程基座 | 脚手架、质量门禁、通用基础库、本地基础设施 | T01–T02 | — | 已完成 |
-| 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 已决（ADR-0043）；Q3 在 T15a 开工前决定，T15a 先做 D52；T28 落实 D44–D46 并由 T29 复测 P7；P8 随 T19 定稿（`docs/poc/M0-总结.md`） |
+| 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 已决（ADR-0043）；Q3 已决、D52 已落地（T15a，ADR-0045、ADR-0046）；T28 落实 D44–D46 并由 T29 复测 P7；P8 随 T19 定稿（`docs/poc/M0-总结.md`） |
 | 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 进行中 |
 | 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 未开始 |
 | 4 M1 控制台 | 设计方向与组件、原型（并行轨道）、工程基座、五组页面 | T20a–T25b | R3 | 未开始 |
@@ -254,11 +254,11 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D20 | T07 | Hibernate Validator 第一次校验失败时在 Netty 事件循环上读取消息资源包（每个进程一次，测试中由 BlockHound 放行）；需要时可在启动时预热 | T27 |
 | D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a 部分完成：`PlatformTool.generateSuggestions` 给出内容级建议（文件工具为路径，`bash` 为每段的命令前缀）。T12a 部分完成：`bash` 改为记住这一条命令（规则内容为命令原文，ADR-0037），不再放行整个工具。剩余：内核随动作带出建议、runtime 按它保存，要给 `session.status_requires_action` 的动作与 `pending_actions` 加字段（公开事件载荷），建议 T19b（控制台待处理动作页展示建议规则）一并处理 |
 | D22 | T08 | 租户与项目策略的开发实现在 `rt.permission_rules`，租户层没有写入接口；项目级"记住此决定"写入 runtime。平台安全规则使权限上下文永远不平凡，`DEFAULT` 模式下没有命中 allow 的工具都要确认：智能体版本的默认配置要显式放行工具（`unattended` 会话中的 `BYPASS` 智能体同样变为 `DONT_ASK`） | T15b |
-| D23 | T09a | 开发期的模型目录（`dev-config/providers`）与凭据解析（`EnvironmentSecretResolver`）不按项目授权：任何项目的智能体都能使用目录中的模型；`ModelGateway.resolve` 的"未授权给该项目"由 control-plane 的目录实现 | T15a |
+| D23 | T09a | 开发期的模型目录（`dev-config/providers`）与凭据解析（`EnvironmentSecretResolver`）不按项目授权：任何项目的智能体都能使用目录中的模型；`ModelGateway.resolve` 的"未授权给该项目"由 control-plane 的目录实现 | T15a（已落地：模型属于租户、租户内全部项目可用，别的租户的模型与不存在相同；凭据解析校验租户与项目；文件实现只允许 dev、test profile，ADR-0045，`ControlPlaneCatalogIT`） |
 | D24 | T09a | 预算以 token（输入加输出）计，Redis 计数不分周期；软阈值告警、按价格表换算金额、预扣记录过期（1 小时）后未结算部分的修正、四级计数与账本的每小时对账都未实现（ADR-0032 第 6 条） | T16 |
-| D25 | T09a | `ModelGateway.Provider` 中只有 OpenAI 兼容类型有底层客户端（DashScope 走 `compatible-mode/v1`）；Anthropic、Gemini 的 2.0.4 模型类需要引入 `anthropic-java`、`google-genai`，DashScope 原生与 Ollama 同样未接入，扩展点是 `ProviderClientFactory`。供应商账号管理只能开放已实现的类型 | T15a |
+| D25 | T09a | `ModelGateway.Provider` 中只有 OpenAI 兼容类型有底层客户端（DashScope 走 `compatible-mode/v1`）；Anthropic、Gemini 的 2.0.4 模型类需要引入 `anthropic-java`、`google-genai`，DashScope 原生与 Ollama 同样未接入，扩展点是 `ProviderClientFactory`。供应商账号管理只能开放已实现的类型 | T15a（已落地：Q3 定为 OpenAI 兼容、Anthropic、Gemini；后两者用平台适配器，ADR-0046，`ProviderAdaptersIT`；DashScope 原生与 Ollama 原生不做，私有化推理服务走 OpenAI 兼容端点） |
 | D26 | T09b | `/v1/chat/completions` 只支持文本消息与函数工具（ADR-0033）：`content` 为内容块数组、`tool_choice`、`top_p`、`stop`、`n`、`response_format` 等字段返回 400；OpenAI SDK 的常用参数需要按业务方反馈补齐（与 `/v1/responses` 一起评估） | T17b |
-| D27 | T09b | Embedding 与 rerank 只接入了 OpenAI 兼容格式（rerank 为 DashScope 的 `compatible-api/v1/reranks`）的供应商，`ProviderVectorClient` 不区分供应商类型；其他格式（DashScope 原生 rerank、Cohere 等）需要按供应商类型扩展 | T15a |
+| D27 | T09b | Embedding 与 rerank 只接入了 OpenAI 兼容格式（rerank 为 DashScope 的 `compatible-api/v1/reranks`）的供应商，`ProviderVectorClient` 不区分供应商类型；其他格式（DashScope 原生 rerank、Cohere 等）需要按供应商类型扩展 | T15a（以约束处理：Embedding 与 rerank 模型只能挂在 OpenAI 兼容账号下，ADR-0045；其他格式按需再接） |
 | D28 | T09b | 用量记录新增 `kind`：`embedding_tokens`、`rerank_tokens`（用途 `embedding`、`rerank`，只有输入 token），control-plane 的消费者与价格表要按 `kind` 计价 | T16 |
 | D29 | T10a | harness 的 `WorkspaceContextMiddleware` 把受保护路径 `AGENTS.md`（智能体层的系统提示词）注入系统提示词的 `<agents_context>`，与装配时的 `sysPrompt` 重复，每次请求多一份提示词 | T10b（已落地：装配时 `disableWorkspaceContext()`，智能体层只经 `sysPrompt` 进入，当前时间以 `<platform_context>` 消息注入，ADR-0035） |
 | D30 | T10a | 工作区（`rt.workspace_entries` 与对象存储 `rt/{tenant}/{session}/workspace/`）要在删除会话时按命名空间前缀与对象前缀清除；目前没有会话数据的清除作业 | T17a |
@@ -283,7 +283,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D49 | R1 | runtime 健壮性小项（审查）：C-07 工作区写入没有租约条件；C-08 steer 消费提交与批次 checkpoint 之间强杀会丢 steer；C-09 状态写入的围栏不含轮次 ID（先用故障注入确认）；C-12 可重试错误置回无退避、数据库瞬断计入恢复次数、终态后续租误计 `meridian.lease.lost`、下线时先改库后取消、`stop` 与 `drain` 竞态；C-13 回收器单行失败饿死后续；C-12 的 outbox 毒丸与持锁发布给 T16 | T17a（outbox 部分 T16） |
 | D50 | R1 | 沙箱与出网后续（审查）：C-10 回收先快照再删除再提交的失败代价、`sandbox_last_used_at` 取轮次开始时间、`findIdle` 不过滤已删除会话；C-11 `DatabaseSandboxStates.save`/`clear` 未接入出网撤销、删除与归档不淘汰出网缓存（最多 30 秒）；S-F4 产物在列出之后被后台进程继续写大、`readOutput` 整文件进堆（需要给 `SandboxDriver` 加带上限的读取） | T17a（C-10、C-11），T37（S-F4） |
 | D51 | R1 | 安全加固（审查）：S-F5 自定义工具的 `input_schema` 不校验（灾难性回溯、远程 `$ref`）；S-F7 SSE 没有每 Key 连接上限、Key 吊销后连接保持；S-F8 `none` 档工作区没有配额、单文件上限按字符数；S-F13 来源标签的转义只覆盖 ASCII 空白；S-F14 批准时改写的入参是否重走规则；S-F15 审计与账本保存完整命令与入参、没有脱敏；S-F3 代理在 Envoy 层拒绝回环与未指定地址的上游 | T37 |
-| D52 | R1 | 供应商接入前的校验（审查）：S-F11 `user.message` 的 `image.url` 不限协议，Anthropic、Ollama 的转换器会读本机文件或下载；S-F10 `SecretResolver` 不校验密钥属于调用方租户，供应商与搜索的 `base_url` 没有 SSRF 校验 | T15a（在 D25 引入新供应商类型之前） |
+| D52 | R1 | 供应商接入前的校验（审查）：S-F11 `user.message` 的 `image.url` 不限协议，Anthropic、Ollama 的转换器会读本机文件或下载；S-F10 `SecretResolver` 不校验密钥属于调用方租户，供应商与搜索的 `base_url` 没有 SSRF 校验 | T15a（已落地：`image.url` 只接受 http(s)；凭据解析校验租户；`common.net.EndpointPolicy` 在写入供应商账号、模型、联网搜索后端时与 runtime 读取目录时校验端点；Gemini 适配器拒绝 URL 媒体，ADR-0045、ADR-0046） |
 | D53 | R1 | AgentScope 集成后续（审查）：A-F5 装配自检失败不 `close` 智能体、MCP 资源在后续工具构造失败时不关；A-F6 `AgentEventDisposition` 与 `TurnEventMapper` 两张表各自独立；A-F7 `plan_write` 不经账本；A-F8 MCP 服务重启后的重连语义；A-F9 幂等键依赖供应商的 `tool_use_id`；A-F10 `HarnessAgent.close()` 在 commonPool 上等待 | T15b（A-F5、A-F8 随 MCP 配置分发），T19（A-F8 验证），T27（A-F10），其余 R2 复查 |
 | D54 | R1 | 工程质量（审查）：Q-M1 token 估算在 runtime 与 engine 重复；Q-M2 重试退避重复且 `VectorModelService` 缺上限；Q-M3 `app` 依赖具体 `infra`、跨上下文依赖对方的 `infra`（修订规范或加 ArchUnit 规则）；Q-L1、L2、L3 摘要、Map 拷贝、输出上限常量重复；Q-L5 配置默认值双写；Q-L6 `application-test.yml` 在 `src/main`；Q-L8 三处无超时的 `.block()`；Q-L9 `Optional` 作参数；Q-L11 两处丢 cause；Q-L12 靠 `sleep` 的静默断言；Q-L13 `md_to_docx.py` 与执行服务符号链接的测试缺口；Q-L14 test-support 的 enforcer 多放行、`ScriptedOpenAiServer` 的 `Instant.now()` | R2（Q-M3 的规范决定），重复实现在 T17b 收口时处理，Q-L6 给 T28 |
 | D55 | T14a | MVC 服务的公开 API 还没有 API Key 过滤器与按 Key 限流：`meridian-security` 只有 WebFlux 版（`ApiKeyWebFilter`）；control-plane 的 `/v1/agents`（T15b）、knowledge 的 `/v1/knowledge-bases*`（T18）上线前要加 MVC 版，复用 `ApiKeyAuthenticator`、`ApiKeyRateLimiter`，并订阅 `key.revoked` 淘汰缓存 | T15b、T18 |
