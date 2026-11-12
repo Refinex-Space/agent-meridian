@@ -1,10 +1,11 @@
-package cn.refinex.meridian.runtime.file.domain;
+package cn.refinex.meridian.common.text;
 
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 
 /**
- * 文件名的规范化（ADR-0050）：文件名会成为工作区中的路径 {@code uploads/{file_id}/{filename}} 与下载的
+ * 文件名的规范化（ADR-0050）：runtime 的上传文件与 knowledge 的文档（ADR-0051）共用。文件名会成为工作区中的路径
+ * {@code uploads/{file_id}/{filename}} 与下载的
  * {@code Content-Disposition}，所以只保留最后一段、去掉会被解释的字符，结果不含路径分隔符、不能是 {@code .} 或 {@code ..}。
  *
  * <ol>

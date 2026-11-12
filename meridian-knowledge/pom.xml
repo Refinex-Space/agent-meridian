@@ -13,6 +13,11 @@
     <name>AgentMeridian Knowledge</name>
     <description>知识库应用：写入与混合检索。</description>
 
+    <properties>
+        <!-- 开发镜像（Compose app profile） -->
+        <jib.skip>false</jib.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>cn.refinex.meridian</groupId>
@@ -34,10 +39,139 @@
             <groupId>cn.refinex.meridian</groupId>
             <artifactId>meridian-model-client</artifactId>
         </dependency>
+        <!-- knowledge 是 Spring MVC 加虚拟线程的应用（架构设计「部署单元」） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+        <!-- 健康检查（/actuator/health 与 liveness、readiness 探针） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- 生成接口上的 @Valid 与约束注解需要 Bean Validation 实现才生效（ADR-0029） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!--
+          文档解析（架构设计「写入流程」第 2 步，ADR-0051）：媒体类型检测与 Office、HTML、RTF、ODF 经 Tika（Office 走 POI）；PDF 用 PDFBox
+          直接抽取文字、检查扫描件与框线。只引入用到的解析模块，不引入 tika-parsers-standard-package（OCR、压缩包、邮件等用不到）
+        -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parser-microsoft-module</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parser-miscoffice-module</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parser-html-module</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parser-text-module</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.refinex.meridian</groupId>
+            <artifactId>meridian-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- 契约测试：按 meridian-v1.yaml 与内部接口规范校验每个请求与响应（ADR-0029） -->
+        <dependency>
+            <groupId>com.atlassian.oai</groupId>
+            <artifactId>openapi-request-validator-core</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <configuration>
+                    <to>
+                        <image>agent-meridian/knowledge:dev</image>
+                    </to>
+                    <container>
+                        <mainClass>cn.refinex.meridian.knowledge.KnowledgeApplication</mainClass>
+                        <ports>
+                            <port>18083</port>
+                        </ports>
+                    </container>
+                </configuration>
+            </plugin>
+            <!--
+              从 meridian-api 的规范生成 servlet 服务端接口，模型引用 meridian-api 的 DTO（ADR-0029）：公开规范只生成 KnowledgeBases，
+              内部接口只生成 InternalKnowledge（ADR-0051）。
+            -->
+            <plugin>
+                <groupId>org.openapitools</groupId>
+                <artifactId>openapi-generator-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>generate-public-server</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/../meridian-api/src/main/resources/openapi/meridian-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <apiPackage>cn.refinex.meridian.knowledge.openapi.pub</apiPackage>
+                            <generateApis>true</generateApis>
+                            <generateModels>false</generateModels>
+                            <apisToGenerate>KnowledgeBases</apisToGenerate>
+                            <configOptions>
+                                <interfaceOnly>true</interfaceOnly>
+                                <skipDefaultInterface>true</skipDefaultInterface>
+                                <useTags>true</useTags>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-internal-server</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/../meridian-api/src/main/resources/openapi/meridian-internal-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <apiPackage>cn.refinex.meridian.knowledge.openapi.internal</apiPackage>
+                            <modelPackage>cn.refinex.meridian.api.internal.model</modelPackage>
+                            <generateApis>true</generateApis>
+                            <generateModels>false</generateModels>
+                            <apisToGenerate>InternalKnowledge</apisToGenerate>
+                            <configOptions>
+                                <interfaceOnly>true</interfaceOnly>
+                                <skipDefaultInterface>true</skipDefaultInterface>
+                                <useTags>true</useTags>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

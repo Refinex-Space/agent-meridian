@@ -1,0 +1,52 @@
+# knowledge 的公共配置。环境相关的连接信息在 profile 中：dev 连接本地 compose，test 由 Testcontainers 注入。
+spring:
+  application:
+    name: meridian-knowledge
+  threads:
+    virtual:
+      # MVC 加虚拟线程（架构设计「部署单元」）
+      enabled: true
+  jackson:
+    deserialization:
+      # 请求体中未声明的字段返回 400，不静默忽略（与 runtime、control-plane 相同）
+      fail-on-unknown-properties: true
+  flyway:
+    # 迁移以 meridian_migrator 执行（spring.flyway.user/password），脚本位置与 schema 由 meridian-persistence 的迁移约定设置
+    enabled: true
+  servlet:
+    multipart:
+      # 与 meridian.knowledge.documents.max-size 一致；超过时返回 413 document.too_large（UploadLimitAdvice）
+      max-file-size: ${meridian.knowledge.documents.max-size:64MB}
+      max-request-size: ${meridian.knowledge.documents.max-size:64MB}
+      # 大于 1 MB 的部分写临时文件，不占内存
+      file-size-threshold: 1MB
+
+server:
+  port: ${MERIDIAN_KNOWLEDGE_PORT:18083}
+
+meridian:
+  persistence:
+    schema: kb
+  security:
+    service-jwt:
+      # 本服务名：入站服务 JWT 的 aud，出站换取令牌的客户端 ID（ADR-0044）；客户端密钥部署时配置
+      service: knowledge
+    oidc:
+      # 控制台用户带 Meridian-Project 调用公开 API（ADR-0044）：部署时配置 issuer
+      audience: meridian
+  knowledge:
+    # 部署时配置 runtime.url（Embedding）与 doc-parser.url（扫描件、表格与图片）；其余默认值见 KnowledgeProperties
+    runtime:
+      url:
+    doc-parser:
+      url:
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

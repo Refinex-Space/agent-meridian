@@ -53,6 +53,11 @@
         <mcp-sdk.version>0.17.2</mcp-sdk.version>
         <!-- 上传文件与工作区文件的媒体类型检测（ADR-0050）：Apache Tika 4.2.0（2026-10-25），技术基线的文档解析组件，T18 的解析沿用同一版本 -->
         <tika.version>4.2.0</tika.version>
+        <!--
+          知识库解析（T18，ADR-0051）：PDFBox 与 Tika 4.2.0 的 PDF 模块使用同一版本 3.0.8（2026-06），knowledge 直接用它抽取文字与检查框线；
+          Tika 的解析模块（Office 走 POI 5.5.1）经 tika-bom 管理
+        -->
+        <pdfbox.version>3.0.8</pdfbox.version>
 
         <!-- 与根 POM 的 spotless-maven-plugin.version 保持一致 -->
         <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
@@ -144,6 +149,13 @@
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-bom</artifactId>
                 <version>${mockito.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-bom</artifactId>
+                <version>${tika.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -253,6 +265,11 @@
                 <groupId>org.apache.tika</groupId>
                 <artifactId>tika-core</artifactId>
                 <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.pdfbox</groupId>
+                <artifactId>pdfbox</artifactId>
+                <version>${pdfbox.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.wiremock</groupId>

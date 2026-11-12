@@ -55,7 +55,7 @@
         <openapi-generator-maven-plugin.version>7.26.0</openapi-generator-maven-plugin.version>
         <!-- 开发镜像（Compose app profile，T14a）：3.5.2 发布于 2026-07，读取 JDK 25 的 class 文件 -->
         <jib-maven-plugin.version>3.5.2</jib-maven-plugin.version>
-        <!-- 只有 control-plane、runtime 与 test-support（脚本化模型服务）打镜像，它们各自把它设为 false -->
+        <!-- 只有 control-plane、runtime、knowledge 与 test-support（脚本化模型服务）打镜像，它们各自把它设为 false -->
         <jib.skip>true</jib.skip>
 
         <!-- 测试过滤：默认排除真实模型测试与 kind 集群测试，live、kind profile 中分别改为只运行它们 -->

@@ -1,0 +1,45 @@
+# 本地开发：连接 scripts/dev/up.sh 启动的 compose（端口见 deploy/compose/.env.example），先启动 control-plane（API Key 校验、服务 JWT）
+# 与 runtime（Embedding）。口令与客户端密钥只从环境变量读取：MERIDIAN_APP_PASSWORD、MERIDIAN_MIGRATOR_PASSWORD、
+# MERIDIAN_KNOWLEDGE_CLIENT_SECRET、MINIO_ROOT_USER、MINIO_ROOT_PASSWORD。
+spring:
+  datasource:
+    url: ${MERIDIAN_DB_URL:jdbc:postgresql://localhost:15432/meridian}
+    username: meridian_app
+    password: ${MERIDIAN_APP_PASSWORD}
+  flyway:
+    user: meridian_migrator
+    password: ${MERIDIAN_MIGRATOR_PASSWORD}
+  data:
+    redis:
+      host: ${MERIDIAN_REDIS_HOST:localhost}
+      port: ${MERIDIAN_REDIS_PORT:16379}
+
+meridian:
+  knowledge:
+    runtime:
+      url: ${MERIDIAN_RUNTIME_URL:http://localhost:18080}
+    doc-parser:
+      # scripts/dev/run-doc-parser.sh 或 Compose app profile 的 doc-parser
+      url: ${MERIDIAN_DOC_PARSER_URL:http://localhost:18084}
+  persistence:
+    objectstore:
+      endpoint: http://localhost:${MERIDIAN_MINIO_PORT:19000}
+      region: us-east-1
+      bucket: ${MERIDIAN_S3_BUCKET:meridian}
+      access-key: ${MINIO_ROOT_USER}
+      secret-key: ${MINIO_ROOT_PASSWORD}
+      path-style-access: true
+  security:
+    service-client:
+      # API Key 经 control-plane 校验、控制台用户的项目权限与服务 JWT 都来自 control-plane（ADR-0042、ADR-0044）
+      control-plane-url: ${MERIDIAN_CONTROL_PLANE_URL:http://localhost:18081}
+    service-jwt:
+      client-secret: ${MERIDIAN_KNOWLEDGE_CLIENT_SECRET}
+    oidc:
+      issuer: ${MERIDIAN_OIDC_ISSUER:http://localhost:18082/realms/meridian-dev}
+      jwks-uri: ${MERIDIAN_OIDC_JWKS_URI:}
+
+management:
+  endpoint:
+    health:
+      show-details: always
