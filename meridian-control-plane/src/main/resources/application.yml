@@ -35,6 +35,14 @@ meridian:
     # 服务 JWT 的签发（ADR-0044）：部署时配置 key-directory（生产改用密钥管理系统，T28）与各服务的客户端
     service-tokens:
       clients: []
+    # 凭据库（ADR-0045）：key-encryption 没有默认值，部署必须选 vault（生产）或 local（开发与测试），否则启动失败。
+    # vault 需要 address、token（只从环境变量或 Secret 读取），mount 默认 transit、key-name 默认 meridian-secrets
+    secrets:
+      data-key-cache-ttl: 5m
+    # 供应商与搜索后端端点的地址策略（ADR-0045 第 5 条）：链路本地、云元数据、保留地址始终拒绝；回环只在开发与测试放行；
+    # 私有网段不配置时全部放行，生产按私有化推理服务所在网段收窄，例如 [10.20.0.0/16]
+    provider-endpoints:
+      allow-loopback: false
 
 management:
   endpoints:

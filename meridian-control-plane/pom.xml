@@ -66,6 +66,12 @@
             <artifactId>spring-boot-starter-restclient</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Vault Transit 的密钥加密服务的集成测试（T15a-A02，ADR-0045）；版本由 Testcontainers BOM 管理 -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-vault</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>cn.refinex.meridian</groupId>
             <artifactId>meridian-test-support</artifactId>
@@ -98,7 +104,7 @@
             </plugin>
             <!--
               从 meridian-api 的规范生成 servlet 服务端接口，模型引用 meridian-api 的 DTO（ADR-0029、ADR-0042）：
-              管理 API 全部生成；内部接口只生成 control-plane 提供的两个标签。
+              管理 API 全部生成；内部接口只生成 control-plane 提供的标签。
             -->
             <plugin>
                 <groupId>org.openapitools</groupId>
@@ -135,7 +141,7 @@
                             <modelPackage>cn.refinex.meridian.api.internal.model</modelPackage>
                             <generateApis>true</generateApis>
                             <generateModels>false</generateModels>
-                            <apisToGenerate>InternalApiKeys,InternalTenants,InternalServiceTokens,InternalProjectAccess</apisToGenerate>
+                            <apisToGenerate>InternalApiKeys,InternalTenants,InternalServiceTokens,InternalProjectAccess,InternalSecrets,InternalModelCatalog</apisToGenerate>
                             <configOptions>
                                 <interfaceOnly>true</interfaceOnly>
                                 <skipDefaultInterface>true</skipDefaultInterface>

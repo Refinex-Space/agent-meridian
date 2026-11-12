@@ -4,6 +4,7 @@ import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.common.id.IdPrefix;
 import cn.refinex.meridian.common.id.Ids;
+import cn.refinex.meridian.common.net.EndpointPolicy;
 import cn.refinex.meridian.common.page.Cursor;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.common.page.PageResult;
@@ -17,6 +18,7 @@ import cn.refinex.meridian.controlplane.tenant.domain.TenantSettings;
 import cn.refinex.meridian.controlplane.tenant.infra.TenantRepository;
 import cn.refinex.meridian.controlplane.tenant.infra.TenantSettingsRepository;
 import cn.refinex.meridian.controlplane.tenant.infra.system.TenantDirectoryRepository;
+import cn.refinex.meridian.controlplane.web.Endpoints;
 import cn.refinex.meridian.controlplane.web.Scopes;
 import cn.refinex.meridian.security.rbac.AccessContext;
 import cn.refinex.meridian.security.rbac.Permission;
@@ -44,6 +46,7 @@ public class TenantService {
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transactions;
     private final ControlPlaneProperties properties;
+    private final EndpointPolicy endpoints;
     private final Clock clock;
 
     /**
@@ -58,6 +61,7 @@ public class TenantService {
      * @param events 进程内事件（同一事务中同步处理）
      * @param transactions 事务模板
      * @param properties control-plane 配置，取默认配额
+     * @param endpoints 端点策略，校验联网搜索后端的地址（ADR-0045，D52）
      * @param clock 时钟
      */
     public TenantService(
@@ -70,6 +74,7 @@ public class TenantService {
             ApplicationEventPublisher events,
             TransactionTemplate transactions,
             ControlPlaneProperties properties,
+            EndpointPolicy endpoints,
             Clock clock) {
         this.tenants = tenants;
         this.settings = settings;
@@ -80,6 +85,7 @@ public class TenantService {
         this.events = events;
         this.transactions = transactions;
         this.properties = properties;
+        this.endpoints = endpoints;
         this.clock = clock;
     }
 
@@ -222,6 +228,9 @@ public class TenantService {
      */
     public TenantSettings updateSettings(
             String actor, String tenantId, String systemPrompt, TenantSettings.WebSearch webSearch) {
+        if (webSearch != null) {
+            Endpoints.check(endpoints, webSearch.baseUrl(), "web_search.base_url");
+        }
         return PlatformContexts.call(
                 Scopes.tenant(tenantId),
                 () -> transactions.execute(status -> {

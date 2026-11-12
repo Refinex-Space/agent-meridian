@@ -5,11 +5,15 @@ import static cn.refinex.meridian.security.rbac.Permission.API_KEY_WRITE;
 import static cn.refinex.meridian.security.rbac.Permission.MEMBER_READ;
 import static cn.refinex.meridian.security.rbac.Permission.MEMBER_WRITE;
 import static cn.refinex.meridian.security.rbac.Permission.MODEL_INVOKE;
+import static cn.refinex.meridian.security.rbac.Permission.MODEL_READ;
+import static cn.refinex.meridian.security.rbac.Permission.MODEL_WRITE;
 import static cn.refinex.meridian.security.rbac.Permission.PENDING_ACTION_DECIDE;
 import static cn.refinex.meridian.security.rbac.Permission.PROJECT_CREATE;
 import static cn.refinex.meridian.security.rbac.Permission.PROJECT_DELETE;
 import static cn.refinex.meridian.security.rbac.Permission.PROJECT_READ;
 import static cn.refinex.meridian.security.rbac.Permission.PROJECT_UPDATE;
+import static cn.refinex.meridian.security.rbac.Permission.SECRET_READ;
+import static cn.refinex.meridian.security.rbac.Permission.SECRET_WRITE;
 import static cn.refinex.meridian.security.rbac.Permission.SESSION_READ;
 import static cn.refinex.meridian.security.rbac.Permission.SESSION_WRITE;
 import static cn.refinex.meridian.security.rbac.Permission.TENANT_CREATE;
@@ -42,7 +46,7 @@ public final class RoleMatrix {
             }
         }
         MATRIX.put(Role.TENANT_OWNER, owner);
-        // 租户管理员："管理项目、成员、模型、凭据、预算"：不能删除租户、不能管理所有者、不审批
+        // 租户管理员："管理项目、成员、模型、凭据、预算"：不能删除租户、不能管理所有者、不审批（模型与凭据 ADR-0045）
         MATRIX.put(
                 Role.TENANT_ADMIN,
                 EnumSet.of(
@@ -56,8 +60,12 @@ public final class RoleMatrix {
                         PROJECT_DELETE,
                         API_KEY_READ,
                         API_KEY_WRITE,
+                        MODEL_READ,
+                        MODEL_WRITE,
+                        SECRET_READ,
+                        SECRET_WRITE,
                         SESSION_READ));
-        // 项目开发者"可用 Playground"：公开 API 的读写与模型直通（ADR-0044）
+        // 项目开发者"可用 Playground"：公开 API 的读写与模型直通（ADR-0044）；查看模型目录以选择智能体的模型（ADR-0045）
         MATRIX.put(
                 Role.PROJECT_DEVELOPER,
                 EnumSet.of(
@@ -67,9 +75,10 @@ public final class RoleMatrix {
                         API_KEY_WRITE,
                         SESSION_READ,
                         SESSION_WRITE,
-                        MODEL_INVOKE));
-        // 观察者"只读，包括会话回放"
-        MATRIX.put(Role.PROJECT_VIEWER, EnumSet.of(TENANT_READ, PROJECT_READ, API_KEY_READ, SESSION_READ));
+                        MODEL_INVOKE,
+                        MODEL_READ));
+        // 观察者"只读，包括会话回放"；凭据的元数据不对观察者开放
+        MATRIX.put(Role.PROJECT_VIEWER, EnumSet.of(TENANT_READ, PROJECT_READ, API_KEY_READ, SESSION_READ, MODEL_READ));
         MATRIX.put(Role.APPROVER, EnumSet.of(TENANT_READ, PROJECT_READ, PENDING_ACTION_DECIDE, SESSION_READ));
     }
 

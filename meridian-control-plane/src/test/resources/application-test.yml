@@ -8,6 +8,14 @@ meridian:
       user-id-claim: preferred_username
   control-plane:
     platform-admin-groups: [meridian-platform-admins]
+    secrets:
+      # 测试的本地主密钥：在模块的 target 下，clean 后重新生成（库也随 Testcontainers 重建）
+      key-encryption: local
+      local:
+        master-key-file: target/test-secret-master-key
+    provider-endpoints:
+      # 测试的模拟供应商在回环地址上
+      allow-loopback: true
 
 management:
   endpoint:

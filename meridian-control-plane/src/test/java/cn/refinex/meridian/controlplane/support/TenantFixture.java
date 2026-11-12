@@ -8,11 +8,11 @@ import java.util.Map;
 
 /**
  * 一个经管理 API 建好的租户：所有者 {@code owner}、第二位所有者 {@code owner2}、管理员 {@code admin}，项目 {@code project} 上的开发者、
- * 观察者、审批人，另一个项目 {@code other_project}，可被移除的成员 {@code spare}（{@code project} 的观察者），以及 {@code project} 下的
- * 一个 API Key。
+ * 观察者、审批人，另一个项目 {@code other_project}，可被移除的成员 {@code spare}（{@code project} 的观察者），{@code project} 下的
+ * 一个 API Key，以及凭据与模型目录（T15a）。
  *
  * @param values 占位符到 ID 的映射：tenant、project、other_project、spare_member、spare_binding、owner2_member、owner2_binding、
- *     key、key_plaintext
+ *     key、key_plaintext、secret、spare_secret、provider、spare_provider、price_book、model、spare_model
  */
 public record TenantFixture(Map<String, String> values) {
 
@@ -63,6 +63,7 @@ public record TenantFixture(Map<String, String> values) {
                 "{\"name\":\"夹具 Key\",\"scopes\":[\"sessions:read\",\"sessions:write\"]}"));
         v.put("key", key.text("id"));
         v.put("key_plaintext", key.text("key"));
+        catalog(client, base, owner, v);
         return new TenantFixture(Map.copyOf(v));
     }
 
@@ -91,6 +92,82 @@ public record TenantFixture(Map<String, String> values) {
             result = result.replace("{" + entry.getKey() + "}", entry.getValue());
         }
         return result;
+    }
+
+    /**
+     * 凭据与模型目录（T15a）：被供应商账号引用的凭据 {@code secret}、没有引用方的 {@code spare_secret}；挂着模型的供应商账号
+     * {@code provider} 与空账号 {@code spare_provider}；价格表 {@code price_book}；模型 {@code model} 与没有引用方的 {@code spare_model}。
+     * 端点在回环地址上（测试配置放行回环），不做 DNS 解析。
+     */
+    private static void catalog(AdminClient client, String base, String owner, Map<String, String> v) {
+        v.put(
+                "secret",
+                ok(client.admin(
+                                "POST",
+                                base + "/secrets",
+                                owner,
+                                "{\"name\":\"夹具凭据\",\"value\":\"fixture-secret-value\"}"))
+                        .text("id"));
+        v.put(
+                "spare_secret",
+                ok(client.admin(
+                                "POST",
+                                base + "/secrets",
+                                owner,
+                                "{\"name\":\"备用凭据\",\"value\":\"spare-secret-value\"}"))
+                        .text("id"));
+        v.put(
+                "provider",
+                ok(client.admin(
+                                "POST",
+                                base + "/provider-accounts",
+                                owner,
+                                "{\"name\":\"夹具账号\",\"provider\":\"openai_compatible\","
+                                        + "\"base_url\":\"http://127.0.0.1:18090/v1\",\"secret_id\":\""
+                                        + v.get("secret") + "\"}"))
+                        .text("id"));
+        v.put(
+                "spare_provider",
+                ok(client.admin(
+                                "POST",
+                                base + "/provider-accounts",
+                                owner,
+                                "{\"name\":\"空账号\",\"provider\":\"anthropic\"}"))
+                        .text("id"));
+        v.put(
+                "price_book",
+                ok(client.admin(
+                                "POST",
+                                base + "/price-books",
+                                owner,
+                                "{\"name\":\"夹具价格表\",\"currency\":\"CNY\"," + PRICES + "}"))
+                        .text("id"));
+        v.put(
+                "model",
+                ok(client.admin("POST", base + "/models", owner, model(v.get("provider"), "夹具模型", v.get("price_book"))))
+                        .text("id"));
+        v.put(
+                "spare_model",
+                ok(client.admin("POST", base + "/models", owner, model(v.get("provider"), "备用模型", null)))
+                        .text("id"));
+    }
+
+    /** 价格表请求中的单价字段。 */
+    public static final String PRICES =
+            "\"prices\":{\"input\":\"0.8\",\"output\":\"2\",\"cache_read\":\"0.16\",\"cache_write\":\"0.8\",\"reasoning\":\"8\"}";
+
+    /**
+     * 创建对话模型的请求体。
+     *
+     * @param providerAccountId 供应商账号
+     * @param name 名称
+     * @param priceBookId 价格表；可为空
+     * @return JSON
+     */
+    public static String model(String providerAccountId, String name, String priceBookId) {
+        return "{\"provider_account_id\":\"" + providerAccountId + "\",\"name\":\"" + name + "\",\"kind\":\"chat\","
+                + "\"upstream_model\":\"scripted\",\"context_window\":131072,\"max_output_tokens\":2048"
+                + (priceBookId == null ? "" : ",\"price_book_id\":\"" + priceBookId + "\"") + "}";
     }
 
     private static String bind(

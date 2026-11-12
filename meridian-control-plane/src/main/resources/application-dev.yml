@@ -21,6 +21,14 @@ meridian:
   control-plane:
     # 开发 realm 中 meridian-platform-admins 组的成员（dev-admin）是平台管理员，可以创建租户（ADR-0043）
     platform-admin-groups: [meridian-platform-admins]
+    secrets:
+      # 凭据库的主密钥（ADR-0045）：开发用本地文件，不存在时生成；写在已忽略的 deploy/compose/data，Compose 中是命名卷
+      key-encryption: local
+      local:
+        master-key-file: ${MERIDIAN_SECRET_MASTER_KEY_FILE:deploy/compose/data/secret-master-key}
+    provider-endpoints:
+      # 本机的脚本化模型服务在 localhost:18090
+      allow-loopback: true
     service-tokens:
       # 服务 JWT 的签名密钥（ADR-0044）：本机运行写在仓库的 deploy/compose/data（已忽略），Compose 中是命名卷
       key-directory: ${MERIDIAN_SERVICE_TOKEN_KEY_DIR:deploy/compose/data/service-token-keys}

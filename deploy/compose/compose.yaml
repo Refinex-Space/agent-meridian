@@ -126,11 +126,14 @@ services:
       MERIDIAN_RUNTIME_CLIENT_SECRET: ${MERIDIAN_RUNTIME_CLIENT_SECRET:?在 .env 中设置 MERIDIAN_RUNTIME_CLIENT_SECRET}
       MERIDIAN_EGRESS_PROXY_CLIENT_SECRET: ${MERIDIAN_EGRESS_PROXY_CLIENT_SECRET:?在 .env 中设置 MERIDIAN_EGRESS_PROXY_CLIENT_SECRET}
       MERIDIAN_SERVICE_TOKEN_KEY_DIR: /var/lib/meridian/service-token-keys
+      MERIDIAN_SECRET_MASTER_KEY_FILE: /var/lib/meridian/secret-master-key/master.key
       MERIDIAN_OIDC_ISSUER: http://localhost:${MERIDIAN_KEYCLOAK_PORT:-18082}/realms/meridian-dev
       MERIDIAN_OIDC_JWKS_URI: http://keycloak:8080/realms/meridian-dev/protocol/openid-connect/certs
     volumes:
       # 服务 JWT 的签名密钥（ADR-0044）：重建容器后沿用，已签发的令牌仍能校验
       - service-token-keys:/var/lib/meridian/service-token-keys
+      # 凭据库的开发主密钥（ADR-0045）：丢了它，库中的凭据就解不开了
+      - secret-master-key:/var/lib/meridian/secret-master-key
     ports:
       - "127.0.0.1:${MERIDIAN_CONTROL_PLANE_PORT:-18081}:18081"
     healthcheck:
@@ -188,6 +191,7 @@ services:
 
 volumes:
   service-token-keys:
+  secret-master-key:
   postgres-data:
   redis-data:
   minio-data:

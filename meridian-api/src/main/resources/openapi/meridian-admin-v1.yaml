@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Admin API
   version: 1.0.0
-  summary: 控制台使用的管理 API：租户、租户设置、项目、成员、角色绑定与 API Key。
+  summary: 控制台使用的管理 API：租户、租户设置、项目、成员、角色绑定、API Key、凭据与模型目录。
   description: |
     只供控制台调用（ADR-0042），与控制台同版本发布，不对业务系统开放；业务系统使用公开 API（`meridian-v1.yaml`）。
 
@@ -31,6 +31,14 @@ tags:
     description: 成员与角色绑定：谁能在租户与项目中做什么。
   - name: ApiKeys
     description: 项目下的 API Key：业务系统调用公开 API 的凭据，明文只在创建时返回一次。
+  - name: Secrets
+    description: 凭据库：信封加密保存供应商与外部服务的凭据，只能写入、轮换、删除，任何接口都读不出明文（ADR-0045）。
+  - name: ProviderAccounts
+    description: 供应商账号：类型、端点、凭据引用与限流（ADR-0045、ADR-0046）。
+  - name: Models
+    description: 模型目录：租户内全部项目可用的模型，带上下文窗口、能力、备用模型与价格表。
+  - name: PriceBooks
+    description: 价格表：按版本计价，新版本发布即生效，已有用量记录不受影响。
 
 paths:
   /admin/v1/tenants:
@@ -772,6 +780,577 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /admin/v1/tenants/{tenant_id}/secrets:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: createSecret
+      tags: [Secrets]
+      summary: 写入凭据
+      description: |
+        凭据值经信封加密后保存（ADR-0045），这个响应与之后的任何接口都不返回明文。`project_id` 为 null 时是租户级凭据，供应商账号、
+        租户设置与全部项目都可以引用；给出项目时只有该项目的资源可以引用。用 `Idempotency-Key` 重放时以首次的结果为准，凭据值不参与
+        幂等的请求指纹。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecretRequest'
+            example:
+              name: DashScope 生产
+              project_id: null
+              value: sk-0123456789abcdef
+      responses:
+        '201':
+          $ref: '#/components/responses/SecretCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listSecrets
+      tags: [Secrets]
+      summary: 列出凭据
+      description: 租户级与各项目的凭据，按创建时间从早到晚；只有元数据与引用方，不含明文。
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 凭据列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/secrets/{secret_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/SecretId'
+    get:
+      operationId: getSecret
+      tags: [Secrets]
+      summary: 查看凭据
+      responses:
+        '200':
+          $ref: '#/components/responses/SecretOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteSecret
+      tags: [Secrets]
+      summary: 删除凭据
+      description: |
+        删除密文，不可恢复。仍被供应商账号或租户设置引用时返回 409 `secret.in_use`，`references` 列出引用方；先改掉引用再删除。
+        runtime 经 `config.invalidate` 立即淘汰缓存的明文。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/secrets/{secret_id}:rotate:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/SecretId'
+    post:
+      operationId: rotateSecret
+      tags: [Secrets]
+      summary: 轮换凭据
+      description: 写入新值，版本号加一，旧值被覆盖、不可恢复。runtime 经 `config.invalidate` 立即改用新值。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateSecretRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/SecretOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/provider-accounts:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: createProviderAccount
+      tags: [ProviderAccounts]
+      summary: 创建供应商账号
+      description: |
+        `openai_compatible` 必须给出 `base_url`（DashScope 兼容模式、vLLM、SGLang 等私有化推理服务都走它）；`anthropic`、`gemini`
+        的 `base_url` 为 null 时用官方端点。端点只允许 http(s)，链路本地、云元数据与保留地址一律拒绝，内网地址只在平台放行的网段内
+        允许（ADR-0045）。`secret_id` 必须是本租户的租户级凭据。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProviderAccountRequest'
+            example:
+              name: DashScope
+              provider: openai_compatible
+              base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+              secret_id: sec_01JC8Z3D6F8H0K2M4P6R8T0V2X
+              rate_limit: {rpm: 60, tpm: 200000}
+      responses:
+        '201':
+          $ref: '#/components/responses/ProviderAccountCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listProviderAccounts
+      tags: [ProviderAccounts]
+      summary: 列出供应商账号
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 供应商账号列表，按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderAccountPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/provider-accounts/{provider_account_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProviderAccountId'
+    get:
+      operationId: getProviderAccount
+      tags: [ProviderAccounts]
+      summary: 查看供应商账号
+      responses:
+        '200':
+          $ref: '#/components/responses/ProviderAccountOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateProviderAccount
+      tags: [ProviderAccounts]
+      summary: 修改供应商账号
+      description: 整体替换可改的字段（类型不能改）。runtime 经 `config.invalidate` 立即改用新配置。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProviderAccountRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProviderAccountOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteProviderAccount
+      tags: [ProviderAccounts]
+      summary: 删除供应商账号
+      description: 账号下还有模型时返回 409 `catalog.in_use`，`references` 列出这些模型。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/models:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: createModel
+      tags: [Models]
+      summary: 创建模型
+      description: |
+        模型属于租户，租户内的全部项目都可以使用。`embedding`、`rerank` 只能挂在 `openai_compatible` 账号下；备用模型必须是本租户
+        同种类的另一个模型。`base_url` 覆盖账号的端点（例如 DashScope 的 rerank 在 `compatible-api/v1`），校验规则与账号相同。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateModelRequest'
+            example:
+              provider_account_id: prv_01JC8Z4E7G9J1L3N5Q7S9U1W3Y
+              name: 通义千问 Plus
+              kind: chat
+              upstream_model: qwen-plus
+              context_window: 131072
+              max_output_tokens: 2048
+              capabilities: {tool_calls: true, vision: false, reasoning: false}
+              price_book_id: prb_01JC8Z5F8H0K2M4P6R8T0V2X4Z
+      responses:
+        '201':
+          $ref: '#/components/responses/ModelCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listModels
+      tags: [Models]
+      summary: 列出模型
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 模型列表，按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/models/{model_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ModelId'
+    get:
+      operationId: getModel
+      tags: [Models]
+      summary: 查看模型
+      responses:
+        '200':
+          $ref: '#/components/responses/ModelOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateModel
+      tags: [Models]
+      summary: 修改模型
+      description: 整体替换可改的字段（供应商账号与种类不能改）。runtime 经 `config.invalidate` 立即改用新配置。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/ModelOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteModel
+      tags: [Models]
+      summary: 删除模型
+      description: 被其他模型作为备用模型时返回 409 `catalog.in_use`，`references` 列出这些模型。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/price-books:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: createPriceBook
+      tags: [PriceBooks]
+      summary: 创建价格表
+      description: 同时发布版本 1，立即生效。单价按每百万 token，十进制字符串，最多 6 位小数。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePriceBookRequest'
+            example:
+              name: 通义千问 Plus
+              currency: CNY
+              prices: {input: '0.8', output: '2', cache_read: '0.16', cache_write: '0.8', reasoning: '8'}
+      responses:
+        '201':
+          $ref: '#/components/responses/PriceBookCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listPriceBooks
+      tags: [PriceBooks]
+      summary: 列出价格表
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 价格表列表，按创建时间从早到晚，带当前版本。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceBookPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/price-books/{price_book_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/PriceBookId'
+    get:
+      operationId: getPriceBook
+      tags: [PriceBooks]
+      summary: 查看价格表
+      responses:
+        '200':
+          $ref: '#/components/responses/PriceBookOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/price-books/{price_book_id}/versions:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/PriceBookId'
+    post:
+      operationId: publishPriceBookVersion
+      tags: [PriceBooks]
+      summary: 发布价格表的新版本
+      description: |
+        新版本立即生效：之后结算的用量按新版本计价，已有的用量记录仍按记录中的版本（ADR-0045）。版本发布后不可修改；runtime 经
+        `config.invalidate` 立即改用新版本。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishPriceBookVersionRequest'
+      responses:
+        '201':
+          description: 已发布。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceBookVersion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listPriceBookVersions
+      tags: [PriceBooks]
+      summary: 列出价格表的版本
+      description: 按版本号从新到旧。
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 版本列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceBookVersionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ConsoleAuth:
@@ -844,6 +1423,34 @@ components:
       schema:
         type: string
         minLength: 1
+    SecretId:
+      name: secret_id
+      in: path
+      required: true
+      description: 凭据 ID（sec_…）。
+      schema:
+        type: string
+    ProviderAccountId:
+      name: provider_account_id
+      in: path
+      required: true
+      description: 供应商账号 ID（prv_…）。
+      schema:
+        type: string
+    ModelId:
+      name: model_id
+      in: path
+      required: true
+      description: 模型 ID（mdl_…）。
+      schema:
+        type: string
+    PriceBookId:
+      name: price_book_id
+      in: path
+      required: true
+      description: 价格表 ID（prb_…）。
+      schema:
+        type: string
 
   responses:
     TenantCreated:
@@ -934,6 +1541,94 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiKey'
+    SecretCreated:
+      description: 已写入，只有元数据。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Secret'
+    SecretOk:
+      description: 凭据的元数据。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Secret'
+    ProviderAccountCreated:
+      description: 已创建。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProviderAccount'
+    ProviderAccountOk:
+      description: 供应商账号。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProviderAccount'
+    ModelCreated:
+      description: 已创建。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Model'
+    ModelOk:
+      description: 模型。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Model'
+    PriceBookCreated:
+      description: 已创建，当前版本为 1。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PriceBook'
+    PriceBookOk:
+      description: 价格表与当前版本。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PriceBook'
     Deleted:
       description: 已删除，没有响应体。
       headers:
@@ -973,7 +1668,8 @@ components:
     NotFound:
       description: |
         资源不存在或已删除：`tenant.not_found`、`project.not_found`、`member.not_found`、`role_binding.not_found`、
-        `api_key.not_found`。
+        `api_key.not_found`、`secret.not_found`、`catalog.provider_account_not_found`、`catalog.model_not_found`、
+        `catalog.price_book_not_found`。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -984,7 +1680,9 @@ components:
     Conflict:
       description: |
         `member.already_exists`：该主体已是租户成员；`role_binding.already_exists`：同一角色已授予；`member.last_owner`：
-        不能移除或撤销最后一位所有者；`idempotency.key_reused`、`idempotency.in_progress`：幂等键冲突。
+        不能移除或撤销最后一位所有者；`secret.name_taken`、`catalog.name_taken`：同一范围内已有同名的凭据、供应商账号、模型或
+        价格表；`secret.in_use`、`catalog.in_use`：资源仍被引用，`references` 列出引用方；`idempotency.key_reused`、
+        `idempotency.in_progress`：幂等键冲突。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -1138,12 +1836,11 @@ components:
           type: string
           enum: [searxng, bocha]
         base_url:
-          description: 后端的基础 URL。
+          description: 后端的基础 URL（http 或 https）；链路本地、云元数据、保留地址拒绝，内网地址只在平台放行的网段内允许（ADR-0045）。
           type: string
-          format: uri
           maxLength: 2048
         secret_id:
-          description: 访问凭据的 ID（sec_…，T15a）；不需要凭据时为 null。
+          description: 本租户的租户级凭据 ID（sec_…）；不需要凭据时为 null。
           type: [string, 'null']
     Project:
       description: 项目。
@@ -1507,6 +2204,535 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+    ResourceReference:
+      description: 引用了某个资源的另一个资源。
+      type: object
+      required: [type, id, name]
+      properties:
+        type:
+          description: 引用方的资源类型：`provider_account`、`model`、`tenant_settings`（T15b 起另有 `mcp_server`、`agent_version`）。
+          type: string
+        id:
+          description: 引用方的 ID；租户设置为租户 ID。
+          type: string
+        name:
+          description: 引用方的名称；没有名称时为 null。
+          type: [string, 'null']
+    Secret:
+      description: 凭据的元数据。任何接口都不返回明文（ADR-0045）。
+      type: object
+      required: [id, tenant_id, project_id, name, version, created_by, created_at, updated_at, last_used_at, references]
+      properties:
+        id:
+          description: 凭据 ID（sec_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID；为 null 表示租户级凭据。
+          type: [string, 'null']
+        name:
+          description: 名称，在同一范围（租户级或同一项目）内唯一。
+          type: string
+        version:
+          description: 版本：创建为 1，每次轮换加一。
+          type: integer
+        created_by:
+          description: 创建者的主体标识。
+          type: string
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次写入（创建或轮换）的时间。
+          type: string
+          format: date-time
+        last_used_at:
+          description: 最近一次被 runtime 解析的时间；没有用过时为 null。
+          type: [string, 'null']
+          format: date-time
+        references:
+          description: 引用这个凭据的资源；没有时为空数组。
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceReference'
+    SecretPage:
+      description: 一页凭据。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的凭据。
+          type: array
+          items:
+            $ref: '#/components/schemas/Secret'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    CreateSecretRequest:
+      description: 写入凭据。
+      type: object
+      required: [name, value]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        project_id:
+          description: 所属项目 ID；不传或为 null 表示租户级凭据。
+          type: [string, 'null']
+        value:
+          description: 凭据值（API Key、令牌等），只写不读，最多 16384 个字符。
+          type: string
+          minLength: 1
+          maxLength: 16384
+          writeOnly: true
+    RotateSecretRequest:
+      description: 轮换凭据。
+      type: object
+      required: [value]
+      additionalProperties: false
+      properties:
+        value:
+          description: 新的凭据值，只写不读，最多 16384 个字符。
+          type: string
+          minLength: 1
+          maxLength: 16384
+          writeOnly: true
+    ProviderType:
+      description: 供应商类型（ADR-0046）：`openai_compatible`（含 DashScope 兼容模式与私有化推理服务）、`anthropic`、`gemini`。
+      type: string
+      enum: [openai_compatible, anthropic, gemini]
+    RateLimit:
+      description: 每分钟的请求与 token 上限，用 Redis 令牌桶等待，最长 30 秒（架构设计「模型调用」）。
+      type: object
+      required: [rpm, tpm]
+      additionalProperties: false
+      properties:
+        rpm:
+          description: 每分钟请求上限；为 null 表示不限（模型上为 null 表示用账号的）。
+          type: [integer, 'null']
+          minimum: 1
+        tpm:
+          description: 每分钟 token 上限；为 null 表示不限（模型上为 null 表示用账号的）。
+          type: [integer, 'null']
+          minimum: 1
+    ProviderAccount:
+      description: 供应商账号。
+      type: object
+      required: [id, tenant_id, name, provider, base_url, secret_id, rate_limit, created_at, updated_at]
+      properties:
+        id:
+          description: 供应商账号 ID（prv_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        name:
+          description: 名称，租户内唯一。
+          type: string
+        provider:
+          $ref: '#/components/schemas/ProviderType'
+        base_url:
+          description: 端点；为 null 表示该类型的官方端点。
+          type: [string, 'null']
+        secret_id:
+          description: 凭据 ID；为 null 表示不需要凭据。
+          type: [string, 'null']
+        rate_limit:
+          $ref: '#/components/schemas/RateLimit'
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    ProviderAccountPage:
+      description: 一页供应商账号。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的供应商账号。
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderAccount'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    CreateProviderAccountRequest:
+      description: 创建供应商账号。
+      type: object
+      required: [name, provider]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        provider:
+          $ref: '#/components/schemas/ProviderType'
+        base_url:
+          description: 端点（http 或 https）；`openai_compatible` 必填，其他类型为 null 时用官方端点。
+          type: [string, 'null']
+          maxLength: 2048
+        secret_id:
+          description: 本租户的租户级凭据 ID；不需要凭据时为 null。
+          type: [string, 'null']
+        rate_limit:
+          description: 限流；不传表示不限。
+          oneOf:
+            - $ref: '#/components/schemas/RateLimit'
+            - type: 'null'
+    UpdateProviderAccountRequest:
+      description: 修改供应商账号：整体替换可改的字段，类型不能改。
+      type: object
+      required: [name, base_url, secret_id, rate_limit]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        base_url:
+          description: 端点；规则同创建。
+          type: [string, 'null']
+          maxLength: 2048
+        secret_id:
+          description: 本租户的租户级凭据 ID；为 null 表示不需要凭据。
+          type: [string, 'null']
+        rate_limit:
+          $ref: '#/components/schemas/RateLimit'
+    ModelKind:
+      description: 模型种类：`chat`（对话，智能体与 `/v1/chat/completions`）、`embedding`、`rerank`。
+      type: string
+      enum: [chat, embedding, rerank]
+    ModelCapabilities:
+      description: 模型能力，供控制台展示与智能体配置校验。
+      type: object
+      required: [tool_calls, vision, reasoning]
+      additionalProperties: false
+      properties:
+        tool_calls:
+          description: 支持工具调用。
+          type: boolean
+        vision:
+          description: 支持图片输入。
+          type: boolean
+        reasoning:
+          description: 输出推理（思考）内容。
+          type: boolean
+    Model:
+      description: 模型目录中的一个模型。
+      type: object
+      required:
+        [id, tenant_id, provider_account_id, name, kind, upstream_model, context_window, max_output_tokens, capabilities,
+         fallback_model_id, price_book_id, base_url, max_batch_size, rate_limit, created_at, updated_at]
+      properties:
+        id:
+          description: 模型 ID（mdl_…），智能体配置与直通接口按它引用。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        provider_account_id:
+          description: 所属供应商账号 ID。
+          type: string
+        name:
+          description: 名称，租户内唯一。
+          type: string
+        kind:
+          $ref: '#/components/schemas/ModelKind'
+        upstream_model:
+          description: 供应商侧的模型名，例如 `qwen-plus`。
+          type: string
+        context_window:
+          description: 上下文窗口，单位 token。
+          type: integer
+        max_output_tokens:
+          description: 请求没有指定时的最大输出 token。
+          type: integer
+        capabilities:
+          $ref: '#/components/schemas/ModelCapabilities'
+        fallback_model_id:
+          description: 备用模型 ID；为 null 表示没有。
+          type: [string, 'null']
+        price_book_id:
+          description: 价格表 ID；为 null 表示没有定价。
+          type: [string, 'null']
+        base_url:
+          description: 本模型的端点，覆盖账号的；为 null 表示用账号的。
+          type: [string, 'null']
+        max_batch_size:
+          description: Embedding 一次请求的输入条数上限；为 null 表示默认值。
+          type: [integer, 'null']
+        rate_limit:
+          $ref: '#/components/schemas/RateLimit'
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    ModelPage:
+      description: 一页模型。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的模型。
+          type: array
+          items:
+            $ref: '#/components/schemas/Model'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    CreateModelRequest:
+      description: 创建模型。
+      type: object
+      required: [provider_account_id, name, kind, upstream_model, context_window, max_output_tokens]
+      additionalProperties: false
+      properties:
+        provider_account_id:
+          description: 本租户的供应商账号 ID。
+          type: string
+        name:
+          description: 名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        kind:
+          $ref: '#/components/schemas/ModelKind'
+        upstream_model:
+          description: 供应商侧的模型名，1 到 256 个字符。
+          type: string
+          minLength: 1
+          maxLength: 256
+        context_window:
+          description: 上下文窗口，单位 token。
+          type: integer
+          minimum: 1
+        max_output_tokens:
+          description: 请求没有指定时的最大输出 token。
+          type: integer
+          minimum: 1
+        capabilities:
+          description: 能力；不传表示都不支持。
+          oneOf:
+            - $ref: '#/components/schemas/ModelCapabilities'
+            - type: 'null'
+        fallback_model_id:
+          description: 备用模型：本租户同种类的另一个模型；为 null 表示没有。
+          type: [string, 'null']
+        price_book_id:
+          description: 本租户的价格表 ID；为 null 表示没有定价。
+          type: [string, 'null']
+        base_url:
+          description: 本模型的端点，覆盖账号的；为 null 表示用账号的。
+          type: [string, 'null']
+          maxLength: 2048
+        max_batch_size:
+          description: Embedding 一次请求的输入条数上限；为 null 表示默认值（10）。
+          type: [integer, 'null']
+          minimum: 1
+        rate_limit:
+          description: 本模型的限流，覆盖账号的；不传表示用账号的。
+          oneOf:
+            - $ref: '#/components/schemas/RateLimit'
+            - type: 'null'
+    UpdateModelRequest:
+      description: 修改模型：整体替换可改的字段，供应商账号与种类不能改。
+      type: object
+      required:
+        [name, upstream_model, context_window, max_output_tokens, capabilities, fallback_model_id, price_book_id, base_url,
+         max_batch_size, rate_limit]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        upstream_model:
+          description: 供应商侧的模型名，1 到 256 个字符。
+          type: string
+          minLength: 1
+          maxLength: 256
+        context_window:
+          description: 上下文窗口，单位 token。
+          type: integer
+          minimum: 1
+        max_output_tokens:
+          description: 请求没有指定时的最大输出 token。
+          type: integer
+          minimum: 1
+        capabilities:
+          $ref: '#/components/schemas/ModelCapabilities'
+        fallback_model_id:
+          description: 备用模型；为 null 表示没有。
+          type: [string, 'null']
+        price_book_id:
+          description: 价格表 ID；为 null 表示没有定价。
+          type: [string, 'null']
+        base_url:
+          description: 本模型的端点；为 null 表示用账号的。
+          type: [string, 'null']
+          maxLength: 2048
+        max_batch_size:
+          description: Embedding 一次请求的输入条数上限；为 null 表示默认值。
+          type: [integer, 'null']
+          minimum: 1
+        rate_limit:
+          $ref: '#/components/schemas/RateLimit'
+    TokenPrices:
+      description: 每百万 token 的单价，十进制字符串，最多 12 位整数、6 位小数；缓存读写与推理分别定价。
+      type: object
+      required: [input, output, cache_read, cache_write, reasoning]
+      additionalProperties: false
+      properties:
+        input:
+          description: 输入 token 的单价。
+          type: string
+          pattern: '^[0-9]{1,12}(\.[0-9]{1,6})?$'
+        output:
+          description: 输出 token 的单价。
+          type: string
+          pattern: '^[0-9]{1,12}(\.[0-9]{1,6})?$'
+        cache_read:
+          description: 命中提示词缓存的输入 token 的单价。
+          type: string
+          pattern: '^[0-9]{1,12}(\.[0-9]{1,6})?$'
+        cache_write:
+          description: 写入提示词缓存的输入 token 的单价。
+          type: string
+          pattern: '^[0-9]{1,12}(\.[0-9]{1,6})?$'
+        reasoning:
+          description: 推理 token 的单价。
+          type: string
+          pattern: '^[0-9]{1,12}(\.[0-9]{1,6})?$'
+    PriceBookVersion:
+      description: 价格表的一个版本，发布后不可修改。
+      type: object
+      required: [price_book_id, version, prices, effective_from, created_by]
+      properties:
+        price_book_id:
+          description: 价格表 ID。
+          type: string
+        version:
+          description: 版本号，从 1 递增。
+          type: integer
+        prices:
+          $ref: '#/components/schemas/TokenPrices'
+        effective_from:
+          description: 生效时间（发布时间）。
+          type: string
+          format: date-time
+        created_by:
+          description: 发布者的主体标识。
+          type: string
+    PriceBookVersionPage:
+      description: 一页价格表版本。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的版本，版本号从新到旧。
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceBookVersion'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    PriceBook:
+      description: 价格表与当前生效的版本。
+      type: object
+      required: [id, tenant_id, name, currency, current_version, created_at, updated_at]
+      properties:
+        id:
+          description: 价格表 ID（prb_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        name:
+          description: 名称，租户内唯一。
+          type: string
+        currency:
+          description: 币种（ISO 4217），例如 `CNY`。
+          type: string
+        current_version:
+          $ref: '#/components/schemas/PriceBookVersion'
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次发布版本的时间。
+          type: string
+          format: date-time
+    PriceBookPage:
+      description: 一页价格表。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的价格表。
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceBook'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    CreatePriceBookRequest:
+      description: 创建价格表并发布版本 1。
+      type: object
+      required: [name, currency, prices]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名称，1 到 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        currency:
+          description: 币种（ISO 4217，三个大写字母），例如 `CNY`。
+          type: string
+          pattern: '^[A-Z]{3}$'
+        prices:
+          $ref: '#/components/schemas/TokenPrices'
+    PublishPriceBookVersionRequest:
+      description: 发布价格表的新版本。
+      type: object
+      required: [prices]
+      additionalProperties: false
+      properties:
+        prices:
+          $ref: '#/components/schemas/TokenPrices'
     Problem:
       description: RFC 9457 错误响应，扩展字段 `code` 与 `request_id`。
       type: object
@@ -1538,6 +2764,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FieldViolation'
+        references:
+          description: 引用方，只在资源仍被引用（`secret.in_use`、`catalog.in_use`）时出现。
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceReference'
     FieldViolation:
       description: 一个字段的校验失败。
       type: object

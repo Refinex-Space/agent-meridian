@@ -2,13 +2,14 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Internal API
   version: 1.0.0
-  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，control-plane 提供服务令牌、API Key 校验、租户配额与控制台用户的项目权限。
+  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，control-plane 提供服务令牌、API Key 校验、租户配额、控制台用户的项目权限、凭据解析与模型目录。
   description: |
     只供平台内部服务调用（knowledge 经 `meridian-model-client`，沙箱出网代理经 Envoy 的 Lua 过滤器，runtime 与 knowledge
     经 `meridian-security` 的服务间调用客户端访问 control-plane），不对业务系统开放，不随公开 API 发布。
 
     **提供方。** 标签 `InternalModels`、`InternalEgress` 由 runtime 提供；`InternalServiceTokens`、`InternalApiKeys`、
-    `InternalTenants`、`InternalProjectAccess` 由 control-plane 提供（ADR-0042、ADR-0044）。各服务只生成并实现自己的标签。
+    `InternalTenants`、`InternalProjectAccess`、`InternalSecrets`、`InternalModelCatalog` 由 control-plane 提供（ADR-0042、ADR-0044、
+    ADR-0045）。各服务只生成并实现自己的标签。
 
     **认证。** `/internal/` 下的请求带 `Authorization: Bearer <服务 JWT>`：control-plane 签发，RS256，有效 5 分钟，`aud` 是被调用
     的服务名，`sub` 是调用方服务名。服务用自己的客户端密钥在 `POST /oauth2/token` 换取（OAuth2 客户端凭据模式），公钥在
@@ -36,6 +37,10 @@ tags:
     description: control-plane 提供：服务 JWT 的签发与公钥（架构设计「认证」中"服务之间"一行，ADR-0044）。
   - name: InternalProjectAccess
     description: control-plane 提供：控制台用户在某个项目上能使用的公开 API 作用域（ADR-0044）。
+  - name: InternalSecrets
+    description: control-plane 提供：凭据明文的解析，只给 runtime，每次解析写审计（架构设计「凭据」，ADR-0045）。
+  - name: InternalModelCatalog
+    description: control-plane 提供：模型目录与供应商账号的解析，不含凭据明文（ADR-0045）。
 
 paths:
   /internal/v1/embeddings:
@@ -294,6 +299,85 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /internal/v1/secrets:resolve:
+    post:
+      operationId: resolveSecret
+      tags: [InternalSecrets]
+      summary: 解析凭据明文
+      description: |
+        调用方：`runtime`。runtime 在模型调用、MCP 请求头、联网搜索后端等工具执行边界解析凭据，明文只在内存中缓存 5 分钟。凭据的
+        租户必须等于 `tenant_id`；凭据属于某个项目时 `project_id` 也必须相同，否则与不存在相同（404 `secret.not_found`）。每次成功的
+        解析在同一事务中写审计 `secret.resolved` 并更新最后使用时间。响应带 `Cache-Control: no-store`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecretResolveRequest'
+            example:
+              tenant_id: ten_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
+              project_id: prj_01JC8Z2B5D3F7H9K1M4P6R8T0V
+              secret_id: sec_01JC8Z3D6F8H0K2M4P6R8T0V2X
+      responses:
+        '200':
+          description: 凭据明文。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Cache-Control:
+              description: 固定为 `no-store`。
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolvedSecret'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/SecretNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/models/{model_id}:
+    get:
+      operationId: getCatalogModel
+      tags: [InternalModelCatalog]
+      summary: 模型目录中的一个模型
+      description: |
+        调用方：`runtime`。模型、所属供应商账号（只有凭据 ID）与当前价格表版本。不按租户过滤：装配时读上下文窗口不需要租户，
+        runtime 在解析调用路由时自己校验模型的租户与调用方一致。runtime 缓存 60 秒，收到 `config.invalidate`（`provider_account`、
+        `model`、`secret`、`price_book`）立即淘汰。
+      parameters:
+        - name: model_id
+          in: path
+          required: true
+          description: 模型 ID（mdl_…）。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 模型与供应商账号。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/CatalogModelNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
   /oauth2/token:
     post:
       operationId: issueServiceToken
@@ -378,6 +462,24 @@ components:
         type: string
 
   responses:
+    SecretNotFound:
+      description: '`secret.not_found`：凭据不存在，或不属于请求中的租户与项目。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    CatalogModelNotFound:
+      description: '`catalog.model_not_found`：模型不存在。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     ApiKeyNotFound:
       description: '`api_key.not_found`：Key 不存在、已吊销、已过期，或所属项目、租户已删除。'
       headers:
@@ -493,6 +595,114 @@ components:
             $ref: '#/components/schemas/Problem'
 
   schemas:
+    SecretResolveRequest:
+      description: 解析一个凭据。
+      type: object
+      required: [tenant_id, secret_id]
+      additionalProperties: false
+      properties:
+        tenant_id:
+          description: 调用方租户 ID（PlatformContext）。
+          type: string
+          minLength: 1
+          maxLength: 64
+        project_id:
+          description: 调用方项目 ID；没有项目上下文时为 null，此时只能解析租户级凭据。
+          type: [string, 'null']
+          maxLength: 64
+        secret_id:
+          description: 凭据 ID（sec_…）。
+          type: string
+          minLength: 1
+          maxLength: 64
+    ResolvedSecret:
+      description: 凭据明文。调用方只放在内存中，不记日志、不写事件。
+      type: object
+      required: [secret_id, version, value]
+      properties:
+        secret_id:
+          description: 凭据 ID。
+          type: string
+        version:
+          description: 凭据版本，轮换后加一。
+          type: integer
+        value:
+          description: 凭据明文。
+          type: string
+    CatalogRateLimit:
+      description: 每分钟的请求与 token 上限；为 null 表示不限（模型上为 null 表示用账号的）。
+      type: object
+      required: [rpm, tpm]
+      properties:
+        rpm:
+          description: 每分钟请求上限。
+          type: [integer, 'null']
+        tpm:
+          description: 每分钟 token 上限。
+          type: [integer, 'null']
+    CatalogProviderAccount:
+      description: 模型所属的供应商账号，不含凭据明文。
+      type: object
+      required: [provider_account_id, provider, base_url, secret_id, rate_limit]
+      properties:
+        provider_account_id:
+          description: 供应商账号 ID（prv_…）。
+          type: string
+        provider:
+          description: 供应商类型：`openai_compatible`、`anthropic`、`gemini`。
+          type: string
+        base_url:
+          description: 端点；为 null 表示该类型的官方端点。
+          type: [string, 'null']
+        secret_id:
+          description: 凭据 ID，经 `secrets:resolve` 解析；为 null 表示不需要凭据。
+          type: [string, 'null']
+        rate_limit:
+          $ref: '#/components/schemas/CatalogRateLimit'
+    CatalogModel:
+      description: 模型目录中的一个模型与它的供应商账号。
+      type: object
+      required:
+        [model_id, tenant_id, kind, upstream_model, context_window, max_output_tokens, fallback_model_id, base_url,
+         max_batch_size, rate_limit, price_book_id, price_book_version, provider_account]
+      properties:
+        model_id:
+          description: 模型 ID（mdl_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID：只有该租户的调用可以使用。
+          type: string
+        kind:
+          description: 种类：`chat`、`embedding`、`rerank`。
+          type: string
+        upstream_model:
+          description: 供应商侧的模型名。
+          type: string
+        context_window:
+          description: 上下文窗口，单位 token。
+          type: integer
+        max_output_tokens:
+          description: 请求没有指定时的最大输出 token。
+          type: integer
+        fallback_model_id:
+          description: 目录中的备用模型；为 null 表示没有。
+          type: [string, 'null']
+        base_url:
+          description: 本模型的端点，覆盖账号的；为 null 表示用账号的。
+          type: [string, 'null']
+        max_batch_size:
+          description: Embedding 一次请求的输入条数上限；为 null 表示默认值。
+          type: [integer, 'null']
+        rate_limit:
+          $ref: '#/components/schemas/CatalogRateLimit'
+        price_book_id:
+          description: 价格表 ID；为 null 表示没有定价。
+          type: [string, 'null']
+        price_book_version:
+          description: 价格表当前生效的版本号，写进用量记录；没有价格表时为 null。
+          type: [integer, 'null']
+        provider_account:
+          $ref: '#/components/schemas/CatalogProviderAccount'
     ApiKeyVerifyRequest:
       description: 校验 API Key 的请求。
       type: object

@@ -63,6 +63,38 @@ public class AdminAudit {
     }
 
     /**
+     * 记录一次由内部服务发起的操作（例如 runtime 解析凭据，ADR-0045）。必须在业务事务中调用。
+     *
+     * @param action 动作，例如 {@code secret.resolved}
+     * @param service 调用方服务名（服务 JWT 的 {@code sub}）
+     * @param tenantId 租户 ID
+     * @param projectId 项目 ID；可为空
+     * @param resourceType 资源类型
+     * @param resourceId 资源 ID
+     * @param details 补充信息；不含凭据
+     */
+    public void recordService(
+            String action,
+            String service,
+            String tenantId,
+            String projectId,
+            String resourceType,
+            String resourceId,
+            Map<String, Object> details) {
+        outbox.append(
+                TOPIC,
+                new AdminAuditRecord(
+                        action,
+                        clock.instant(),
+                        tenantId,
+                        projectId,
+                        new Actor("service", service),
+                        resourceType,
+                        resourceId,
+                        java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(details))));
+    }
+
+    /**
      * 管理操作的审计记录（outbox 主题 {@code audit}），格式由 T16 的审计消费者定稿。
      *
      * @param action 动作
@@ -87,7 +119,7 @@ public class AdminAudit {
     /**
      * 操作者。
      *
-     * @param type 类型：T14a 只有 {@code console_user}
+     * @param type 类型：{@code console_user}（控制台用户），{@code service}（内部服务，T15a）
      * @param subject 主体标识
      */
     public record Actor(String type, String subject) {}

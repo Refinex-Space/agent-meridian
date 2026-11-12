@@ -10,6 +10,7 @@ import java.util.Map;
  *
  * @param status HTTP 状态码
  * @param body 响应体：{@code type}、{@code title}、{@code status}、{@code detail}、{@code instance}、{@code code}、
- *     {@code request_id}，校验失败时另有 {@code errors}
+ *     {@code request_id}，校验失败时另有 {@code errors}，
+ *     资源被引用时另有 {@code references}
  */
 public record Problem(int status, Map<String, Object> body) {}

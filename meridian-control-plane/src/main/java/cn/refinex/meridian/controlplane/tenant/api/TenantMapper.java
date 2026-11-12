@@ -6,7 +6,6 @@ import cn.refinex.meridian.common.page.PageResult;
 import cn.refinex.meridian.controlplane.tenant.domain.Tenant;
 import cn.refinex.meridian.controlplane.tenant.domain.TenantSettings;
 import cn.refinex.meridian.controlplane.web.Times;
-import java.net.URI;
 
 /** 租户的领域对象与管理 API DTO 之间的转换。 */
 final class TenantMapper {
@@ -35,15 +34,12 @@ final class TenantMapper {
                 web == null
                         ? null
                         : new WebSearchSettings(
-                                WebSearchSettings.BackendEnum.fromValue(web.backend()),
-                                URI.create(web.baseUrl()),
-                                web.secretId()));
+                                WebSearchSettings.BackendEnum.fromValue(web.backend()), web.baseUrl(), web.secretId()));
     }
 
     static TenantSettings.WebSearch toDomain(WebSearchSettings web) {
         return web == null
                 ? null
-                : new TenantSettings.WebSearch(
-                        web.getBackend().getValue(), web.getBaseUrl().toString(), web.getSecretId());
+                : new TenantSettings.WebSearch(web.getBackend().getValue(), web.getBaseUrl(), web.getSecretId());
     }
 }

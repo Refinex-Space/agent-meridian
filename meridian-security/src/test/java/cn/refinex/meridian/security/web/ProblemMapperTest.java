@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cn.refinex.meridian.common.error.CommonErrorCode;
 import cn.refinex.meridian.common.error.ConflictException;
+import cn.refinex.meridian.common.error.ReferencedException;
+import cn.refinex.meridian.common.error.ResourceReference;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -35,6 +38,28 @@ class ProblemMapperTest {
                 .isEqualTo(List.of(
                         Map.of("field", "agent_id", "message", "不能为空"),
                         Map.of("field", "max_turns", "message", "不能小于 1")));
+    }
+
+    @Test
+    void referencedResourcesAreListed() {
+        Problem problem = mapper.map(
+                new ReferencedException(
+                        CommonErrorCode.CONFLICT,
+                        "凭据仍被引用",
+                        List.of(
+                                new ResourceReference("provider_account", "prv_1", "DashScope"),
+                                new ResourceReference("tenant_settings", "ten_1", null))),
+                "req-1",
+                "/admin/v1/tenants/ten_1/secrets/sec_1");
+
+        assertThat(problem.status()).isEqualTo(409);
+        assertThat(problem.body()).doesNotContainKey("errors");
+        Map<String, Object> second = new LinkedHashMap<>();
+        second.put("type", "tenant_settings");
+        second.put("id", "ten_1");
+        second.put("name", null);
+        assertThat(problem.body().get("references"))
+                .isEqualTo(List.of(Map.of("type", "provider_account", "id", "prv_1", "name", "DashScope"), second));
     }
 
     @Test

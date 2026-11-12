@@ -36,7 +36,7 @@ class IdsTest {
                 .extracting(IdPrefix::value)
                 .containsExactlyInAnyOrder(
                         "ten", "prj", "key", "agt", "agv", "env", "mdl", "prv", "sec", "skl", "ses", "thr", "trn",
-                        "evt", "tiv", "act", "kb", "doc", "fil", "mcp", "mbr", "rbd");
+                        "evt", "tiv", "act", "kb", "doc", "fil", "mcp", "mbr", "rbd", "prb");
     }
 
     @Test

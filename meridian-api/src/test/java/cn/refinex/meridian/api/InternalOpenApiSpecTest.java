@@ -30,7 +30,7 @@ class InternalOpenApiSpecTest {
 
     /**
      * 架构设计「写入流程」「检索流程」中 knowledge 调用 runtime 的内部接口，「沙箱出网」中出网代理的授权回调（T12b），以及
-     * control-plane 的 API Key 校验与租户配额（T14a，ADR-0042）。
+     * control-plane 的 API Key 校验与租户配额（T14a，ADR-0042）、凭据解析与模型目录（T15a，ADR-0045）。
      */
     private static final Set<String> EXPECTED_OPERATIONS = Set.of(
             "POST /internal/v1/embeddings",
@@ -39,6 +39,8 @@ class InternalOpenApiSpecTest {
             "POST /internal/v1/api-keys:verify",
             "GET /internal/v1/tenants/{tenant_id}/quotas",
             "POST /internal/v1/project-access:resolve",
+            "POST /internal/v1/secrets:resolve",
+            "GET /internal/v1/models/{model_id}",
             "POST /oauth2/token",
             "GET /oauth2/jwks");
 

@@ -22,7 +22,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * 管理 API 规范 {@code meridian-admin-v1.yaml} 的校验（T14a，ADR-0042）：按 OpenAPI 3.1 解析无错误，端点与交付范围一致、都在
+ * 管理 API 规范 {@code meridian-admin-v1.yaml} 的校验（T14a、T15a，ADR-0042）：按 OpenAPI 3.1 解析无错误，端点与交付范围一致、都在
  * {@code /admin/v1/} 下并要求控制台身份，写操作都接受 {@code Idempotency-Key}，写作约束与公开 API 相同。
  */
 class AdminOpenApiSpecTest {
@@ -30,7 +30,7 @@ class AdminOpenApiSpecTest {
     /** 规范在类路径中的位置。 */
     static final String SPEC = "openapi/meridian-admin-v1.yaml";
 
-    /** T14a 交付的管理接口：租户与项目、成员与角色、API Key 的增删改查。 */
+    /** 管理接口：T14a 的租户与项目、成员与角色、API Key，T15a 的凭据、供应商账号、模型与价格表（ADR-0045）。 */
     private static final Set<String> EXPECTED_OPERATIONS = Set.of(
             "POST /admin/v1/tenants",
             "GET /admin/v1/tenants",
@@ -57,7 +57,27 @@ class AdminOpenApiSpecTest {
             "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/api-keys",
             "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/api-keys/{api_key_id}",
             "PATCH /admin/v1/tenants/{tenant_id}/projects/{project_id}/api-keys/{api_key_id}",
-            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/api-keys/{api_key_id}:revoke");
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/api-keys/{api_key_id}:revoke",
+            "POST /admin/v1/tenants/{tenant_id}/secrets",
+            "GET /admin/v1/tenants/{tenant_id}/secrets",
+            "GET /admin/v1/tenants/{tenant_id}/secrets/{secret_id}",
+            "DELETE /admin/v1/tenants/{tenant_id}/secrets/{secret_id}",
+            "POST /admin/v1/tenants/{tenant_id}/secrets/{secret_id}:rotate",
+            "POST /admin/v1/tenants/{tenant_id}/provider-accounts",
+            "GET /admin/v1/tenants/{tenant_id}/provider-accounts",
+            "GET /admin/v1/tenants/{tenant_id}/provider-accounts/{provider_account_id}",
+            "PUT /admin/v1/tenants/{tenant_id}/provider-accounts/{provider_account_id}",
+            "DELETE /admin/v1/tenants/{tenant_id}/provider-accounts/{provider_account_id}",
+            "POST /admin/v1/tenants/{tenant_id}/models",
+            "GET /admin/v1/tenants/{tenant_id}/models",
+            "GET /admin/v1/tenants/{tenant_id}/models/{model_id}",
+            "PUT /admin/v1/tenants/{tenant_id}/models/{model_id}",
+            "DELETE /admin/v1/tenants/{tenant_id}/models/{model_id}",
+            "POST /admin/v1/tenants/{tenant_id}/price-books",
+            "GET /admin/v1/tenants/{tenant_id}/price-books",
+            "GET /admin/v1/tenants/{tenant_id}/price-books/{price_book_id}",
+            "POST /admin/v1/tenants/{tenant_id}/price-books/{price_book_id}/versions",
+            "GET /admin/v1/tenants/{tenant_id}/price-books/{price_book_id}/versions");
 
     private static final Set<PathItem.HttpMethod> WRITES = Set.of(
             PathItem.HttpMethod.POST, PathItem.HttpMethod.PUT, PathItem.HttpMethod.PATCH, PathItem.HttpMethod.DELETE);

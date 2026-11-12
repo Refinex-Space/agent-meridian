@@ -28,6 +28,14 @@ public enum Permission {
     OWNER_ROLE_MANAGE(Level.TENANT),
     /** 创建项目。 */
     PROJECT_CREATE(Level.TENANT),
+    /** 查看模型目录：供应商账号、模型、价格表（ADR-0045）。 */
+    MODEL_READ(Level.TENANT),
+    /** 管理模型目录：创建、修改、删除供应商账号与模型，创建价格表与发布版本（ADR-0045）。 */
+    MODEL_WRITE(Level.TENANT),
+    /** 查看凭据的元数据（名称、版本、使用时间、引用方），任何接口都不返回明文（ADR-0045）。 */
+    SECRET_READ(Level.TENANT),
+    /** 写入、轮换、删除凭据（ADR-0045）。 */
+    SECRET_WRITE(Level.TENANT),
     /** 查看项目。 */
     PROJECT_READ(Level.PROJECT),
     /** 修改项目。 */

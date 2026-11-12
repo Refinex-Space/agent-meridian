@@ -4,6 +4,7 @@ import cn.refinex.meridian.common.error.CommonErrorCode;
 import cn.refinex.meridian.common.error.ErrorCode;
 import cn.refinex.meridian.common.error.FieldViolation;
 import cn.refinex.meridian.common.error.MeridianException;
+import cn.refinex.meridian.common.error.ReferencedException;
 import cn.refinex.meridian.common.error.ValidationException;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,7 +27,8 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
  *
  * <p>映射规则：
  * <ul>
- *   <li>{@link MeridianException}：取它的错误码与 detail；{@link ValidationException} 另输出 {@code errors}。
+ *   <li>{@link MeridianException}：取它的错误码与 detail；{@link ValidationException} 另输出 {@code errors}，
+ *       {@link ReferencedException} 另输出 {@code references}（{@code [{type, id, name}]}）。
  *   <li>参数绑定校验失败（{@link BindingResult}）：{@code request.validation_failed}，字段名转为 snake_case。
  *   <li>请求参数、请求头的约束校验失败（{@link HandlerMethodValidationException}）：{@code request.validation_failed}，
  *       字段名取参数在 HTTP 中的名字（例如 {@code limit}、{@code Idempotency-Key}）。
@@ -76,6 +78,19 @@ public final class ProblemMapper {
                                 Map<String, Object> item = new LinkedHashMap<>();
                                 item.put("field", v.field());
                                 item.put("message", v.message());
+                                return item;
+                            })
+                            .toList());
+        }
+        if (error instanceof ReferencedException referenced) {
+            body.put(
+                    "references",
+                    referenced.references().stream()
+                            .map(r -> {
+                                Map<String, Object> item = new LinkedHashMap<>();
+                                item.put("type", r.type());
+                                item.put("id", r.id());
+                                item.put("name", r.name());
                                 return item;
                             })
                             .toList());

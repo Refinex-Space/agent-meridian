@@ -181,9 +181,9 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 - [x] 1. ADR：凭据、供应商与模型目录的补充约定（ADR-0045）；Anthropic、Gemini 适配器的变更（ADR-0046，用户已确认）；架构设计 v1.20
 - [x] 2. D52：`AddressPolicy` 移到 `common.net` 并增加 `EndpointPolicy`；`image.url` 只允许 http(s)（`SessionApiIT`）
-- [ ] 3. control-plane 迁移：`secrets`、`secret_data_keys`、`provider_accounts`、`models`、`price_books`、`price_book_versions`
-- [ ] 4. 凭据库：信封加密、`KeyEncryptionService`（本地主密钥、Vault Transit）、管理 API（写入、轮换、删除、列表与引用方）、`/internal/v1/secrets:resolve`（服务 JWT、租户校验、审计、最后使用时间）
-- [ ] 5. 供应商账号、模型、价格表的管理 API 与内部解析接口；删除被引用的资源返回冲突；`config.invalidate` 发布
+- [x] 3. control-plane 迁移：`secrets`、`secret_data_keys`、`provider_accounts`、`models`、`price_books`、`price_book_versions`
+- [x] 4. 凭据库：信封加密、`KeyEncryptionService`（本地主密钥、Vault Transit）、管理 API（写入、轮换、删除、列表与引用方）、`/internal/v1/secrets:resolve`（服务 JWT、租户校验、审计、最后使用时间）
+- [x] 5. 供应商账号、模型、价格表的管理 API 与内部解析接口；删除被引用的资源返回冲突；`config.invalidate` 发布（control-plane 全部 IT 390 个通过；顺带修了租户设置带联网搜索后端时 500 的规范问题）
 - [ ] 6. runtime：基于 control-plane 的 `SecretResolver` 与模型目录（缓存、失效通知、兜底过期、租户校验），文件实现只留 dev/test；用量消息带价格表版本
 - [ ] 7. engine：Anthropic、Gemini 适配器与错误分类（D25），模拟服务测试
 - [ ] 8. 验收测试：A01（明文不可读、密文、租户数据密钥、审计、日志与事件扫描）、A02（Vault Testcontainers）、A03（scripted 与 `-Plive`）、A04（价格表版本）、A05（失效与冲突）
