@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-M0（内核与运行时核心，T01–T13）有条件完成，R1 的结论与进入 M1 的前提见 `docs/poc/M0-总结.md`；当前是 M1 控制面与治理（T14a 起）。已实现的是 control-plane 的租户体系（租户、项目、成员与角色、API Key、限流、租户并发配额，T14a）、身份（OIDC 控制台用户、服务 JWT 的签发，T14b）与凭据库、供应商账号、模型目录、价格表（T15a，runtime 的模型调用经内部接口解析）、智能体与版本、环境、技能、MCP 服务、权限策略、租户设置及其分发（T15b，runtime 的智能体配置经内部接口读取，`config.invalidate` 通知失效）、用量账本与审计日志的消费与查询、四级预算（Redis 限额与每小时对账）、用量报表（T16，runtime 的预算限额读 control-plane 写进 Redis 的值，新租户默认零预算）、Webhook 的配置（T17a，投递与投递记录在 runtime）、runtime（会话、事件与 SSE、调度与租约、崩溃恢复、投递与待处理动作、权限合成、模型路由与计量、平台工具、会话沙箱与出网、子智能体、Webhook 投递、会话清理与事件归档、保留，T17a）、engine-agentscope、common、persistence、security、OpenAPI 规范、沙箱镜像与 chart；knowledge、model-client 还是空骨架，console 尚未建立。每个任务交付了什么、对应哪个 ADR，见 `docs/plan/PLAN.md` 的会话日志与 `docs/adr/README.md`。
+M0（内核与运行时核心，T01–T13）有条件完成，R1 的结论与进入 M1 的前提见 `docs/poc/M0-总结.md`；当前是 M1 控制面与治理（T14a 起）。已实现的是 control-plane 的租户体系（租户、项目、成员与角色、API Key、限流、租户并发配额，T14a）、身份（OIDC 控制台用户、服务 JWT 的签发，T14b）与凭据库、供应商账号、模型目录、价格表（T15a，runtime 的模型调用经内部接口解析）、智能体与版本、环境、技能、MCP 服务、权限策略、租户设置及其分发（T15b，runtime 的智能体配置经内部接口读取，`config.invalidate` 通知失效）、用量账本与审计日志的消费与查询、四级预算（Redis 限额与每小时对账）、用量报表（T16，runtime 的预算限额读 control-plane 写进 Redis 的值，新租户默认零预算）、Webhook 的配置（T17a，投递与投递记录在 runtime）、runtime（会话、事件与 SSE、调度与租约、崩溃恢复、投递与待处理动作、权限合成、模型路由与计量、平台工具、会话沙箱与出网、子智能体、Webhook 投递、会话清理与事件归档、保留，T17a；上传文件与引用、工作区 API、`session.usage`、`/v1/responses` 子集，T17b）、engine-agentscope、common、persistence、security、OpenAPI 规范、沙箱镜像与 chart；knowledge、model-client 还是空骨架，console 尚未建立。每个任务交付了什么、对应哪个 ADR，见 `docs/plan/PLAN.md` 的会话日志与 `docs/adr/README.md`。
 
 ## 交付流程
 
