@@ -65,7 +65,11 @@ public enum Permission {
     /** 公开 API：创建会话、发送事件，即 Playground（作用域 {@code sessions:write}，ADR-0044）。 */
     SESSION_WRITE(Level.PROJECT),
     /** 公开 API：模型直通（作用域 {@code models:invoke}，ADR-0044）。 */
-    MODEL_INVOKE(Level.PROJECT);
+    MODEL_INVOKE(Level.PROJECT),
+    /** 公开 API：查看知识库、文档与写入进度（作用域 {@code knowledge:read}，ADR-0051）。 */
+    KNOWLEDGE_READ(Level.PROJECT),
+    /** 公开 API：创建知识库，上传、重新处理与删除文档（作用域 {@code knowledge:write}，ADR-0051）。 */
+    KNOWLEDGE_WRITE(Level.PROJECT);
 
     /** 判定层级。 */
     public enum Level {

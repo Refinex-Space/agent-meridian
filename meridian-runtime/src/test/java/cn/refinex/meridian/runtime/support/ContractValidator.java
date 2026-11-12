@@ -55,9 +55,9 @@ public final class ContractValidator {
 
     /**
      * 由别的服务提供的公开标签：{@code Agents}（ADR-0047，契约校验在其 {@code AgentVersionIT}）与 {@code Usage}（ADR-0048，契约校验在其
-     * {@code UsageReportIT}）在 control-plane。
+     * {@code UsageReportIT}）在 control-plane，{@code KnowledgeBases}（ADR-0051，契约校验在其 {@code KnowledgeApiIT}）在 knowledge。
      */
-    private static final Set<String> OTHER_SERVICE_TAGS = Set.of("Agents", "Usage");
+    private static final Set<String> OTHER_SERVICE_TAGS = Set.of("Agents", "Usage", "KnowledgeBases");
 
     private ContractValidator() {}
 

@@ -61,7 +61,11 @@ public enum IdPrefix {
     /** Webhook（T17a，ADR-0049）。 */
     WEBHOOK("whk"),
     /** Webhook 的投递记录（T17a，ADR-0049）。 */
-    WEBHOOK_DELIVERY("whd");
+    WEBHOOK_DELIVERY("whd"),
+    /** 知识库切片（T18，ADR-0051）。 */
+    CHUNK("chk"),
+    /** 知识库写入作业（T18，ADR-0051）。 */
+    INGESTION_JOB("ijb");
 
     private final String value;
 

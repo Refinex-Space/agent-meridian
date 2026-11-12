@@ -2,18 +2,18 @@ openapi: 3.1.0
 info:
   title: AgentMeridian API
   version: 1.0.0
-  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作、SSE 事件流、文件与工作区、OpenAI 兼容的模型直通、已发布的智能体与用量。
+  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作、SSE 事件流、文件与工作区、OpenAI 兼容的模型直通、已发布的智能体、用量与知识库。
   description: |
     业务系统通过本 API 使用平台上的智能体：创建会话、发送事件、订阅事件流、回应待处理动作。
 
     **认证。** 每个请求带 `Authorization: Bearer <API Key>`。API Key 属于一个项目，数据按"项目 + `end_user_id`"隔离：
     同一项目内按 `end_user_id` 区分终端用户，跨项目不可见，即使 `end_user_id` 相同。API Key 的作用域决定能调用哪些接口：
-    读接口需要 `sessions:read`，写接口需要 `sessions:write`，上传文件需要 `files:write`，模型直通需要 `models:invoke`，每个操作的
-    `security` 列出所需作用域。
+    读接口需要 `sessions:read`，写接口需要 `sessions:write`，上传文件需要 `files:write`，模型直通需要 `models:invoke`，知识库的读写
+    分别需要 `knowledge:read`、`knowledge:write`，每个操作的 `security` 列出所需作用域。
 
     控制台（例如 Playground）以登录用户的 OIDC access token 代替 API Key 调用，同时用请求头 `Meridian-Project: <项目 ID>`
     指定项目；缺少该头返回 400 `auth.project_required`。用户的作用域由他在该项目中的角色决定（项目开发者与租户所有者有上面
-    四个作用域，其他角色只有 `sessions:read`）；项目不存在或用户在其中没有角色时返回 403 `access.forbidden`。
+    全部作用域，租户管理员与项目观察者有 `sessions:read` 与 `knowledge:read`，审批人只有 `sessions:read`）；项目不存在或用户在其中没有角色时返回 403 `access.forbidden`。
 
     **约定。**
     - 字段名 snake_case；时间为 RFC 3339 UTC，例如 `2026-11-07T08:30:12.345Z`。
@@ -55,6 +55,8 @@ tags:
     description: 文件：上传到项目的文件，在消息中按 `file_id` 引用，轮次开始时放进会话工作区（ADR-0050）。
   - name: Workspace
     description: 工作区：读写会话工作区中的文件；`sandbox` 档只读产物目录 `outputs/` 的副本（ADR-0050）。
+  - name: KnowledgeBases
+    description: 知识库：创建知识库，上传、查看、重新处理与删除文档。由 knowledge 服务提供（ADR-0051）。
 
 paths:
   /v1/sessions:
@@ -1259,6 +1261,291 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /v1/knowledge-bases:
+    post:
+      operationId: createKnowledgeBase
+      tags: [KnowledgeBases]
+      summary: 创建知识库
+      description: |
+        在 API Key 所在的项目中创建知识库。`embedding_model` 是本租户模型目录中的 Embedding 模型，写入与检索都用它，创建后
+        不能修改；向量维度由平台配置决定（默认 1024），模型必须支持该维度。模型是否存在在写入第一份文档时校验，不存在时
+        文档的写入以 `model.not_found` 失败。
+      security:
+        - ApiKeyAuth: [knowledge:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKnowledgeBaseRequest'
+            example:
+              name: 公司制度
+              description: 人事、财务与行政制度文件
+              embedding_model: mdl_01JC8Z4D7F5H9K1M3P6R8T0V2X
+      responses:
+        '201':
+          description: 新建的知识库。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeBase'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listKnowledgeBases
+      tags: [KnowledgeBases]
+      summary: 列出知识库
+      security:
+        - ApiKeyAuth: [knowledge:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 本项目的知识库，按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeBasePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/knowledge-bases/{knowledge_base_id}:
+    parameters:
+      - $ref: '#/components/parameters/KnowledgeBaseId'
+    get:
+      operationId: getKnowledgeBase
+      tags: [KnowledgeBases]
+      summary: 查看知识库
+      security:
+        - ApiKeyAuth: [knowledge:read]
+      responses:
+        '200':
+          description: 知识库。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeBase'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/KnowledgeBaseNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/knowledge-bases/{knowledge_base_id}/documents:
+    parameters:
+      - $ref: '#/components/parameters/KnowledgeBaseId'
+    post:
+      operationId: uploadDocument
+      tags: [KnowledgeBases]
+      summary: 上传文档
+      description: |
+        以 `multipart/form-data` 上传一份文档（字段 `file`），可选的 `acl_tags`（逗号分隔）写到它的每个切片上，检索时与调用方的
+        标签取交集过滤。上传后立即返回 202，文档进入写入队列：解析、切分、Embedding、入库，进度经查看文档获取。
+
+        支持 Markdown、纯文本、PDF（含扫描件）、Word、PowerPoint、Excel、HTML、RTF、OpenDocument 与常见图片格式，媒体类型由
+        服务端按内容检测；其他类型返回 400 `document.unsupported_type`。大小上限默认 64 MB（部署可配置），超过返回 413
+        `document.too_large`；空文件返回 400。
+      security:
+        - ApiKeyAuth: [knowledge:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UploadDocumentRequest'
+      responses:
+        '202':
+          description: 已接受的文档，状态为 `queued`。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeDocument'
+        '400':
+          $ref: '#/components/responses/DocumentBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/KnowledgeBaseNotFound'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '413':
+          $ref: '#/components/responses/DocumentTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listDocuments
+      tags: [KnowledgeBases]
+      summary: 列出文档
+      security:
+        - ApiKeyAuth: [knowledge:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 知识库中的文档，按上传时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeDocumentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/KnowledgeBaseNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}:
+    parameters:
+      - $ref: '#/components/parameters/KnowledgeBaseId'
+      - $ref: '#/components/parameters/DocumentId'
+    get:
+      operationId: getDocument
+      tags: [KnowledgeBases]
+      summary: 查看文档与写入进度
+      security:
+        - ApiKeyAuth: [knowledge:read]
+      responses:
+        '200':
+          description: 文档，`ingestion` 是最近一次写入的进度。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeDocument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DocumentNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteDocument
+      tags: [KnowledgeBases]
+      summary: 删除文档
+      description: 删除文档、它的全部切片与对象存储中的原文件，不可恢复；正在进行的写入被放弃。
+      security:
+        - ApiKeyAuth: [knowledge:write]
+      responses:
+        '204':
+          description: 已删除。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DocumentNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}:reprocess:
+    parameters:
+      - $ref: '#/components/parameters/KnowledgeBaseId'
+      - $ref: '#/components/parameters/DocumentId'
+    post:
+      operationId: reprocessDocument
+      tags: [KnowledgeBases]
+      summary: 重新处理文档
+      description: |
+        用原文件重新解析、切分与 Embedding。新切片就绪前旧切片仍可被检索，就绪时一次替换；失败时保留旧切片。写入正在排队或
+        进行时返回 409 `document.processing`。
+      security:
+        - ApiKeyAuth: [knowledge:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: 已重新进入写入队列的文档。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeDocument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DocumentNotFound'
+        '409':
+          $ref: '#/components/responses/DocumentConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -1285,6 +1572,20 @@ components:
         minimum: 1
 
   parameters:
+    KnowledgeBaseId:
+      name: knowledge_base_id
+      in: path
+      required: true
+      description: 知识库 ID（kb_…）。
+      schema:
+        type: string
+    DocumentId:
+      name: document_id
+      in: path
+      required: true
+      description: 文档 ID（doc_…）。
+      schema:
+        type: string
     DeliveryId:
       name: delivery_id
       in: path
@@ -1357,6 +1658,53 @@ components:
         default: false
 
   responses:
+    KnowledgeBaseNotFound:
+      description: '`knowledge_base.not_found`：知识库不存在，或不属于当前项目。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    DocumentNotFound:
+      description: '`knowledge_base.not_found`：知识库不存在或不属于当前项目；`document.not_found`：文档不存在或不在该知识库中。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    DocumentBadRequest:
+      description: |
+        请求不合法：`request.invalid`、`request.validation_failed`（见 `errors`，例如缺少文件、空文件、标签不合法）；
+        `document.unsupported_type`：不支持的文档类型，`detail` 给出检测到的媒体类型。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    DocumentTooLarge:
+      description: '`document.too_large`：文档超过大小上限（默认 64 MB），`detail` 给出上限。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    DocumentConflict:
+      description: '`document.processing`：文档的写入正在排队或进行，不能重新处理；`idempotency.key_reused`、`idempotency.in_progress`：见幂等约定。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     EventStream:
       description: |
         SSE 事件流（`text/event-stream`）。每条消息的 `event:` 为事件类型，`id:` 为 `seq`（只在流上的事件没有 `id:`），
@@ -1566,6 +1914,216 @@ components:
             $ref: '#/components/schemas/Problem'
 
   schemas:
+    CreateKnowledgeBaseRequest:
+      description: 创建知识库的请求。
+      type: object
+      additionalProperties: false
+      required: [name, embedding_model]
+      properties:
+        name:
+          description: 名称，1 至 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          description: 说明，至多 1000 个字符。
+          type: string
+          maxLength: 1000
+        embedding_model:
+          description: 本租户模型目录中的 Embedding 模型 ID（mdl_…），创建后不能修改。
+          type: string
+          minLength: 1
+          maxLength: 64
+    KnowledgeBase:
+      description: 知识库，属于一个项目。
+      type: object
+      required: [id, name, description, embedding_model, embedding_dimensions, document_count, created_at, updated_at]
+      properties:
+        id:
+          description: 知识库 ID（kb_…）。
+          type: string
+        name:
+          description: 名称。
+          type: string
+        description:
+          description: 说明；没有时为 null。
+          type: [string, 'null']
+        embedding_model:
+          description: Embedding 模型 ID（mdl_…）。
+          type: string
+        embedding_dimensions:
+          description: 向量维度，由平台配置决定。
+          type: integer
+        document_count:
+          description: 文档数（含写入中与失败的）。
+          type: integer
+          format: int64
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最后修改时间。
+          type: string
+          format: date-time
+    KnowledgeBasePage:
+      description: 一页知识库。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的知识库。
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeBase'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    UploadDocumentRequest:
+      description: 上传文档的表单。
+      type: object
+      required: [file]
+      properties:
+        file:
+          description: 文档内容；表单中的文件名经规范化后成为 `filename`。
+          type: string
+          format: binary
+        acl_tags:
+          description: |
+            访问标签，逗号分隔，例如 `dept:finance,level:internal`；至多 32 个，每个 1 至 128 个字符（字母、数字与 `._:-@/`），
+            写到文档的每个切片上。不传时没有标签。
+          type: string
+          maxLength: 4200
+          pattern: '^[A-Za-z0-9._:@/-]+(,[A-Za-z0-9._:@/-]+)*$'
+    DocumentStatus:
+      description: |
+        文档状态：`queued` 等待写入（含等待重试），`processing` 正在写入，`ready` 切片已可检索，`failed` 写入失败（见
+        `ingestion.error`；之前成功写入过的切片仍可检索）。
+      type: string
+      enum: [queued, processing, ready, failed]
+    IngestionStage:
+      description: 写入阶段：`parsing` 解析，`chunking` 切分，`embedding` 计算向量，`storing` 入库。
+      type: string
+      enum: [parsing, chunking, embedding, storing]
+    IngestionError:
+      description: 写入失败的原因。
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code:
+          description: 错误码，例如 `document.parse_failed`、`document.parser_unavailable`、`model.not_found`。
+          type: string
+        message:
+          description: 说明。
+          type: string
+        retryable:
+          description: 是否为可重试的错误（依赖暂时不可用等）；重试用尽后仍可重新处理。
+          type: boolean
+    DocumentIngestion:
+      description: 最近一次写入的进度。
+      type: object
+      required: [attempts, max_attempts, stage, chunks_total, chunks_embedded, next_attempt_at, error, started_at, finished_at]
+      properties:
+        attempts:
+          description: 已开始的尝试次数。
+          type: integer
+        max_attempts:
+          description: 最多尝试次数（首次加 3 次重试）。
+          type: integer
+        stage:
+          description: 正在进行的阶段；未开始或已结束时为 null。
+          oneOf:
+            - $ref: '#/components/schemas/IngestionStage'
+            - type: 'null'
+        chunks_total:
+          description: 本次切分得到的切片数；切分之前为 null。
+          type: [integer, 'null']
+        chunks_embedded:
+          description: 已计算向量的切片数；切分之前为 null。
+          type: [integer, 'null']
+        next_attempt_at:
+          description: 等待重试时下一次尝试的最早时间；否则为 null。
+          type: [string, 'null']
+          format: date-time
+        error:
+          description: 最近一次失败的原因；没有失败时为 null。
+          oneOf:
+            - $ref: '#/components/schemas/IngestionError'
+            - type: 'null'
+        started_at:
+          description: 最近一次尝试开始的时间；还没有开始时为 null。
+          type: [string, 'null']
+          format: date-time
+        finished_at:
+          description: 写入结束（成功或最终失败）的时间；未结束时为 null。
+          type: [string, 'null']
+          format: date-time
+    KnowledgeDocument:
+      description: 知识库中的一份文档。
+      type: object
+      required: [id, knowledge_base_id, filename, media_type, size_bytes, sha256, acl_tags, status, parser, chunk_count, ingestion, created_at, updated_at]
+      properties:
+        id:
+          description: 文档 ID（doc_…）。
+          type: string
+        knowledge_base_id:
+          description: 所属知识库（kb_…）。
+          type: string
+        filename:
+          description: 规范化后的文件名。
+          type: string
+        media_type:
+          description: 服务端按内容检测的媒体类型。
+          type: string
+        size_bytes:
+          description: 原文件的字节数。
+          type: integer
+          format: int64
+        sha256:
+          description: 原文件的 SHA-256（小写十六进制）。
+          type: string
+        acl_tags:
+          description: 访问标签。
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/DocumentStatus'
+        parser:
+          description: 最近一次成功解析所用的解析器（`markdown`、`text`、`tika`、`pdfbox`、`doc-parser`）；还没有成功解析过时为 null。
+          type: [string, 'null']
+        chunk_count:
+          description: 当前可检索的切片数。
+          type: integer
+        ingestion:
+          $ref: '#/components/schemas/DocumentIngestion'
+        created_at:
+          description: 上传时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最后更新时间。
+          type: string
+          format: date-time
+    KnowledgeDocumentPage:
+      description: 一页文档。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的文档。
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeDocument'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
     WebhookDeliveryStatus:
       description: 投递状态：`pending` 等待投递或重试，`succeeded` 接收方返回了 2xx，`failed` 重试用尽、过了截止时间或 Webhook 已删除、停用。
       type: string

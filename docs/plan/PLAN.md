@@ -179,8 +179,8 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 开工基线：`verify.sh` 只有 runtime 的 `EventStreamIT.threadStreamsAndMainFilterDoNotTreatOtherThreadsSeqsAsMissing` 失败（单独重跑仍失败：跳号回补计数 51→84）；该类与 SSE 代码自 T17a 未改、T17b 收尾时通过，开工时主机负载约 100（其他项目的 Playwright/WebKit），判为负载下的时序问题，收尾时复跑。
 
-- [ ] 1. ADR-0051、架构设计（kb 表、ID 前缀、权限类别、内部接口、用量种类）、OpenAPI（公开知识库接口、knowledge 的内部接口）
-- [ ] 2. common（`IdPrefix` 的 `chk`、`ijb`，切分用的 token 估算）、security（`KNOWLEDGE_READ`、`KNOWLEDGE_WRITE` 与 `knowledge:*` 作用域换算）
+- [x] 1. ADR-0051、架构设计（kb 表、ID 前缀、权限类别、内部接口、用量种类）、OpenAPI（公开知识库接口、knowledge 的内部接口）
+- [x] 2. common（`IdPrefix` 的 `chk`、`ijb`，切分用的 token 估算）、security（`KNOWLEDGE_READ`、`KNOWLEDGE_WRITE` 与 `knowledge:*` 作用域换算）
 - [ ] 3. `meridian-model-client`：经服务 JWT 调 runtime 的 `/internal/v1/embeddings`，每批 64 条
 - [ ] 4. `meridian-knowledge` 骨架：应用、配置、`kb` 迁移、知识库与文档接口（上传、列表、进度、重新处理、删除）、幂等、审计、`key.revoked` 订阅、内部接口
 - [ ] 5. 写入流水线：`ingestion_jobs` 队列（`SKIP LOCKED`、退避重试 3 次）、解析（Tika/POI、PDFBox、Markdown、doc-parser）、中间表示、切分、批量 Embedding、入库

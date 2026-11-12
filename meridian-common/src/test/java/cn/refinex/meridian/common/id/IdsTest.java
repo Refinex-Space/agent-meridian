@@ -37,7 +37,7 @@ class IdsTest {
                 .containsExactlyInAnyOrder(
                         "ten", "prj", "key", "agt", "agv", "env", "mdl", "prv", "sec", "skl", "ses", "thr", "trn",
                         "evt", "tiv", "act", "kb", "doc", "fil", "mcp", "mbr", "rbd", "prb", "prl", "bdg", "bal", "whk",
-                        "whd");
+                        "whd", "chk", "ijb");
     }
 
     @Test

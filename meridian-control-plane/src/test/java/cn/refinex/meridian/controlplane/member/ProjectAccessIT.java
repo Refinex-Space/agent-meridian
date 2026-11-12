@@ -39,10 +39,22 @@ class ProjectAccessIT extends ControlPlaneTestBase {
         assertThat(developer.status()).isEqualTo(200);
         assertThat(developer.text("tenant_id")).isEqualTo(fixture.get("tenant"));
         assertThat(scopes(developer))
-                .containsExactly("files:write", "models:invoke", "sessions:read", "sessions:write");
+                .containsExactly(
+                        "files:write",
+                        "knowledge:read",
+                        "knowledge:write",
+                        "models:invoke",
+                        "sessions:read",
+                        "sessions:write");
         assertThat(scopes(resolve("owner", project, token)))
-                .containsExactly("files:write", "models:invoke", "sessions:read", "sessions:write");
-        assertThat(scopes(resolve("viewer", project, token))).containsExactly("sessions:read");
+                .containsExactly(
+                        "files:write",
+                        "knowledge:read",
+                        "knowledge:write",
+                        "models:invoke",
+                        "sessions:read",
+                        "sessions:write");
+        assertThat(scopes(resolve("viewer", project, token))).containsExactly("knowledge:read", "sessions:read");
         assertThat(scopes(resolve("approver", project, token))).containsExactly("sessions:read");
         // 项目级角色只作用于绑定的项目；不是成员没有作用域
         assertThat(scopes(resolve("developer", fixture.get("other_project"), token)))

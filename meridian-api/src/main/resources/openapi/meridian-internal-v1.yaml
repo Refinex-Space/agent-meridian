@@ -2,14 +2,15 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Internal API
   version: 1.0.0
-  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，control-plane 提供服务令牌、API Key 校验、租户配额与设置、控制台用户的项目权限、凭据解析、模型目录、智能体配置与权限策略。
+  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，knowledge 提供知识库的查询，control-plane 提供服务令牌、API Key 校验、租户配额与设置、控制台用户的项目权限、凭据解析、模型目录、智能体配置与权限策略。
   description: |
     只供平台内部服务调用（knowledge 经 `meridian-model-client`，沙箱出网代理经 Envoy 的 Lua 过滤器，runtime 与 knowledge
     经 `meridian-security` 的服务间调用客户端访问 control-plane），不对业务系统开放，不随公开 API 发布。
 
     **提供方。** 标签 `InternalModels`、`InternalEgress` 由 runtime 提供；`InternalServiceTokens`、`InternalApiKeys`、
     `InternalTenants`、`InternalProjectAccess`、`InternalSecrets`、`InternalModelCatalog`、`InternalAgentConfig`、
-    `InternalPermissionRules`、`InternalWebhooks` 由 control-plane 提供（ADR-0042、ADR-0044、ADR-0045、ADR-0047、ADR-0049）。各服务只生成并实现自己的标签。
+    `InternalPermissionRules`、`InternalWebhooks` 由 control-plane 提供（ADR-0042、ADR-0044、ADR-0045、ADR-0047、ADR-0049）；`InternalKnowledge`
+    由 knowledge 提供（ADR-0051）。各服务只生成并实现自己的标签。
 
     **认证。** `/internal/` 下的请求带 `Authorization: Bearer <服务 JWT>`：control-plane 签发，RS256，有效 5 分钟，`aud` 是被调用
     的服务名，`sub` 是调用方服务名。服务用自己的客户端密钥在 `POST /oauth2/token` 换取（OAuth2 客户端凭据模式），公钥在
@@ -47,6 +48,8 @@ tags:
     description: control-plane 提供：租户与项目策略，以及“记住此决定”写入的项目级规则（ADR-0047）。
   - name: InternalWebhooks
     description: control-plane 提供：项目的 Webhook 订阅与签名密钥，runtime 据此投递（架构设计「Webhook」，ADR-0049）。
+  - name: InternalKnowledge
+    description: knowledge 提供：按 ID 查询知识库的归属与 Embedding 模型（架构设计「对外形态」，ADR-0051）。
 
 paths:
   /internal/v1/embeddings:
@@ -659,6 +662,40 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /internal/v1/knowledge-bases/{knowledge_base_id}:
+    get:
+      operationId: getInternalKnowledgeBase
+      tags: [InternalKnowledge]
+      summary: 查询知识库
+      description: |
+        调用方：`control-plane`、`runtime`。control-plane 发布智能体版本时据此校验规格中的知识库存在，并比较租户与项目（ADR-0051）。
+        不按租户过滤，由调用方校验归属；知识库不存在时 404 `knowledge_base.not_found`。
+      parameters:
+        - name: knowledge_base_id
+          in: path
+          required: true
+          description: 知识库 ID（kb_…）。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 知识库。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalKnowledgeBase'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/KnowledgeBaseNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
   /internal/v1/tenants/{tenant_id}/settings:
     get:
       operationId: getInternalTenantSettings
@@ -834,6 +871,15 @@ components:
             $ref: '#/components/schemas/Problem'
     ApiKeyNotFound:
       description: '`api_key.not_found`：Key 不存在、已吊销、已过期，或所属项目、租户已删除。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    KnowledgeBaseNotFound:
+      description: '`knowledge_base.not_found`：知识库不存在。'
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -1385,6 +1431,26 @@ components:
           description: 会话事件的保留天数，至少 1（架构设计「数据保留」）。
           type: integer
           minimum: 1
+    InternalKnowledgeBase:
+      description: 知识库的归属与 Embedding 模型。
+      type: object
+      required: [id, tenant_id, project_id, name, embedding_model]
+      properties:
+        id:
+          description: 知识库 ID（kb_…）。
+          type: string
+        tenant_id:
+          description: 所属租户（ten_…）。
+          type: string
+        project_id:
+          description: 所属项目（prj_…）。
+          type: string
+        name:
+          description: 名称。
+          type: string
+        embedding_model:
+          description: 写入与检索使用的 Embedding 模型 ID（mdl_…）。
+          type: string
     InternalWebhookList:
       description: 项目的 Webhook。
       type: object

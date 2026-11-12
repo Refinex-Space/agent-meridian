@@ -20,12 +20,17 @@ class PublicApiScopesTest {
                 ApiKeyScope.SESSIONS_READ,
                 ApiKeyScope.SESSIONS_WRITE,
                 ApiKeyScope.MODELS_INVOKE,
-                ApiKeyScope.FILES_WRITE);
+                ApiKeyScope.FILES_WRITE,
+                ApiKeyScope.KNOWLEDGE_READ,
+                ApiKeyScope.KNOWLEDGE_WRITE);
 
         assertThat(scopes(new Grant(Role.TENANT_OWNER, null), "prj_a")).isEqualTo(all);
         assertThat(scopes(new Grant(Role.PROJECT_DEVELOPER, "prj_a"), "prj_a")).isEqualTo(all);
-        assertThat(scopes(new Grant(Role.TENANT_ADMIN, null), "prj_a")).containsExactly(ApiKeyScope.SESSIONS_READ);
-        assertThat(scopes(new Grant(Role.PROJECT_VIEWER, "prj_a"), "prj_a")).containsExactly(ApiKeyScope.SESSIONS_READ);
+        // 知识库只读（ADR-0051）
+        assertThat(scopes(new Grant(Role.TENANT_ADMIN, null), "prj_a"))
+                .containsExactlyInAnyOrder(ApiKeyScope.SESSIONS_READ, ApiKeyScope.KNOWLEDGE_READ);
+        assertThat(scopes(new Grant(Role.PROJECT_VIEWER, "prj_a"), "prj_a"))
+                .containsExactlyInAnyOrder(ApiKeyScope.SESSIONS_READ, ApiKeyScope.KNOWLEDGE_READ);
         assertThat(scopes(new Grant(Role.APPROVER, "prj_a"), "prj_a")).containsExactly(ApiKeyScope.SESSIONS_READ);
     }
 

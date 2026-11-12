@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.24 |
+| 版本 | v1.25 |
 | 日期 | 2026-11-12 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -334,6 +334,7 @@ erDiagram
 | `prb` | 价格表 | `prl` | 权限规则（租户与项目策略） |
 | `bdg` | 预算 | `bal` | 预算告警 |
 | `whk` | Webhook | `whd` | Webhook 投递记录 |
+| `chk` | 知识库切片 | `ijb` | 知识库写入作业 |
 
 ## 数据架构
 
@@ -387,7 +388,7 @@ erDiagram
 
 两张表的分区由迁移角色拥有的 `SECURITY DEFINER` 函数 `ensure_ledger_partitions(month)`、`drop_expired_ledger_partitions()` 创建与删除，应用角色在两张表与全部分区上只有 `INSERT`、`SELECT`（ADR-0048）。
 
-**knowledge（schema `kb`）**：`knowledge_bases`、`documents`、`chunks`（`embedding vector(n)`、`tsv tsvector`、`acl_tags text[]`、`source_locator jsonb`）、`ingestion_jobs`。
+**knowledge（schema `kb`）**：`knowledge_bases`（`embedding_model` 创建后不可改）、`documents`（`acl_tags`、`status`、`parser`、`file_bytes`、`index_bytes`、`chunk_count`）、`chunks`（`embedding vector(n)`，n 由迁移占位符取配置，默认 1024；`tsv tsvector`、`acl_tags text[]`、`source_locator jsonb`、`kind`（正文或表格）、`token_count`；HNSW、`tsv` 与 `acl_tags` 的 GIN 索引）、`ingestion_jobs`（`status`、`attempts`、`not_before`、`lease_expires_at`、`stage` 与进度、错误码）、`storage_reports`（每个知识库每天一行，存储计量的去重）（ADR-0051）。
 
 ### 跨服务数据流
 
@@ -985,13 +986,13 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 
 ### 写入流程
 
-1. 上传文件到对象存储，创建 `ingestion_jobs` 任务。
-2. 解析：Office 和常规 PDF 用 Tika、PDFBox、POI；扫描件、复杂表格、公式交给 doc-parser。
-3. 切分：按标题层级和段落结构切分，目标 512 token，重叠 64 token；表格整体作为一个切片。
-4. Embedding：经 `meridian-model-client` 调用 runtime 的 `/internal/v1/embeddings`，每批 64 条。用量由 runtime 记账。
-5. 写入 `kb.chunks`，同时写 `tsv` 和 `acl_tags`。
+1. 上传文件到对象存储（`kb/{tenant}/{project}/{knowledge_base}/{document}`），创建 `ingestion_jobs` 任务。
+2. 解析：按 Tika 检测的媒体类型路由。Markdown 与纯文本用内置的结构解析；Office、HTML、RTF、ODF 用 Tika（POI）；PDF 先用 PDFBox 检查，文字层稀疏（扫描件）或页面上有框线网格（表格）的交给 doc-parser，其余用 PDFBox 抽取并按字号推断标题；图片交给 doc-parser。所有解析器的结果都转成同一个中间表示（标题、段落、列表项、表格，带页码），切分器只依赖它（ADR-0051）。
+3. 切分：按标题层级和段落结构切分，目标 512 token，重叠 64 token；表格整体作为一个切片（超过 2048 token 时按行拆分并重复表头）。token 按贴近 Qwen 系分词的方式估算。每个切片记录来源定位：文档、页码、标题路径。
+4. Embedding：经 `meridian-model-client` 调用 runtime 的 `/internal/v1/embeddings`，每批 64 条，模型是知识库创建时指定的 Embedding 模型，维度取配置（默认 1024，与 `kb.chunks.embedding` 的列维度一致）。输入是"标题路径 + 正文"。用量由 runtime 记账。
+5. 写入 `kb.chunks`，同时写 `tsv`（`chinese` 配置，标题路径 + 正文）和 `acl_tags`（取自文档）。一个事务内替换该文档的全部切片：重新处理时旧切片在新切片就绪前仍可检索。
 
-写入任务用 PostgreSQL 队列（`SKIP LOCKED`），失败按指数退避重试 3 次。
+写入任务用 PostgreSQL 队列（`SKIP LOCKED`），认领时写租约（默认 5 分钟，执行中每分钟续一次），租约过期的任务由下一次认领收回；可重试的失败（依赖暂时不可用、429、5xx）按指数退避重试 3 次（30 秒起翻倍），格式损坏、类型不支持、模型不存在等直接失败（ADR-0051）。
 
 ### 检索流程
 
@@ -1007,6 +1008,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 - 前置检索：由 `KnowledgePrefetchMiddleware` 实现。
 - REST：`/v1/knowledge-bases/{id}/search`。
 - MCP Server：`/mcp/knowledge`，用 MCP Java SDK 的 `HttpServletStreamableServerTransportProvider` 注册为 Servlet。
+- 内部接口：`GET /internal/v1/knowledge-bases/{id}`（调用方 control-plane、runtime）返回知识库的租户、项目与 Embedding 模型；control-plane 发布智能体版本时据此校验知识库存在且属于同一项目，出站服务 JWT 由它自己的签发用例在进程内签发（ADR-0051）。
 
 调用方的 `acl_tags` 来自会话创建时声明的 `end_user_attributes.acl_tags`。平台信任 API Key 所属项目声明的这些属性。
 
@@ -1051,11 +1053,13 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 
 Webhook 配置与 API Key 同属业务系统的接入配置，同用 `API_KEY_READ`、`API_KEY_WRITE`（ADR-0049）。
 
+知识库与文档是项目级的操作类别 `KNOWLEDGE_READ`、`KNOWLEDGE_WRITE`：写操作只有所有者与项目开发者，租户管理员与项目观察者只读；控制台用户的 `knowledge:read`、`knowledge:write` 作用域由它们换算（ADR-0051）。
+
 另有**平台管理员**，由 control-plane 配置给出主体标识或令牌中的组，不属于任何租户：创建租户（同时指定首个所有者）、查看租户、修改租户配额。配额是平台资源的分配，租户所有者不能改自己的配额。
 
 授权是声明式的：角色矩阵（角色 × 操作类别）只在 `security.rbac` 中定义，管理 API 的处理器方法标注所需的操作类别，MVC 拦截器按路径中的租户与项目查该用户的角色绑定后判定；`/admin/` 下没有标注的处理器一律拒绝。租户级角色作用于租户下的全部项目，项目级角色只作用于绑定的项目，在租户级的只读操作上也算租户成员；授予或撤销租户所有者另需所有者权限，租户至少保留一位所有者（ADR-0042）。
 
-控制台用户在公开 API 上没有 API Key，作用域由他在项目中的角色按同一张矩阵换算：操作类别 `SESSION_READ`、`SESSION_WRITE`、`MODEL_INVOKE` 分别对应 `sessions:read`、`sessions:write`、`models:invoke`；所有者与项目开发者三个都有，租户管理员、项目观察者、审批人只有 `sessions:read`。项目不存在与没有角色同样返回 403（ADR-0044）。
+控制台用户在公开 API 上没有 API Key，作用域由他在项目中的角色按同一张矩阵换算：操作类别 `SESSION_READ`、`SESSION_WRITE`、`MODEL_INVOKE` 分别对应 `sessions:read`、`sessions:write`、`models:invoke`（`files:write` 随 `SESSION_WRITE`，`knowledge:read`、`knowledge:write` 对应 `KNOWLEDGE_READ`、`KNOWLEDGE_WRITE`）；所有者与项目开发者都有，租户管理员、项目观察者、审批人只有 `sessions:read`（租户管理员与项目观察者另有 `knowledge:read`）。项目不存在与没有角色同样返回 403（ADR-0044）。
 
 ### 租户隔离
 
@@ -1118,7 +1122,7 @@ Webhook 配置与 API Key 同属业务系统的接入配置，同用 `API_KEY_RE
 | 工作区 | `GET/PUT /v1/sessions/{id}/workspace/files/{path}`、`GET /v1/sessions/{id}/workspace:list`。`none` 档读写平台存储中的工作区，受保护路径只读；沙箱档只读 `outputs/` 副本、不能写入；路径整体 URL 编码（ADR-0050） | 是 |
 | 文件 | `POST /v1/files`（`files:write`，大小上限可配置，默认 32 MB）、`GET /v1/files/{id}`、`GET /v1/files/{id}/content`。媒体类型由服务端检测，文件名规范化；在 `user.message` 中按 `file_id` 引用，轮次开始时放进工作区（ADR-0050） | 是 |
 | 智能体（只读） | `GET /v1/agents`、`GET /v1/agents/{id}`：本项目已发布的智能体与当前版本，由 control-plane 提供（ADR-0047） | 是 |
-| 知识库 | `/v1/knowledge-bases`、`/documents`、`/search` | 是 |
+| 知识库 | `POST/GET /v1/knowledge-bases`、`GET /v1/knowledge-bases/{id}`；文档 `POST/GET /v1/knowledge-bases/{id}/documents`（multipart 上传，带 `acl_tags`）、`GET/DELETE /v1/knowledge-bases/{id}/documents/{doc_id}`（进度与删除，删除时切片与原文件一并删除）、`POST /v1/knowledge-bases/{id}/documents/{doc_id}:reprocess`（T18，ADR-0051）；`/search`（T19）。读要 `knowledge:read`，写要 `knowledge:write` | 是 |
 | 模型直通 | `POST /v1/chat/completions`、`POST /v1/responses`、`POST /v1/embeddings`（OpenAI 兼容）。服务之间的内部接口（`/internal/v1/embeddings`、`/internal/v1/rerank` 等）另写 `meridian-internal-v1.yaml`，不随公开 API 发布（ADR-0033） | 是 |
 | 用量 | `GET /v1/usage`：本项目的用量按天、模型、智能体、API Key 聚合，由 control-plane 提供（ADR-0048） | 是 |
 | Webhook 投递记录 | `GET /v1/webhook-deliveries`、`GET /v1/webhook-deliveries/{id}`、`POST /v1/webhook-deliveries/{id}:redeliver`（手动重投，202）；Webhook 的配置在管理 API（ADR-0049） | 是 |
@@ -1213,7 +1217,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 
 ## 计量与预算
 
-- **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天。沙箱 vCPU 秒是沙箱存活时间乘以规格的 vCPU 数，在每轮结束、回收与删除会话时分段记录，用量种类 `sandbox_vcpu_seconds`（ADR-0037）。
+- **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天。知识库存储每天（UTC）为每个有内容的知识库记一条 `knowledge_storage_gb_days`：原文件加切片正文与向量的字节数除以 10^9，由 knowledge 的 outbox 上报，`kb.storage_reports` 防止同一天重复上报（ADR-0051）。沙箱 vCPU 秒是沙箱存活时间乘以规格的 vCPU 数，在每轮结束、回收与删除会话时分段记录，用量种类 `sandbox_vcpu_seconds`（ADR-0037）。
 - **账本**：每条记录带租户、项目、API Key、智能体版本、会话、线程、轮次、模型、价格表版本。价格表有版本，调价不影响历史记录：版本发布即生效、不可修改，runtime 的用量消息在结算时带上模型当前的 `price_book_id` 与 `price_book_version`，计价按记录中的版本（ADR-0045）。
 - **预算**：分租户、项目、API Key、会话四级，每级有软阈值（告警）和硬阈值（停止），单位是 token（模型调用的输入加输出；沙箱与搜索只进账本）。租户、项目、API Key 按自然月（UTC）计，会话不分周期。每级可以设置"该级所有范围的默认值"，具体范围的设置优先；没有设置的级别硬阈值为 0，新租户在管理员设置之前不能调用模型。会话中的调用计入创建会话的 API Key。账本汇总越过软阈值时写一条告警（`budget_alerts`）与审计 `budget.soft_limit_reached`（ADR-0048）。
 - **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。Redis 计数以 token（输入加输出）计，四级计数都记（没有限额的级别也记，供对账），键带租户哈希标签；用量记录经 outbox 的 `usage` 主题投递，输入、输出、缓存读、缓存写、推理 token 分别记，带调用用途（推理、压缩、Embedding、rerank）；Embedding 与 rerank 的记录种类分别为 `embedding_tokens`、`rerank_tokens`（ADR-0033）。限额由 control-plane 在提交后写进每租户一个 Redis 哈希 `budget:{租户}:limits`、每 5 分钟全量重写，runtime 每次预扣用一次 `HMGET` 读四级；计数键带周期，预扣记录带上占用的计数键并记进租户的预扣集合（ADR-0048）。
@@ -1504,6 +1508,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.19 | 2026-11-09 | T14b：服务 JWT 的换取（客户端凭据模式）、JWKS、密钥与轮换、按调用方限定内部接口；控制台用户经 `Meridian-Project` 调用公开 API 的作用域来源与限流；`PlatformContext` 增加控制台用户；出网代理的回调凭据；技术基线补 Nimbus；本地开发的 `auth` profile（ADR-0044） |
 | v1.18 | 2026-11-09 | Q2 已决：身份只认标准 OIDC，声明映射可配置，SAML、LDAP 经 Keycloak 转接，Keycloak 作为参考实现与可选组件（ADR-0043） |
 | v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
+| v1.25 | 2026-11-12 | T18：知识库写入的解析器路由与中间表示、作业的租约与重试分类、切分与 token 估算、向量维度的配置、`kb` 表的列与 `storage_reports`、知识库存储的计量种类、操作类别 `KNOWLEDGE_READ`、`KNOWLEDGE_WRITE`、知识库的公开端点与内部接口、ID 前缀 `chk`、`ijb`（ADR-0051） |
 | v1.24 | 2026-11-12 | T17b：文件资源（`rt.files`、服务端检测媒体类型、文件名规范化）、引用的校验与轮次开始时放进工作区（`SandboxDriver.writeFiles`、`TurnContext.workspaceFiles`）、工作区 API 的两档、`session.usage` 的口径与 `rt.turn_usage`、`/v1/responses` 子集（ADR-0050） |
 | v1.23 | 2026-11-12 | T17a：Webhook 的配置、签名密钥、outbox、投递器、重试计划与投递记录接口，只推送主线程的事件；会话删除的清理作业与审计、等待 Webhook 投递、按标签清除残留沙箱；事件归档的格式与透明读取；事件保留的下发与执行；删除与归档撤销出网授权；ID 前缀 `whk`、`whd`（ADR-0049） |
 | v1.22 | 2026-11-12 | T16：用量账本与审计日志的消费、分区与保留，审计消息的标准字段，四级预算的单位、周期、默认值与 Redis 限额，对账口径，会话记下创建它的 API Key，outbox 认领后在事务外发布，`GET /v1/usage` 由 control-plane 提供，操作类别 `BUDGET_READ`、`BUDGET_WRITE`、`AUDIT_READ`、`USAGE_READ`，ID 前缀 `bdg`、`bal`（ADR-0048） |
