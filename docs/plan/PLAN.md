@@ -83,7 +83,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 已完成 | f5de788 |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 已完成 | 9aa41da |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 已完成 | b7df25f |
-| T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 进行中 | — |
+| T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 已完成 | 51dc16a |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 未开始 | — |
 | T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 未开始 | — |
 | R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 未开始 | — |
@@ -175,22 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-### T18 知识库写入（2026-11-12 开工）
-
-开工基线：`verify.sh` 只有 runtime 的 `EventStreamIT.threadStreamsAndMainFilterDoNotTreatOtherThreadsSeqsAsMissing` 失败（单独重跑仍失败：跳号回补计数 51→84）；该类与 SSE 代码自 T17a 未改、T17b 收尾时通过，开工时主机负载约 100（其他项目的 Playwright/WebKit），判为负载下的时序问题，收尾时复跑。
-
-- [x] 1. ADR-0051、架构设计（kb 表、ID 前缀、权限类别、内部接口、用量种类）、OpenAPI（公开知识库接口、knowledge 的内部接口）
-- [x] 2. common（`IdPrefix` 的 `chk`、`ijb`，切分用的 token 估算）、security（`KNOWLEDGE_READ`、`KNOWLEDGE_WRITE` 与 `knowledge:*` 作用域换算）
-- [x] 3. `meridian-model-client`：经服务 JWT 调 runtime 的 `/internal/v1/embeddings`，每批 64 条
-- [x] 4. `meridian-knowledge` 骨架：应用、配置、`kb` 迁移、知识库与文档接口（上传、列表、进度、重新处理、删除）、幂等、审计、`key.revoked` 订阅、内部接口
-- [x] 5. 写入流水线：`ingestion_jobs` 队列（`SKIP LOCKED`、退避重试 3 次）、解析（Tika/POI、PDFBox、Markdown、doc-parser）、中间表示、切分、批量 Embedding、入库
-- [x] 6. 存储计量：每日按知识库上报 outbox `usage`；control-plane 的 `UsageKind`、`UsageMessages`、迁移与样本
-- [x] 7. control-plane：`KnowledgeCatalogClient` 经 knowledge 内部接口（替换 `TODO(T18)`）
-- [x] 8. `doc-parser/`：FastAPI + Docling（MinerU 可选）、镜像固化模型、Ruff/mypy/pytest、接入 `verify.sh`
-- [x] 9. Compose `app` profile 加入 knowledge 与 doc-parser、`build-images.sh`、`run-knowledge.sh`、冒烟脚本
-- [ ] 10. 测试与验收：A01–A09（集成测试、容器化 doc-parser、`-Plive`）
-- [ ] 11. 收尾：`CLAUDE.md`（knowledge、model-client、doc-parser、根）、文档、`acceptance.json`、全量 `verify.sh`（A10）
-
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -487,6 +472,14 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：文件在轮次开始时放置而不是上传时；路径经 `TurnContext` 交给内核，不写进事件；steer 中的文件降级为 queue；`session.usage` 的 `model_id` 改为可选（事件从未产生过，openapi-diff 判为兼容）；不支持的 Responses 参数在 schema 中列出以便逐项报错；D26 维持子集
 - 顺带修复：开工基线 `EventArchiveIT` 偶发失败（SSE 与列表接口的 `created_at` 小数位表示不同，按时刻比较，表示的不一致登记 D76）；D54 的重复实现收口（Q-M1、Q-M2、Q-L1、Q-L3）
 - 遗留：D74（上传文件没有删除与保留期）、D75（按 ID 引用的图片不作为视觉输入）、D76（时间的文本表示）、D77（事件中的 delivery 是请求值）；D66 在本任务的全量检查中又出现一次（`SubagentSessionIT` 的请求 ID 生成被 BlockHound 判为阻塞，重跑通过）
+
+### 2026-11-12 T18 已完成（提交 51dc16a）
+
+- 交付：`meridian-knowledge`（迁移 `kb/V0001`：知识库、文档、写入作业、切片（HNSW、`tsv` 与 `acl_tags` 的 GIN）、`storage_reports`、outbox、幂等键；公开 API `KnowledgeBases` 8 个操作与内部接口 `GET /internal/v1/knowledge-bases/{id}`；写入流水线：`SKIP LOCKED` 认领与租约、按尝试次数 fencing、退避重试 3 次、Tika/PDFBox/Markdown/doc-parser 的解析路由、中间表示与切分器、经 runtime 的批量 Embedding；每日存储计量、审计、幂等、`key.revoked` 订阅）；`meridian-model-client`（`EmbeddingClient`）；`doc-parser/`（FastAPI + Docling 2.144.0 与 RapidOCR，MinerU 可选，镜像固化模型与中文字体，4.12 GB）；control-plane 的 `KnowledgeServiceCatalog`（进程内签发自己的服务 JWT）、`knowledge_storage_gb_days`（cp `V0006`）；security 的 `KNOWLEDGE_READ`、`KNOWLEDGE_WRITE`；common 的 `chk`、`ijb`、`TextTokens.approximate`、`FileNames`（从 runtime 移入）；Compose `app` profile、`run-knowledge.sh`、`run-doc-parser.sh`、`build-images.sh`；ADR-0051，架构设计 v1.25
+- 验收：A01–A10 全部 passing（`IngestionIT`、`ChunkIndexesIT`、`KnowledgeApiIT`、`StorageMeteringIT`，容器化的 doc-parser；`-Plive` 的 `IngestionLiveIT`；`verify.sh` 通过）
+- 决策：向量维度用 Flyway 占位符并在启动时核对；PDF 先用 PDFBox 检查，扫描件与有框线表格的交给 doc-parser；结束事务锁住文档与本次尝试再整体替换切片；存储量每天按执行时的大小上报并用 `storage_reports` 去重；doc-parser 不校验服务 JWT、靠网络策略；`acl_tags` 用逗号分隔的表单字段（Spring 解析不了数组表单字段）
+- 开工基线：`EventStreamIT` 在主机负载约 100 时连续失败，负载降下来后的全量运行中通过（时序敏感）；收尾时 D66 的 `SubagentSessionIT` 又出现两次
+- 遗留：D78（知识库 ID 没有进入用量账本）、D79（doc-parser 的网络策略与资源限额）、D80（PDF 路由的启发式、P8 复核）、D81（存储量取执行时的大小、知识库没有删改接口）；本机 `.env` 需要 `MERIDIAN_KNOWLEDGE_CLIENT_SECRET` 才能用 Compose 起 knowledge（`run-*.sh` 会取 `.env.example` 的值）
 
 ## 计划变更记录
 

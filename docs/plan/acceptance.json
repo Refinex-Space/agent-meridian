@@ -1371,71 +1371,71 @@
       "id": "T18-A01",
       "task": "T18",
       "description": "四种测试语料都能完成写入，进度接口反映状态，失败的任务按退避重试。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-knowledge -am verify -Dtest=NONE（IngestionIT，2026-11-12）：allFourCorporaAreIngestedWithTheRightParsers 上传 docx、Markdown、带表格 PDF、扫描件 PDF（另加纯文字 PDF）全部 ready，parser 分别为 tika、markdown、doc-parser、doc-parser、pdfbox，进度接口 attempts=1、chunks_total=chunks_embedded=chunk_count、stage 与 error 为 null；retryableFailuresBackOffAndPermanentFailuresStop：一次 503 后第 2 次成功，404 model.not_found 第 1 次即 failed（retryable=false），持续 503 共 4 次尝试后 failed，等待期间给出 next_attempt_at；expiredLeasesAreReclaimedAsAFailedAttempt：租约过期的作业被收回、第 2 次成功。Tests run: 6, Failures: 0"
     },
     {
       "id": "T18-A02",
       "task": "T18",
       "description": "切分保留标题路径与页码；表格作为整体切片；切片长度落在目标范围内。验证：针对制度文件与 PDF 的断言。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ParsersTest（单元）：制度文件的标题层级（第三章 费用标准 / 第二节 住宿费）、条款编号、住宿标准表整体为一个 TABLE 切片，正文切片 1–512 token、交通费一节切成多片；纯文字 PDF 按字号推断三层标题、页码 1–2。IngestionIT：带表格 PDF 经 doc-parser 后表格单独一片（含 研发工程师…行政与财务，page_start=1，标题路径末项 三、配置标准），第 2 页正文 page_start=2、路径含 五、报废处置；全部正文切片 token_count 在 1–512。ChunkerTest 覆盖重叠、超长表格按行拆分并重复表头"
     },
     {
       "id": "T18-A03",
       "task": "T18",
       "description": "扫描件经 `doc-parser` 解析出文字（Docling）。验证：集成测试（容器化的 doc-parser）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "IngestionIT 用容器化的 doc-parser（agent-meridian/doc-parser:test-<摘要>，Docling 2.144.0 + RapidOCR）：scanned-notice.pdf 的切片含「夏季作息时间」「十三点三十分」；镜像内 docker build --target test doc-parser：15 passed（含 test_scanned_pdf_is_recognized_with_ocr、test_ruled_table_is_kept_as_one_table）"
     },
     {
       "id": "T18-A04",
       "task": "T18",
       "description": "Embedding 经 runtime 内部接口调用，用量记在 runtime 一侧，knowledge 不产生用量记录。验证：集成测试；`-Plive` 下用真实模型写入一份文档。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "IngestionIT：runtime 替身记录的每次 Embedding 调用都带 aud=runtime、sub=knowledge 的服务 JWT（替身用 JWKS 校验）、本租户与项目、模型 mdl_test_embedding、每批 1–64 条（largeDocumentsAreEmbeddedInBatchesOf64：90 片分为 64+26）；kb.outbox 中该租户没有任何 usage 消息（用量只在 runtime 记账，runtime 一侧由 ModelEndpointsIT 覆盖）。-Plive：./mvnw -Plive -pl meridian-knowledge -am verify，IngestionLiveIT 1 passed：制度文件经 qwen3.7-text-embedding 写入，全部切片 1024 维，模型报告 1317 token、切分估算 1427 token（+8.4%）"
     },
     {
       "id": "T18-A05",
       "task": "T18",
       "description": "`chunks` 的向量、全文、`acl_tags` 索引存在且被使用（`EXPLAIN` 确认）。验证：测试输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ChunkIndexesIT（关闭 enable_seqscan 后 EXPLAIN）：向量检索 \"Index Scan using chunks_embedding_hnsw_idx\"，全文检索 \"Bitmap Index Scan on chunks_tsv_gin_idx\"（tsv @@ '住宿' & '标准'），标签过滤 \"Bitmap Index Scan on chunks_acl_tags_gin_idx\"（acl_tags && '{dept:finance}'）；pg_indexes 中三个索引的定义为 hnsw (embedding vector_cosine_ops)、gin (tsv)、gin (acl_tags)"
     },
     {
       "id": "T18-A06",
       "task": "T18",
       "description": "删除文档后，切片与对象存储中的原文件都被删除。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "IngestionIT.deletingADocumentRemovesChunksAndTheOriginalFile：删除前对象存在、切片非空；DELETE 204 后 kb.chunks 与 kb.ingestion_jobs 中该文档为 0 行，ObjectStore.exists(object_key)=false，再查 404 document.not_found"
     },
     {
       "id": "T18-A07",
       "task": "T18",
       "description": "`doc-parser` 的 Ruff、类型检查、pytest 通过，已接入 `scripts/dev/verify.sh`。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "cd doc-parser：uv run ruff format --check（13 files already formatted）、ruff check（All checks passed）、mypy（Success: no issues found in 9 source files）、pytest -q -W error（13 passed, 2 skipped：需要模型的 2 个用例在镜像 test 阶段运行，15 passed）；scripts/dev/verify.sh 末尾已加 doc-parser 段"
     },
     {
       "id": "T18-A08",
       "task": "T18",
       "description": "knowledge 调用 runtime 时使用服务 JWT；吊销的 API Key 在 1 秒内被 knowledge 拒绝。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "KnowledgeApiIT：aRevokedKeyIsRejectedWithinOneSecond 吊销前缓存仍接受（校验次数不变），发布 key.revoked 后 1 秒内返回 401 auth.invalid_api_key；theInternalLookupAcceptsOnlyControlPlaneAndRuntime 内部接口只接受 control-plane、runtime 的服务 JWT（egress-proxy 403，aud 不对 401）；Embedding 调 runtime 时带 knowledge 的服务 JWT（见 A04，StubPlatform 以 JWKS 校验）"
     },
     {
       "id": "T18-A09",
       "task": "T18",
       "description": "知识库存储量每日上报为用量；knowledge 的写操作有审计记录；POST 支持幂等。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "StorageMeteringIT：两次执行只有 1 条 knowledge_storage_gb_days（day=昨天、occurred_at=次日 00:00Z、file_bytes 与 index_bytes、gb_days=字节/1e9），字段与 meridian-test-support 样本一致，没有文档的知识库不上报；control-plane UsageLedgerIT 用同一样本入账（数量 1.75、无成本）。KnowledgeApiIT.postsAreIdempotentAndWritesAreAudited：创建知识库与上传文档同键重放 Idempotent-Replayed: true、同键不同请求 409 idempotency.key_reused、只插入一份文档；审计依次为 knowledge_base.created、document.uploaded、document.reprocessed、document.deleted，actor 为 api_key 与 Key ID"
     },
     {
       "id": "T18-A10",
       "task": "T18",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh（2026-11-12，51dc16a 之后）：exit=0，Maven BUILD SUCCESS（spotless、编译、单元与集成测试共 2219 个用例、ArchUnit、enforcer、覆盖率），check-pom-versions 通过，sandbox-runtime 23 passed，doc-parser 13 passed、2 skipped（需要模型的用例在镜像 test 阶段 15 passed）。此前两次全量运行中 runtime 的 SubagentSessionIT 各失败一次（登记事项 D66：BlockHound 把请求 ID 的 ULID 生成器的锁等待判为阻塞），第一次还有 AgentScopeRuntimeBaselineIT 的 Jackson 2 版本（tika-bom 引入，已在 51dc16a 修正）"
     },
     {
       "id": "T19-A01",
