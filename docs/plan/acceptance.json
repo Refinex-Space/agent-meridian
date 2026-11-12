@@ -1231,8 +1231,8 @@
       "id": "T15b-A09",
       "task": "T15b",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`scripts/dev/verify.sh`（提交 ea59ed4 之后）exit 0：Maven reactor 15 个模块 BUILD SUCCESS（格式、编译、单元与集成测试、架构测试、enforcer、覆盖率、POM 版本）——control-plane 集成测试 666 个、runtime 集成测试 269 个、engine-agentscope-test 257 个、security 108 个等全部通过，无失败与跳过；沙箱执行服务的格式、lint、类型检查通过，pytest 23 passed。第一次运行时 runtime 的 `SessionApiContractIT` 失败（契约覆盖把 control-plane 提供的 `GET /v1/agents*` 也算作 runtime 的操作），改为只统计 runtime 生成的标签、归属不明的标签直接报错后重跑通过。"
     },
     {
       "id": "T16-A01",

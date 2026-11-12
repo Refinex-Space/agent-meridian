@@ -79,7 +79,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 已完成 | 251ed4e |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 已完成 | ed57d00 |
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | a9db160 |
-| T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 进行中 | — |
+| T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 待填 |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 未开始 | — |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 未开始 | — |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 未开始 | — |
@@ -175,16 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T15b（开工 2026-11-11，基线 `scripts/dev/verify.sh` 通过）：
-
-- [x] 1. 规范：`agent-spec.schema.json`（与 `ResolvedAgentSpec` 一一对应）、管理 API（智能体与版本、环境、技能、MCP 服务、权限规则）、内部接口（解析、环境、技能、权限规则、租户设置）、公开接口 `GET /v1/agents`
-- [x] 2. control-plane：迁移 `V0003`、智能体与版本（发布不可变、六项校验、版本对比）、环境（修订历史）、技能包（frontmatter 校验、对象存储、版本化）、MCP 服务（端点校验、探测并保存工具清单、每个工具的副作用）、权限规则（租户与项目、记住此决定）、租户设置的下发与 D61、`config.invalidate`、`KnowledgeCatalogClient` 开发实现
-- [x] 3. control-plane 公开接口：MVC 版 API Key 过滤器与限流（D55）、`GET /v1/agents`
-- [x] 4. engine：MCP 每个工具的副作用、按智能体版本淘汰实例（D32）
-- [x] 5. runtime：control-plane 的 `AgentConfigProvider`、`PolicyStorePort`、租户设置（缓存、失效、兜底过期），文件实现只在 dev、test
-- [x] 6. 验收测试：A02（Schema 一致性与六项校验）、A03、A04、A05、A06、A07、A08
-- [x] 7. A01 端到端（`-Plive`，qwen-plus，不读 `dev-config/`）
-- [ ] 8. 收尾：ADR、架构设计、模块 CLAUDE.md、登记事项、A09 `verify.sh`、验收记录
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -434,6 +425,13 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：凭据属于租户、可再限定到项目；模型租户内全部项目可用；端点策略危险地址始终拒绝、私有与保留网段按配置放行（本机 fake-ip 解析到 `198.18.0.0/15`，dev 配置显式放行）；Anthropic、Gemini 不用 2.0.4 的模型类（凭据构造时给、SDK 自带重试、`boundedElastic`）
 - 顺带修复：租户设置带联网搜索后端时 500（生成的 `@Size` 落在 `URI` 字段上）
 - 遗留：D59（凭据库的生产部署与重新包装）、D60（Anthropic、Gemini 没有真实模型验证）、D61（联网搜索后端在 runtime 侧的校验与凭据引用，T15b）、D62（DNS 重绑定，T37）；`dev` 与 Compose `app` 的 runtime 仍读 `dev-config/providers`（开发智能体引用 `mdl_dev_*`，T15b 改由 control-plane 下发智能体后切换）
+
+### 2026-11-12 T15b 已完成（提交 待填）
+
+- 交付：智能体规格的 JSON Schema（`meridian-api` 的 `agent-spec.schema.json`，与 `ResolvedAgentSpec` 一一对应）；control-plane 的 `agent`（草稿与发布、发布不可变、六项校验与快照、版本对比、引用与删除冲突）、`environment`（修订历史）、`skill`（JSON 技能包、frontmatter 校验、对象存储、版本只追加）、`mcp`（端点校验、MCP SDK 0.17.2 探测并保存工具清单、按工具的副作用）、`policy`（租户与项目策略、记住此决定）上下文，迁移 `V0003`，租户设置下发（D61），`config.invalidate` 新增 6 种类型，内部接口（版本与当前版本解析、环境修订、技能、权限规则、租户设置），公开 `GET /v1/agents`（`meridian-security` 的 `PublicApiAdmission` 与 MVC `ApiKeyFilter`，D55），操作类别 `AGENT_READ`、`AGENT_WRITE`，ID 前缀 `prl`，`KnowledgeCatalogClient` 的开发实现（`TODO(T18)`）；engine 的 `McpServerSpec.toolSideEffects`、`AgentEngine.evictAgentVersions`（D32）、D53 A-F5；runtime 的 `ControlPlaneAgentConfigProvider`（按项目校验，D18）、`ControlPlanePolicyStore`（D22）、`AgentConfigInvalidationListener`、`agent-config.source`（`file` 只允许 dev、test）、`ConfigUnavailableException`；test-support 的 `TestMcpServer`；`scripts/dev/agent-smoke.sh`；ADR-0047，架构设计 v1.21
+- 验收：A01–A09 全部 passing（`AgentVersionIT`、`AgentResourcesIT`、`AgentConfigDomainTest`、`AgentSpecSchemaTest`、`AgentConfigSessionIT`；`-Plive` 的 `AgentConfigLiveIT` 与真实链路 `agent-smoke.sh --dashscope` 都通过，全程不读 `dev-config/`）
+- 决策：一份 Schema，草稿省略发布时填写的字段；发布时快照 MCP 服务的登记配置，版本真正不可变；技能包以 JSON 上传；租户设置变更时按租户淘汰实例；解析类接口不按租户过滤，由 runtime 校验资源属于调用方项目；networknt 用 2.0.1（与 AgentScope 带来的 2.0.0 同坐标，3.x 换了 Jackson 3）
+- 遗留：D53 A-F8（MCP 重连语义，T19）、D55 的 knowledge 部分（T18）、D63（`dev-config/` 只剩测试与本地开发，预算限额 T16）、D64（`TODO(T18)` 知识库存在性）、D65（已删除智能体的版本不计入引用，R2）
 
 ## 计划变更记录
 
