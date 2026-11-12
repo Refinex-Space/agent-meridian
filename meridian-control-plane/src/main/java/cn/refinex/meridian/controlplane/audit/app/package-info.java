@@ -1,4 +1,4 @@
 /**
- * 管理操作的审计写入：只写 outbox，不查询（审计查询在 T16）。被各上下文的用例在业务事务中调用。
+ * 审计的用例：写入（{@code AdminAudit}，各上下文在业务事务中调用）、消费入库（{@code AuditIngestion}）、查询（{@code AuditQuery}）。
  */
 package cn.refinex.meridian.controlplane.audit.app;

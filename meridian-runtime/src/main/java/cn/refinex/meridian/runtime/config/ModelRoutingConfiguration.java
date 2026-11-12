@@ -9,6 +9,7 @@ import cn.refinex.meridian.runtime.modelrouting.infra.ControlPlaneModelCatalog;
 import cn.refinex.meridian.runtime.modelrouting.infra.FileBudgetLimits;
 import cn.refinex.meridian.runtime.modelrouting.infra.FileModelCatalog;
 import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient;
+import cn.refinex.meridian.runtime.modelrouting.infra.RedisBudgetLimits;
 import cn.refinex.meridian.security.servicejwt.ServiceClientProperties;
 import cn.refinex.meridian.security.servicejwt.ServiceJwts;
 import cn.refinex.meridian.security.servicejwt.ServiceRestClients;
@@ -20,6 +21,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -28,7 +30,7 @@ import org.springframework.web.client.RestClient;
  *
  * <p>目录与凭据按 {@code meridian.runtime.model-routing.catalog-source} 选择（ADR-0045）：{@code control-plane}（默认）经内部接口解析，
  * 并订阅 {@code config.invalidate} 淘汰缓存；{@code file} 读开发配置与环境变量，只允许在 {@code dev}、{@code test} profile 使用。预算
- * 限额仍是开发实现，T16 起改为 control-plane 同步到 Redis 的值。
+ * 限额按 {@code budget-source} 选择（ADR-0048）。
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(ModelRoutingProperties.class)
@@ -36,6 +38,9 @@ public class ModelRoutingConfiguration {
 
     /** 目录来源的配置键。 */
     static final String CATALOG_SOURCE = "meridian.runtime.model-routing.catalog-source";
+
+    /** 预算限额来源的配置键（ADR-0048 第 10 条）。 */
+    static final String BUDGET_SOURCE = "meridian.runtime.model-routing.budget-source";
 
     /**
      * 供应商与模型目录。
@@ -105,15 +110,27 @@ public class ModelRoutingConfiguration {
     }
 
     /**
-     * 预算硬阈值：读 {@code meridian.runtime.model-routing.budgets-directory}（默认 {@code dev-config/budgets}），没有配置时不限。
+     * 预算硬阈值（ADR-0048 第 10 条）：{@code budget-source=control-plane}（默认）读 control-plane 同步到 Redis 的限额，没有设置的级别
+     * 为 0；{@code file} 读 {@code budgets-directory}，没有配置的级别不限，只允许 {@code test} profile。
      *
      * @param properties 配置
+     * @param environment 环境，取激活的 profile
+     * @param redis Redis 模板
      * @return 限额来源
+     * @throws IllegalStateException 文件来源用在 test 之外时
      */
     @Bean
     @ConditionalOnMissingBean
-    public BudgetLimitPort budgetLimitPort(ModelRoutingProperties properties) {
-        return new FileBudgetLimits(properties.budgetsDirectory());
+    public BudgetLimitPort budgetLimitPort(
+            ModelRoutingProperties properties, Environment environment, StringRedisTemplate redis) {
+        if (ModelRoutingProperties.FILE.equals(properties.budgetSource())) {
+            if (!environment.matchesProfiles("test")) {
+                throw new IllegalStateException(
+                        BUDGET_SOURCE + "=file 只允许在 test profile 使用；开发与生产读 control-plane 下发的限额");
+            }
+            return new FileBudgetLimits(properties.budgetsDirectory());
+        }
+        return new RedisBudgetLimits(redis);
     }
 
     /**

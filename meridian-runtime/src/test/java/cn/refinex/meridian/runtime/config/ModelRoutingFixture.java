@@ -54,7 +54,7 @@ final class ModelRoutingFixture implements AutoCloseable {
     final String projectId = "prj_" + Ids.newUlid();
     final String accountId = "prv_" + Ids.newUlid();
     final SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    final RedisBudgetLedger ledger = new RedisBudgetLedger(RuntimeTestRedis.template());
+    final RedisBudgetLedger ledger = new RedisBudgetLedger(RuntimeTestRedis.template(), Clock.systemUTC());
     final RoutingModelGateway gateway;
     final ProviderHttpTransport transport = new ProviderHttpTransport(Clock.systemUTC());
     final ProviderVectorClient vectorClient = new ProviderVectorClient(Clock.systemUTC());

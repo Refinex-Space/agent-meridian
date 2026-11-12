@@ -18,6 +18,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param secrets 凭据库（ADR-0045）
  * @param providerEndpoints 供应商与搜索后端端点的地址策略（ADR-0045 第 5 条）
  * @param knowledge 知识库目录的开发配置（ADR-0047，T18 之前）
+ * @param metering 用量与审计消费者、分区维护、预算的限额同步与对账（ADR-0048）
  */
 @ConfigurationProperties("meridian.control-plane")
 public record ControlPlaneProperties(
@@ -28,7 +29,8 @@ public record ControlPlaneProperties(
         @DefaultValue ServiceTokens serviceTokens,
         @DefaultValue Secrets secrets,
         @DefaultValue ProviderEndpoints providerEndpoints,
-        @DefaultValue Knowledge knowledge) {
+        @DefaultValue Knowledge knowledge,
+        @DefaultValue Metering metering) {
 
     /** 规整空列表。 */
     public ControlPlaneProperties {
@@ -176,4 +178,18 @@ public record ControlPlaneProperties(
             devKnowledgeBaseIds = devKnowledgeBaseIds == null ? List.of() : List.copyOf(devKnowledgeBaseIds);
         }
     }
+
+    /**
+     * 用量与审计消费者、分区维护、预算的限额同步与对账（ADR-0048）。
+     *
+     * @param consumersEnabled 是否在本实例运行用量与审计消费者，默认开启；多实例同组消费，每条消息只投递给一个实例
+     * @param partitionInterval 账本分区维护的间隔，默认 6 小时（启动时先执行一次）
+     * @param limitSyncInterval 限额全量重写的间隔，默认 5 分钟（启动时先执行一次）
+     * @param reconciliationInterval 预算对账的间隔，默认 1 小时（架构设计「计量与预算」）
+     */
+    public record Metering(
+            @DefaultValue("true") boolean consumersEnabled,
+            @DefaultValue("6h") Duration partitionInterval,
+            @DefaultValue("5m") Duration limitSyncInterval,
+            @DefaultValue("1h") Duration reconciliationInterval) {}
 }

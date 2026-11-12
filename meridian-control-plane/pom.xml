@@ -150,8 +150,8 @@
                             <apiPackage>cn.refinex.meridian.controlplane.openapi.pub</apiPackage>
                             <generateApis>true</generateApis>
                             <generateModels>false</generateModels>
-                            <!-- 公开 API 中只有智能体（Agents）由 control-plane 提供（ADR-0047），其余标签由 runtime 提供 -->
-                            <apisToGenerate>Agents</apisToGenerate>
+                            <!-- 公开 API 中智能体（Agents，ADR-0047）与用量（Usage，ADR-0048）由 control-plane 提供，其余标签由 runtime 提供 -->
+                            <apisToGenerate>Agents,Usage</apisToGenerate>
                             <configOptions>
                                 <interfaceOnly>true</interfaceOnly>
                                 <skipDefaultInterface>true</skipDefaultInterface>

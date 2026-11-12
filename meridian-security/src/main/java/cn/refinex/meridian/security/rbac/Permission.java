@@ -50,6 +50,14 @@ public enum Permission {
     AGENT_READ(Level.PROJECT),
     /** 管理本项目的智能体（含发布版本）、环境、技能、MCP 服务与项目策略（ADR-0047）。 */
     AGENT_WRITE(Level.PROJECT),
+    /** 查看四级预算、预算告警与租户用量报表（ADR-0048）。 */
+    BUDGET_READ(Level.TENANT),
+    /** 设置、修改、删除预算（ADR-0048）。 */
+    BUDGET_WRITE(Level.TENANT),
+    /** 查询审计日志（ADR-0048）。 */
+    AUDIT_READ(Level.TENANT),
+    /** 查看本项目的用量报表（ADR-0048）。 */
+    USAGE_READ(Level.PROJECT),
     /** 处理待处理动作（审批）。 */
     PENDING_ACTION_DECIDE(Level.PROJECT),
     /** 公开 API：读取会话、事件与事件流（作用域 {@code sessions:read}，ADR-0044）。 */

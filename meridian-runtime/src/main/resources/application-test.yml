@@ -9,6 +9,8 @@ meridian:
     model-routing:
       # 测试默认读临时目录中的供应商配置（ADR-0045）；经 control-plane 解析的测试显式设为 control-plane
       catalog-source: file
+      # 测试默认读临时目录中的预算限额（没有配置的级别不限）；经 control-plane 下发限额的测试显式设为 control-plane（ADR-0048）
+      budget-source: file
       # 模拟供应商在回环地址上
       allow-loopback-endpoints: true
 

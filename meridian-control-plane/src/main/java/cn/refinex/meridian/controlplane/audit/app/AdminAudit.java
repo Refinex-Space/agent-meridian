@@ -1,5 +1,6 @@
 package cn.refinex.meridian.controlplane.audit.app;
 
+import cn.refinex.meridian.common.audit.AuditActor;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import java.time.Clock;
 import java.time.Instant;
@@ -7,7 +8,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
- * 管理操作的审计（ADR-0042）：在业务事务中写 outbox 主题 {@value #TOPIC}，由 Relay 发布到 Redis Stream，T16 的审计消费者入库
+ * 管理操作的审计（ADR-0042）：在业务事务中写 outbox 主题 {@value #TOPIC}，由 Relay 发布到 Redis Stream，审计消费者（{@code AuditIngestion}）入库
  * {@code cp.audit_logs}。载荷中不出现 API Key 明文与哈希，只有 ID 与显示前缀。
  */
 @Component
@@ -56,7 +57,7 @@ public class AdminAudit {
                         clock.instant(),
                         tenantId,
                         projectId,
-                        new Actor("console_user", actor),
+                        AuditActor.consoleUser(actor),
                         resourceType,
                         resourceId,
                         java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(details))));
@@ -88,14 +89,14 @@ public class AdminAudit {
                         clock.instant(),
                         tenantId,
                         projectId,
-                        new Actor("service", service),
+                        AuditActor.service(service),
                         resourceType,
                         resourceId,
                         java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(details))));
     }
 
     /**
-     * 管理操作的审计记录（outbox 主题 {@code audit}），格式由 T16 的审计消费者定稿。
+     * 管理操作的审计记录（outbox 主题 {@code audit}），标准字段见 ADR-0048 第 6 条。
      *
      * @param action 动作
      * @param occurredAt 发生时间，审计表按它分区
@@ -111,16 +112,8 @@ public class AdminAudit {
             Instant occurredAt,
             String tenantId,
             String projectId,
-            Actor actor,
+            AuditActor actor,
             String resourceType,
             String resourceId,
             Map<String, Object> details) {}
-
-    /**
-     * 操作者。
-     *
-     * @param type 类型：{@code console_user}（控制台用户），{@code service}（内部服务，T15a）
-     * @param subject 主体标识
-     */
-    public record Actor(String type, String subject) {}
 }

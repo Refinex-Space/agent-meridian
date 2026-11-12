@@ -44,4 +44,19 @@ public class ApiKeyLookupRepository extends SystemRepository {
                 .query(ApiKeyRepository::map)
                 .optional();
     }
+
+    /**
+     * 按 ID 查找租户中的 Key（含已吊销的），预算设置 API Key 级范围时确认 Key 存在并取所在项目（ADR-0048）。
+     *
+     * @param tenantId 租户 ID
+     * @param keyId API Key ID
+     * @return 元数据；不存在或不属于该租户时为空
+     */
+    public Optional<ApiKey> findInTenant(String tenantId, String keyId) {
+        return jdbc().sql("SELECT * FROM cp.api_keys WHERE id = :id AND tenant_id = :tenant")
+                .param("id", keyId)
+                .param("tenant", tenantId)
+                .query(ApiKeyRepository::map)
+                .optional();
+    }
 }

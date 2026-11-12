@@ -22,6 +22,7 @@ import cn.refinex.meridian.engine.spi.port.WebFetchPort;
 import cn.refinex.meridian.engine.spi.port.WebSearchPort;
 import cn.refinex.meridian.engine.spi.port.WorkspaceStorePort;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
+import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxProperties;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
 import cn.refinex.meridian.runtime.tooling.app.TenantWebSearch;
@@ -30,11 +31,13 @@ import cn.refinex.meridian.runtime.tooling.infra.BochaSearchAdapter;
 import cn.refinex.meridian.runtime.tooling.infra.GuardedWebFetcher;
 import cn.refinex.meridian.runtime.tooling.infra.SearxngSearchAdapter;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 内核的工具、工作区文件系统与技能仓库三个提供者的生产实现（T10a）：平台工具（{@link PlatformToolProvider}，经账本与对象存储
@@ -45,6 +48,9 @@ import org.springframework.context.annotation.Bean;
  */
 @AutoConfiguration(before = EngineAutoConfiguration.class)
 public class PlatformToolsAutoConfiguration {
+
+    /** 用量的 outbox 主题（架构设计「跨服务数据流」）。 */
+    static final String USAGE_TOPIC = "usage";
 
     /**
      * 平台工具：T10a 的六个文件工具；T10b 的 {@code web_fetch}、{@code web_search}、{@code knowledge_search} 与 MCP 工具（智能体挂载的
@@ -96,14 +102,29 @@ public class PlatformToolsAutoConfiguration {
     /**
      * 按租户选择后端的联网搜索：SearXNG 与博查两个适配器（ADR-0035）。
      *
+     * 每次成功的搜索在独立的事务中写一条用量（outbox {@code usage}，ADR-0048）。
+     *
      * @param configs 租户设置来源
      * @param secrets 凭据解析
+     * @param outbox outbox 写入
+     * @param transactions 事务模板
+     * @param clock 时钟
      * @return 搜索端口
      */
     @Bean
     @ConditionalOnMissingBean(WebSearchPort.class)
-    public WebSearchPort webSearchPort(AgentConfigProvider configs, SecretResolver secrets) {
-        return new TenantWebSearch(configs, secrets, List.of(new SearxngSearchAdapter(), new BochaSearchAdapter()));
+    public WebSearchPort webSearchPort(
+            AgentConfigProvider configs,
+            SecretResolver secrets,
+            OutboxWriter outbox,
+            TransactionTemplate transactions,
+            Clock clock) {
+        return new TenantWebSearch(
+                configs,
+                secrets,
+                List.of(new SearxngSearchAdapter(), new BochaSearchAdapter()),
+                message -> transactions.executeWithoutResult(status -> outbox.append(USAGE_TOPIC, message)),
+                clock);
     }
 
     /**

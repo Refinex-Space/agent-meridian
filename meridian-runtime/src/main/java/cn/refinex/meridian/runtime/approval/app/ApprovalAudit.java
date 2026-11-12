@@ -1,5 +1,6 @@
 package cn.refinex.meridian.runtime.approval.app;
 
+import cn.refinex.meridian.common.audit.AuditActor;
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.engine.spi.event.AgentOutputEvent;
@@ -20,7 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 权限判定与待处理动作回应的审计（架构设计「跨服务数据流」：outbox → Redis Stream {@code audit} → control-plane 审计消费者）。
- * 消息与业务数据在同一事务中写入，格式由 T16 的审计消费者定稿。
+ * 消息与业务数据在同一事务中写入，标准字段见 ADR-0048 第 6 条。
  *
  * <ul>
  *   <li>{@code permission.decided}：每个工具调用的权限判定结果。放行、经审批放行与拒绝随工具结果事件写入（{@link #append}）；
@@ -41,6 +42,12 @@ public class ApprovalAudit {
 
     /** 待处理动作结论的审计动作。 */
     public static final String ACTION_CONCLUDED = "pending_action.concluded";
+
+    /** 平台自己做出的判定与结论的操作者（ADR-0048 第 6 条）。 */
+    static final AuditActor RUNTIME = AuditActor.service("runtime");
+
+    /** 权限判定的资源类型：工具调用，资源 ID 是工具调用 ID。 */
+    static final String TOOL_CALL = "tool_call";
 
     private final SessionEventWriter events;
     private final OutboxWriter outbox;
@@ -114,6 +121,9 @@ public class ApprovalAudit {
                 clock.instant(),
                 tenantId(),
                 projectId(),
+                RUNTIME,
+                TOOL_CALL,
+                action.toolUseId(),
                 sessionId,
                 threadId,
                 turnId,
@@ -137,6 +147,9 @@ public class ApprovalAudit {
                 clock.instant(),
                 tenantId(),
                 projectId(),
+                RUNTIME,
+                TOOL_CALL,
+                action.toolUseId(),
                 sessionId,
                 threadId,
                 turnId,
@@ -159,6 +172,9 @@ public class ApprovalAudit {
                 clock.instant(),
                 tenantId(),
                 projectId(),
+                decidedBy == null ? RUNTIME : AuditActor.ofPrincipal(decidedBy),
+                "pending_action",
+                action.id(),
                 action.sessionId(),
                 action.threadId(),
                 action.turnId(),
@@ -178,6 +194,9 @@ public class ApprovalAudit {
                 clock.instant(),
                 tenantId(),
                 projectId(),
+                RUNTIME,
+                TOOL_CALL,
+                toolUseId,
                 batch.sessionId(),
                 batch.threadId(),
                 batch.turnId(),
@@ -215,6 +234,9 @@ public class ApprovalAudit {
      * @param occurredAt 发生时间
      * @param tenantId 租户 ID
      * @param projectId 项目 ID
+     * @param actor 操作者：runtime 的权限引擎或无人值守的自动拒绝
+     * @param resourceType 资源类型 {@code tool_call}
+     * @param resourceId 工具调用 ID
      * @param sessionId 会话 ID
      * @param threadId 线程 ID
      * @param turnId 轮次 ID
@@ -228,6 +250,9 @@ public class ApprovalAudit {
             Instant occurredAt,
             String tenantId,
             String projectId,
+            AuditActor actor,
+            String resourceType,
+            String resourceId,
             String sessionId,
             String threadId,
             String turnId,
@@ -243,6 +268,9 @@ public class ApprovalAudit {
      * @param occurredAt 发生时间
      * @param tenantId 租户 ID
      * @param projectId 项目 ID
+     * @param actor 操作者：调用方回应时是 API Key 或控制台用户，超时、中断、自动拒绝时是 runtime
+     * @param resourceType 资源类型 {@code pending_action}
+     * @param resourceId 动作 ID
      * @param sessionId 会话 ID
      * @param threadId 线程 ID
      * @param turnId 产生动作的轮次
@@ -260,6 +288,9 @@ public class ApprovalAudit {
             Instant occurredAt,
             String tenantId,
             String projectId,
+            AuditActor actor,
+            String resourceType,
+            String resourceId,
             String sessionId,
             String threadId,
             String turnId,

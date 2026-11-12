@@ -1,5 +1,6 @@
 package cn.refinex.meridian.runtime.tooling.app;
 
+import cn.refinex.meridian.common.audit.AuditActor;
 import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
@@ -55,6 +56,12 @@ public class DatabaseToolLedger implements ToolLedgerPort {
 
     /** 审计的 outbox 主题（架构设计「跨服务数据流」）。 */
     static final String AUDIT_TOPIC = "audit";
+
+    /** 工具执行与沙箱命令审计的操作者：runtime 自己（ADR-0048 第 6 条）。 */
+    static final AuditActor RUNTIME = AuditActor.service("runtime");
+
+    /** 工具执行与沙箱命令审计的资源类型：工具调用，资源 ID 是工具调用 ID。 */
+    static final String TOOL_CALL = "tool_call";
 
     /** 工具调用计数的指标名，导出为 {@code meridian_tool_calls_total}（架构设计「可观测性」）。 */
     static final String TOOL_CALLS = "meridian.tool.calls";
@@ -163,6 +170,9 @@ public class DatabaseToolLedger implements ToolLedgerPort {
                 clock.instant(),
                 context.tenantId(),
                 context.projectId(),
+                RUNTIME,
+                TOOL_CALL,
+                row.toolUseId(),
                 row.sessionId(),
                 row.threadId(),
                 execution.turnId(),
@@ -180,6 +190,9 @@ public class DatabaseToolLedger implements ToolLedgerPort {
      * @param occurredAt 结束时间
      * @param tenantId 租户 ID
      * @param projectId 项目 ID
+     * @param actor 操作者：runtime（ADR-0048 第 6 条）
+     * @param resourceType 资源类型 {@code tool_call}
+     * @param resourceId 工具调用 ID
      * @param sessionId 会话 ID
      * @param threadId 线程 ID
      * @param turnId 轮次 ID
@@ -194,6 +207,9 @@ public class DatabaseToolLedger implements ToolLedgerPort {
             Instant occurredAt,
             String tenantId,
             String projectId,
+            AuditActor actor,
+            String resourceType,
+            String resourceId,
             String sessionId,
             String threadId,
             String turnId,
@@ -210,6 +226,9 @@ public class DatabaseToolLedger implements ToolLedgerPort {
                 clock.instant(),
                 context.tenantId(),
                 context.projectId(),
+                RUNTIME,
+                TOOL_CALL,
+                command.toolUseId(),
                 context.sessionId(),
                 command.threadId(),
                 context.turnId(),
@@ -228,6 +247,9 @@ public class DatabaseToolLedger implements ToolLedgerPort {
      * @param occurredAt 记录时间
      * @param tenantId 租户 ID
      * @param projectId 项目 ID
+     * @param actor 操作者：runtime（ADR-0048 第 6 条）
+     * @param resourceType 资源类型 {@code tool_call}
+     * @param resourceId 工具调用 ID
      * @param sessionId 会话 ID
      * @param threadId 线程 ID
      * @param turnId 轮次 ID
@@ -243,6 +265,9 @@ public class DatabaseToolLedger implements ToolLedgerPort {
             Instant occurredAt,
             String tenantId,
             String projectId,
+            AuditActor actor,
+            String resourceType,
+            String resourceId,
             String sessionId,
             String threadId,
             String turnId,

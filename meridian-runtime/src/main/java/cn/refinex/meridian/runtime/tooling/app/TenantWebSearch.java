@@ -6,12 +6,15 @@ import cn.refinex.meridian.engine.spi.port.SecretResolver;
 import cn.refinex.meridian.engine.spi.port.SecretValue;
 import cn.refinex.meridian.engine.spi.port.WebSearchPort;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
+import cn.refinex.meridian.runtime.tooling.domain.SearchUsageMessage;
 import cn.refinex.meridian.runtime.tooling.domain.WebSearchSettings;
+import java.time.Clock;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -21,7 +24,7 @@ import reactor.core.publisher.Mono;
  *
  * <p>租户从 Reactor Context 的 {@code PlatformContext} 取，设置经 {@link AgentConfigProvider#tenantSettings} 读取（T15b 起由
  * control-plane 下发），API 密钥经 {@link SecretResolver} 在每次调用时解析、只用于这一次请求。租户没有配置或配置的后端没有适配器时，
- * 以"未配置"的错误结束，{@code web_search} 把它作为错误结果交给模型。
+ * 以"未配置"的错误结束，{@code web_search} 把它作为错误结果交给模型。每次成功的搜索记一条用量（种类 {@code search_calls}）。
  *
  * <p>线程安全：不可变。
  */
@@ -32,6 +35,8 @@ public final class TenantWebSearch implements WebSearchPort {
     private final AgentConfigProvider configs;
     private final SecretResolver secrets;
     private final Map<WebSearchSettings.Backend, WebSearchAdapter> adapters;
+    private final Consumer<SearchUsageMessage> usage;
+    private final Clock clock;
 
     /**
      * 创建实现。
@@ -39,13 +44,22 @@ public final class TenantWebSearch implements WebSearchPort {
      * @param configs 租户设置来源
      * @param secrets 凭据解析
      * @param adapters 各后端的适配器
+     * @param usage 用量记录的写入（outbox {@code usage}，会阻塞；在虚拟线程上调用）
+     * @param clock 时钟
      */
-    public TenantWebSearch(AgentConfigProvider configs, SecretResolver secrets, List<WebSearchAdapter> adapters) {
+    public TenantWebSearch(
+            AgentConfigProvider configs,
+            SecretResolver secrets,
+            List<WebSearchAdapter> adapters,
+            Consumer<SearchUsageMessage> usage,
+            Clock clock) {
         this.configs = Objects.requireNonNull(configs, "configs");
         this.secrets = Objects.requireNonNull(secrets, "secrets");
         Map<WebSearchSettings.Backend, WebSearchAdapter> byBackend = new EnumMap<>(WebSearchSettings.Backend.class);
         adapters.forEach(adapter -> byBackend.put(adapter.backend(), adapter));
         this.adapters = Map.copyOf(byBackend);
+        this.usage = Objects.requireNonNull(usage, "usage");
+        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     @Override
@@ -67,7 +81,19 @@ public final class TenantWebSearch implements WebSearchPort {
                                 "web search backend " + settings.backend().value() + " is not available"));
                     }
                     return apiKey(settings)
-                            .flatMap(key -> adapter.search(settings, key.orElse(null), query, maxResults));
+                            .flatMap(key -> adapter.search(settings, key.orElse(null), query, maxResults))
+                            .flatMap(results -> meter(settings.backend()).thenReturn(results));
+                });
+    }
+
+    /** 记一次搜索的用量（架构设计「计量与预算」的搜索次数，ADR-0048）；写入失败只记日志，不影响搜索结果。 */
+    private Mono<Void> meter(WebSearchSettings.Backend backend) {
+        return PlatformContexts.currentReactive()
+                .flatMap(context -> Blocking.run(
+                        () -> usage.accept(SearchUsageMessage.of(context, backend.value(), clock.instant()))))
+                .onErrorResume(error -> {
+                    log.warn("联网搜索的用量记录写入失败 backend={}", backend, error);
+                    return Mono.empty();
                 });
     }
 

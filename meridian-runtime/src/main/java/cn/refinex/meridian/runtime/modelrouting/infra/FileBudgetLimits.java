@@ -4,11 +4,13 @@ import cn.refinex.meridian.common.budget.BudgetLevel;
 import cn.refinex.meridian.runtime.modelrouting.app.BudgetLimitPort;
 import cn.refinex.meridian.runtime.modelrouting.domain.BudgetScope;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * 从开发配置目录 {@code dev-config/budgets} 读取预算硬阈值的 {@link BudgetLimitPort}（T09a；T16 起改为 control-plane 同步的限额）。
+ * 从开发配置目录读取预算硬阈值的 {@link BudgetLimitPort}：只用于测试（{@code budget-source=file}，ADR-0048 第 10 条），生产与开发读
+ * control-plane 同步到 Redis 的限额（{@link RedisBudgetLimits}）。
  *
  * <p>每个文件是一个 {@code kind: budget}：{@code level}（{@code tenant}、{@code project}、{@code api_key}、{@code session}）、
  * {@code scope_id}（具体 ID，或 {@code "*"} 表示该级别的所有范围）、{@code hard_limit_tokens}。同一级别具体 ID 优先于 {@code "*"}；
@@ -36,6 +38,19 @@ public final class FileBudgetLimits implements BudgetLimitPort {
     }
 
     @Override
+    public List<BudgetScope> withLimits(String tenantId, List<BudgetScope> scopes) {
+        return scopes.stream()
+                .map(scope -> scope.withHardLimit(hardLimit(scope.level(), scope.scopeId())))
+                .toList();
+    }
+
+    /**
+     * 一级预算的硬阈值。
+     *
+     * @param level 级别
+     * @param scopeId 范围 ID
+     * @return 硬阈值（token）；负数表示不限
+     */
     public long hardLimit(BudgetLevel level, String scopeId) {
         long wildcard = BudgetScope.UNLIMITED;
         for (Map<String, Object> document : YamlDocuments.load(directory)) {

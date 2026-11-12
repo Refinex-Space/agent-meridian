@@ -24,6 +24,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -497,7 +498,7 @@ class ModelEndpointsIT extends ApiTestBase {
     }
 
     private static long used(String tenant, BudgetLevel level, String scopeId) {
-        return new RedisBudgetLedger(RuntimeTestRedis.template()).used(tenant, level, scopeId);
+        return new RedisBudgetLedger(RuntimeTestRedis.template(), Clock.systemUTC()).used(tenant, level, scopeId);
     }
 
     private static List<Map<String, Object>> usageRecords() {

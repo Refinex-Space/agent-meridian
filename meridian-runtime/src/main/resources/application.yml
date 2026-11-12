@@ -85,7 +85,9 @@ meridian:
       secret-cache-ttl: 5m
       # 供应商端点的地址策略：私有网段不配置时全部放行（private-networks），生产按私有化推理服务所在网段收窄
       allow-loopback-endpoints: false
-      # catalog-source=file 时的供应商目录；预算限额（T16 之前，目录不存在时不限）。都相对于工作目录
+      # 预算限额（ADR-0048）：默认读 control-plane 同步到 Redis 的限额，没有设置的级别为 0（新租户默认零预算）；file 只允许 test
+      budget-source: control-plane
+      # catalog-source=file 时的供应商目录；budget-source=file 时的预算限额（目录不存在时不限）。都相对于工作目录
       providers-directory: dev-config/providers
       budgets-directory: dev-config/budgets
 

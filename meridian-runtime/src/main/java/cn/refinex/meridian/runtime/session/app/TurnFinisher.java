@@ -1,5 +1,6 @@
 package cn.refinex.meridian.runtime.session.app;
 
+import cn.refinex.meridian.common.audit.AuditActor;
 import cn.refinex.meridian.common.context.Interaction;
 import cn.refinex.meridian.common.id.IdPrefix;
 import cn.refinex.meridian.common.id.Ids;
@@ -447,6 +448,9 @@ public class TurnFinisher {
                         clock.instant(),
                         turn.tenantId(),
                         turn.projectId(),
+                        AuditActor.service("runtime"),
+                        "turn",
+                        turn.turnId(),
                         turn.sessionId(),
                         turn.threadId(),
                         turn.turnId(),
@@ -464,12 +468,15 @@ public class TurnFinisher {
     }
 
     /**
-     * 轮次结束的审计记录（outbox 主题 {@code audit}），格式由 T16 的审计消费者定稿。
+     * 轮次结束的审计记录（outbox 主题 {@code audit}），标准字段见 ADR-0048 第 6 条。
      *
      * @param action 动作，固定为 {@code turn.finished}
      * @param occurredAt 发生时间
      * @param tenantId 租户 ID
      * @param projectId 项目 ID
+     * @param actor 操作者：runtime
+     * @param resourceType 资源类型 {@code turn}
+     * @param resourceId 轮次 ID
      * @param sessionId 会话 ID
      * @param threadId 线程 ID
      * @param turnId 轮次 ID
@@ -485,6 +492,9 @@ public class TurnFinisher {
             Instant occurredAt,
             String tenantId,
             String projectId,
+            AuditActor actor,
+            String resourceType,
+            String resourceId,
             String sessionId,
             String threadId,
             String turnId,

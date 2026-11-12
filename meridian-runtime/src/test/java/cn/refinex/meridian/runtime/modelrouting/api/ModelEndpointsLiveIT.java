@@ -16,6 +16,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -72,7 +73,7 @@ class ModelEndpointsLiveIT extends ApiTestBase {
 
     @Test
     void streamingChatCompletionIsSettledWithTheReportedUsage() {
-        long apiKeyUsedBefore = new RedisBudgetLedger(RuntimeTestRedis.template())
+        long apiKeyUsedBefore = new RedisBudgetLedger(RuntimeTestRedis.template(), Clock.systemUTC())
                 .used(ApiTestKeys.TENANT, BudgetLevel.API_KEY, "key_test_a");
 
         EntityExchangeResult<byte[]> result = client().post()
@@ -119,7 +120,7 @@ class ModelEndpointsLiveIT extends ApiTestBase {
         Map<String, Object> record = usage(ApiTestKeys.TENANT).getLast();
         assertThat(record).containsEntry("usage_source", "provider").containsEntry("model_id", "mdl_live_chat");
         assertThat(record).containsEntry("input_tokens", prompt).containsEntry("output_tokens", completion);
-        assertThat(new RedisBudgetLedger(RuntimeTestRedis.template())
+        assertThat(new RedisBudgetLedger(RuntimeTestRedis.template(), Clock.systemUTC())
                                 .used(ApiTestKeys.TENANT, BudgetLevel.API_KEY, "key_test_a")
                         - apiKeyUsedBefore)
                 .as("预算按供应商报告的输入加输出结算")

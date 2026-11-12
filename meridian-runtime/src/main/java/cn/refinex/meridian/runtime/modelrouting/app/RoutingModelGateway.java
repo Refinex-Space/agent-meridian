@@ -6,7 +6,6 @@ import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.MeridianException;
 import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.common.error.ValidationException;
-import cn.refinex.meridian.common.id.Ids;
 import cn.refinex.meridian.engine.spi.error.BudgetExceededException;
 import cn.refinex.meridian.engine.spi.error.RateLimitTimeoutException;
 import cn.refinex.meridian.engine.spi.port.ModelGateway;
@@ -38,7 +37,8 @@ import reactor.core.publisher.Mono;
  *       调用方租户（ADR-0045），否则与不存在相同。
  *   <li>限流："供应商账号加模型"的 RPM、TPM 令牌桶（{@link RedisRateLimiter}），需要等待时按令牌桶给出的时间等，累计等待会超过
  *       {@link ModelRoutingProperties#rateLimitMaxWait()}（30 秒）时立即抛 {@link RateLimitTimeoutException}，不空等到超时。
- *   <li>预算：租户、项目、API Key、会话四级（{@link RedisBudgetLedger}），硬阈值来自 {@link BudgetLimitPort}，任一级不足抛
+ *   <li>预算：租户、项目、API Key、会话四级（{@link RedisBudgetLedger}），硬阈值来自 {@link BudgetLimitPort}（生产为 control-plane
+ *       同步到 Redis 的限额，没有设置的级别为 0，ADR-0048），任一级不足抛
  *       {@link BudgetExceededException}。范围取 Reactor Context 中的 {@code PlatformContext}，缺少的级别（例如直通接口没有会话）不计。
  *   <li>结算：先写用量记录（outbox {@code usage}），再按"输入加输出"修正各级计数、退回 TPM 桶多扣的 token，最后记指标。先写记录再改
  *       计数：Redis 失败时计数偏多（预扣留在计数里），由对账按账本修正，不会少记。
@@ -191,7 +191,7 @@ public class RoutingModelGateway implements ModelGateway {
     @Override
     public Mono<BudgetReservation> reserve(ModelRoute route, int estimatedTokens) {
         return PlatformContexts.currentReactive().flatMap(context -> {
-            String reservationId = Ids.newUlid();
+            String reservationId = ledger.newReservationId();
             return Blocking.call(() -> ledger.reserve(
                             context.tenantId(),
                             limitedScopes(context),
@@ -268,9 +268,7 @@ public class RoutingModelGateway implements ModelGateway {
 
     /** 调用上下文涉及的各级预算范围，带上硬阈值。在虚拟线程上执行（读限额会阻塞）。 */
     private List<BudgetScope> limitedScopes(PlatformContext context) {
-        return BudgetScope.of(context).stream()
-                .map(scope -> scope.withHardLimit(budgets.hardLimit(scope.level(), scope.scopeId())))
-                .toList();
+        return budgets.withLimits(context.tenantId(), BudgetScope.of(context));
     }
 
     private CatalogEntry entry(String modelId) {

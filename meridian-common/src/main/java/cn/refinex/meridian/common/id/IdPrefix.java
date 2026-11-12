@@ -53,7 +53,11 @@ public enum IdPrefix {
     /** 价格表（ADR-0045）。 */
     PRICE_BOOK("prb"),
     /** 租户与项目策略中的权限规则（ADR-0047）。 */
-    PERMISSION_RULE("prl");
+    PERMISSION_RULE("prl"),
+    /** 预算（T16，ADR-0048）。 */
+    BUDGET("bdg"),
+    /** 预算告警（T16，ADR-0048）。 */
+    BUDGET_ALERT("bal");
 
     private final String value;
 

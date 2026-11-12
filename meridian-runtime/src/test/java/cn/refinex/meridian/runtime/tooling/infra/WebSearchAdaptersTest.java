@@ -20,12 +20,17 @@ import cn.refinex.meridian.engine.spi.port.SecretValue;
 import cn.refinex.meridian.engine.spi.port.WebSearchPort;
 import cn.refinex.meridian.runtime.config.FileAgentConfigProvider;
 import cn.refinex.meridian.runtime.tooling.app.TenantWebSearch;
+import cn.refinex.meridian.runtime.tooling.domain.SearchUsageMessage;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -55,6 +60,9 @@ class WebSearchAdaptersTest {
 
     private TenantWebSearch search;
 
+    /** 写入的用量记录（T16：每次成功的搜索一条，ADR-0048）。 */
+    private final List<SearchUsageMessage> usage = new CopyOnWriteArrayList<>();
+
     @BeforeEach
     void configureTenants() throws IOException {
         Files.writeString(directory.resolve("ten-searxng.yaml"), """
@@ -77,7 +85,12 @@ class WebSearchAdaptersTest {
                 ? reactor.core.publisher.Mono.just(new SecretValue(BOCHA_KEY))
                 : reactor.core.publisher.Mono.error(new NotFoundException("凭据不存在：" + id));
         FileAgentConfigProvider configs = new FileAgentConfigProvider(directory);
-        search = new TenantWebSearch(configs, secrets, List.of(new SearxngSearchAdapter(), new BochaSearchAdapter()));
+        search = new TenantWebSearch(
+                configs,
+                secrets,
+                List.of(new SearxngSearchAdapter(), new BochaSearchAdapter()),
+                usage::add,
+                Clock.fixed(Instant.parse("2026-11-12T08:00:00Z"), ZoneOffset.UTC));
         searxng.stubFor(get(urlPathEqualTo("/search"))
                 .willReturn(aResponse()
                         .withHeader("Content-Type", "application/json")
@@ -108,6 +121,18 @@ class WebSearchAdaptersTest {
                 .withQueryParam("q", equalTo("agentscope"))
                 .withQueryParam("format", equalTo("json")));
         bocha.verify(0, postRequestedFor(urlPathEqualTo("/v1/web-search")));
+        assertThat(usage)
+                .containsExactly(new SearchUsageMessage(
+                        "search_calls",
+                        Instant.parse("2026-11-12T08:00:00Z"),
+                        "ten_searxng",
+                        "prj_test",
+                        null,
+                        null,
+                        null,
+                        null,
+                        "searxng",
+                        1));
     }
 
     @Test
@@ -140,6 +165,7 @@ class WebSearchAdaptersTest {
 
         assertThatThrownBy(() -> searchAs("ten_unconfigured", "x", 3))
                 .hasMessage("web search is not configured for this organization");
+        assertThat(usage).as("失败的搜索不计量").isEmpty();
     }
 
     private List<WebSearchPort.Result> searchAs(String tenantId, String query, int max) {

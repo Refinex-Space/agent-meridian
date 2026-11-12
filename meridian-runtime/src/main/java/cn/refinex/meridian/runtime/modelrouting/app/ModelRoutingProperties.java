@@ -14,13 +14,15 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param reservationTtl 预扣记录在 Redis 中的保留时间，默认 1 小时；远大于一次模型调用的时长，过期未结算的预扣由对账修正
  * @param providersDirectory 开发与测试的供应商与模型目录，{@code catalog-source=file} 时使用，默认相对于工作目录的
  *     {@code dev-config/providers}
- * @param budgetsDirectory 开发期预算限额（T16 之前），默认 {@code dev-config/budgets}；不存在时不限
+ * @param budgetsDirectory {@code budget-source=file} 时的预算限额目录，默认 {@code dev-config/budgets}；不存在时不限
  * @param catalogSource 目录与凭据的来源：{@code control-plane}（默认，经内部接口解析，ADR-0045）或 {@code file}（只在 {@code dev}、
  *     {@code test} profile：{@code providersDirectory} 加环境变量中的 {@code *_API_KEY}）
  * @param catalogCacheTtl 模型目录的缓存时间，默认 60 秒：{@code config.invalidate} 丢失时的兜底
  * @param secretCacheTtl 凭据明文在内存中的缓存时间，默认 5 分钟（架构设计「凭据」）
  * @param allowLoopbackEndpoints 供应商端点是否放行回环地址：只在开发与测试为真（ADR-0045 第 5 条）
  * @param privateNetworks 供应商端点放行的私有网段；不配置时为全部私有网段
+ * @param budgetSource 预算限额的来源：{@code control-plane}（默认，读 control-plane 同步到 Redis 的限额，没有设置的级别为 0，
+ *     ADR-0048）或 {@code file}（只在 {@code test} profile：{@code budgetsDirectory}，没有配置的级别不限）
  */
 @ConfigurationProperties("meridian.runtime.model-routing")
 public record ModelRoutingProperties(
@@ -32,7 +34,8 @@ public record ModelRoutingProperties(
         @DefaultValue("60s") Duration catalogCacheTtl,
         @DefaultValue("5m") Duration secretCacheTtl,
         boolean allowLoopbackEndpoints,
-        List<String> privateNetworks) {
+        List<String> privateNetworks,
+        @DefaultValue(CONTROL_PLANE) String budgetSource) {
 
     /** 目录与凭据来自 control-plane。 */
     public static final String CONTROL_PLANE = "control-plane";
@@ -54,6 +57,9 @@ public record ModelRoutingProperties(
         }
         if (!CONTROL_PLANE.equals(catalogSource) && !FILE.equals(catalogSource)) {
             throw new IllegalArgumentException("catalog-source 必须是 control-plane 或 file：" + catalogSource);
+        }
+        if (!CONTROL_PLANE.equals(budgetSource) && !FILE.equals(budgetSource)) {
+            throw new IllegalArgumentException("budget-source 必须是 control-plane 或 file：" + budgetSource);
         }
         privateNetworks =
                 privateNetworks == null ? EndpointPolicy.DEFAULT_PRIVATE_NETWORKS : List.copyOf(privateNetworks);
@@ -83,6 +89,7 @@ public record ModelRoutingProperties(
                 Duration.ofSeconds(60),
                 Duration.ofMinutes(5),
                 true,
-                null);
+                null,
+                FILE);
     }
 }
