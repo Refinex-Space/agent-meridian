@@ -12,7 +12,8 @@ import tools.jackson.databind.JsonNode;
 /**
  * 解析 outbox 主题 {@code usage} 的消息（ADR-0048 第 3 条）。runtime 的三种消息：模型调用（{@code ModelUsageMessage}，种类
  * {@code model_tokens}、{@code embedding_tokens}、{@code rerank_tokens}）、沙箱 vCPU 秒（{@code SandboxUsageMessage}）、联网搜索
- * （{@code SearchUsageMessage}）。格式不对的消息抛 {@link IllegalArgumentException}，由消费者转入死信。
+ * （{@code SearchUsageMessage}）；knowledge 的知识库存储 GB 天（{@code StorageUsageMessage}，ADR-0051）。格式不对的消息抛
+ * {@link IllegalArgumentException}，由消费者转入死信。
  */
 public final class UsageMessages {
 
@@ -98,6 +99,14 @@ public final class UsageMessages {
                 attributes.put("backend", required(node, "backend"));
                 long calls = node.has("count") ? count(node, "count") : 1;
                 yield simple(messageId, occurredAt, kind, tenantId, node, BigDecimal.valueOf(calls), attributes);
+            }
+            case KNOWLEDGE_STORAGE_GB_DAYS -> {
+                Map<String, Object> attributes = new LinkedHashMap<>();
+                attributes.put("knowledge_base_id", required(node, "knowledge_base_id"));
+                attributes.put("day", required(node, "day"));
+                attributes.put("file_bytes", count(node, "file_bytes"));
+                attributes.put("index_bytes", count(node, "index_bytes"));
+                yield simple(messageId, occurredAt, kind, tenantId, node, decimal(node, "gb_days"), attributes);
             }
         };
     }

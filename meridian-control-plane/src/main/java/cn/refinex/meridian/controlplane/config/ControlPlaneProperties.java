@@ -17,7 +17,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param serviceTokens 服务 JWT 的签发（ADR-0044）
  * @param secrets 凭据库（ADR-0045）
  * @param providerEndpoints 供应商与搜索后端端点的地址策略（ADR-0045 第 5 条）
- * @param knowledge 知识库目录的开发配置（ADR-0047，T18 之前）
+ * @param knowledge knowledge 服务的地址：发布智能体版本时经它校验知识库（ADR-0051）
  * @param metering 用量与审计消费者、分区维护、预算的限额同步与对账（ADR-0048）
  * @param webhooks Webhook 地址的地址策略（ADR-0049）
  */
@@ -187,17 +187,11 @@ public record ControlPlaneProperties(
     }
 
     /**
-     * 知识库目录（发布智能体版本时校验知识库存在，ADR-0047）。T18 之前没有 knowledge 服务，开发实现只认这里列出的知识库 ID。
+     * knowledge 服务（发布智能体版本时校验知识库存在且属于同一项目，ADR-0047、ADR-0051）。
      *
-     * @param devKnowledgeBaseIds 视为存在的知识库 ID；不配置时没有任何知识库存在
+     * @param url knowledge 的基础 URL，例如 {@code http://knowledge:18083}；为空表示没有部署，引用了知识库的发布返回 503
      */
-    public record Knowledge(List<String> devKnowledgeBaseIds) {
-
-        /** 规整空列表。 */
-        public Knowledge {
-            devKnowledgeBaseIds = devKnowledgeBaseIds == null ? List.of() : List.copyOf(devKnowledgeBaseIds);
-        }
-    }
+    public record Knowledge(String url) {}
 
     /**
      * 用量与审计消费者、分区维护、预算的限额同步与对账（ADR-0048）。

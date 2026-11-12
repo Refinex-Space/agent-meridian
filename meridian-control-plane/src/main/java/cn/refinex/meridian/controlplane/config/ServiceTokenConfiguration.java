@@ -1,7 +1,9 @@
 package cn.refinex.meridian.controlplane.config;
 
+import cn.refinex.meridian.controlplane.servicetoken.app.ServiceTokenIssuer;
 import cn.refinex.meridian.controlplane.servicetoken.app.SigningKeySource;
 import cn.refinex.meridian.controlplane.servicetoken.infra.DirectorySigningKeys;
+import cn.refinex.meridian.security.servicejwt.ServiceCredentialProvider;
 import cn.refinex.meridian.security.servicejwt.ServiceCredentialResolver;
 import cn.refinex.meridian.security.servicejwt.ServiceJwtVerifier;
 import cn.refinex.meridian.security.servicejwt.ServiceJwts;
@@ -17,8 +19,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 服务 JWT 的装配（ADR-0044）：签名密钥的来源（开发方式是目录，生产实现以同类型的 bean 替换），以及 control-plane 自己的 {@code /internal/}
- * 校验器——用进程内的公钥，不经 HTTP 读自己的 JWKS。
+ * 服务 JWT 的装配（ADR-0044）：签名密钥的来源（开发方式是目录，生产实现以同类型的 bean 替换），control-plane 自己的 {@code /internal/}
+ * 校验器——用进程内的公钥，不经 HTTP 读自己的 JWKS；以及调用其他服务（knowledge）时的出站凭据——进程内签发（ADR-0051）。
  */
 @Configuration(proxyBeanMethods = false)
 public class ServiceTokenConfiguration {
@@ -40,6 +42,17 @@ public class ServiceTokenConfiguration {
                     "没有配置服务 JWT 的签名密钥目录 meridian.control-plane.service-tokens.key-directory（生产改用密钥管理系统，T28）");
         }
         return new DirectorySigningKeys(Path.of(directory), clock);
+    }
+
+    /**
+     * control-plane 调用其他服务时的服务 JWT：由本进程的签发用例直接签发，每次调用一个新令牌（调用很少：发布智能体版本时）。
+     *
+     * @param issuer 签发用例
+     * @return 出站凭据
+     */
+    @Bean
+    public ServiceCredentialProvider serviceCredentialProvider(ServiceTokenIssuer issuer) {
+        return audience -> issuer.issueOwn(audience).token();
     }
 
     /**

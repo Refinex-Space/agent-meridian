@@ -1,0 +1,11 @@
+{
+  "kind": "knowledge_storage_gb_days",
+  "occurred_at": "2026-11-12T00:00:00Z",
+  "tenant_id": "ten_sample",
+  "project_id": "prj_sample",
+  "knowledge_base_id": "kb_sample",
+  "day": "2026-11-11",
+  "file_bytes": 1500000000,
+  "index_bytes": 250000000,
+  "gb_days": 1.75
+}

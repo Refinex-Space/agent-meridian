@@ -56,7 +56,7 @@ class MeteringDomainTest {
     }
 
     @Test
-    void sandboxSearchAndEmbeddingUsageAreParsed() {
+    void sandboxSearchStorageAndEmbeddingUsageAreParsed() {
         UsageRecord sandbox = UsageMessages.parse("msg_s", OutboxSamples.read("usage", "sandbox_vcpu_seconds"));
         assertThat(sandbox.kind()).isEqualTo(UsageKind.SANDBOX_VCPU_SECONDS);
         assertThat(sandbox.quantity()).isEqualByComparingTo("12.5");
@@ -68,6 +68,18 @@ class MeteringDomainTest {
         assertThat(search.quantity()).isEqualByComparingTo("1");
         assertThat(search.attributes()).containsEntry("backend", "searxng");
         assertThat(search.apiKeyId()).isEqualTo("key_sample");
+
+        UsageRecord storage = UsageMessages.parse("msg_k", OutboxSamples.read("usage", "knowledge_storage_gb_days"));
+        assertThat(storage.kind()).isEqualTo(UsageKind.KNOWLEDGE_STORAGE_GB_DAYS);
+        assertThat(storage.kind().tokens()).isFalse();
+        assertThat(storage.quantity()).isEqualByComparingTo("1.75");
+        assertThat(storage.billableTokens()).isZero();
+        assertThat(storage.projectId()).isEqualTo("prj_sample");
+        assertThat(storage.attributes())
+                .containsEntry("knowledge_base_id", "kb_sample")
+                .containsEntry("day", "2026-11-11")
+                .containsEntry("file_bytes", 1500000000L)
+                .containsEntry("index_bytes", 250000000L);
 
         UsageRecord embedding = UsageMessages.parse("msg_e", OutboxSamples.read("usage", "embedding_tokens"));
         assertThat(embedding.kind()).isEqualTo(UsageKind.EMBEDDING_TOKENS);

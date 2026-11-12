@@ -1,0 +1,15 @@
+# 集成测试：数据源、Redis、对象存储、control-plane 与 runtime 替身、doc-parser 的地址由测试基类的 @DynamicPropertySource 注入。
+meridian:
+  knowledge:
+    ingestion:
+      # 测试里让作业尽快被认领、重试间隔短
+      poll-interval: 200ms
+      backoff-base: 1s
+      heartbeat: 1s
+    storage-metering:
+      # 存储计量由测试手动执行（共用的库中，定期任务会处理别的测试的数据）
+      enabled: false
+
+logging:
+  level:
+    cn.refinex.meridian: DEBUG

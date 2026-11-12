@@ -13,7 +13,9 @@ public enum UsageKind {
     /** 沙箱 vCPU 秒（ADR-0037）。 */
     SANDBOX_VCPU_SECONDS,
     /** 联网搜索次数。 */
-    SEARCH_CALLS;
+    SEARCH_CALLS,
+    /** 知识库存储 GB 天：knowledge 每天为每个知识库上报一条（ADR-0051）。 */
+    KNOWLEDGE_STORAGE_GB_DAYS;
 
     /**
      * 消息、数据库与接口中的取值。

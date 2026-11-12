@@ -5,7 +5,8 @@
 #   docker compose -f deploy/compose/compose.yaml --profile app up -d，端到端检查用 scripts/dev/app-smoke.sh。
 # auth profile（T14b，ADR-0043、ADR-0044）：Keycloak，导入开发 realm deploy/keycloak/meridian-dev-realm.json；
 #   docker compose -f deploy/compose/compose.yaml --env-file deploy/compose/.env --profile auth up -d keycloak
-# 可观测（observability）等可选组件由后续任务以 profile 加入，T18 在 app 中加入 knowledge 与 doc-parser（架构设计「本地开发」）。
+# app profile 另有 knowledge 与 doc-parser（T18）：doc-parser 镜像由 build-images.sh 用 docker build 构建（含 Docling 模型，约 10 分钟）。
+# 可观测（observability）等可选组件由后续任务以 profile 加入（架构设计「本地开发」）。
 name: agent-meridian
 
 services:
@@ -127,6 +128,8 @@ services:
       MERIDIAN_MIGRATOR_PASSWORD: ${MERIDIAN_MIGRATOR_PASSWORD}
       MERIDIAN_RUNTIME_CLIENT_SECRET: ${MERIDIAN_RUNTIME_CLIENT_SECRET:?在 .env 中设置 MERIDIAN_RUNTIME_CLIENT_SECRET}
       MERIDIAN_EGRESS_PROXY_CLIENT_SECRET: ${MERIDIAN_EGRESS_PROXY_CLIENT_SECRET:?在 .env 中设置 MERIDIAN_EGRESS_PROXY_CLIENT_SECRET}
+      MERIDIAN_KNOWLEDGE_CLIENT_SECRET: ${MERIDIAN_KNOWLEDGE_CLIENT_SECRET:?在 .env 中设置 MERIDIAN_KNOWLEDGE_CLIENT_SECRET}
+      MERIDIAN_KNOWLEDGE_URL: http://knowledge:18083
       MERIDIAN_SERVICE_TOKEN_KEY_DIR: /var/lib/meridian/service-token-keys
       MERIDIAN_SECRET_MASTER_KEY_FILE: /var/lib/meridian/secret-master-key/master.key
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -194,6 +197,49 @@ services:
     image: agent-meridian/scripted-model:dev
     ports:
       - "127.0.0.1:${MERIDIAN_SCRIPTED_MODEL_PORT:-18090}:18090"
+
+  # ---- T18：知识库写入 ----
+  knowledge:
+    profiles: [app]
+    image: agent-meridian/knowledge:dev
+    depends_on:
+      control-plane:
+        condition: service_healthy
+      runtime:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      MERIDIAN_DB_URL: jdbc:postgresql://postgres:5432/meridian
+      MERIDIAN_REDIS_HOST: redis
+      MERIDIAN_REDIS_PORT: "6379"
+      MERIDIAN_APP_PASSWORD: ${MERIDIAN_APP_PASSWORD}
+      MERIDIAN_MIGRATOR_PASSWORD: ${MERIDIAN_MIGRATOR_PASSWORD}
+      MERIDIAN_KNOWLEDGE_CLIENT_SECRET: ${MERIDIAN_KNOWLEDGE_CLIENT_SECRET}
+      MERIDIAN_CONTROL_PLANE_URL: http://control-plane:18081
+      MERIDIAN_RUNTIME_URL: http://runtime:8080
+      MERIDIAN_DOC_PARSER_URL: http://doc-parser:8000
+      MERIDIAN_OIDC_ISSUER: http://localhost:${MERIDIAN_KEYCLOAK_PORT:-18082}/realms/meridian-dev
+      MERIDIAN_OIDC_JWKS_URI: http://keycloak:8080/realms/meridian-dev/protocol/openid-connect/certs
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MERIDIAN_S3_BUCKET: ${MERIDIAN_S3_BUCKET:-meridian}
+      MERIDIAN_PERSISTENCE_OBJECTSTORE_ENDPOINT: http://minio:9000
+    ports:
+      - "127.0.0.1:${MERIDIAN_KNOWLEDGE_PORT:-18083}:18083"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/18083 && printf 'GET /actuator/health HTTP/1.0\r\n\r\n' >&3 && grep -q UP <&3"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+
+  doc-parser:
+    profiles: [app]
+    image: agent-meridian/doc-parser:dev
+    ports:
+      - "127.0.0.1:${MERIDIAN_DOC_PARSER_PORT:-18084}:8000"
 
 volumes:
   service-token-keys:

@@ -10,8 +10,8 @@ import java.util.List;
 public final class OutboxSamples {
 
     /** 用量主题的样本名，与 {@code kind} 相同。 */
-    public static final List<String> USAGE =
-            List.of("model_tokens", "embedding_tokens", "sandbox_vcpu_seconds", "search_calls");
+    public static final List<String> USAGE = List.of(
+            "model_tokens", "embedding_tokens", "sandbox_vcpu_seconds", "search_calls", "knowledge_storage_gb_days");
 
     /** 审计主题的样本名，与 {@code action} 的点换成下划线相同。 */
     public static final List<String> AUDIT = List.of(

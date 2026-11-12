@@ -99,6 +99,26 @@ public class ServiceTokenIssuer {
         return new IssuedToken(sign(claims), ServiceJwts.TOKEN_TTL);
     }
 
+    /**
+     * 为 control-plane 自己签发调用其他服务的令牌（{@code sub} 为 {@value ServiceJwts#CONTROL_PLANE}，ADR-0051）：control-plane 是签发方，
+     * 不经令牌端点、不需要客户端密钥。
+     *
+     * @param audience 目标服务名，例如 {@value ServiceJwts#KNOWLEDGE}
+     * @return 令牌与有效期
+     */
+    public IssuedToken issueOwn(String audience) {
+        Instant now = clock.instant();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(issuer)
+                .subject(ServiceJwts.CONTROL_PLANE)
+                .audience(audience)
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plus(ServiceJwts.TOKEN_TTL)))
+                .jwtID(UUID.randomUUID().toString())
+                .build();
+        return new IssuedToken(sign(claims), ServiceJwts.TOKEN_TTL);
+    }
+
     private String sign(JWTClaimsSet claims) {
         RSAKey key = keys.current();
         try {

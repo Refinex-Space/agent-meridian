@@ -4887,9 +4887,9 @@ components:
             type: number
         - type: string
     UsageKind:
-      description: 计量种类：模型 token、Embedding token、rerank token、沙箱 vCPU 秒、搜索次数。
+      description: 计量种类：模型 token、Embedding token、rerank token、沙箱 vCPU 秒、搜索次数、知识库存储 GB 天（ADR-0051）。
       type: string
-      enum: [model_tokens, embedding_tokens, rerank_tokens, sandbox_vcpu_seconds, search_calls]
+      enum: [model_tokens, embedding_tokens, rerank_tokens, sandbox_vcpu_seconds, search_calls, knowledge_storage_gb_days]
     UsageReport:
       description: 按账本明细聚合的用量。
       type: object

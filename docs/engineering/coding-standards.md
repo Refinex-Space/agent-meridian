@@ -61,7 +61,8 @@ package cn.refinex.meridian.runtime.dispatch;
 | 游标分页 | `common.page` | `Cursor`、`PageResult` |
 | JSON 序列化配置（snake_case、时间格式） | `common.json` | 平台 API 用 Jackson 3 |
 | SHA-256 摘要的十六进制 | `common.crypto` | `Sha256.hex(bytes / text / Path)`；要原始字节、截断或分段更新时直接用 `MessageDigest`（R1 Q-L1） |
-| 按字符数估算 token | `common.text` | `TextTokens`：内核的 `TokenEstimator` 与 runtime 的 Embedding、rerank 共用（R1 Q-M1） |
+| 按字符数估算 token | `common.text` | `TextTokens.estimate`：内核的 `TokenEstimator` 与 runtime 的 Embedding、rerank 共用（R1 Q-M1）；`TextTokens.approximate` 贴近 Qwen 分词，只给知识库切分（ADR-0051） |
+| 文件名规范化 | `common.text` | `FileNames.normalize`：runtime 的上传文件与 knowledge 的文档共用（ADR-0050、ADR-0051） |
 | 首包之前的供应商重试 | `engine.spi.port` | `ProviderRetryPolicy`：`RoutedModel` 与 `VectorModelService` 共用的次数、指数退避与 `Retry-After` 上限（R1 Q-M2） |
 | 时钟 | `common.time` | 注入 `java.time.Clock`，禁止直接 `Instant.now()` |
 | `PlatformContext` 与传递 | `common.context` | MVC 服务用 `ScopedValue`；runtime 用 Reactor Context |

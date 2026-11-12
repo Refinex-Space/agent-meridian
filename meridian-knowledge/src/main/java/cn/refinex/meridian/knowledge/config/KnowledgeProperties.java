@@ -82,9 +82,9 @@ public record KnowledgeProperties(
      * doc-parser 服务。
      *
      * @param url 基础 URL，例如 {@code http://doc-parser:8000}；为空表示没有部署，需要它的文档写入失败（不重试）
-     * @param timeout 单次解析的读取超时，默认 10 分钟（大扫描件逐页 OCR）
+     * @param timeout 单次解析的读取超时，默认 15 分钟：CPU 上识别表格结构、逐页 OCR 都慢（doc-parser 的 README 有实测）
      */
-    public record DocParser(String url, @DefaultValue("10m") Duration timeout) {}
+    public record DocParser(String url, @DefaultValue("15m") Duration timeout) {}
 
     /**
      * runtime 服务。

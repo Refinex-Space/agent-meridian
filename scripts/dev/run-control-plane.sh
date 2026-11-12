@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # 以 dev profile 在本机启动 control-plane（端口 18081），连接 scripts/dev/up.sh 启动的 PostgreSQL 与 Redis。
-# 口令与客户端密钥读取 deploy/compose/.env，不存在时使用 .env.example（与 up.sh 一致），只传给 Java 进程，不打印。
+# 口令与客户端密钥读取 deploy/compose/.env.example 与 .env（后者覆盖前者），只传给 Java 进程，不打印。
 # 用法：scripts/dev/run-control-plane.sh [Spring Boot 参数]；Ctrl+C 停止。管理 API 的令牌用 scripts/dev/console-token.sh（需要 auth profile）。
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${repo_root}"
 
-env_file="deploy/compose/.env"
-if [[ ! -f "${env_file}" ]]; then
-    env_file="deploy/compose/.env.example"
-fi
+# 先读 .env.example 的默认值，再用 .env 覆盖：旧的 .env 里没有后来新增的变量（例如 T18 的 MERIDIAN_KNOWLEDGE_CLIENT_SECRET）时取示例值
 set -a
-# shellcheck disable=SC1090
-source "${env_file}"
+# shellcheck disable=SC1091
+source deploy/compose/.env.example
+if [[ -f deploy/compose/.env ]]; then
+    # shellcheck disable=SC1091
+    source deploy/compose/.env
+fi
 set +a
 export MERIDIAN_DB_URL="${MERIDIAN_DB_URL:-jdbc:postgresql://localhost:${MERIDIAN_POSTGRES_PORT}/meridian}"
 

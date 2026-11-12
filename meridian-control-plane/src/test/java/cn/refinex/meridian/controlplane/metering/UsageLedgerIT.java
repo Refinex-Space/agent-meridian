@@ -90,7 +90,7 @@ class UsageLedgerIT extends ControlPlaneTestBase {
     }
 
     @Test
-    void sandboxSearchAndEmbeddingUsageAreRecordedWithTheirQuantities() {
+    void sandboxSearchStorageAndEmbeddingUsageAreRecordedWithTheirQuantities() {
         TenantFixture fixture = TenantFixture.create(client());
         String tenant = fixture.get("tenant");
         String project = fixture.get("project");
@@ -100,6 +100,11 @@ class UsageLedgerIT extends ControlPlaneTestBase {
                 sample("usage", "sandbox_vcpu_seconds", fields("tenant_id", tenant, "project_id", project)));
         String search = publish(
                 redis, "usage", sample("usage", "search_calls", fields("tenant_id", tenant, "project_id", project)));
+        // knowledge 的知识库存储量（ADR-0051）
+        String storage = publish(
+                redis,
+                "usage",
+                sample("usage", "knowledge_storage_gb_days", fields("tenant_id", tenant, "project_id", project)));
         String embedding = publish(
                 redis,
                 "usage",
@@ -116,11 +121,12 @@ class UsageLedgerIT extends ControlPlaneTestBase {
                                 "price_book_id",
                                 fixture.get("price_book"))));
         await(
-                "三条入账",
+                "四条入账",
                 () -> count("usage_records", embedding)
                                 + count("usage_records", sandbox)
                                 + count("usage_records", search)
-                        == 3);
+                                + count("usage_records", storage)
+                        == 4);
 
         assertThat(quantity(sandbox)).isEqualByComparingTo("12.5");
         assertThat(cost(sandbox)).as("沙箱没有单价").isNull();
@@ -130,6 +136,13 @@ class UsageLedgerIT extends ControlPlaneTestBase {
                         .single())
                 .isEqualTo("small");
         assertThat(quantity(search)).isEqualByComparingTo("1");
+        assertThat(quantity(storage)).isEqualByComparingTo("1.75");
+        assertThat(cost(storage)).as("存储没有单价").isNull();
+        assertThat(db().sql("SELECT attributes->>'knowledge_base_id' FROM cp.usage_records WHERE id = :id")
+                        .param("id", storage)
+                        .query(String.class)
+                        .single())
+                .isEqualTo("kb_sample");
         // Embedding 只有输入：640 × 0.8 / 1e6
         assertThat(cost(embedding)).isEqualByComparingTo("0.000512");
         assertThat(budgetUsage(tenant, "project", project, "2026-11"))

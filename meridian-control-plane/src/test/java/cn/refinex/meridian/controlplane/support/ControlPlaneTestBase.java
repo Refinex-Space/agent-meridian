@@ -63,8 +63,8 @@ public abstract class ControlPlaneTestBase {
     /** 进程内的 MCP 服务，同一 JVM 中的测试共用（登记时探测它）。 */
     public static final TestMcpServer MCP = TestMcpServer.start(MCP_TOKEN);
 
-    /** 开发期知识库目录中存在的知识库（T18 之前的 {@code ConfiguredKnowledgeCatalog}）。 */
-    public static final String KNOWN_KNOWLEDGE_BASE = "kb_test_known";
+    /** knowledge 内部接口的替身：发布智能体版本时经它校验知识库（ADR-0051），测试用 {@code KNOWLEDGE.register} 登记知识库。 */
+    public static final StubKnowledge KNOWLEDGE = StubKnowledge.start();
 
     @LocalServerPort
     protected int port;
@@ -76,7 +76,7 @@ public abstract class ControlPlaneTestBase {
         // 技能文件存对象存储（ADR-0047）
         SpringContainerProperties.minio(registry);
         registry.add("meridian.security.oidc.issuer", KeycloakRealm::issuer);
-        registry.add("meridian.control-plane.knowledge.dev-knowledge-base-ids[0]", () -> KNOWN_KNOWLEDGE_BASE);
+        registry.add("meridian.control-plane.knowledge.url", KNOWLEDGE::url);
         registry.add("meridian.control-plane.service-tokens.key-directory", KEY_DIRECTORY::toString);
         registry.add("meridian.control-plane.service-tokens.clients[0].service", () -> RUNTIME_CLIENT);
         registry.add("meridian.control-plane.service-tokens.clients[0].secret", () -> RUNTIME_SECRET);

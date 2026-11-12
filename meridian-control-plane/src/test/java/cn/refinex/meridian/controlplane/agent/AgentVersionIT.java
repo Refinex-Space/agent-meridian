@@ -8,6 +8,11 @@ import cn.refinex.meridian.controlplane.support.ControlPlaneTestBase;
 import cn.refinex.meridian.controlplane.support.TenantFixture;
 import cn.refinex.meridian.controlplane.tenant.app.ConfigInvalidations;
 import cn.refinex.meridian.persistence.redis.RedisMessaging;
+import cn.refinex.meridian.security.servicejwt.ServiceJwtVerifier;
+import cn.refinex.meridian.security.servicejwt.ServiceJwts;
+import cn.refinex.meridian.security.servicejwt.ServicePrincipal;
+import java.net.URI;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -64,7 +69,9 @@ class AgentVersionIT extends ControlPlaneTestBase {
                                 + subagent("[\"web_fetch\",\"mcp__crm__lookup_order\"]") + "]"),
                 "spec.subagents.0.tools.0",
                 "spec.subagents.0.tools.1");
-        // 4. 知识库存在（开发期目录只认 kb_test_known）
+        // 4. 知识库存在且属于本项目（经 knowledge 的内部接口，ADR-0051）：另一个项目的知识库与不存在的相同
+        String knowledgeBase = KNOWLEDGE.register(fixture.get("tenant"), fixture.get("project"));
+        String otherProjectBase = KNOWLEDGE.register(fixture.get("tenant"), fixture.get("other_project"));
         assertPublishFails(
                 client,
                 fixture,
@@ -72,9 +79,11 @@ class AgentVersionIT extends ControlPlaneTestBase {
                 spec(
                         fixture,
                         null,
-                        "\"knowledge\":{\"knowledge_base_ids\":[\"" + KNOWN_KNOWLEDGE_BASE
-                                + "\",\"kb_missing\"],\"prefetch\":true,\"prefetch_top_k\":3}"),
-                "spec.knowledge.knowledge_base_ids.1");
+                        "\"knowledge\":{\"knowledge_base_ids\":[\"" + knowledgeBase
+                                + "\",\"kb_missing\",\"" + otherProjectBase
+                                + "\"],\"prefetch\":true,\"prefetch_top_k\":3}"),
+                "spec.knowledge.knowledge_base_ids.1",
+                "spec.knowledge.knowledge_base_ids.2");
         // 5. MCP 服务存在、启用的工具在探测到的清单中
         assertPublishFails(
                 client,
@@ -112,12 +121,51 @@ class AgentVersionIT extends ControlPlaneTestBase {
                                 + fixture.get("mcp")
                                 + "\",\"enabled_tools\":[\"lookup_order\"]}],\"subagents\":["
                                 + subagent("[\"read_file\",\"mcp__crm__lookup_order\"]")
-                                + "],\"knowledge\":{\"knowledge_base_ids\":[\"" + KNOWN_KNOWLEDGE_BASE
+                                + "],\"knowledge\":{\"knowledge_base_ids\":[\"" + knowledgeBase
                                 + "\"],\"prefetch\":true,\"prefetch_top_k\":3}"));
         Reply published =
                 publish(client, fixture, agent, ok.json().get("version").asInt());
         assertThat(published.status()).as(published.raw()).isEqualTo(200);
         assertThat(published.json().at("/spec/subagents/0/tools").toString()).contains("mcp__crm__lookup_order");
+    }
+
+    @Test
+    void knowledgeBasesAreCheckedThroughTheKnowledgeServiceWithAControlPlaneServiceJwt() throws Exception {
+        AdminClient client = client();
+        TenantFixture fixture = TenantFixture.create(client).withAgentConfig(client);
+        String agent = agent(client, fixture, "knowledge-check");
+        String knowledgeBase = KNOWLEDGE.register(fixture.get("tenant"), fixture.get("project"));
+        String withKnowledge = "\"knowledge\":{\"knowledge_base_ids\":[\"" + knowledgeBase
+                + "\"],\"prefetch\":false,\"prefetch_top_k\":3}";
+
+        Reply ok = draft(client, fixture, agent, spec(fixture, null, withKnowledge));
+        int before = KNOWLEDGE.authorizations().size();
+        assertThat(publish(client, fixture, agent, ok.json().get("version").asInt())
+                        .status())
+                .isEqualTo(200);
+
+        // 出站令牌由 control-plane 在进程内签发：sub 是 control-plane，aud 是 knowledge，用本服务的 JWKS 能校验
+        String authorization = KNOWLEDGE.authorizations().get(before);
+        assertThat(authorization).startsWith("Bearer ");
+        ServiceJwtVerifier verifier = ServiceJwtVerifier.remote(
+                URI.create("http://127.0.0.1:" + port + ServiceJwts.JWKS_PATH).toURL(),
+                ServiceJwts.DEFAULT_ISSUER,
+                ServiceJwts.KNOWLEDGE,
+                Duration.ofMinutes(5));
+        assertThat(verifier.resolve(authorization.substring("Bearer ".length())))
+                .contains(new ServicePrincipal(ServiceJwts.CONTROL_PLANE));
+
+        // knowledge 不可用时发布被拒绝（503），不把"查不到"当成"不存在"
+        Reply next = draft(client, fixture, agent, spec(fixture, null, withKnowledge));
+        KNOWLEDGE.down(true);
+        try {
+            Reply unavailable =
+                    publish(client, fixture, agent, next.json().get("version").asInt());
+            assertThat(unavailable.status()).isEqualTo(503);
+            assertThat(unavailable.text("code")).isEqualTo("service.unavailable");
+        } finally {
+            KNOWLEDGE.down(false);
+        }
     }
 
     @Test
