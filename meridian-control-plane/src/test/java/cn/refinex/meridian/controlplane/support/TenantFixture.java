@@ -64,6 +64,11 @@ public record TenantFixture(Map<String, String> values) {
         v.put("key", key.text("id"));
         v.put("key_plaintext", key.text("key"));
         catalog(client, base, owner, v);
+        // T16：租户级预算（不限），角色矩阵的预算行引用它
+        v.put(
+                "budget",
+                ok(client.admin("POST", base + "/budgets", owner, "{\"level\":\"tenant\",\"hard_limit_tokens\":null}"))
+                        .text("id"));
         return new TenantFixture(Map.copyOf(v));
     }
 

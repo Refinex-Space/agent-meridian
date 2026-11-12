@@ -1,0 +1,17 @@
+{
+  "action": "tool.executed",
+  "occurred_at": "2026-11-12T08:00:00Z",
+  "tenant_id": "ten_sample",
+  "project_id": "prj_sample",
+  "actor": {"type": "service", "subject": "runtime"},
+  "resource_type": "tool_call",
+  "resource_id": "call_sample",
+  "session_id": "ses_sample",
+  "thread_id": "thr_sample",
+  "turn_id": "trn_sample",
+  "tool_use_id": "call_sample",
+  "tool_name": "write_file",
+  "side_effect": "idempotent",
+  "status": "succeeded",
+  "idempotency_key": "ses_sample:call_sample"
+}

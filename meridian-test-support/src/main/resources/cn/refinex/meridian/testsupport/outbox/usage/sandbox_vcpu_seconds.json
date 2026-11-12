@@ -1,0 +1,16 @@
+{
+  "kind": "sandbox_vcpu_seconds",
+  "occurred_at": "2026-11-12T08:00:00Z",
+  "tenant_id": "ten_sample",
+  "project_id": "prj_sample",
+  "agent_version_id": "agv_sample",
+  "session_id": "ses_sample",
+  "thread_id": "thr_sample",
+  "turn_id": "trn_sample",
+  "sandbox_id": "sbx-sample",
+  "size": "small",
+  "vcpu": 1,
+  "period_start": "2026-11-12T07:59:47.500Z",
+  "period_end": "2026-11-12T08:00:00Z",
+  "vcpu_seconds": 12.5
+}

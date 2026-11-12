@@ -1,0 +1,12 @@
+{
+  "kind": "search_calls",
+  "occurred_at": "2026-11-12T08:00:00Z",
+  "tenant_id": "ten_sample",
+  "project_id": "prj_sample",
+  "api_key_id": "key_sample",
+  "session_id": "ses_sample",
+  "thread_id": "thr_sample",
+  "turn_id": "trn_sample",
+  "backend": "searxng",
+  "count": 1
+}

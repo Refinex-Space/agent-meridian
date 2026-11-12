@@ -1,0 +1,20 @@
+{
+  "action": "pending_action.concluded",
+  "occurred_at": "2026-11-12T08:00:00Z",
+  "tenant_id": "ten_sample",
+  "project_id": "prj_sample",
+  "actor": {"type": "api_key", "subject": "key_sample"},
+  "resource_type": "pending_action",
+  "resource_id": "act_sample",
+  "session_id": "ses_sample",
+  "thread_id": "thr_sample",
+  "turn_id": "trn_sample",
+  "action_id": "act_sample",
+  "action_type": "tool_confirmation",
+  "tool_use_id": "call_sample",
+  "tool_name": "bash",
+  "origin": "caller",
+  "outcome": "approved",
+  "remember_scope": null,
+  "decided_by": "key_sample"
+}
