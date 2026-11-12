@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Admin API
   version: 1.0.0
-  summary: 控制台使用的管理 API：租户、租户设置、项目、成员、角色绑定、API Key、凭据与模型目录，智能体与版本、环境、技能、MCP 服务与权限策略。
+  summary: 控制台使用的管理 API：租户、租户设置、项目、成员、角色绑定、API Key、凭据与模型目录，智能体与版本、环境、技能、MCP 服务与权限策略，预算、用量报表与审计日志。
   description: |
     只供控制台调用（ADR-0042），与控制台同版本发布，不对业务系统开放；业务系统使用公开 API（`meridian-v1.yaml`）。
 
@@ -49,6 +49,12 @@ tags:
     description: MCP 服务：端点、传输、凭据引用与工具的副作用等级；登记时探测并保存工具清单。
   - name: PermissionRules
     description: 租户与项目策略：五层权限合成中的第 2、3 层，含“记住此决定”的项目级规则。
+  - name: Budgets
+    description: 四级预算（租户、项目、API Key、会话）的软硬阈值与告警，单位 token（ADR-0048）。
+  - name: Usage
+    description: 用量报表：按账本明细聚合，成本按记录中的价格表版本计算（ADR-0048）。
+  - name: AuditLogs
+    description: 审计日志：只追加，按时间、操作者、资源、动作检索（ADR-0048）。
 
 paths:
   /admin/v1/tenants:
@@ -2443,6 +2449,320 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /admin/v1/tenants/{tenant_id}/budgets:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: createBudget
+      tags: [Budgets]
+      summary: 设置一级预算
+      description: |
+        预算以 token（模型调用的输入加输出）计（ADR-0048）：租户、项目、API Key 按自然月（UTC）重置，会话不分周期。不给
+        `scope_id` 表示该级所有范围的默认值，具体范围的预算覆盖默认值；租户级只有一条，不能给 `scope_id`。没有设置的级别硬阈值
+        为 0：新租户在四级都有值之前不能调用模型（"不限"也要显式设置为 null）。同一级别、同一范围已有预算时 409
+        `budget.exists`，改用修改接口。限额在提交后同步到 runtime。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBudgetRequest'
+            example:
+              level: project
+              scope_id: prj_01JD8X2M9Q4R5S6T7V8W9X0Y1Z
+              soft_limit_tokens: 8000000
+              hard_limit_tokens: 10000000
+      responses:
+        '201':
+          $ref: '#/components/responses/BudgetCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listBudgets
+      tags: [Budgets]
+      summary: 列出预算
+      description: 按级别（租户、项目、API Key、会话）再按范围排列，默认值在同级的具体范围之前；带当前周期的账本用量。
+      parameters:
+        - name: level
+          in: query
+          description: 只列出这一级的预算。
+          schema:
+            $ref: '#/components/schemas/BudgetLevel'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 预算列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/budgets/{budget_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/BudgetId'
+    get:
+      operationId: getBudget
+      tags: [Budgets]
+      summary: 查看预算
+      responses:
+        '200':
+          $ref: '#/components/responses/BudgetOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateBudget
+      tags: [Budgets]
+      summary: 修改预算的阈值
+      description: 整体替换软阈值与硬阈值；级别与范围不能改。新阈值在提交后同步到 runtime。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBudgetRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/BudgetOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteBudget
+      tags: [Budgets]
+      summary: 删除预算
+      description: |
+        删除后该范围回到同级的默认值；删除的是默认值（或租户级预算）时，没有自己预算的范围硬阈值变为 0，模型调用会被拒绝。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/budget-alerts:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      operationId: listBudgetAlerts
+      tags: [Budgets]
+      summary: 列出预算告警
+      description: 账本用量越过软阈值时产生的告警，同一范围、周期与阈值只有一条；按发生时间从新到旧。
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 告警列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetAlertPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/usage:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      operationId: getTenantUsage
+      tags: [Usage]
+      summary: 租户用量报表
+      description: |
+        按账本明细聚合租户的用量（与 `GET /v1/usage` 同一口径）。每行总是按计量种类与币种分组：不同种类的数量、不同币种的
+        金额不能相加。需要租户级的预算查看权限。
+      parameters:
+        - $ref: '#/components/parameters/UsageFrom'
+        - $ref: '#/components/parameters/UsageTo'
+        - $ref: '#/components/parameters/UsageGroupBy'
+        - name: project_id
+          in: query
+          description: 只统计这个项目。
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          $ref: '#/components/responses/UsageReportOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/usage:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: getProjectUsage
+      tags: [Usage]
+      summary: 项目用量报表
+      description: 与租户用量报表相同，只统计这个项目；项目开发者与项目观察者也可以查看。
+      parameters:
+        - $ref: '#/components/parameters/UsageFrom'
+        - $ref: '#/components/parameters/UsageTo'
+        - $ref: '#/components/parameters/UsageGroupBy'
+      responses:
+        '200':
+          $ref: '#/components/responses/UsageReportOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/audit-logs:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      operationId: listAuditLogs
+      tags: [AuditLogs]
+      summary: 查询审计日志
+      description: |
+        管理操作、凭据访问、权限判定、待处理动作的回应、有副作用的工具执行、沙箱命令、轮次结束与预算告警，按发生时间从新到旧。
+        时间范围左闭右开，不传时为最近 30 天；条件之间是"且"。审计日志只追加，任何接口都不能修改或删除。
+      parameters:
+        - name: from
+          in: query
+          description: 起始时间（含）；默认 `to` 之前 30 天。
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 结束时间（不含）；默认当前时间。
+          schema:
+            type: string
+            format: date-time
+        - name: action
+          in: query
+          description: 动作，例如 `api_key.created`、`permission.decided`。
+          schema:
+            type: string
+            minLength: 1
+        - name: actor
+          in: query
+          description: 操作者：控制台用户的主体标识、API Key ID 或服务名。
+          schema:
+            type: string
+            minLength: 1
+        - name: resource_type
+          in: query
+          description: 资源类型，例如 `api_key`、`tool_call`、`pending_action`。
+          schema:
+            type: string
+            minLength: 1
+        - name: resource_id
+          in: query
+          description: 资源 ID。
+          schema:
+            type: string
+            minLength: 1
+        - name: project_id
+          in: query
+          description: 项目 ID。
+          schema:
+            type: string
+            minLength: 1
+        - name: session_id
+          in: query
+          description: 会话 ID：运行时的审计（权限判定、工具执行、沙箱命令等）带会话。
+          schema:
+            type: string
+            minLength: 1
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 审计日志。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ConsoleAuth:
@@ -2621,6 +2941,37 @@ components:
       schema:
         type: string
 
+    BudgetId:
+      name: budget_id
+      in: path
+      required: true
+      description: 预算 ID（bdg_…）。
+      schema:
+        type: string
+    UsageFrom:
+      name: from
+      in: query
+      description: 起始时间（含）；默认当前 UTC 月份的第一天。
+      schema:
+        type: string
+        format: date-time
+    UsageTo:
+      name: to
+      in: query
+      description: 结束时间（不含）；默认当前时间。与 `from` 相距不超过 366 天。
+      schema:
+        type: string
+        format: date-time
+    UsageGroupBy:
+      name: group_by
+      in: query
+      description: |
+        聚合维度，逗号分隔，可以组合，例如 `day,model`：`day`（UTC 日期）、`model`、`agent`、`api_key`，租户报表另有 `project`。
+        不传时只按计量种类与币种汇总；未知的维度返回 400 `usage.invalid_query`。
+      schema:
+        type: string
+        pattern: '^[a-z_]+(,[a-z_]+)*$'
+        maxLength: 64
   responses:
     TenantCreated:
       description: 已创建。
@@ -2948,6 +3299,37 @@ components:
           $ref: '#/components/headers/XRequestId'
         Idempotent-Replayed:
           $ref: '#/components/headers/IdempotentReplayed'
+    BudgetCreated:
+      description: 已设置。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Budget'
+    BudgetOk:
+      description: 预算与当前周期的账本用量。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Budget'
+    UsageReportOk:
+      description: 用量报表。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UsageReport'
     BadRequest:
       description: |
         请求不合法：`request.invalid`（格式错误）、`request.validation_failed`（字段校验失败，见 `errors`；智能体规格的错误
@@ -4759,3 +5141,309 @@ components:
         message:
           description: 失败原因。
           type: string
+    BudgetLevel:
+      description: 预算级别。
+      type: string
+      enum: [tenant, project, api_key, session]
+    Budget:
+      description: 一级预算（单位 token，ADR-0048）。
+      type: object
+      required:
+        [id, tenant_id, level, scope_id, project_id, soft_limit_tokens, hard_limit_tokens, period, current_period,
+         used_tokens, created_by, created_at, updated_at]
+      properties:
+        id:
+          description: 预算 ID（bdg_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        level:
+          $ref: '#/components/schemas/BudgetLevel'
+        scope_id:
+          description: 范围 ID（项目、API Key 或会话）；为 null 表示该级所有范围的默认值，租户级总为 null。
+          type: [string, 'null']
+        project_id:
+          description: 范围所在的项目：项目级为该项目，API Key 级为 Key 所在的项目；其余为 null。
+          type: [string, 'null']
+        soft_limit_tokens:
+          description: 软阈值（每周期的 token），越过时告警；为 null 表示不告警。
+          type: [integer, 'null']
+          format: int64
+        hard_limit_tokens:
+          description: 硬阈值（每周期的 token），达到后拒绝模型调用；为 null 表示不限。
+          type: [integer, 'null']
+          format: int64
+        period:
+          description: 计数周期：`monthly`（自然月，UTC）或 `total`（会话的整个生命周期）。
+          type: string
+          enum: [monthly, total]
+        current_period:
+          description: 当前周期：`yyyy-MM` 或 `total`。
+          type: string
+        used_tokens:
+          description: 当前周期的账本用量；默认值不对应具体范围，为 null。
+          type: [integer, 'null']
+          format: int64
+        created_by:
+          description: 创建者的主体标识。
+          type: string
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    BudgetPage:
+      description: 一页预算。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的预算。
+          type: array
+          items:
+            $ref: '#/components/schemas/Budget'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    CreateBudgetRequest:
+      description: 设置一级预算。
+      type: object
+      required: [level, hard_limit_tokens]
+      additionalProperties: false
+      properties:
+        level:
+          $ref: '#/components/schemas/BudgetLevel'
+        scope_id:
+          description: 范围 ID：项目级为项目 ID，API Key 级为 Key ID，会话级为会话 ID；不给表示该级的默认值。租户级不能给。
+          type: string
+          minLength: 1
+          maxLength: 64
+        soft_limit_tokens:
+          description: 软阈值；不给或为 null 表示不告警。不能大于硬阈值。
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+        hard_limit_tokens:
+          description: 硬阈值；为 null 表示不限。
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+    UpdateBudgetRequest:
+      description: 修改预算的阈值，整体替换。
+      type: object
+      required: [soft_limit_tokens, hard_limit_tokens]
+      additionalProperties: false
+      properties:
+        soft_limit_tokens:
+          description: 软阈值；为 null 表示不告警。不能大于硬阈值。
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+        hard_limit_tokens:
+          description: 硬阈值；为 null 表示不限。
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+    BudgetAlert:
+      description: 一条预算告警。
+      type: object
+      required: [id, level, scope_id, period, kind, threshold_tokens, used_tokens, occurred_at]
+      properties:
+        id:
+          description: 告警 ID（bal_…）。
+          type: string
+        level:
+          $ref: '#/components/schemas/BudgetLevel'
+        scope_id:
+          description: 范围 ID（租户级为租户 ID）。
+          type: string
+        period:
+          description: 周期：`yyyy-MM` 或 `total`。
+          type: string
+        kind:
+          description: 告警种类：`soft_limit_reached`（越过软阈值）。
+          type: string
+          enum: [soft_limit_reached]
+        threshold_tokens:
+          description: 越过的阈值。
+          type: integer
+          format: int64
+        used_tokens:
+          description: 越过时的账本用量。
+          type: integer
+          format: int64
+        occurred_at:
+          description: 越过阈值的那条用量的发生时间。
+          type: string
+          format: date-time
+    BudgetAlertPage:
+      description: 一页预算告警。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的告警，从新到旧。
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetAlert'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    AuditActor:
+      description: 审计的操作者。
+      type: object
+      required: [type, subject]
+      properties:
+        type:
+          description: 类型：`console_user`（控制台用户）、`api_key`、`service`（平台服务，例如 runtime 的权限引擎）。
+          type: string
+        subject:
+          description: 主体标识、API Key ID 或服务名。
+          type: string
+    AuditLog:
+      description: 一条审计日志。
+      type: object
+      required: [id, occurred_at, action, project_id, actor, resource_type, resource_id, session_id, details]
+      properties:
+        id:
+          description: 审计 ID（产生它的 outbox 消息 ID）。
+          type: string
+        occurred_at:
+          description: 发生时间。
+          type: string
+          format: date-time
+        action:
+          description: 动作，`<资源>.<动作>`。
+          type: string
+        project_id:
+          description: 项目 ID；租户级操作为 null。
+          type: [string, 'null']
+        actor:
+          description: 操作者；没有时为 null。
+          oneOf:
+            - $ref: '#/components/schemas/AuditActor'
+            - type: 'null'
+        resource_type:
+          description: 资源类型。
+          type: [string, 'null']
+        resource_id:
+          description: 资源 ID。
+          type: [string, 'null']
+        session_id:
+          description: 相关会话 ID。
+          type: [string, 'null']
+        details:
+          description: 补充信息，字段随动作不同；不含凭据。
+          type: object
+          additionalProperties: true
+    AuditLogPage:
+      description: 一页审计日志。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的审计日志，从新到旧。
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    UsageKind:
+      description: 计量种类：模型 token、Embedding token、rerank token、沙箱 vCPU 秒、搜索次数。
+      type: string
+      enum: [model_tokens, embedding_tokens, rerank_tokens, sandbox_vcpu_seconds, search_calls]
+    UsageReport:
+      description: 按账本明细聚合的用量。
+      type: object
+      required: [from, to, group_by, rows]
+      properties:
+        from:
+          description: 起始时间（含）。
+          type: string
+          format: date-time
+        to:
+          description: 结束时间（不含）。
+          type: string
+          format: date-time
+        group_by:
+          description: 实际使用的聚合维度。
+          type: array
+          items:
+            type: string
+        rows:
+          description: 聚合结果，按维度与种类排序。
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageReportRow'
+    UsageReportRow:
+      description: 一组用量的合计。没有按某个维度聚合时，该维度的字段为 null。
+      type: object
+      required:
+        [day, project_id, model_id, agent_id, api_key_id, kind, currency, records, quantity, input_tokens, output_tokens,
+         cache_read_tokens, cache_write_tokens, reasoning_tokens, cost]
+      properties:
+        day:
+          description: UTC 日期。
+          type: [string, 'null']
+          format: date
+        project_id:
+          description: 项目 ID。
+          type: [string, 'null']
+        model_id:
+          description: 模型 ID；沙箱与搜索没有模型。
+          type: [string, 'null']
+        agent_id:
+          description: 智能体 ID；直通接口与 Embedding 没有智能体。
+          type: [string, 'null']
+        api_key_id:
+          description: API Key ID；控制台用户与平台内部发起的调用没有 API Key。
+          type: [string, 'null']
+        kind:
+          $ref: '#/components/schemas/UsageKind'
+        currency:
+          description: 成本的币种；没有定价的用量为 null。
+          type: [string, 'null']
+        records:
+          description: 账本记录数。
+          type: integer
+          format: int64
+        quantity:
+          description: 计量数量的合计（十进制字符串）：token 种类为输入加输出，沙箱为 vCPU 秒，搜索为次数。
+          type: string
+        input_tokens:
+          description: 输入 token。
+          type: integer
+          format: int64
+        output_tokens:
+          description: 输出 token。
+          type: integer
+          format: int64
+        cache_read_tokens:
+          description: 命中提示词缓存的输入 token。
+          type: integer
+          format: int64
+        cache_write_tokens:
+          description: 写入提示词缓存的输入 token。
+          type: integer
+          format: int64
+        reasoning_tokens:
+          description: 推理用的输出 token。
+          type: integer
+          format: int64
+        cost:
+          description: 成本的合计（十进制字符串，12 位小数，不舍入）；没有定价时为 null。
+          type: [string, 'null']

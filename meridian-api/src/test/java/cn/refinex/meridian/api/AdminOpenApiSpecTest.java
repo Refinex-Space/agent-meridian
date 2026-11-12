@@ -115,7 +115,16 @@ class AdminOpenApiSpecTest {
             "DELETE /admin/v1/tenants/{tenant_id}/permission-rules/{permission_rule_id}",
             "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/permission-rules",
             "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/permission-rules",
-            "DELETE /admin/v1/tenants/{tenant_id}/projects/{project_id}/permission-rules/{permission_rule_id}");
+            "DELETE /admin/v1/tenants/{tenant_id}/projects/{project_id}/permission-rules/{permission_rule_id}",
+            "POST /admin/v1/tenants/{tenant_id}/budgets",
+            "GET /admin/v1/tenants/{tenant_id}/budgets",
+            "GET /admin/v1/tenants/{tenant_id}/budgets/{budget_id}",
+            "PUT /admin/v1/tenants/{tenant_id}/budgets/{budget_id}",
+            "DELETE /admin/v1/tenants/{tenant_id}/budgets/{budget_id}",
+            "GET /admin/v1/tenants/{tenant_id}/budget-alerts",
+            "GET /admin/v1/tenants/{tenant_id}/usage",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/usage",
+            "GET /admin/v1/tenants/{tenant_id}/audit-logs");
 
     private static final Set<PathItem.HttpMethod> WRITES = Set.of(
             PathItem.HttpMethod.POST, PathItem.HttpMethod.PUT, PathItem.HttpMethod.PATCH, PathItem.HttpMethod.DELETE);

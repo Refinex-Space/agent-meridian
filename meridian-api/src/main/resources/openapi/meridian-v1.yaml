@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: AgentMeridian API
   version: 1.0.0
-  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作、SSE 事件流、OpenAI 兼容的模型直通与已发布的智能体。
+  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作、SSE 事件流、OpenAI 兼容的模型直通、已发布的智能体与用量。
   description: |
     业务系统通过本 API 使用平台上的智能体：创建会话、发送事件、订阅事件流、回应待处理动作。
 
@@ -46,6 +46,8 @@ tags:
     description: 模型直通：OpenAI 兼容的对话补全与文本向量，与智能体共用平台的限流、预算与计量。
   - name: Agents
     description: 智能体（只读）：本项目已发布的智能体与它们当前的版本，创建会话时引用。由 control-plane 提供（ADR-0047）。
+  - name: Usage
+    description: 用量：本项目的用量按天、模型、智能体、API Key 聚合，与账本一致。由 control-plane 提供（ADR-0048）。
 
 paths:
   /v1/sessions:
@@ -746,6 +748,60 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/usage:
+    get:
+      operationId: getUsage
+      tags: [Usage]
+      summary: 查询用量
+      description: |
+        按账本明细聚合本项目的用量：模型 token（对话、压缩）、Embedding 与 rerank token、沙箱 vCPU 秒、搜索次数。每行总是按
+        计量种类与币种分组（不同种类的数量、不同币种的金额不能相加），成本按每条记录中的价格表版本计算。账本由用量消息异步入账，
+        通常落后几秒。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - name: from
+          in: query
+          description: 起始时间（含）；默认当前 UTC 月份的第一天。
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 结束时间（不含）；默认当前时间。与 `from` 相距不超过 366 天。
+          schema:
+            type: string
+            format: date-time
+        - name: group_by
+          in: query
+          description: |
+            聚合维度，逗号分隔，可以组合，例如 `day,model`：`day`（UTC 日期）、`model`、`agent`、`api_key`。不传时只按计量种类与
+            币种汇总；未知的维度返回 400 `usage.invalid_query`。
+          schema:
+            type: string
+            pattern: '^[a-z_]+(,[a-z_]+)*$'
+            maxLength: 64
+      responses:
+        '200':
+          description: 用量报表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/RateLimited'
         default:
@@ -3263,3 +3319,88 @@ components:
           items:
             type: number
         - type: string
+    UsageKind:
+      description: 计量种类：模型 token、Embedding token、rerank token、沙箱 vCPU 秒、搜索次数。
+      type: string
+      enum: [model_tokens, embedding_tokens, rerank_tokens, sandbox_vcpu_seconds, search_calls]
+    UsageReport:
+      description: 按账本明细聚合的用量。
+      type: object
+      required: [from, to, group_by, rows]
+      properties:
+        from:
+          description: 起始时间（含）。
+          type: string
+          format: date-time
+        to:
+          description: 结束时间（不含）。
+          type: string
+          format: date-time
+        group_by:
+          description: 实际使用的聚合维度。
+          type: array
+          items:
+            type: string
+        rows:
+          description: 聚合结果，按维度与种类排序。
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageReportRow'
+    UsageReportRow:
+      description: 一组用量的合计。没有按某个维度聚合时，该维度的字段为 null。
+      type: object
+      required:
+        [day, project_id, model_id, agent_id, api_key_id, kind, currency, records, quantity, input_tokens, output_tokens,
+         cache_read_tokens, cache_write_tokens, reasoning_tokens, cost]
+      properties:
+        day:
+          description: UTC 日期。
+          type: [string, 'null']
+          format: date
+        project_id:
+          description: 项目 ID。
+          type: [string, 'null']
+        model_id:
+          description: 模型 ID；沙箱与搜索没有模型。
+          type: [string, 'null']
+        agent_id:
+          description: 智能体 ID；直通接口与 Embedding 没有智能体。
+          type: [string, 'null']
+        api_key_id:
+          description: API Key ID；控制台用户与平台内部发起的调用没有 API Key。
+          type: [string, 'null']
+        kind:
+          $ref: '#/components/schemas/UsageKind'
+        currency:
+          description: 成本的币种；没有定价的用量为 null。
+          type: [string, 'null']
+        records:
+          description: 账本记录数。
+          type: integer
+          format: int64
+        quantity:
+          description: 计量数量的合计（十进制字符串）：token 种类为输入加输出，沙箱为 vCPU 秒，搜索为次数。
+          type: string
+        input_tokens:
+          description: 输入 token。
+          type: integer
+          format: int64
+        output_tokens:
+          description: 输出 token。
+          type: integer
+          format: int64
+        cache_read_tokens:
+          description: 命中提示词缓存的输入 token。
+          type: integer
+          format: int64
+        cache_write_tokens:
+          description: 写入提示词缓存的输入 token。
+          type: integer
+          format: int64
+        reasoning_tokens:
+          description: 推理用的输出 token。
+          type: integer
+          format: int64
+        cost:
+          description: 成本的合计（十进制字符串，12 位小数，不舍入）；没有定价时为 null。
+          type: [string, 'null']
