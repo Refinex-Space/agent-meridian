@@ -33,6 +33,8 @@ import java.util.Objects;
  * @param cacheReadTokens 命中提示词缓存的输入 token
  * @param cacheWriteTokens 写入提示词缓存的输入 token
  * @param reasoningTokens 推理用的输出 token
+ * @param priceBookId 结算时模型关联的价格表；没有定价时为空（ADR-0045 第 8 条）
+ * @param priceBookVersion 结算时价格表当前生效的版本，T16 的消费者按它计价；没有定价时为空
  */
 public record ModelUsageMessage(
         String kind,
@@ -55,7 +57,9 @@ public record ModelUsageMessage(
         int outputTokens,
         int cacheReadTokens,
         int cacheWriteTokens,
-        int reasoningTokens) {
+        int reasoningTokens,
+        String priceBookId,
+        Integer priceBookVersion) {
 
     /** 模型 token 用量的种类。 */
     public static final String KIND_MODEL_TOKENS = "model_tokens";
@@ -87,9 +91,11 @@ public record ModelUsageMessage(
      * @param context 调用的平台上下文
      * @param record 计量信息
      * @param occurredAt 结算时间
+     * @param model 结算时目录中的模型，取价格表与版本；可为空（调用期间模型被删除）
      * @return 用量记录
      */
-    public static ModelUsageMessage of(PlatformContext context, ModelCallRecord record, Instant occurredAt) {
+    public static ModelUsageMessage of(
+            PlatformContext context, ModelCallRecord record, Instant occurredAt, CatalogModel model) {
         String kind = switch (record.purpose()) {
             case REASONING, COMPACTION -> KIND_MODEL_TOKENS;
             case EMBEDDING -> KIND_EMBEDDING_TOKENS;
@@ -116,7 +122,9 @@ public record ModelUsageMessage(
                 record.usage().outputTokens(),
                 record.usage().cachedTokens(),
                 record.usage().cacheCreationTokens(),
-                record.usage().reasoningTokens());
+                record.usage().reasoningTokens(),
+                model == null ? null : model.priceBookId(),
+                model == null ? null : model.priceBookVersion());
     }
 
     /**

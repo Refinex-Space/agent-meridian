@@ -3,6 +3,11 @@ meridian:
   runtime:
     dispatch:
       node-id: test-node
+    model-routing:
+      # 测试默认读临时目录中的供应商配置（ADR-0045）；经 control-plane 解析的测试显式设为 control-plane
+      catalog-source: file
+      # 模拟供应商在回环地址上
+      allow-loopback-endpoints: true
 
 management:
   endpoint:

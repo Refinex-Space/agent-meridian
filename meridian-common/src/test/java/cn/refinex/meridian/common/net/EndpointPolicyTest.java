@@ -96,6 +96,22 @@ class EndpointPolicyTest {
     }
 
     @Test
+    void reservedRangesAreAllowedOnlyWhenListedButMetadataNeverIs() {
+        // fake-ip 方式的透明代理把公网域名解析到 198.18.0.0/15
+        EndpointPolicy.Resolver fakeIp = host -> List.of(InetAddress.getByName("198.18.0.106"));
+        assertThat(EndpointPolicy.DEFAULT.violation("https://dashscope.aliyuncs.com/compatible-mode/v1", fakeIp))
+                .hasValueSatisfying(reason -> assertThat(reason).contains("未放行的保留地址"));
+        EndpointPolicy withFakeIp = new EndpointPolicy(false, List.of("10.0.0.0/8", "198.18.0.0/15"));
+        assertThat(withFakeIp.violation("https://dashscope.aliyuncs.com/compatible-mode/v1", fakeIp))
+                .isEmpty();
+        // 列出链路本地段也不放行元数据与链路本地地址
+        EndpointPolicy careless = new EndpointPolicy(false, List.of("169.254.0.0/16", "0.0.0.0/0"));
+        assertThat(careless.violation("http://169.254.169.254/latest", DNS)).isPresent();
+        assertThat(careless.violation("http://169.254.1.1/", DNS)).isPresent();
+        assertThat(careless.violation("http://224.0.0.1/", DNS)).isPresent();
+    }
+
+    @Test
     void rejectsMalformedNetworks() {
         assertThatThrownBy(() -> new EndpointPolicy(false, List.of("10.0.0.0")))
                 .isInstanceOf(IllegalArgumentException.class);

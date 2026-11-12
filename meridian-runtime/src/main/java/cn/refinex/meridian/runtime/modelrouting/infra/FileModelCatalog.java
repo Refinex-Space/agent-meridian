@@ -2,6 +2,7 @@ package cn.refinex.meridian.runtime.modelrouting.infra;
 
 import cn.refinex.meridian.engine.spi.port.ModelGateway.Provider;
 import cn.refinex.meridian.runtime.modelrouting.app.ModelCatalogPort;
+import cn.refinex.meridian.runtime.modelrouting.domain.CatalogEntry;
 import cn.refinex.meridian.runtime.modelrouting.domain.CatalogModel;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelKind;
 import cn.refinex.meridian.runtime.modelrouting.domain.ProviderAccount;
@@ -15,7 +16,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 从开发配置目录 {@code dev-config/providers} 读取供应商账号与模型目录的 {@link ModelCatalogPort}（T09a；T15a 之后只留给开发与测试）。
+ * 从开发配置目录 {@code dev-config/providers} 读取供应商账号与模型目录的 {@link ModelCatalogPort}（T09a；T15a 起只在 {@code dev}、
+ * {@code test} profile 使用，模型不带租户，任何租户都能用，ADR-0045）。
  *
  * <p>每个文件是一个 {@code kind: provider_account}：{@code provider_account_id}、{@code provider}（取值同
  * {@code ModelGateway.Provider.value()}，例如 {@code openai_compatible}）、{@code base_url}、{@code secret_ref}（凭据引用，开发实现是
@@ -58,7 +60,22 @@ public final class FileModelCatalog implements ModelCatalogPort {
     }
 
     @Override
-    public Optional<CatalogModel> model(String modelId) {
+    public Optional<CatalogEntry> find(String modelId) {
+        return model(modelId)
+                .map(model -> new CatalogEntry(
+                        model,
+                        account(model.providerAccountId())
+                                .orElseThrow(() -> new IllegalStateException(
+                                        "模型目录不一致：模型 " + modelId + " 的供应商账号不存在 " + model.providerAccountId()))));
+    }
+
+    /**
+     * 按模型 ID 查找模型。
+     *
+     * @param modelId 模型 ID
+     * @return 模型；不存在时为空
+     */
+    Optional<CatalogModel> model(String modelId) {
         for (Map<String, Object> account : accounts()) {
             for (Map<?, ?> model : models(account)) {
                 if (modelId.equals(model.get("model_id"))) {
@@ -71,16 +88,25 @@ public final class FileModelCatalog implements ModelCatalogPort {
                             model.get("rate_limit") instanceof Map<?, ?> limit ? rateLimit(limit) : null,
                             ModelKind.of((String) model.get("kind")),
                             (String) model.get("base_url"),
-                            Math.toIntExact(YamlDocuments.number(
-                                    model, "max_batch_size", CatalogModel.DEFAULT_MAX_BATCH_SIZE))));
+                            Math.toIntExact(
+                                    YamlDocuments.number(model, "max_batch_size", CatalogModel.DEFAULT_MAX_BATCH_SIZE)),
+                            null,
+                            (String) model.get("fallback_model_id"),
+                            null,
+                            null));
                 }
             }
         }
         return Optional.empty();
     }
 
-    @Override
-    public Optional<ProviderAccount> account(String providerAccountId) {
+    /**
+     * 按 ID 查找供应商账号。
+     *
+     * @param providerAccountId 供应商账号 ID
+     * @return 账号；不存在时为空
+     */
+    Optional<ProviderAccount> account(String providerAccountId) {
         return accounts().stream()
                 .filter(account -> providerAccountId.equals(account.get("provider_account_id")))
                 .findFirst()

@@ -17,15 +17,16 @@ import java.util.Optional;
  *
  * <ul>
  *   <li>公网地址放行。
- *   <li>私有网段落在 {@link #privateNetworks()} 中才放行（企业内的私有化推理服务），默认全部私有网段。
+ *   <li>私有网段与保留网段落在 {@link #privateNetworks()} 中才放行：企业内的私有化推理服务在私有网段；fake-ip 方式的透明代理把公网域名
+ *       解析到基准测试段 {@code 198.18.0.0/15}，要显式列出才放行。默认是全部私有网段，不含任何保留段。
  *   <li>回环只在 {@link #allowLoopback()} 为真时放行（开发与测试的脚本化模型服务）。
- *   <li>链路本地、云元数据、未指定、组播、保留段始终拒绝。
+ *   <li>链路本地、云元数据、未指定、组播始终拒绝，列在网段中也不放行。
  * </ul>
  *
  * <p>线程安全：不可变。解析器由调用方给出，测试可以替换。
  *
  * @param allowLoopback 是否放行回环地址
- * @param privateNetworks 放行的私有网段（CIDR）；空列表表示私有地址一律拒绝
+ * @param privateNetworks 放行的私有网段与保留网段（CIDR）；空列表表示私有与保留地址一律拒绝
  */
 public record EndpointPolicy(boolean allowLoopback, List<String> privateNetworks) {
 
@@ -141,14 +142,16 @@ public record EndpointPolicy(boolean allowLoopback, List<String> privateNetworks
         return switch (type) {
             case PUBLIC -> Optional.empty();
             case LOOPBACK -> allowLoopback ? Optional.empty() : rejected(host, address, "回环地址");
-            case PRIVATE ->
-                privateNetworks.stream().anyMatch(cidr -> AddressPolicy.contains(cidr, address))
-                        ? Optional.empty()
-                        : rejected(host, address, "未放行的内网地址");
+            case PRIVATE -> listed(address) ? Optional.empty() : rejected(host, address, "未放行的内网地址");
+            case RESERVED -> listed(address) ? Optional.empty() : rejected(host, address, "未放行的保留地址");
             case LINK_LOCAL -> rejected(host, address, "链路本地地址");
             case METADATA -> rejected(host, address, "云元数据地址");
-            case UNSPECIFIED, MULTICAST, RESERVED -> rejected(host, address, "保留地址");
+            case UNSPECIFIED, MULTICAST -> rejected(host, address, "未指定或组播地址");
         };
+    }
+
+    private boolean listed(InetAddress address) {
+        return privateNetworks.stream().anyMatch(cidr -> AddressPolicy.contains(cidr, address));
     }
 
     private static Optional<String> rejected(String host, InetAddress address, String what) {

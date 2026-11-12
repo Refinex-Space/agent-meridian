@@ -13,7 +13,7 @@ import cn.refinex.meridian.engine.spi.port.ModelGateway;
 import cn.refinex.meridian.engine.spi.port.SecretResolver;
 import cn.refinex.meridian.engine.spi.port.SecretValue;
 import cn.refinex.meridian.runtime.modelrouting.domain.BudgetScope;
-import cn.refinex.meridian.runtime.modelrouting.domain.CatalogModel;
+import cn.refinex.meridian.runtime.modelrouting.domain.CatalogEntry;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelKind;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelRoutingErrorCode;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelUsageMessage;
@@ -34,7 +34,8 @@ import reactor.core.publisher.Mono;
  * {@link ModelGateway} 的实现，见架构设计「端口」「模型调用」「计量与预算」：
  *
  * <ul>
- *   <li>路由：模型目录（{@link ModelCatalogPort}）加凭据（{@link SecretResolver}，只在本次调用的路由中带出明文）。
+ *   <li>路由：模型目录（{@link ModelCatalogPort}）加凭据（{@link SecretResolver}，只在本次调用的路由中带出明文）。模型必须属于
+ *       调用方租户（ADR-0045），否则与不存在相同。
  *   <li>限流："供应商账号加模型"的 RPM、TPM 令牌桶（{@link RedisRateLimiter}），需要等待时按令牌桶给出的时间等，累计等待会超过
  *       {@link ModelRoutingProperties#rateLimitMaxWait()}（30 秒）时立即抛 {@link RateLimitTimeoutException}，不空等到超时。
  *   <li>预算：租户、项目、API Key、会话四级（{@link RedisBudgetLedger}），硬阈值来自 {@link BudgetLimitPort}，任一级不足抛
@@ -96,8 +97,9 @@ public class RoutingModelGateway implements ModelGateway {
 
     @Override
     public Mono<ModelDescriptor> describe(String modelId) {
-        return Blocking.call(() -> model(modelId))
-                .map(model -> new ModelDescriptor(modelId, model.contextWindow(), model.maxOutputTokens()));
+        return Blocking.call(() -> entry(modelId).model())
+                .map(model -> new ModelDescriptor(
+                        modelId, model.contextWindow(), model.maxOutputTokens(), model.fallbackModelId()));
     }
 
     @Override
@@ -114,32 +116,35 @@ public class RoutingModelGateway implements ModelGateway {
      * @return 路由信息；模型不存在以 {@code NotFoundException} 失败，种类不符以 {@code ValidationException} 失败
      */
     public Mono<ModelRoute> resolve(String modelId, ModelKind kind) {
-        return Blocking.call(() -> {
-                    CatalogModel model = model(modelId);
-                    if (model.kind() != kind) {
+        return PlatformContexts.currentReactive()
+                .flatMap(context -> Blocking.call(() -> {
+                    CatalogEntry entry = entry(modelId);
+                    // D23：模型属于租户，租户内的全部项目都能用；别的租户的模型与不存在相同
+                    if (!entry.model().usableBy(context.tenantId())) {
+                        throw modelNotFound(modelId);
+                    }
+                    if (entry.model().kind() != kind) {
                         throw new ValidationException(
                                 ModelRoutingErrorCode.UNSUPPORTED_OPERATION,
-                                "模型 " + modelId + " 是 " + model.kind().value() + " 模型，不能用于 " + kind.value() + " 调用");
+                                "模型 " + modelId + " 是 " + entry.model().kind().value() + " 模型，不能用于 " + kind.value()
+                                        + " 调用");
                     }
-                    return new Resolved(model, account(model));
-                })
-                .flatMap(resolved -> {
-                    ProviderAccount account = resolved.account();
+                    return entry;
+                }))
+                .flatMap(entry -> {
+                    ProviderAccount account = entry.account();
                     Mono<Optional<SecretValue>> credential = account.secretRef() == null
                             ? Mono.just(Optional.empty())
                             : secrets.resolve(account.secretRef()).map(Optional::of);
-                    String baseUrl = resolved.model().baseUrl() != null
-                            ? resolved.model().baseUrl()
-                            : account.baseUrl();
                     return credential.map(apiKey -> new ModelRoute(
                             modelId,
                             account.providerAccountId(),
                             account.provider(),
-                            baseUrl,
-                            resolved.model().upstreamModel(),
+                            entry.baseUrl(),
+                            entry.model().upstreamModel(),
                             apiKey.orElse(null),
-                            resolved.model().contextWindow(),
-                            resolved.model().maxOutputTokens()));
+                            entry.model().contextWindow(),
+                            entry.model().maxOutputTokens()));
                 });
     }
 
@@ -203,22 +208,30 @@ public class RoutingModelGateway implements ModelGateway {
     @Override
     public Mono<Void> settle(BudgetReservation reservation, ModelCallRecord record) {
         return PlatformContexts.currentReactive().flatMap(context -> {
-            ModelUsageMessage message = ModelUsageMessage.of(context, record, clock.instant());
-            long billable = message.billableTokens();
-            return Blocking.run(() -> usage.record(message))
-                    .then(Blocking.run(() -> {
-                        ledger.settle(
-                                context.tenantId(), BudgetScope.of(context), reservation.reservationId(), billable);
-                        RateLimit limit = rateLimit(record.route());
-                        int unused = (int) Math.max(0, reservation.reservedTokens() - billable);
-                        rateLimiter.refund(
-                                RedisRateLimiter.key(
-                                        record.route().providerAccountId(),
-                                        record.route().upstreamModel()),
-                                limit,
-                                unused,
-                                clock.instant());
-                    }))
+            long billable = (long) record.usage().inputTokens() + record.usage().outputTokens();
+            // 价格表版本取结算时目录中的当前版本：新版本发布后，之后结算的用量按新版本计价（ADR-0045 第 8 条）。调用期间模型被删除时
+            // 目录里已经没有它，用量照样记录（不带价格表），不能因此丢账
+            return Blocking.call(() -> catalog.find(record.route().modelId()))
+                    .flatMap(entry -> Blocking.run(() -> usage.record(ModelUsageMessage.of(
+                                    context,
+                                    record,
+                                    clock.instant(),
+                                    entry.map(CatalogEntry::model).orElse(null))))
+                            .then(Blocking.run(() -> {
+                                ledger.settle(
+                                        context.tenantId(),
+                                        BudgetScope.of(context),
+                                        reservation.reservationId(),
+                                        billable);
+                                int unused = (int) Math.max(0, reservation.reservedTokens() - billable);
+                                entry.ifPresent(found -> rateLimiter.refund(
+                                        RedisRateLimiter.key(
+                                                record.route().providerAccountId(),
+                                                record.route().upstreamModel()),
+                                        found.rateLimit(),
+                                        unused,
+                                        clock.instant()));
+                            })))
                     .doOnSuccess(done -> {
                         metrics.tokens(record.route().modelId(), record.usage());
                         if (record.firstTokenLatency() != null) {
@@ -260,21 +273,17 @@ public class RoutingModelGateway implements ModelGateway {
                 .toList();
     }
 
-    private CatalogModel model(String modelId) {
-        return catalog.model(modelId)
-                .orElseThrow(() -> new NotFoundException(ModelRoutingErrorCode.MODEL_NOT_FOUND, "模型不存在：" + modelId));
+    private CatalogEntry entry(String modelId) {
+        return catalog.find(modelId).orElseThrow(() -> modelNotFound(modelId));
     }
 
-    private ProviderAccount account(CatalogModel model) {
-        return catalog.account(model.providerAccountId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "模型目录不一致：模型 " + model.modelId() + " 的供应商账号不存在 " + model.providerAccountId()));
+    private static NotFoundException modelNotFound(String modelId) {
+        return new NotFoundException(ModelRoutingErrorCode.MODEL_NOT_FOUND, "模型不存在：" + modelId);
     }
 
     /** 本次调用的限流参数：模型自己的，没有时取账号的。 */
     private RateLimit rateLimit(ModelRoute route) {
-        CatalogModel model = model(route.modelId());
-        return model.rateLimit() != null ? model.rateLimit() : account(model).rateLimit();
+        return entry(route.modelId()).rateLimit();
     }
 
     private MeridianException budgetExceeded(BudgetScope scope) {
@@ -291,7 +300,4 @@ public class RoutingModelGateway implements ModelGateway {
     private static RateLimitTimeoutException rateLimitTimeout(ModelRoute route, Duration wait) {
         return new RateLimitTimeoutException("模型 " + route.modelId() + " 限流需要等待 " + wait.toMillis() + " 毫秒，超过上限");
     }
-
-    /** 解析出的目录模型与供应商账号。 */
-    private record Resolved(CatalogModel model, ProviderAccount account) {}
 }

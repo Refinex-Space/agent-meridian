@@ -84,9 +84,10 @@ public class VectorModelService {
      */
     public Mono<Embeddings> embed(String modelId, List<String> inputs, Integer dimensions) {
         return gateway.resolve(modelId, ModelKind.EMBEDDING)
-                .zipWith(Blocking.call(() -> catalog.model(modelId)
+                .zipWith(Blocking.call(() -> catalog.find(modelId)
                         .orElseThrow(
                                 () -> new NotFoundException(ModelRoutingErrorCode.MODEL_NOT_FOUND, "模型不存在：" + modelId))
+                        .model()
                         .maxBatchSize()))
                 .flatMap(resolved -> {
                     ModelRoute route = resolved.getT1();

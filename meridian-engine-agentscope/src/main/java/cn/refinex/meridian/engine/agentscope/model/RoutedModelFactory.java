@@ -11,7 +11,8 @@ import java.util.Objects;
 /**
  * 生产用的模型工厂：每个智能体实例一个 {@link RoutedModel}，不经 AgentScope 的 {@code ModelRegistry}（架构设计「引擎装配」）。
  *
- * <p>装配时经 {@link ModelGateway#describe} 读取主模型的上下文窗口并设置到模型上；凭据与路由在每次调用时解析。
+ * <p>装配时经 {@link ModelGateway#describe} 读取主模型的上下文窗口并设置到模型上，智能体配置没有备用模型时取目录中的备用模型；
+ * 凭据与路由在每次调用时解析。
  * 装配在虚拟线程上执行（{@code AgentInstanceCache} 经 {@code Blocking} 调用），这里可以阻塞等待目录读取。
  *
  * <p>线程安全：无可变状态。
@@ -42,6 +43,11 @@ public final class RoutedModelFactory implements ModelFactory {
     public Model create(String agentVersionId, ModelSpec model) {
         ModelDescriptor descriptor = gateway.describe(model.modelId()).block(DESCRIBE_TIMEOUT);
         Objects.requireNonNull(descriptor, "模型目录没有返回模型信息：" + model.modelId());
-        return new RoutedModel(gateway, clients, retryPolicy, model, agentVersionId, descriptor.contextWindow());
+        // 智能体配置没有给出备用模型时用目录中的（ADR-0045 第 7 条）
+        ModelSpec effective = model.fallbackModelId() == null && descriptor.fallbackModelId() != null
+                ? new ModelSpec(
+                        model.modelId(), descriptor.fallbackModelId(), model.maxOutputTokens(), model.temperature())
+                : model;
+        return new RoutedModel(gateway, clients, retryPolicy, effective, agentVersionId, descriptor.contextWindow());
     }
 }

@@ -17,27 +17,19 @@ import cn.refinex.meridian.runtime.session.app.TurnWorkerLifecycle;
 import cn.refinex.meridian.runtime.support.ApiTestClient;
 import cn.refinex.meridian.runtime.support.ApiTestClient.ApiResponse;
 import cn.refinex.meridian.runtime.support.DbAssertions;
-import cn.refinex.meridian.security.apikey.ApiKeyHashes;
 import cn.refinex.meridian.security.apikey.ControlPlaneApiKeyResolver;
-import cn.refinex.meridian.security.servicejwt.ServiceJwtVerifier;
 import cn.refinex.meridian.security.servicejwt.ServiceJwts;
-import cn.refinex.meridian.security.servicejwt.ServicePrincipal;
 import cn.refinex.meridian.testsupport.SpringContainerProperties;
 import cn.refinex.meridian.testsupport.auth.KeycloakRealm;
-import cn.refinex.meridian.testsupport.auth.TestTokenIssuer;
 import cn.refinex.meridian.testsupport.model.ScriptedOpenAiServer;
-import com.sun.net.httpserver.HttpExchange;
 import io.agentscope.core.shutdown.GracefulShutdownManager;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,7 +62,6 @@ class ControlPlaneIntegrationIT {
 
     private static final String AGENT = "agt_cp_scripted";
     private static final String ENVIRONMENT = "env_cp_none";
-    private static final String RUNTIME_SECRET = "test-runtime-client-secret";
     private static final Duration WAIT = Duration.ofSeconds(30);
 
     private static final ScriptedOpenAiServer MODEL =
@@ -84,7 +75,7 @@ class ControlPlaneIntegrationIT {
         SpringContainerProperties.redis(registry);
         SpringContainerProperties.minio(registry);
         registry.add("meridian.security.service-client.control-plane-url", CONTROL_PLANE::baseUrl);
-        registry.add("meridian.security.service-jwt.client-secret", () -> RUNTIME_SECRET);
+        registry.add("meridian.security.service-jwt.client-secret", () -> StubControlPlane.RUNTIME_SECRET);
         // 控制台用户（ADR-0044）：Keycloak 开发 realm，默认的 sub 声明
         registry.add("meridian.security.oidc.issuer", KeycloakRealm::issuer);
         registry.add(
@@ -360,160 +351,6 @@ class ControlPlaneIntegrationIT {
         @Bean
         SkillRepositoryProvider skillRepositoryProvider() {
             return StaticSkillRepository.empty();
-        }
-    }
-
-    /**
-     * control-plane 的替身（ADR-0044）：建在 {@link TestTokenIssuer} 上——令牌端点与 JWKS 是真实的签发方，内部接口（API Key 校验、租户配额、
-     * 控制台用户的项目权限）只接受 runtime 换取的、{@code aud} 为 control-plane 的服务 JWT，响应格式与 {@code meridian-internal-v1.yaml}
-     * 一致。
-     */
-    static final class StubControlPlane implements AutoCloseable {
-
-        final Map<String, Integer> quotas = new ConcurrentHashMap<>();
-        final AtomicInteger verifyCalls = new AtomicInteger();
-        final AtomicInteger quotaCalls = new AtomicInteger();
-        final List<String> callers = new java.util.concurrent.CopyOnWriteArrayList<>();
-        private final Map<String, String> verifications = new ConcurrentHashMap<>();
-        private final Map<String, String> keyIds = new ConcurrentHashMap<>();
-        private final Map<String, String> access = new ConcurrentHashMap<>();
-        private final TestTokenIssuer issuer;
-        private final ServiceJwtVerifier verifier;
-
-        private StubControlPlane(TestTokenIssuer issuer) {
-            this.issuer = issuer;
-            try {
-                this.verifier = ServiceJwtVerifier.remote(
-                        java.net.URI.create(issuer.jwksUrl()).toURL(),
-                        ServiceJwts.DEFAULT_ISSUER,
-                        ServiceJwts.CONTROL_PLANE,
-                        Duration.ofMinutes(5));
-            } catch (java.net.MalformedURLException e) {
-                throw new IllegalStateException(e);
-            }
-        }
-
-        static StubControlPlane start() {
-            TestTokenIssuer issuer = TestTokenIssuer.start().client(ServiceJwts.RUNTIME, RUNTIME_SECRET);
-            StubControlPlane stub = new StubControlPlane(issuer);
-            issuer.route("/internal/v1/api-keys:verify", stub::verify)
-                    .route("/internal/v1/tenants/", stub::quota)
-                    .route("/internal/v1/project-access:resolve", stub::projectAccess);
-            return stub;
-        }
-
-        String baseUrl() {
-            return issuer.url();
-        }
-
-        String issue(String tenantId, int ratePerMinute, String... scopes) {
-            String plaintext = "mk_live_" + Ids.newUlid() + "abcdefghijklmn";
-            String keyId = Ids.newId(IdPrefix.API_KEY);
-            verifications.put(ApiKeyHashes.sha256(plaintext), """
-                    {"api_key_id":"%s","tenant_id":"%s","project_id":"%s","scopes":[%s],"rate_limit_per_minute":%d,
-                     "expires_at":null}
-                    """.formatted(
-                            keyId, tenantId, Ids.newId(IdPrefix.PROJECT), json(scopes), ratePerMinute));
-            keyIds.put(plaintext, keyId);
-            return plaintext;
-        }
-
-        /** 登记控制台用户在项目上的作用域（control-plane 按角色矩阵换算后的结果）。 */
-        void grant(String subject, String tenantId, String projectId, String... scopes) {
-            access.put(subject + "|" + projectId, """
-                    {"tenant_id":"%s","project_id":"%s","scopes":[%s]}
-                    """.formatted(tenantId, projectId, json(scopes)));
-        }
-
-        String keyId(String plaintext) {
-            return keyIds.get(plaintext);
-        }
-
-        void revoke(String plaintext) {
-            verifications.remove(ApiKeyHashes.sha256(plaintext));
-        }
-
-        private static String json(String... values) {
-            return String.join(
-                    ",",
-                    java.util.Arrays.stream(values).map(s -> "\"" + s + "\"").toList());
-        }
-
-        private void verify(HttpExchange exchange) throws IOException {
-            verifyCalls.incrementAndGet();
-            if (!authorized(exchange)) {
-                return;
-            }
-            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            String hash = body.replaceAll(".*\"key_hash\"\\s*:\\s*\"([0-9a-f]{64})\".*", "$1");
-            String verification = verifications.get(hash);
-            if (verification == null) {
-                respond(exchange, 404, problem("api_key.not_found", 404));
-            } else {
-                respond(exchange, 200, verification);
-            }
-        }
-
-        private void quota(HttpExchange exchange) throws IOException {
-            quotaCalls.incrementAndGet();
-            if (!authorized(exchange)) {
-                return;
-            }
-            String tenantId = exchange.getRequestURI().getPath().split("/")[4];
-            Integer quota = quotas.get(tenantId);
-            if (quota == null) {
-                respond(exchange, 404, problem("tenant.not_found", 404));
-            } else {
-                respond(exchange, 200, "{\"tenant_id\":\"" + tenantId + "\",\"max_concurrent_turns\":" + quota + "}");
-            }
-        }
-
-        private void projectAccess(HttpExchange exchange) throws IOException {
-            if (!authorized(exchange)) {
-                return;
-            }
-            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            String subject = body.replaceAll(".*\"subject\"\\s*:\\s*\"([^\"]*)\".*", "$1");
-            String project = body.replaceAll(".*\"project_id\"\\s*:\\s*\"([^\"]*)\".*", "$1");
-            String granted = access.get(subject + "|" + project);
-            if (granted == null) {
-                respond(exchange, 404, problem("project.not_found", 404));
-            } else {
-                respond(exchange, 200, granted);
-            }
-        }
-
-        /** 只接受 runtime 的服务 JWT（签名、签发方、受众都由真实的校验器检查）。 */
-        private boolean authorized(HttpExchange exchange) throws IOException {
-            String header = exchange.getRequestHeaders().getFirst("Authorization");
-            java.util.Optional<ServicePrincipal> principal = header != null && header.startsWith("Bearer ")
-                    ? verifier.resolve(header.substring("Bearer ".length()))
-                    : java.util.Optional.empty();
-            if (principal.isPresent() && principal.get().service().equals(ServiceJwts.RUNTIME)) {
-                callers.add(principal.get().service());
-                return true;
-            }
-            respond(exchange, 401, problem("auth.invalid_service_credential", 401));
-            return false;
-        }
-
-        private static String problem(String code, int status) {
-            return "{\"type\":\"urn:meridian:error:" + code + "\",\"title\":\"x\",\"status\":" + status
-                    + ",\"detail\":null,\"instance\":\"/\",\"code\":\"" + code + "\",\"request_id\":\"r\"}";
-        }
-
-        private static void respond(HttpExchange exchange, int status, String body) throws IOException {
-            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders()
-                    .set("Content-Type", status == 200 ? "application/json" : "application/problem+json");
-            exchange.sendResponseHeaders(status, bytes.length);
-            exchange.getResponseBody().write(bytes);
-            exchange.close();
-        }
-
-        @Override
-        public void close() {
-            issuer.close();
         }
     }
 }

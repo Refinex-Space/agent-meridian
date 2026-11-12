@@ -71,7 +71,14 @@ meridian:
       # 限流等待上限（架构设计「模型调用」）；预扣记录的保留时间远大于一次模型调用，过期未结算的由对账修正
       rate-limit-max-wait: 30s
       reservation-ttl: 1h
-      # 开发期的供应商与模型目录（T15a 之前）、预算限额（T16 之前，目录不存在时不限），相对于工作目录
+      # 供应商、模型目录与凭据（ADR-0045）：默认经 control-plane 的内部接口解析；file 只允许在 dev、test profile
+      catalog-source: control-plane
+      # 目录缓存 60 秒、凭据明文缓存 5 分钟，都是 config.invalidate 丢失时的兜底
+      catalog-cache-ttl: 60s
+      secret-cache-ttl: 5m
+      # 供应商端点的地址策略：私有网段不配置时全部放行（private-networks），生产按私有化推理服务所在网段收窄
+      allow-loopback-endpoints: false
+      # catalog-source=file 时的供应商目录；预算限额（T16 之前，目录不存在时不限）。都相对于工作目录
       providers-directory: dev-config/providers
       budgets-directory: dev-config/budgets
 

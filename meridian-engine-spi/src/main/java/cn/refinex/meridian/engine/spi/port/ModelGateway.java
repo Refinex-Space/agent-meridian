@@ -28,7 +28,7 @@ public interface ModelGateway {
      * 解析模型的供应商账号、端点与凭据。结果可以按"供应商账号加模型"缓存。
      *
      * @param modelId 模型 ID（{@code mdl_…}）
-     * @return 路由信息；模型不存在或未授权给该项目时以 {@code NotFoundException} 失败
+     * @return 路由信息；模型不存在或不属于调用方租户（租户内全部项目可用，ADR-0045）时以 {@code NotFoundException} 失败
      */
     Mono<ModelRoute> resolve(String modelId);
 
@@ -84,8 +84,9 @@ public interface ModelGateway {
      * @param modelId 模型 ID；必填
      * @param contextWindow 上下文窗口，单位 token，大于 0
      * @param maxOutputTokens 请求没有指定时使用的最大输出 token 数，大于 0；预扣按它计算
+     * @param fallbackModelId 目录中的备用模型；可为空。智能体配置没有给出备用模型时使用（ADR-0045 第 7 条）
      */
-    record ModelDescriptor(String modelId, int contextWindow, int maxOutputTokens) {
+    record ModelDescriptor(String modelId, int contextWindow, int maxOutputTokens, String fallbackModelId) {
 
         /**
          * 创建模型信息。
@@ -98,6 +99,17 @@ public interface ModelGateway {
             if (contextWindow < 1 || maxOutputTokens < 1) {
                 throw new IllegalArgumentException("contextWindow 与 maxOutputTokens 必须大于 0");
             }
+        }
+
+        /**
+         * 创建没有备用模型的模型信息。
+         *
+         * @param modelId 模型 ID
+         * @param contextWindow 上下文窗口
+         * @param maxOutputTokens 默认最大输出
+         */
+        public ModelDescriptor(String modelId, int contextWindow, int maxOutputTokens) {
+            this(modelId, contextWindow, maxOutputTokens, null);
         }
     }
 

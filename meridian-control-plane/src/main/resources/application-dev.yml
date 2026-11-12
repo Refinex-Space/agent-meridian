@@ -29,6 +29,8 @@ meridian:
     provider-endpoints:
       # 本机的脚本化模型服务在 localhost:18090
       allow-loopback: true
+      # 默认的私有网段，加上 fake-ip 透明代理把公网域名解析到的 198.18.0.0/15（本机开发常见）
+      private-networks: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, "fc00::/7", 198.18.0.0/15]
     service-tokens:
       # 服务 JWT 的签名密钥（ADR-0044）：本机运行写在仓库的 deploy/compose/data（已忽略），Compose 中是命名卷
       key-directory: ${MERIDIAN_SERVICE_TOKEN_KEY_DIR:deploy/compose/data/service-token-keys}

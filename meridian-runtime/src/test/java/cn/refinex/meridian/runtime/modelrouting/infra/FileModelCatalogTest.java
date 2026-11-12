@@ -56,7 +56,11 @@ class FileModelCatalogTest {
                         null,
                         ModelKind.CHAT,
                         null,
-                        CatalogModel.DEFAULT_MAX_BATCH_SIZE));
+                        CatalogModel.DEFAULT_MAX_BATCH_SIZE,
+                        null,
+                        null,
+                        null,
+                        null));
         assertThat(catalog.model("mdl_b"))
                 .contains(new CatalogModel(
                         "mdl_b",
@@ -67,7 +71,11 @@ class FileModelCatalogTest {
                         new RateLimit(5, 0),
                         ModelKind.CHAT,
                         null,
-                        CatalogModel.DEFAULT_MAX_BATCH_SIZE));
+                        CatalogModel.DEFAULT_MAX_BATCH_SIZE,
+                        null,
+                        null,
+                        null,
+                        null));
         assertThat(catalog.account("prv_acme"))
                 .contains(new ProviderAccount(
                         "prv_acme",
@@ -76,6 +84,13 @@ class FileModelCatalogTest {
                         "ACME_API_KEY",
                         new RateLimit(60, 100_000)));
         assertThat(catalog.model("mdl_missing")).isEmpty();
+        assertThat(catalog.find("mdl_b"))
+                .hasValueSatisfying(entry -> assertThat(entry.rateLimit()).isEqualTo(new RateLimit(5, 0)));
+        assertThat(catalog.find("mdl_a"))
+                .hasValueSatisfying(entry -> assertThat(entry.rateLimit()).isEqualTo(new RateLimit(60, 100_000)));
+        // 开发期的文件目录不带租户，任何租户都能用
+        assertThat(catalog.find("mdl_a").orElseThrow().model().usableBy("ten_any"))
+                .isTrue();
     }
 
     @Test
