@@ -1133,36 +1133,36 @@
       "id": "T15a-A01",
       "task": "T15a",
       "description": "凭据：明文无法经任何接口读出；密文存储；不同租户的数据密钥不同；每次解析都有审计记录；日志与事件中无明文。验证：集成测试与日志检查。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "control-plane `./mvnw -pl meridian-control-plane -am verify -Dit.test='SecretStoreIT'`：6 个通过——管理接口（创建、幂等重放、查看、列表）的响应都没有 value 与明文；cp.secrets.ciphertext 长度为 12+明文+16 且不含明文，outbox 与幂等记录不含明文；两个租户的 secret_data_keys 解包后的数据密钥不同（32 字节），B 租户解析 A 租户的凭据 404；3 次解析写 3 条 secret.resolved 审计（actor service/runtime）并更新 last_used_at；租户与项目校验（项目级凭据只给本项目）；DEBUG 日志（OutputCaptureExtension）不含明文。`SecretCryptoTest`：AES-GCM 绑定租户、凭据、版本，篡改与换密钥都解不开；本地主密钥 0600。runtime `-Dit.test=ControlPlaneCatalogIT`：一轮完整会话后，捕获的日志、rt.session_events.data、rt.outbox 都不含凭据明文。真实链路 `scripts/dev/catalog-smoke.sh --dashscope` 之后，control-plane、runtime、脚本化模型服务的日志中 DASHSCOPE_API_KEY 出现 0 次，cp.outbox 中 secret.resolved 4 条与 4 次解析对应。"
     },
     {
       "id": "T15a-A02",
       "task": "T15a",
       "description": "Vault Transit 实现通过 Vault 的 Testcontainers 测试。验证：测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw -pl meridian-control-plane -am verify -Dit.test=VaultTransitIT`：2 个通过。Testcontainers 的 hashicorp/vault:1.20.4（开发模式，启用 transit 并建 meridian-secrets 密钥），整个 control-plane 以 key-encryption=vault 运行：secret_data_keys.wrapped_key 以 vault:v1: 开头，经管理 API 写入的凭据经 secrets:resolve 解出原值；transit 密钥轮换后旧包装仍能解包、新租户的数据密钥以 vault:v2: 包装，轮换凭据后解析出新值；错误令牌与不可达的 Vault 以 secret.encryption_unavailable 失败、消息不含令牌。"
     },
     {
       "id": "T15a-A03",
       "task": "T15a",
       "description": "通过管理 API 创建凭据、供应商账号与模型后，runtime 的模型调用从 control-plane 解析供应商与凭据（`scripted` 供应商与 `-Plive` 的 DashScope 各一次），不读 `dev-config/providers/`。验证：集成测试与 `-Plive` 输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "真实链路 `scripts/dev/catalog-smoke.sh --dashscope`（up.sh、auth profile、run-control-plane.sh、scripted-model.sh、`MERIDIAN_RUNTIME_CATALOG_SOURCE=control-plane run-runtime.sh --server.port=18080`）：经管理 API 建凭据、供应商账号、价格表、模型后，runtime 的 /v1/chat/completions 成功（脚本化 usage=14/12），凭据记下 last_used_at，轮换后再调用成功；同样经管理 API 接入 DashScope 兼容端点，qwen-plus 回答 81 个字符、usage=13/49，输出“全部通过”。集成测试 runtime `-Dit.test=ControlPlaneCatalogIT`（3 个通过）：catalog-source=control-plane，providers-directory 指向不存在的目录，会话与直通调用的端点和凭据都来自 control-plane 内部接口（StubControlPlane 按规范应答）。`./mvnw -Plive -pl meridian-runtime -am verify -Dit.test=ControlPlaneCatalogLiveIT`：1 个通过，输出 `T15a-A03 live: model=qwen-plus input_tokens=13 output_tokens=49 price_book_version=1`，凭据经 secrets:resolve 解析 1 次。"
     },
     {
       "id": "T15a-A04",
       "task": "T15a",
       "description": "价格表版本化：新版本生效后，新用量按新价格，旧记录不变。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "control-plane `-Dit.test=ModelCatalogIT#newPriceBookVersionsTakeEffectAndOldVersionsStayUnchanged`：发布版本 2 后 config.invalidate 收到 price_book 消息、内部接口的 price_book_version 变为 2，版本 1 的单价（0.8/2/0.16）不变、版本只追加。runtime `ControlPlaneCatalogIT#credentialEndpointAndPriceChangesTakeEffectImmediately`：发布前的用量记录 price_book_version=1，price_book 失效通知之后新的用量记录为 2，先前的记录仍全部为 1（T16 按记录中的版本计价）。"
     },
     {
       "id": "T15a-A05",
       "task": "T15a",
       "description": "供应商、模型、凭据变更后 runtime 立即使用新配置；删除被引用的资源返回冲突。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "runtime `ControlPlaneCatalogIT`：凭据轮换（5 分钟明文缓存内）、供应商端点修改（60 秒目录缓存内）、价格表新版本、模型删除，经 config.invalidate 在 5 秒内生效（下一次调用的 x-api-key/Authorization、目标服务器、用量版本、404 model.not_found 都随之变化）；别的租户的模型 404。control-plane `ModelCatalogIT`：删除挂着模型的供应商账号、被作为备用模型的模型返回 409 catalog.in_use 并列出 references；`SecretStoreIT`：删除被供应商账号或租户设置引用的凭据返回 409 secret.in_use 与 references；修改账号与模型发布 provider_account、model 失效消息。control-plane 全部 IT 390 个通过（含 RoleMatrixIT 359 个用例）。"
     },
     {
       "id": "T15a-A06",
