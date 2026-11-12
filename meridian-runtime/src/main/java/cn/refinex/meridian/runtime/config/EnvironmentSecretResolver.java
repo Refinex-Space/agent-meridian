@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
 import reactor.core.publisher.Mono;
 
 /**
- * {@link SecretResolver} 的开发实现（T09a；T15a 起改为经 control-plane 内部接口解密）：把凭据引用当作环境变量名，从环境变量读取明文。
+ * {@link SecretResolver} 的开发实现（T09a；T15a 起只在 {@code catalog-source=file} 的 {@code dev}、{@code test} profile 使用，生产是
+ * {@link ControlPlaneSecretResolver}）：把凭据引用当作环境变量名，从环境变量读取明文。
  * 开发配置里只写变量名（例如 {@code DASHSCOPE_API_KEY}），不写凭据本身。
  *
  * <p>只允许读取名字以 {@code _API_KEY} 结尾的大写变量，数据库口令等其他环境变量不能经它读出（架构原则第 5 条"凭据默认不可读"）。

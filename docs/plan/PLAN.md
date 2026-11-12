@@ -78,7 +78,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 已完成 | 34b708c |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 已完成 | 251ed4e |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 已完成 | ed57d00 |
-| T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 进行中 | — |
+| T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | 待填 |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 未开始 | — |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 未开始 | — |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 未开始 | — |
@@ -175,19 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-**T15a 凭据库、供应商、模型目录与价格表**（开工 2026-11-11，基线 `verify.sh` 通过）
-
-前提已定（本会话中用户确认）：Q3 首批供应商为 OpenAI 兼容、Anthropic、Gemini；端点校验合并两种策略（始终拒绝回环、链路本地、元数据等地址，私有网段默认放行、平台可收窄到指定网段）；Anthropic、Gemini 用平台薄适配器（复用 2.0.4 的 formatter 与响应解析器，变更型 ADR 已获确认）。
-
-- [x] 1. ADR：凭据、供应商与模型目录的补充约定（ADR-0045）；Anthropic、Gemini 适配器的变更（ADR-0046，用户已确认）；架构设计 v1.20
-- [x] 2. D52：`AddressPolicy` 移到 `common.net` 并增加 `EndpointPolicy`；`image.url` 只允许 http(s)（`SessionApiIT`）
-- [x] 3. control-plane 迁移：`secrets`、`secret_data_keys`、`provider_accounts`、`models`、`price_books`、`price_book_versions`
-- [x] 4. 凭据库：信封加密、`KeyEncryptionService`（本地主密钥、Vault Transit）、管理 API（写入、轮换、删除、列表与引用方）、`/internal/v1/secrets:resolve`（服务 JWT、租户校验、审计、最后使用时间）
-- [x] 5. 供应商账号、模型、价格表的管理 API 与内部解析接口；删除被引用的资源返回冲突；`config.invalidate` 发布（control-plane 全部 IT 390 个通过；顺带修了租户设置带联网搜索后端时 500 的规范问题）
-- [x] 6. runtime：基于 control-plane 的 `SecretResolver` 与模型目录（缓存、失效通知、兜底过期、租户校验），文件实现只留 dev/test；用量消息带价格表版本（`ControlPlaneCatalogIT`、`-Plive` 的 `ControlPlaneCatalogLiveIT` 通过；端点策略允许显式放行保留段，本机 fake-ip 解析到 198.18.0.0/15）
-- [x] 7. engine：Anthropic、Gemini 适配器与错误分类（D25），模拟服务测试（`ProviderAdaptersIT` 8 个通过）
-- [x] 8. 验收测试：A01（明文不可读、密文、租户数据密钥、审计、日志与事件扫描）、A02（Vault Testcontainers）、A03（scripted 与 `-Plive`）、A04（价格表版本）、A05（失效与冲突）——另有真实链路 `scripts/dev/catalog-smoke.sh --dashscope` 全部通过
-- [ ] 9. 收尾：`verify.sh`、模块与根 `CLAUDE.md`、架构与规范文档、`acceptance.json`、`PLAN.md`
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -290,6 +278,10 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D56 | T14a | `config.invalidate`、`key.revoked` 走 Pub/Sub，不保证送达：吊销有 60 秒缓存过期兜底，但租户并发配额的变更丢失后，runtime 的 `max_running` 要等下一次变更才更新；需要一个定期对账（按 control-plane 的配额刷新已有计数行）或改用 Stream | T27 |
 | D57 | T14a | 平台管理员来自配置 `meridian.control-plane.platform-admins`（主体标识列表）；Q2 已决（ADR-0043）：T14b 再支持按组或角色声明配置 | T14b（已落地：`meridian.control-plane.platform-admin-groups` 按令牌的组声明判定，ADR-0044） |
 | D58 | T14b | 服务 JWT 的生产部署（部署文档待办）：签名密钥从密钥管理系统加载（实现 `servicetoken.app.SigningKeySource`；开发实现 `DirectorySigningKeys` 只适合单副本或共享卷）、多副本 control-plane 共用同一组密钥、定期轮换的触发方式（`rotate()` 目前只有测试调用）；各服务的客户端密钥由 Secret 管理系统下发与更换；接入商业 IdP（Entra ID 的 `oid` 与组 ID、Okta 的组声明）的配置说明 | T28（Helm 与部署文档）、T26（接入说明） |
+| D59 | T15a | 凭据库的生产部署：`key-encryption=vault` 的地址、令牌与命名空间由 Secret 管理系统下发，Transit 密钥的轮换周期与 `rewrap`；从 `local` 切到 `vault`（或换主密钥）后旧的数据密钥解不开，需要一个重新包装数据密钥的迁移作业；`provider-endpoints.private-networks` 按私有化推理服务所在网段收窄（ADR-0045） | T28（部署文档与 Helm） |
+| D60 | T15a | Anthropic、Gemini 适配器只经 MockWebServer 验证（本机没有两家的真实密钥），没有 `-Plive`；扩展思考（Anthropic 的 thinking、Gemini 的 thinking budget）与提示词缓存的计量没有真实数据核对（ADR-0046） | T23（连通性测试接入真实账号时补跑），T30 复查 2.1 |
+| D61 | T15a | 联网搜索后端的端点只在 control-plane 写入租户设置时校验，runtime 侧的租户设置仍读开发配置、没有再校验；`tenant_settings.web_search.secret_id` 没有校验凭据存在且是租户级 | T15b（租户设置改由 control-plane 下发时一并处理） |
+| D62 | T15a | 端点校验与实际连接之间的 DNS 重绑定：control-plane 写入时、runtime 刷新目录时各解析一次，供应商客户端连接时再由 JDK、OkHttp 解析，两次之间换了地址校验不到；以网络策略为最终边界（ADR-0045） | T37 |
 
 ## 技术债
 
@@ -422,6 +414,14 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 交付：`meridian-security` 的服务 JWT 校验（`ServiceJwtVerifier`，JWKS 缓存与未知 `kid` 刷新）与签发客户端（`ServiceTokenClient`，客户端凭据模式，过期前 60 秒刷新）、OIDC 校验（`OidcTokenVerifier`，用户标识与组声明可配置）、公开 API 接受 OIDC 令牌加 `Meridian-Project`（`ConsoleApiAuthenticator`、`ControlPlaneProjectAccessResolver`、按用户限流）、`rbac.PublicApiScopes`、内部接口按调用方限定；删除开发期服务凭据与控制台令牌；control-plane 的 `servicetoken` 上下文（`/oauth2/token`、`/oauth2/jwks`、`DirectorySigningKeys` 与轮换）、`project-access:resolve`、按组的平台管理员；`PlatformContext.userId` 与 `actor()`；Keycloak 开发 realm、Compose `auth` profile、`console-token.sh`；test-support 的 `KeycloakRealm`、`TestTokenIssuer`；出网代理的 Lua 用客户端密钥换取服务 JWT；架构设计 v1.19、ADR-0044
 - 验收：A01–A05 全部 passing（角色矩阵 219 例由 OIDC 令牌驱动；两种声明配置；P14 在 kind 上以服务 JWT 复测通过）
 - 遗留：D58（服务 JWT 的生产部署：密钥管理系统、多副本共享密钥、轮换触发、IdP 接入说明，T28、T26）；Compose `app-smoke.sh` 的新步骤没有在本机实跑（Docker 内存紧张）
+
+### 2026-11-11 T15a 已完成（提交 待填）
+
+- 交付：Q3 已决（OpenAI 兼容、Anthropic、Gemini）；control-plane 的 `secret` 上下文（信封加密：按租户的 AES-256 数据密钥，AES-GCM 绑定租户、凭据与版本；`KeyEncryptionService` 的本地主密钥与 Vault Transit 实现；只能写入、轮换、删除的管理 API，列表带最后使用时间与引用方；`/internal/v1/secrets:resolve` 只接受 runtime，校验租户与项目，每次解析写审计）与 `catalog` 上下文（供应商账号、模型、价格表的管理 API，价格表版本只追加、发布即生效；`/internal/v1/models/{id}`；删除被引用资源 409 带 `references`；变更发布 `config.invalidate`），迁移 `V0002`，新操作类别 `MODEL_*`、`SECRET_*`，ID 前缀 `prb`；`common.net`（`AddressPolicy` 从 runtime 移入并分类、`EndpointPolicy`）；runtime 的 `ControlPlaneModelCatalog`（缓存 60 秒、读取时再校验端点）、`ControlPlaneSecretResolver`（明文缓存 5 分钟）、`CatalogInvalidationListener`、`catalog-source`（`file` 只允许 dev、test）、模型属于租户（D23）、目录备用模型、用量消息带价格表版本；engine 的 Anthropic、Gemini 平台适配器（D25）；D52 的图片地址与端点校验；`scripts/dev/catalog-smoke.sh`；ADR-0045、ADR-0046（变更型，用户在会话中确认），架构设计 v1.20
+- 验收：A01–A06 全部 passing（`SecretStoreIT`、`VaultTransitIT`、`ModelCatalogIT`、`ControlPlaneCatalogIT`、`ProviderAdaptersIT`；`-Plive` 的 `ControlPlaneCatalogLiveIT` 与真实链路 `catalog-smoke.sh --dashscope` 都通过）
+- 决策：凭据属于租户、可再限定到项目；模型租户内全部项目可用；端点策略危险地址始终拒绝、私有与保留网段按配置放行（本机 fake-ip 解析到 `198.18.0.0/15`，dev 配置显式放行）；Anthropic、Gemini 不用 2.0.4 的模型类（凭据构造时给、SDK 自带重试、`boundedElastic`）
+- 顺带修复：租户设置带联网搜索后端时 500（生成的 `@Size` 落在 `URI` 字段上）
+- 遗留：D59（凭据库的生产部署与重新包装）、D60（Anthropic、Gemini 没有真实模型验证）、D61（联网搜索后端在 runtime 侧的校验与凭据引用，T15b）、D62（DNS 重绑定，T37）；`dev` 与 Compose `app` 的 runtime 仍读 `dev-config/providers`（开发智能体引用 `mdl_dev_*`，T15b 改由 control-plane 下发智能体后切换）
 
 ## 计划变更记录
 

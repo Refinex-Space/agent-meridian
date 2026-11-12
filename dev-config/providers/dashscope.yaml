@@ -1,4 +1,4 @@
-# 开发用的供应商账号与模型目录（FileModelCatalog，T09a）。T15a 起由 control-plane 下发，本目录只留给开发与测试。
+# 开发用的供应商账号与模型目录（FileModelCatalog，T09a）：只在 catalog-source=file 的 dev、test profile 读取；生产由 control-plane 解析（ADR-0045）。
 # secret_ref 是凭据引用：开发实现（EnvironmentSecretResolver）把它当作环境变量名，只允许 *_API_KEY；这里只写变量名，不写凭据。
 kind: provider_account
 provider_account_id: prv_dev_dashscope

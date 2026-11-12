@@ -1168,8 +1168,8 @@
       "id": "T15a-A06",
       "task": "T15a",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`./mvnw clean` 后 `scripts/dev/verify.sh`：BUILD SUCCESS（15 个模块全部 SUCCESS，格式、编译、单元与集成测试、架构测试、enforcer、覆盖率、POM 版本；control-plane 集成测试 390 个、runtime 集成测试含新增的 ControlPlaneCatalogIT，0 失败 0 跳过），check-pom-versions OK，sandbox-runtime 的 pytest 23 passed，exit=0。第一次全量运行在 control-plane 的 domain 行覆盖率 0.61 < 0.80 失败，补了 catalog 与 secret 领域对象的单元测试后重跑通过。"
     },
     {
       "id": "T15b-A01",

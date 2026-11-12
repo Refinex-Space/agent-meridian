@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import cn.refinex.meridian.common.error.ErrorCodes;
 import cn.refinex.meridian.common.error.MeridianException;
+import cn.refinex.meridian.controlplane.secret.domain.Secret;
 import cn.refinex.meridian.controlplane.secret.domain.SecretCipher;
 import cn.refinex.meridian.controlplane.secret.domain.SecretErrorCode;
 import cn.refinex.meridian.controlplane.secret.infra.LocalMasterKeyEncryption;
@@ -13,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -77,6 +79,24 @@ class SecretCryptoTest {
         Files.writeString(file, "c2hvcnQ=");
 
         assertThatThrownBy(() -> new LocalMasterKeyEncryption(file)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void tenantSecretsServeTheWholeTenantAndProjectSecretsOnlyTheirProject() {
+        Secret tenantLevel = new Secret("sec_1", "ten_a", null, "租户级", 1, "u", Instant.EPOCH, Instant.EPOCH, null);
+        Secret projectLevel = new Secret("sec_2", "ten_a", "prj_1", "项目级", 1, "u", Instant.EPOCH, Instant.EPOCH, null);
+
+        assertThat(tenantLevel.usableBy("ten_a", null)).isTrue();
+        assertThat(tenantLevel.usableBy("ten_a", "prj_9")).isTrue();
+        assertThat(tenantLevel.usableBy("ten_b", null)).isFalse();
+        assertThat(projectLevel.usableBy("ten_a", "prj_1")).isTrue();
+        assertThat(projectLevel.usableBy("ten_a", "prj_2")).isFalse();
+        assertThat(projectLevel.usableBy("ten_a", null)).as("租户级的引用方不能用项目级凭据").isFalse();
+        assertThat(projectLevel.usableBy("ten_b", "prj_1")).isFalse();
+        assertThatThrownBy(() -> new Secret("sec_3", null, null, "x", 1, "u", Instant.EPOCH, Instant.EPOCH, null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> SecretCipher.decrypt(key(), new byte[12], SecretCipher.secretAad("t", "s", 1)))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
