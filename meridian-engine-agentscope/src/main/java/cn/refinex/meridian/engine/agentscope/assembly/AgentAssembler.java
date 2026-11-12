@@ -130,21 +130,26 @@ public final class AgentAssembler {
 
     private AssembledAgent assemble(AgentProfile profile, Model model, String tenantPrompt) {
         ToolProvider.ToolBundle tools = toolProvider.tools(profile);
-        HarnessAgent agent;
+        HarnessAgent agent = null;
         try {
             HarnessAgent.Builder builder = HarnessAgent.builder();
             Map<String, AbstractFilesystem> sandboxRoutes =
                     configure(builder, profile, model, tenantPrompt, tools.tools());
             agent = builder.build();
+            HarnessAgent built = agent;
             // 自检：非 ToolBase 工具不进权限引擎，只允许 harness 的白名单工具（登记事项 D02）
-            ToolPolicy.verify(agent.getToolkit());
+            ToolPolicy.verify(built.getToolkit());
             // 平台工具经本实例的工作区文件系统操作文件与命令（架构设计「平台工具」）
-            AbstractFilesystem workspace = toolFilesystem(agent, sandboxRoutes);
+            AbstractFilesystem workspace = toolFilesystem(built, sandboxRoutes);
             tools.tools().stream()
                     .filter(PlatformTool.class::isInstance)
                     .map(PlatformTool.class::cast)
-                    .forEach(tool -> tool.attach(agent, workspace));
+                    .forEach(tool -> tool.attach(built, workspace));
         } catch (RuntimeException e) {
+            // 自检或工具绑定失败时，已经构建的实例与 MCP 客户端都要关闭（R1 审查 A-F5）
+            if (agent != null) {
+                closeQuietly(List.of(agent), e);
+            }
             closeQuietly(tools.resources(), e);
             throw e;
         }

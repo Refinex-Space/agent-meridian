@@ -152,14 +152,27 @@ public final class PlatformToolProvider implements ToolProvider {
                     "智能体挂载了 MCP 服务但没有登记 MCP 连接器，未注册 MCP 工具 agentVersionId={}",
                     profile.key().agentVersionId());
         }
-        if (!profile.isSubagent() && profile.tools().contains(PlatformToolNames.SPAWN_SUBAGENT)) {
-            if (profile.agent().subagents().isEmpty()) {
-                log.debug(
-                        "智能体启用了 spawn_subagent 但没有声明子智能体，未注册 agentVersionId={}",
-                        profile.key().agentVersionId());
-            } else {
-                tools.add(new SpawnSubagentTool(services, profile.agent(), subagentSideEffect(profile.agent(), tools)));
+        try {
+            if (!profile.isSubagent() && profile.tools().contains(PlatformToolNames.SPAWN_SUBAGENT)) {
+                if (profile.agent().subagents().isEmpty()) {
+                    log.debug(
+                            "智能体启用了 spawn_subagent 但没有声明子智能体，未注册 agentVersionId={}",
+                            profile.key().agentVersionId());
+                } else {
+                    tools.add(new SpawnSubagentTool(
+                            services, profile.agent(), subagentSideEffect(profile.agent(), tools)));
+                }
             }
+        } catch (RuntimeException e) {
+            // MCP 客户端已经建立，后面的工具构造失败时要关闭（R1 审查 A-F5）
+            for (AutoCloseable resource : resources) {
+                try {
+                    resource.close();
+                } catch (Exception closeFailure) {
+                    e.addSuppressed(closeFailure);
+                }
+            }
+            throw e;
         }
         return new ToolBundle(tools, resources);
     }
