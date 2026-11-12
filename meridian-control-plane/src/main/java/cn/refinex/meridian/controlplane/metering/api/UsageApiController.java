@@ -10,7 +10,7 @@ import cn.refinex.meridian.security.rbac.Permission;
 import cn.refinex.meridian.security.rbac.RequiresPermission;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.util.Set;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -34,15 +34,17 @@ public class UsageApiController implements UsageApi {
     @Override
     @RequiresPermission(Permission.BUDGET_READ)
     public ResponseEntity<UsageReport> getTenantUsage(
-            String tenantId, OffsetDateTime from, OffsetDateTime to, Set<String> groupBy, String projectId) {
-        return ResponseEntity.ok(toDto(reports.tenant(tenantId, projectId, instant(from), instant(to), groupBy)));
+            String tenantId, OffsetDateTime from, OffsetDateTime to, String groupBy, String projectId) {
+        return ResponseEntity.ok(
+                toDto(reports.tenant(tenantId, projectId, instant(from), instant(to), dimensions(groupBy))));
     }
 
     @Override
     @RequiresPermission(Permission.USAGE_READ)
     public ResponseEntity<UsageReport> getProjectUsage(
-            String tenantId, String projectId, OffsetDateTime from, OffsetDateTime to, Set<String> groupBy) {
-        return ResponseEntity.ok(toDto(reports.project(tenantId, projectId, instant(from), instant(to), groupBy)));
+            String tenantId, String projectId, OffsetDateTime from, OffsetDateTime to, String groupBy) {
+        return ResponseEntity.ok(
+                toDto(reports.project(tenantId, projectId, instant(from), instant(to), dimensions(groupBy))));
     }
 
     private static java.time.Instant instant(OffsetDateTime time) {
@@ -76,5 +78,10 @@ public class UsageApiController implements UsageApi {
 
     private static String text(BigDecimal value) {
         return value == null ? null : value.toPlainString();
+    }
+
+    /** 逗号分隔的维度；格式已由规范的 {@code pattern} 校验，取值由用例校验。 */
+    private static List<String> dimensions(String groupBy) {
+        return groupBy == null ? null : List.of(groupBy.split(","));
     }
 }

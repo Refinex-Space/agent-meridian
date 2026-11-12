@@ -11,7 +11,7 @@ import cn.refinex.meridian.security.apikey.PublicApiRequests;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.util.Set;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,10 +37,10 @@ public class PublicUsageApiController implements UsageApi {
     }
 
     @Override
-    public ResponseEntity<UsageReport> getUsage(OffsetDateTime from, OffsetDateTime to, Set<String> groupBy) {
+    public ResponseEntity<UsageReport> getUsage(OffsetDateTime from, OffsetDateTime to, String groupBy) {
         PublicApiRequests.require(request, ApiKeyScope.SESSIONS_READ);
         UsageReports.Report report = reports.current(
-                from == null ? null : Times.instant(from), to == null ? null : Times.instant(to), groupBy);
+                from == null ? null : Times.instant(from), to == null ? null : Times.instant(to), dimensions(groupBy));
         return ResponseEntity.ok(new UsageReport(
                 Times.utc(report.from()),
                 Times.utc(report.to()),
@@ -67,5 +67,10 @@ public class PublicUsageApiController implements UsageApi {
 
     private static String text(BigDecimal value) {
         return value == null ? null : value.toPlainString();
+    }
+
+    /** 逗号分隔的维度；格式已由规范的 {@code pattern} 校验，取值由用例校验。 */
+    private static List<String> dimensions(String groupBy) {
+        return groupBy == null ? null : List.of(groupBy.split(","));
     }
 }
