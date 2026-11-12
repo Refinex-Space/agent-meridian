@@ -50,6 +50,7 @@ public class EventStreamService {
 
     private final SessionStreamHub hub;
     private final SessionEventRepository events;
+    private final SessionEventReader reader;
     private final SseProperties properties;
     private final Clock clock;
     private final AtomicInteger connections = new AtomicInteger();
@@ -59,7 +60,8 @@ public class EventStreamService {
      * 创建事件流服务。
      *
      * @param hub Redis Stream 的读取入口
-     * @param events 事件仓储，补发与对账读取数据库
+     * @param events 事件仓储，对账读取会话进度
+     * @param reader 事件读取入口，补发透明地读取归档事件（ADR-0049）
      * @param properties SSE 配置
      * @param clock 时钟，{@code ping} 的时间
      * @param meters 指标注册表
@@ -67,11 +69,13 @@ public class EventStreamService {
     public EventStreamService(
             SessionStreamHub hub,
             SessionEventRepository events,
+            SessionEventReader reader,
             SseProperties properties,
             Clock clock,
             MeterRegistry meters) {
         this.hub = hub;
         this.events = events;
+        this.reader = reader;
         this.properties = properties;
         this.clock = clock;
         Gauge.builder("meridian.sse.connections", connections, AtomicInteger::get)
@@ -229,7 +233,7 @@ public class EventStreamService {
         private List<Frame> refill(long upto) {
             List<Frame> frames = new ArrayList<>();
             while (covered < upto) {
-                List<StoredEvent> batch = events.listRange(sessionId, covered, upto, filter, properties.refillBatch());
+                List<StoredEvent> batch = reader.listRange(sessionId, covered, upto, filter, properties.refillBatch());
                 for (StoredEvent event : batch) {
                     frames.add(storedFrame(event));
                 }

@@ -23,7 +23,8 @@ public class IdleSandboxRepository extends SystemRepository {
     }
 
     /**
-     * 找出沙箱最近一次使用早于截止时间的会话，最久未用的在前。只是候选：回收前要在会话行锁内重新判定。
+     * 找出沙箱最近一次使用早于截止时间的会话，最久未用的在前。只是候选：回收前要在会话行锁内重新判定。已删除的会话不回收（不必快照），
+     * 由清理作业删除沙箱（D50 C-10，ADR-0049）。
      *
      * @param cutoff 截止时间（当前时间减空闲阈值）
      * @param limit 至多返回的条数
@@ -34,6 +35,7 @@ public class IdleSandboxRepository extends SystemRepository {
                         SELECT id, tenant_id, project_id
                           FROM rt.sessions
                          WHERE sandbox_pod_ip IS NOT NULL AND sandbox_last_used_at < :cutoff
+                           AND deleted_at IS NULL
                          ORDER BY sandbox_last_used_at
                          LIMIT :limit
                         """)

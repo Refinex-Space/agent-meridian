@@ -2,6 +2,7 @@ package cn.refinex.meridian.runtime.sandbox.app;
 
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
+import cn.refinex.meridian.common.error.ConflictException;
 import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.engine.spi.driver.SandboxDriver;
 import cn.refinex.meridian.engine.spi.driver.SandboxDriver.OutputFile;
@@ -23,6 +24,7 @@ import cn.refinex.meridian.runtime.sandbox.domain.SandboxUsageMessage;
 import cn.refinex.meridian.runtime.sandbox.domain.SessionSandbox;
 import cn.refinex.meridian.runtime.sandbox.infra.SandboxOutputRepository;
 import cn.refinex.meridian.runtime.sandbox.infra.SessionSandboxRepository;
+import cn.refinex.meridian.runtime.session.domain.SessionErrorCode;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.security.MessageDigest;
@@ -229,7 +231,8 @@ public class SandboxService {
     }
 
     /**
-     * 删除会话的沙箱部分：沙箱、全部快照、产物副本与清单（会话删除的总流程在 T17a）。
+     * 删除会话的沙箱部分：沙箱、带会话标签的其他沙箱、全部快照、产物副本与清单，并撤销出网授权。可重复执行（会话清理中途失败后重试，
+     * {@code retention.app.SessionPurger}，ADR-0049）。
      *
      * @param sessionId 会话 ID
      */
@@ -243,9 +246,12 @@ public class SandboxService {
             egress.podIpChanged(row.podIp(), null);
             outputs.deleteAll(sessionId);
         }));
+        // 带会话标签、会话不知道的沙箱（认领之后、记进会话之前崩溃留下的，D37）一并删除
+        SandboxDriver driver = drivers.getIfAvailable();
+        int orphans = driver == null ? 0 : await(driver.deleteSessionSandboxes(sessionId));
         objects.deleteByPrefix(SandboxObjectKeys.outputsPrefix(context.tenantId(), context.projectId(), sessionId));
         objects.deleteByPrefix(SandboxObjectKeys.snapshotsPrefix(context.tenantId(), context.projectId(), sessionId));
-        log.info("已删除会话的沙箱、快照与产物 sessionId={}", sessionId);
+        log.info("已删除会话的沙箱、快照与产物 sessionId={} orphanSandboxes={}", sessionId, orphans);
     }
 
     /** 在会话行锁内取得活着的沙箱。在事务中执行。 */
@@ -255,6 +261,10 @@ public class SandboxService {
         String sessionId = platform.sessionId();
         SessionSandbox row =
                 sessions.lock(sessionId, false).orElseThrow(() -> new NotFoundException("会话不存在：" + sessionId));
+        if (sessions.deleted(sessionId)) {
+            // 删除与清理之间仍在执行的轮次（已被取消，还没察觉）不能再认领沙箱，否则清理作业删掉的沙箱又会出现（ADR-0049）
+            throw new ConflictException(SessionErrorCode.SESSION_TERMINATED, "会话已删除，不再获取沙箱：" + sessionId);
+        }
         Instant now = clock.instant();
         Optional<SandboxHandle> current = row.handle();
         if (current.isPresent()) {

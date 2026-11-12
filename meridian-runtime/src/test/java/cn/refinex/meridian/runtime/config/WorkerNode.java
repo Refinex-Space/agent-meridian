@@ -251,8 +251,12 @@ record WorkerNode(
         SandboxService sandboxes = null;
         TurnSandboxes turnSandboxes = null;
         if (spec.sandbox() != null) {
+            EgressRevocations egress = new EgressRevocations(
+                    new EgressGrants(new SandboxAddressRepository(dataSource), configs, node.meters()),
+                    RuntimeTestRedis.reactiveMessaging());
             turnSandboxes = new TurnSandboxes(
-                    new DatabaseSandboxStates(new SessionSandboxRepository(dataSource), transactions, spec.clock()),
+                    new DatabaseSandboxStates(
+                            new SessionSandboxRepository(dataSource), transactions, egress, spec.clock()),
                     spec.sandbox().attachment());
             sandboxes = new SandboxService(
                     new StaticListableBeanFactory(
@@ -265,9 +269,7 @@ record WorkerNode(
                     new OutboxWriter(dataSource, "rt", spec.clock()),
                     transactions,
                     spec.sandbox().properties(),
-                    new EgressRevocations(
-                            new EgressGrants(new SandboxAddressRepository(dataSource), configs, node.meters()),
-                            RuntimeTestRedis.reactiveMessaging()),
+                    egress,
                     node.meters(),
                     spec.clock());
         }

@@ -27,6 +27,7 @@ import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import cn.refinex.meridian.engine.spi.spec.PolicyLayer;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
+import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.approval.app.PendingActionTimeouts;
 import cn.refinex.meridian.runtime.approval.domain.PendingActionStatus;
 import cn.refinex.meridian.runtime.approval.domain.StoredPendingAction;
@@ -36,6 +37,9 @@ import cn.refinex.meridian.runtime.delivery.domain.InboxEntry;
 import cn.refinex.meridian.runtime.dispatch.app.EnqueueResult;
 import cn.refinex.meridian.runtime.dispatch.app.NodeChannel;
 import cn.refinex.meridian.runtime.dispatch.domain.NewTurn;
+import cn.refinex.meridian.runtime.egress.app.EgressGrants;
+import cn.refinex.meridian.runtime.egress.app.EgressRevocations;
+import cn.refinex.meridian.runtime.egress.infra.system.SandboxAddressRepository;
 import cn.refinex.meridian.runtime.session.app.SessionService;
 import cn.refinex.meridian.runtime.session.app.WorkerProperties;
 import cn.refinex.meridian.runtime.session.infra.SessionRepository;
@@ -219,6 +223,13 @@ final class WorkerFixture {
                 node.node().events(),
                 agents,
                 (agent, environment) -> PlatformToolNames.ALL,
+                new OutboxWriter(dataSource, "rt", clock),
+                new EgressRevocations(
+                        new EgressGrants(
+                                new SandboxAddressRepository(dataSource),
+                                new ProvidedAgentConfigPort(agents),
+                                node.node().meters()),
+                        RuntimeTestRedis.reactiveMessaging()),
                 RuntimeTestDatabase.transactions(),
                 clock);
     }

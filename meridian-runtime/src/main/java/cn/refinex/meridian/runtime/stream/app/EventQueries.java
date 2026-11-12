@@ -18,15 +18,15 @@ import org.springframework.stereotype.Service;
 public class EventQueries {
 
     private final SessionService sessions;
-    private final SessionEventWriter events;
+    private final SessionEventReader events;
 
     /**
      * 创建查询。
      *
      * @param sessions 会话用例，用于确认会话属于当前项目
-     * @param events 事件写入入口（同时提供按 seq 读取）
+     * @param events 事件读取入口（透明读取归档事件，ADR-0049）
      */
-    public EventQueries(SessionService sessions, SessionEventWriter events) {
+    public EventQueries(SessionService sessions, SessionEventReader events) {
         this.sessions = sessions;
         this.events = events;
     }

@@ -25,10 +25,10 @@ import reactor.core.publisher.Mono;
  * 内存中的 {@link SandboxDriver}：每个沙箱是一份 {@code outputs/} 文件表，快照是文件表的副本（同时往对象存储写一个占位对象，便于断言
  * 快照的删除）。{@link #holdResume}、{@link #holdSnapshot} 让一次操作停在中途，用来制造回收与轮次开始的竞争。
  */
-final class FakeSandboxDriver implements SandboxDriver {
+public final class FakeSandboxDriver implements SandboxDriver {
 
-    /** 一个沙箱：资源名、Pod IP 与产物文件。 */
-    record Box(String id, String podIp, Map<String, byte[]> outputs) {}
+    /** 一个沙箱：资源名、Pod IP、产物文件与会话标签。 */
+    record Box(String id, String podIp, Map<String, byte[]> outputs, String sessionId) {}
 
     final Map<String, Box> live = new ConcurrentHashMap<>();
     final Map<String, Map<String, byte[]>> snapshots = new ConcurrentHashMap<>();
@@ -40,7 +40,12 @@ final class FakeSandboxDriver implements SandboxDriver {
     private volatile Gate resumeGate;
     private volatile Gate snapshotGate;
 
-    FakeSandboxDriver(ObjectStore objects) {
+    /**
+     * 创建驱动。
+     *
+     * @param objects 对象存储，快照写一个占位对象
+     */
+    public FakeSandboxDriver(ObjectStore objects) {
         this.objects = objects;
     }
 
@@ -67,14 +72,14 @@ final class FakeSandboxDriver implements SandboxDriver {
 
     /** 沙箱的 Pod 在平台之外被重建、换了 IP：之后的 {@code resume} 返回新 IP。 */
     void changePodIp(SandboxHandle handle, String ip) {
-        live.computeIfPresent(handle.state(), (state, box) -> new Box(box.id(), ip, box.outputs()));
+        live.computeIfPresent(handle.state(), (state, box) -> new Box(box.id(), ip, box.outputs(), box.sessionId()));
     }
 
     @Override
     public Mono<SandboxHandle> create(SandboxRequest request) {
         return Mono.fromSupplier(() -> {
             calls.add("create");
-            return newBox(new ConcurrentHashMap<>());
+            return newBox(new ConcurrentHashMap<>(), request.sessionId());
         });
     }
 
@@ -103,7 +108,7 @@ final class FakeSandboxDriver implements SandboxDriver {
             if (files == null) {
                 throw new NotFoundException("快照不存在：" + snapshotKey);
             }
-            return newBox(new ConcurrentHashMap<>(files));
+            return newBox(new ConcurrentHashMap<>(files), request.sessionId());
         });
     }
 
@@ -138,6 +143,38 @@ final class FakeSandboxDriver implements SandboxDriver {
     }
 
     @Override
+    public Mono<Integer> deleteSessionSandboxes(String sessionId) {
+        return Mono.fromSupplier(() -> {
+            calls.add("deleteSessionSandboxes");
+            int before = live.size();
+            live.values().removeIf(box -> sessionId.equals(box.sessionId()));
+            return before - live.size();
+        });
+    }
+
+    /**
+     * 模拟认领之后、记进会话之前崩溃留下的沙箱：只在驱动中存在，会话不知道它。
+     *
+     * @param sessionId 会话标签
+     * @return 沙箱句柄
+     */
+    public SandboxHandle orphan(String sessionId) {
+        return newBox(new ConcurrentHashMap<>(), sessionId);
+    }
+
+    /**
+     * 带该会话标签、还活着的沙箱数。
+     *
+     * @param sessionId 会话 ID
+     * @return 个数
+     */
+    public long liveFor(String sessionId) {
+        return live.values().stream()
+                .filter(box -> sessionId.equals(box.sessionId()))
+                .count();
+    }
+
+    @Override
     public Mono<Boolean> syncSkills(SandboxHandle handle, List<SkillDefinition> skills) {
         return Mono.fromSupplier(() -> {
             skillSyncs.add(List.copyOf(skills));
@@ -157,11 +194,11 @@ final class FakeSandboxDriver implements SandboxDriver {
         return Mono.fromSupplier(() -> box(handle).outputs().get(path));
     }
 
-    private SandboxHandle newBox(Map<String, byte[]> outputs) {
+    private SandboxHandle newBox(Map<String, byte[]> outputs, String sessionId) {
         int n = sequence.incrementAndGet();
         String ip = nextPodIp;
         nextPodIp = null;
-        Box box = new Box("sbx-" + n, ip != null ? ip : "10.0.0." + n, outputs);
+        Box box = new Box("sbx-" + n, ip != null ? ip : "10.0.0." + n, outputs, sessionId);
         live.put("state-" + n, box);
         return new SandboxHandle(box.id(), box.podIp(), "state-" + n);
     }

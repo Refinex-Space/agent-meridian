@@ -1,5 +1,8 @@
 package cn.refinex.meridian.runtime.session.app;
 
+import cn.refinex.meridian.common.audit.AuditActor;
+import cn.refinex.meridian.common.context.PlatformContext;
+import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.CommonErrorCode;
 import cn.refinex.meridian.common.error.ConflictException;
 import cn.refinex.meridian.common.error.FieldViolation;
@@ -15,10 +18,12 @@ import cn.refinex.meridian.engine.spi.spec.CustomToolDeclaration;
 import cn.refinex.meridian.engine.spi.spec.EnvironmentSpec;
 import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import cn.refinex.meridian.engine.spi.spec.ResolvedAgentSpec;
+import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.approval.infra.PendingActionRepository;
 import cn.refinex.meridian.runtime.dispatch.app.NodeChannel;
 import cn.refinex.meridian.runtime.dispatch.app.TurnTransitions;
 import cn.refinex.meridian.runtime.dispatch.infra.system.TurnLeaseRepository.ActiveTurn;
+import cn.refinex.meridian.runtime.egress.app.EgressRevocations;
 import cn.refinex.meridian.runtime.session.domain.NewSession;
 import cn.refinex.meridian.runtime.session.domain.NewThread;
 import cn.refinex.meridian.runtime.session.domain.Session;
@@ -54,6 +59,9 @@ public class SessionService {
     /** 元数据键的长度上限，与规范中 {@code Metadata.propertyNames} 一致。 */
     static final int METADATA_KEY_MAX = 64;
 
+    /** 审计的 outbox 主题（ADR-0048）。 */
+    static final String AUDIT_TOPIC = "audit";
+
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
 
     private final SessionRepository sessions;
@@ -65,6 +73,8 @@ public class SessionService {
     private final SessionEventWriter events;
     private final AgentConfigProvider agentConfigs;
     private final ReservedToolNames reservedToolNames;
+    private final OutboxWriter outbox;
+    private final EgressRevocations egress;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
@@ -80,6 +90,8 @@ public class SessionService {
      * @param events 事件写入入口
      * @param agentConfigs 智能体与环境配置，创建会话时解析并固化版本
      * @param reservedToolNames 保留工具名，校验自定义工具声明
+     * @param outbox outbox 写入，删除的审计用
+     * @param egress 出网授权的失效：终止的会话的沙箱不再出网
      * @param transactions 事务模板（传播行为 REQUIRED）
      * @param clock 时钟
      */
@@ -93,6 +105,8 @@ public class SessionService {
             SessionEventWriter events,
             AgentConfigProvider agentConfigs,
             ReservedToolNames reservedToolNames,
+            OutboxWriter outbox,
+            EgressRevocations egress,
             TransactionTemplate transactions,
             Clock clock) {
         this.sessions = sessions;
@@ -104,6 +118,8 @@ public class SessionService {
         this.events = events;
         this.agentConfigs = agentConfigs;
         this.reservedToolNames = reservedToolNames;
+        this.outbox = outbox;
+        this.egress = egress;
         this.transactions = transactions;
         this.clock = clock;
     }
@@ -225,6 +241,7 @@ public class SessionService {
                 throw new ConflictException(SessionErrorCode.SESSION_BUSY, "会话正在执行，不能归档；需要停止时先中断，或直接删除会话");
             }
             terminate(sessionId, SessionEvent.TerminationReason.ARCHIVED);
+            revokeEgress(sessionId);
             return null;
         });
         if (archived != null) {
@@ -236,8 +253,9 @@ public class SessionService {
 
     /**
      * 删除会话：取消排队、执行中与等待回应的轮次，未回应的待处理动作作废，写入 {@code session.status_terminated(deleted)}，
-     * 记录删除时间，并删除全部线程（含子线程）的智能体状态（架构设计「状态机」「数据保留」「子智能体」）。其余数据的清理在 24 小时内
-     * 由后台作业完成（T17a）。重复删除原样返回。
+     * 记录删除时间，并删除全部线程（含子线程）的智能体状态（架构设计「状态机」「数据保留」「子智能体」）；同一事务写审计
+     * {@code session.deleted}、撤销沙箱的出网授权。其余数据由 {@code retention.app.SessionPurger} 在 24 小时内清理，完成后会话
+     * 不再存在（ADR-0049）。重复删除原样返回。
      *
      * @param sessionId 会话 ID
      * @return 删除后的会话
@@ -263,6 +281,22 @@ public class SessionService {
             sessions.markDeleted(sessionId, clock.instant());
             // 执行中的轮次已在本事务中取消，带租约的状态写入会被拒绝，删除之后不会再写入
             int states = threads.deleteAgentStates(sessionId);
+            revokeEgress(sessionId);
+            PlatformContext context = PlatformContexts.current();
+            outbox.append(
+                    AUDIT_TOPIC,
+                    new SessionDeletedAudit(
+                            "session.deleted",
+                            clock.instant(),
+                            session.tenantId(),
+                            session.projectId(),
+                            context.actor() == null
+                                    ? AuditActor.service("runtime")
+                                    : AuditActor.ofPrincipal(context.actor()),
+                            "session",
+                            sessionId,
+                            sessionId,
+                            session.status().value()));
             log.info("会话已删除 sessionId={} agentStates={}", sessionId, states);
         });
         return get(sessionId);
@@ -324,6 +358,11 @@ public class SessionService {
         cancelActive(sessionId);
         pendingActions.expirePending(sessionId, clock.instant());
         events.append(EventBatch.unfenced(sessionId, null, List.of(new SessionEvent.StatusTerminated(reason))));
+    }
+
+    /** 终止的会话不应再出网：各节点按源 IP 缓存授权 30 秒，提交后经 {@code egress:revoke} 立即淘汰（D50 C-11）。 */
+    private void revokeEgress(String sessionId) {
+        sessions.sandboxPodIp(sessionId).ifPresent(egress::revoke);
     }
 
     private void lockMainThread(String sessionId) {
@@ -391,4 +430,28 @@ public class SessionService {
     private static ConflictException terminated(String sessionId) {
         return new ConflictException(SessionErrorCode.SESSION_TERMINATED, "会话已归档或删除，只读：" + sessionId);
     }
+
+    /**
+     * 删除会话的审计记录（outbox 主题 {@code audit}，标准字段见 ADR-0048 第 6 条）。清理完成另有 {@code session.purged}。
+     *
+     * @param action 动作，固定为 {@code session.deleted}
+     * @param occurredAt 发生时间
+     * @param tenantId 租户 ID
+     * @param projectId 项目 ID
+     * @param actor 操作者：删除它的 API Key 或控制台用户
+     * @param resourceType 资源类型 {@code session}
+     * @param resourceId 会话 ID
+     * @param sessionId 会话 ID
+     * @param previousStatus 删除前的会话状态
+     */
+    record SessionDeletedAudit(
+            String action,
+            Instant occurredAt,
+            String tenantId,
+            String projectId,
+            AuditActor actor,
+            String resourceType,
+            String resourceId,
+            String sessionId,
+            String previousStatus) {}
 }

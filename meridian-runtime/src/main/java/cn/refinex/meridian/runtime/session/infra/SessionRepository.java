@@ -152,6 +152,20 @@ public class SessionRepository extends TenantScopedRepository {
                         """).param("now", now).param("id", sessionId).update();
     }
 
+    /**
+     * 读取会话沙箱的 Pod IP（删除与归档时撤销它的出网授权，ADR-0049）。
+     *
+     * @param sessionId 会话 ID
+     * @return Pod IP；没有沙箱 Pod 时为空
+     */
+    public Optional<String> sandboxPodIp(String sessionId) {
+        return sql("""
+                        SELECT sandbox_pod_ip FROM rt.sessions
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND id = :id
+                           AND sandbox_pod_ip IS NOT NULL
+                        """).param("id", sessionId).query(String.class).optional();
+    }
+
     private static Session map(ResultSet rs, int row) throws SQLException {
         return new Session(
                 rs.getString("id"),

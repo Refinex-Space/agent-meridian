@@ -162,6 +162,19 @@ public class SessionSandboxRepository extends TenantScopedRepository {
                 .update();
     }
 
+    /**
+     * 会话是否已删除（ADR-0049：已删除的会话不再获取沙箱，清理期间不会有新的沙箱）。在已锁住会话行的事务中调用。
+     *
+     * @param sessionId 会话 ID
+     * @return 已删除时为 true
+     */
+    public boolean deleted(String sessionId) {
+        return sql("""
+                        SELECT deleted_at IS NOT NULL FROM rt.sessions
+                         WHERE id = :id AND tenant_id = :tenant_id AND project_id = :project_id
+                        """).param("id", sessionId).query(Boolean.class).optional().orElse(true);
+    }
+
     private static SessionSandbox map(ResultSet rs, int row) throws SQLException {
         return new SessionSandbox(
                 rs.getString("id"),

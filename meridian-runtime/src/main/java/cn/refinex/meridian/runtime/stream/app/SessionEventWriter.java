@@ -14,6 +14,7 @@ import cn.refinex.meridian.runtime.stream.domain.WriteFence;
 import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import cn.refinex.meridian.runtime.stream.infra.system.SessionEventRepository;
 import cn.refinex.meridian.runtime.stream.infra.system.SessionEventRepository.SeqAllocation;
+import cn.refinex.meridian.runtime.webhook.domain.WebhookEventTypes;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -31,7 +32,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>租约条件（{@link WriteFence.TurnLease}）：锁住轮次行并校验 {@code status='running' AND lease_owner = 本节点
  *       AND lease_epoch = epoch}；不满足时返回 {@link AppendResult.LeaseLost}，什么都不写。
  *   <li>锁定会话行，{@code last_seq} 加上事件数，得到连续的 seq；会话行锁让同一会话的写入串行，seq 严格递增、不重复、不跳号。
- *   <li>插入事件；状态事件在同一事务中推进会话与线程的状态（{@link StatusChange}）。
+ *   <li>插入事件；状态事件在同一事务中推进会话与线程的状态（{@link StatusChange}）；可订阅的四种事件同时写 Webhook 的 outbox
+ *       （{@code rt.webhook_events}，ADR-0049），投递由 {@code webhook.app.WebhookDispatcher} 在事务之外完成，不阻塞写入方。
  * </ol>
  * 事务传播为 REQUIRED：调用方已在事务中（例如回收器、置回队列）时加入调用方的事务，与调用方的其他写入一起提交或回滚。
  *
@@ -126,6 +128,9 @@ public class SessionEventWriter {
                     EngineJson.writeEvent(event),
                     now);
             repository.insert(row);
+            if (WebhookEventTypes.subscribable(event.type())) {
+                repository.insertWebhookEvent(row, EventEnvelopes.json(row));
+            }
             StatusChange.of(batch.threadId(), event).ifPresent(change -> project(batch.sessionId(), change, now));
             stored.add(row);
         }

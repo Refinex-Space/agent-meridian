@@ -63,6 +63,15 @@ public interface SandboxDriver {
     Mono<Void> delete(SandboxHandle handle);
 
     /**
+     * 删除带该会话标签的全部沙箱（ADR-0049）：清理已删除的会话时兜底，覆盖认领之后、记进会话之前进程崩溃留下的沙箱（登记事项 D37
+     * 的已删除会话部分）。没有这样的沙箱时无副作用。
+     *
+     * @param sessionId 会话 ID
+     * @return 删除的沙箱数
+     */
+    Mono<Integer> deleteSessionSandboxes(String sessionId);
+
+    /**
      * 让沙箱中的技能资源与给定技能一致：按内容摘要比较 {@value #SKILLS_DIR} 下的全部文件，不一致（含缺失、被篡改、多出文件）时清空该目录
      * 并用 tar 重新写入。每个技能写在 {@code {SKILLS_DIR}/{技能名}/} 下，不含技能正文 {@code SKILL.md}（正文经平台技能仓库加载）。
      *

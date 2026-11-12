@@ -188,6 +188,36 @@ public final class KubernetesSandboxDriver implements SandboxDriver, SandboxAtta
     }
 
     @Override
+    public Mono<Integer> deleteSessionSandboxes(String sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId");
+        if (!LABEL_VALUE.matcher(sessionId).matches()) {
+            // 不是合法标签值的会话 ID 不会打标签（label），也就没有带标签的 claim
+            return Mono.just(0);
+        }
+        return guard(
+                Blocking.call(() -> {
+                    List<SandboxClaim> claims = kube.resources(SandboxClaim.class)
+                            .inNamespace(settings.namespace())
+                            .withLabel(SESSION_LABEL, sessionId)
+                            .list()
+                            .getItems();
+                    for (SandboxClaim claim : claims) {
+                        String name = claim.getMetadata().getName();
+                        SingleStartSandbox sandbox = live.remove(name);
+                        if (sandbox != null) {
+                            closeConnection(sandbox);
+                        }
+                        kube.resources(SandboxClaim.class)
+                                .inNamespace(settings.namespace())
+                                .withName(name)
+                                .delete();
+                    }
+                    return claims.size();
+                }),
+                "按会话删除沙箱失败");
+    }
+
+    @Override
     public Mono<Boolean> syncSkills(SandboxHandle handle, List<SkillDefinition> skills) {
         Objects.requireNonNull(handle, "handle");
         Objects.requireNonNull(skills, "skills");

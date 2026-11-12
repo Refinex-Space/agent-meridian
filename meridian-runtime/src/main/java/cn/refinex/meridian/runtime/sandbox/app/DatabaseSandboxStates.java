@@ -3,6 +3,7 @@ package cn.refinex.meridian.runtime.sandbox.app;
 import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.engine.spi.driver.SandboxHandle;
 import cn.refinex.meridian.engine.spi.port.SandboxStatePort;
+import cn.refinex.meridian.runtime.egress.app.EgressRevocations;
 import cn.refinex.meridian.runtime.sandbox.domain.SandboxRecord;
 import cn.refinex.meridian.runtime.sandbox.domain.SessionSandbox;
 import cn.refinex.meridian.runtime.sandbox.infra.SessionSandboxRepository;
@@ -18,13 +19,15 @@ import reactor.core.publisher.Mono;
  * 读出 {@link SandboxService#prepare} 准备好的沙箱；保存、标记使用与清除供内核之外的调用方使用，沙箱的获取与回收走
  * {@link SandboxService}（它们要在同一把会话行锁里完成判定）。
  *
- * <p>会话、租户与项目从 Reactor Context 中的 {@code PlatformContext} 取。线程安全：无状态，数据库访问经 {@link Blocking}。
+ * <p>保存与清除改动 Pod IP 时在同一事务里交给 {@link EgressRevocations}（D50 C-11）。会话、租户与项目从 Reactor Context 中的
+ * {@code PlatformContext} 取。线程安全：无状态，数据库访问经 {@link Blocking}。
  */
 @Service
 public class DatabaseSandboxStates implements SandboxStatePort {
 
     private final SessionSandboxRepository sessions;
     private final TransactionTemplate transactions;
+    private final EgressRevocations egress;
     private final Clock clock;
 
     /**
@@ -32,11 +35,17 @@ public class DatabaseSandboxStates implements SandboxStatePort {
      *
      * @param sessions 会话的沙箱列
      * @param transactions 事务模板
+     * @param egress 出网授权的失效
      * @param clock 时钟
      */
-    public DatabaseSandboxStates(SessionSandboxRepository sessions, TransactionTemplate transactions, Clock clock) {
+    public DatabaseSandboxStates(
+            SessionSandboxRepository sessions,
+            TransactionTemplate transactions,
+            EgressRevocations egress,
+            Clock clock) {
         this.sessions = sessions;
         this.transactions = transactions;
+        this.egress = egress;
         this.clock = clock;
     }
 
@@ -57,6 +66,7 @@ public class DatabaseSandboxStates implements SandboxStatePort {
                     .orElseThrow(() -> new IllegalStateException("会话还没有沙箱，不能只保存句柄：" + sessionId));
             sessions.saveSandbox(
                     sessionId, SandboxRecord.of(handle, row.sandbox().size()), handle.podIp(), clock.instant(), null);
+            egress.podIpChanged(row.podIp(), handle.podIp());
         }));
     }
 
@@ -71,6 +81,9 @@ public class DatabaseSandboxStates implements SandboxStatePort {
     public Mono<Void> clear(String sessionId) {
         Objects.requireNonNull(sessionId, "sessionId");
         return Blocking.run(() -> transactions.executeWithoutResult(tx -> sessions.lock(sessionId, false)
-                .ifPresent(row -> sessions.clearSandbox(sessionId, row.snapshotKey(), clock.instant()))));
+                .ifPresent(row -> {
+                    sessions.clearSandbox(sessionId, row.snapshotKey(), clock.instant());
+                    egress.podIpChanged(row.podIp(), null);
+                })));
     }
 }

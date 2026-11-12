@@ -13,6 +13,14 @@ meridian:
       budget-source: file
       # 模拟供应商在回环地址上
       allow-loopback-endpoints: true
+    webhook:
+      # 测试不运行投递器的定期任务（多个 Spring 上下文共用一个库，任一上下文都会扇出别的测试写入的事件）；Webhook 的测试手动驱动
+      # WebhookDispatcher.runOnce()（T17a）。接收方在回环地址上
+      enabled: false
+      allow-loopback: true
+    retention:
+      # 测试不运行会话清理、归档与保留清理的定期任务（跨租户扫描共用的库）；相关测试手动驱动（T17a）
+      enabled: false
 
 management:
   endpoint:

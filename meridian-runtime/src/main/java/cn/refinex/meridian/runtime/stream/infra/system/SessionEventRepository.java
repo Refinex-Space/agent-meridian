@@ -105,6 +105,33 @@ public class SessionEventRepository extends SystemRepository {
     }
 
     /**
+     * 写 Webhook 的 outbox（ADR-0049）：只记主线程与会话级的事件（{@code thread_id} 为空或是主线程），子线程的
+     * {@code session.error} 不推送（登记事项 D42）。在写入事件的同一事务中调用。
+     *
+     * @param event 刚插入的事件
+     * @param envelope 事件信封的 JSON 原文，即投递的请求体
+     */
+    public void insertWebhookEvent(StoredEvent event, String envelope) {
+        jdbc().sql("""
+                        INSERT INTO rt.webhook_events (event_id, tenant_id, project_id, session_id, event_type, payload,
+                                                       created_at)
+                        SELECT :event_id, :tenant_id, :project_id, :session_id, :type, :payload, :created_at
+                         WHERE CAST(:thread_id AS text) IS NULL
+                            OR EXISTS (SELECT 1 FROM rt.threads
+                                        WHERE id = :thread_id AND session_id = :session_id AND parent_thread_id IS NULL)
+                        """)
+                .param("event_id", event.id())
+                .param("tenant_id", event.tenantId())
+                .param("project_id", event.projectId())
+                .param("session_id", event.sessionId())
+                .param("type", event.type().value())
+                .param("payload", envelope)
+                .param("created_at", JdbcValues.timestamptz(event.createdAt()))
+                .param("thread_id", event.threadId())
+                .update();
+    }
+
+    /**
      * 更新会话状态；进入终止状态时同时记录终止时间。
      *
      * @param sessionId 会话 ID
@@ -223,6 +250,29 @@ public class SessionEventRepository extends SystemRepository {
     }
 
     /**
+     * 读取会话的归档指针（ADR-0049）：seq 不超过 {@code archivedSeq} 的事件在归档文件中（或已过保留期），之后的在本表。
+     *
+     * @param sessionId 会话 ID
+     * @return 指针；会话不存在时为空
+     */
+    public Optional<ArchivePointer> archivePointer(String sessionId) {
+        return jdbc().sql("""
+                        SELECT tenant_id, project_id, events_archive_key, events_archived_seq
+                          FROM rt.sessions WHERE id = :session_id
+                        """)
+                .param("session_id", sessionId)
+                .query((rs, row) -> {
+                    long seq = rs.getLong("events_archived_seq");
+                    return new ArchivePointer(
+                            rs.getString("tenant_id"),
+                            rs.getString("project_id"),
+                            rs.getString("events_archive_key"),
+                            rs.wasNull() ? 0 : seq);
+                })
+                .optional();
+    }
+
+    /**
      * 读取会话已分配的最大 seq 与当前状态，SSE 对账使用。
      *
      * @param sessionId 会话 ID
@@ -274,6 +324,16 @@ public class SessionEventRepository extends SystemRepository {
                 rs.getString("data"),
                 JdbcValues.instant(rs, "created_at"));
     }
+
+    /**
+     * 会话的归档指针。
+     *
+     * @param tenantId 租户 ID
+     * @param projectId 项目 ID
+     * @param archiveKey 归档文件的对象键；没有文件时为空
+     * @param archivedSeq 归档覆盖到的最大 seq；从未归档时为 0
+     */
+    public record ArchivePointer(String tenantId, String projectId, String archiveKey, long archivedSeq) {}
 
     /**
      * 会话的事件进度。

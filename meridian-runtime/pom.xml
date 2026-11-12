@@ -167,7 +167,7 @@
                             -->
                             <schemaMappings>SseFrame=org.springframework.http.codec.ServerSentEvent&lt;String&gt;,ChatCompletion=java.lang.Object</schemaMappings>
                             <!-- 智能体（Agents）由 control-plane 提供（ADR-0047），runtime 只生成自己的标签 -->
-                            <apisToGenerate>Sessions,Events,Threads,PendingActions,Models</apisToGenerate>
+                            <apisToGenerate>Sessions,Events,Threads,PendingActions,Models,Webhooks</apisToGenerate>
                             <configOptions>
                                 <reactive>true</reactive>
                                 <interfaceOnly>true</interfaceOnly>
