@@ -47,7 +47,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | 0 工程基座 | 脚手架、质量门禁、通用基础库、本地基础设施 | T01–T02 | — | 已完成 |
 | 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 已决（ADR-0043）；Q3 已决、D52 已落地（T15a，ADR-0045、ADR-0046）；T28 落实 D44–D46 并由 T29 复测 P7；P8 随 T19 定稿（`docs/poc/M0-总结.md`） |
 | 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 进行中 |
-| 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 未开始 |
+| 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 进行中 |
 | 4 M1 控制台 | 设计方向与组件、原型（并行轨道）、工程基座、五组页面 | T20a–T25b | R3 | 未开始 |
 | 5 M1 交付 | SDK 与接入文档、可观测性、部署、端到端验收 | T26–T29 | R4 | 未开始 |
 | 6 M2 扩展能力 | AgentScope 2.1 评估、长期记忆、后台子智能体与团队、分叉与回退、智能问数、Web 终端、A2A 与 AG-UI、安全加固 | T30–T37 | R5 | 未开始 |
@@ -83,7 +83,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 已完成 | f5de788 |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 已完成 | 9aa41da |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 已完成 | b7df25f |
-| T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 未开始 | — |
+| T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 进行中 | — |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 未开始 | — |
 | T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 未开始 | — |
 | R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 未开始 | — |
@@ -175,7 +175,22 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+### T18 知识库写入（2026-11-12 开工）
+
+开工基线：`verify.sh` 只有 runtime 的 `EventStreamIT.threadStreamsAndMainFilterDoNotTreatOtherThreadsSeqsAsMissing` 失败（单独重跑仍失败：跳号回补计数 51→84）；该类与 SSE 代码自 T17a 未改、T17b 收尾时通过，开工时主机负载约 100（其他项目的 Playwright/WebKit），判为负载下的时序问题，收尾时复跑。
+
+- [ ] 1. ADR-0051、架构设计（kb 表、ID 前缀、权限类别、内部接口、用量种类）、OpenAPI（公开知识库接口、knowledge 的内部接口）
+- [ ] 2. common（`IdPrefix` 的 `chk`、`ijb`，切分用的 token 估算）、security（`KNOWLEDGE_READ`、`KNOWLEDGE_WRITE` 与 `knowledge:*` 作用域换算）
+- [ ] 3. `meridian-model-client`：经服务 JWT 调 runtime 的 `/internal/v1/embeddings`，每批 64 条
+- [ ] 4. `meridian-knowledge` 骨架：应用、配置、`kb` 迁移、知识库与文档接口（上传、列表、进度、重新处理、删除）、幂等、审计、`key.revoked` 订阅、内部接口
+- [ ] 5. 写入流水线：`ingestion_jobs` 队列（`SKIP LOCKED`、退避重试 3 次）、解析（Tika/POI、PDFBox、Markdown、doc-parser）、中间表示、切分、批量 Embedding、入库
+- [ ] 6. 存储计量：每日按知识库上报 outbox `usage`；control-plane 的 `UsageKind`、`UsageMessages`、迁移与样本
+- [ ] 7. control-plane：`KnowledgeCatalogClient` 经 knowledge 内部接口（替换 `TODO(T18)`）
+- [ ] 8. `doc-parser/`：FastAPI + Docling（MinerU 可选）、镜像固化模型、Ruff/mypy/pytest、接入 `verify.sh`
+- [ ] 9. Compose `app` profile 加入 knowledge 与 doc-parser、`build-images.sh`、`run-knowledge.sh`、冒烟脚本
+- [ ] 10. 测试与验收：A01–A09（集成测试、容器化 doc-parser、`-Plive`）
+- [ ] 11. 收尾：`CLAUDE.md`（knowledge、model-client、doc-parser、根）、文档、`acceptance.json`、全量 `verify.sh`（A10）
+
 
 ## 控制台设计轨道
 
