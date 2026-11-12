@@ -178,7 +178,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 T17a（开工基线 `scripts/dev/verify.sh` 通过，2026-11-12）：
 
 - [x] ADR-0049、架构设计与规范（Webhook、会话清理、事件归档与保留）
-- [ ] control-plane：`cp.webhooks`、管理接口、内部接口（订阅与签名密钥、租户保留天数）
+- [x] control-plane：`cp.webhooks`、管理接口、内部接口（订阅与签名密钥、租户保留天数）
 - [ ] runtime：Webhook 投递（订阅事件写入、投递器、签名、退避、投递记录与重投接口）（A01）
 - [ ] runtime：会话删除的清理作业（数据库、对象存储、kind 沙箱、审计、可重试）（A02）
 - [ ] runtime：事件归档与透明读取（列表与 SSE 补发）（A03）

@@ -16,6 +16,9 @@ meridian:
     provider-endpoints:
       # 测试的模拟供应商在回环地址上
       allow-loopback: true
+    webhooks:
+      # 测试的 Webhook 接收方在回环地址上（T17a）
+      allow-loopback: true
 
 management:
   endpoint:

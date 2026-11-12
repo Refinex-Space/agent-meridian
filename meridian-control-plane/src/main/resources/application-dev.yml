@@ -26,6 +26,9 @@ meridian:
       key-encryption: local
       local:
         master-key-file: ${MERIDIAN_SECRET_MASTER_KEY_FILE:deploy/compose/data/secret-master-key}
+    webhooks:
+      # 本机调试 Webhook 的接收方常在 localhost（T17a）
+      allow-loopback: true
     provider-endpoints:
       # 本机的脚本化模型服务在 localhost:18090
       allow-loopback: true

@@ -33,7 +33,8 @@ public class InternalTenantsApiController implements InternalTenantsApi {
     @Override
     public ResponseEntity<TenantQuota> getTenantQuotas(String tenantId) {
         ServiceCredentialFilter.require(request, ServiceJwts.RUNTIME, ServiceJwts.KNOWLEDGE);
-        return ResponseEntity.ok(new TenantQuota(tenantId, tenants.get(tenantId).maxConcurrentTurns()));
+        var tenant = tenants.get(tenantId);
+        return ResponseEntity.ok(new TenantQuota(tenantId, tenant.maxConcurrentTurns(), tenant.eventRetentionDays()));
     }
 
     @Override

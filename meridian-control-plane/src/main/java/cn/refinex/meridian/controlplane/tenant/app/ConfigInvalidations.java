@@ -51,6 +51,9 @@ public class ConfigInvalidations {
     /** 消息类型：租户设置变更（{@code id} 为租户 ID），runtime 淘汰租户设置并淘汰该租户已装配的智能体实例（D32）。 */
     public static final String TENANT_SETTINGS = "tenant_settings";
 
+    /** 消息类型：Webhook 创建、修改或删除（{@code id} 为 Webhook ID），runtime 淘汰该租户缓存的订阅（ADR-0049）。 */
+    public static final String WEBHOOK = "webhook";
+
     private static final Logger log = LoggerFactory.getLogger(ConfigInvalidations.class);
 
     private final RedisMessaging redis;

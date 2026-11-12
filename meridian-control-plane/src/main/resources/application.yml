@@ -43,6 +43,11 @@ meridian:
     # 私有网段不配置时全部放行，生产按私有化推理服务所在网段收窄，例如 [10.20.0.0/16]
     provider-endpoints:
       allow-loopback: false
+    # Webhook 地址的地址策略（ADR-0049）：默认不放行任何内网与回环地址；企业内网的接收方按网段放行，例如 [10.30.0.0/16]。
+    # runtime 投递时按 meridian.runtime.webhook 的同名配置再校验解析结果，两边要一致
+    webhooks:
+      allow-loopback: false
+      private-networks: []
 
 management:
   endpoints:

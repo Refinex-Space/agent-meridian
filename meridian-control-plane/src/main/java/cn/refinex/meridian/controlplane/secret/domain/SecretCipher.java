@@ -89,4 +89,15 @@ public final class SecretCipher {
     public static byte[] secretAad(String tenantId, String secretId, int version) {
         return ("meridian:secret:" + tenantId + ":" + secretId + ":" + version).getBytes(StandardCharsets.UTF_8);
     }
+
+    /**
+     * Webhook 签名密钥的附加认证数据（ADR-0049）：与凭据用同一把租户数据密钥，前缀不同，密文不能互换。
+     *
+     * @param tenantId 租户 ID
+     * @param webhookId Webhook ID
+     * @return UTF-8 字节
+     */
+    public static byte[] webhookAad(String tenantId, String webhookId) {
+        return ("meridian:webhook:" + tenantId + ":" + webhookId).getBytes(StandardCharsets.UTF_8);
+    }
 }

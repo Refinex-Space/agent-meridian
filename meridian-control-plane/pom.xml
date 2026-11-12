@@ -171,7 +171,7 @@
                             <modelPackage>cn.refinex.meridian.api.internal.model</modelPackage>
                             <generateApis>true</generateApis>
                             <generateModels>false</generateModels>
-                            <apisToGenerate>InternalApiKeys,InternalTenants,InternalServiceTokens,InternalProjectAccess,InternalSecrets,InternalModelCatalog,InternalAgentConfig,InternalPermissionRules</apisToGenerate>
+                            <apisToGenerate>InternalApiKeys,InternalTenants,InternalServiceTokens,InternalProjectAccess,InternalSecrets,InternalModelCatalog,InternalAgentConfig,InternalPermissionRules,InternalWebhooks</apisToGenerate>
                             <configOptions>
                                 <interfaceOnly>true</interfaceOnly>
                                 <skipDefaultInterface>true</skipDefaultInterface>

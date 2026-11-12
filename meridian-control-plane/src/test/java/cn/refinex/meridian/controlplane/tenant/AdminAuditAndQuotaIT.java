@@ -89,11 +89,10 @@ class AdminAuditAndQuotaIT extends ControlPlaneTestBase {
                     "{\"max_concurrent_turns\":7,\"event_retention_days\":60}");
             assertThat(messages.poll(300, TimeUnit.MILLISECONDS)).isNull();
         }
-        assertThat(client.internal("GET", "/internal/v1/tenants/" + tenantId + "/quotas", serviceToken(), null)
-                        .json()
-                        .get("max_concurrent_turns")
-                        .asInt())
-                .isEqualTo(7);
+        Reply quota = client.internal("GET", "/internal/v1/tenants/" + tenantId + "/quotas", serviceToken(), null);
+        assertThat(quota.json().get("max_concurrent_turns").asInt()).isEqualTo(7);
+        // runtime 的事件保留清理读它（T17a，ADR-0049）
+        assertThat(quota.json().get("event_retention_days").asInt()).isEqualTo(60);
         assertThat(client.internal("GET", "/internal/v1/tenants/ten_missing/quotas", serviceToken(), null)
                         .status())
                 .isEqualTo(404);

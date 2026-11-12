@@ -57,7 +57,11 @@ public enum IdPrefix {
     /** 预算（T16，ADR-0048）。 */
     BUDGET("bdg"),
     /** 预算告警（T16，ADR-0048）。 */
-    BUDGET_ALERT("bal");
+    BUDGET_ALERT("bal"),
+    /** Webhook（T17a，ADR-0049）。 */
+    WEBHOOK("whk"),
+    /** Webhook 的投递记录（T17a，ADR-0049）。 */
+    WEBHOOK_DELIVERY("whd");
 
     private final String value;
 

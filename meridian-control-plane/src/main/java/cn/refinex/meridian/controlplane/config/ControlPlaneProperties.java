@@ -19,6 +19,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param providerEndpoints 供应商与搜索后端端点的地址策略（ADR-0045 第 5 条）
  * @param knowledge 知识库目录的开发配置（ADR-0047，T18 之前）
  * @param metering 用量与审计消费者、分区维护、预算的限额同步与对账（ADR-0048）
+ * @param webhooks Webhook 地址的地址策略（ADR-0049）
  */
 @ConfigurationProperties("meridian.control-plane")
 public record ControlPlaneProperties(
@@ -30,7 +31,8 @@ public record ControlPlaneProperties(
         @DefaultValue Secrets secrets,
         @DefaultValue ProviderEndpoints providerEndpoints,
         @DefaultValue Knowledge knowledge,
-        @DefaultValue Metering metering) {
+        @DefaultValue Metering metering,
+        @DefaultValue Webhooks webhooks) {
 
     /** 规整空列表。 */
     public ControlPlaneProperties {
@@ -163,6 +165,24 @@ public record ControlPlaneProperties(
         public EndpointPolicy policy() {
             return new EndpointPolicy(
                     allowLoopback, privateNetworks == null ? EndpointPolicy.DEFAULT_PRIVATE_NETWORKS : privateNetworks);
+        }
+    }
+
+    /**
+     * Webhook 地址的地址策略（ADR-0049）：与供应商端点不同，默认不放行任何内网地址；企业内网的接收方按网段放行。
+     *
+     * @param allowLoopback 是否放行回环地址：只在开发与测试为真
+     * @param privateNetworks 放行的内网与保留网段（CIDR）；不配置时一律拒绝
+     */
+    public record Webhooks(boolean allowLoopback, List<String> privateNetworks) {
+
+        /**
+         * 转为端点策略。
+         *
+         * @return 策略
+         */
+        public EndpointPolicy policy() {
+            return new EndpointPolicy(allowLoopback, privateNetworks == null ? List.of() : privateNetworks);
         }
     }
 

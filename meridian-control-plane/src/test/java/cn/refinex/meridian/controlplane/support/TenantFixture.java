@@ -69,6 +69,15 @@ public record TenantFixture(Map<String, String> values) {
                 "budget",
                 ok(client.admin("POST", base + "/budgets", owner, "{\"level\":\"tenant\",\"hard_limit_tokens\":null}"))
                         .text("id"));
+        // T17a：项目 {project} 的 Webhook（回环地址，测试配置放行），角色矩阵的 Webhook 行引用它
+        v.put(
+                "webhook",
+                ok(client.admin(
+                                "POST",
+                                base + "/projects/" + v.get("project") + "/webhooks",
+                                owner,
+                                "{\"url\":\"http://127.0.0.1:18999/hooks\",\"events\":[\"session.status_idle\"]}"))
+                        .text("id"));
         return new TenantFixture(Map.copyOf(v));
     }
 
