@@ -36,6 +36,9 @@ public final class MeridianContainers {
     /** MinIO 中预先创建的桶。 */
     public static final String MINIO_BUCKET = "meridian-test";
 
+    /** 测试用 PostgreSQL 的最大连接数：一个测试 JVM 中缓存的每个 Spring 上下文各有一个连接池。 */
+    static final int MAX_CONNECTIONS = 300;
+
     /** Redis 镜像，与 compose 一致；需要独占 Redis 的测试（例如制造 Redis 中断）用它另起容器。 */
     public static final String REDIS_IMAGE = "redis:7.4.11-alpine";
 
@@ -80,7 +83,10 @@ public final class MeridianContainers {
             PostgreSQLContainer container = new PostgreSQLContainer(PostgresImage.resolve())
                     .withDatabaseName(DATABASE)
                     .withEnv("MERIDIAN_MIGRATOR_PASSWORD", MIGRATOR_PASSWORD)
-                    .withEnv("MERIDIAN_APP_PASSWORD", APP_PASSWORD);
+                    .withEnv("MERIDIAN_APP_PASSWORD", APP_PASSWORD)
+                    // 一个测试 JVM 缓存多个 Spring 上下文，每个上下文一个连接池（默认 10 个连接）：默认的 100 个连接在 runtime
+                    // 的集成测试中会用尽（T17a 新增了几个带测试替身的上下文）。fsync=off 是 Testcontainers 的默认参数，覆盖命令时保留
+                    .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=" + MAX_CONNECTIONS);
             container.start();
             return container;
         }

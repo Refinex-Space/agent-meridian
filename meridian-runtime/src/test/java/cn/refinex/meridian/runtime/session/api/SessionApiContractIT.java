@@ -119,7 +119,34 @@ class SessionApiContractIT extends ApiTestBase {
                         .text("code"))
                 .isEqualTo("model.not_found");
 
+        // Webhook 投递记录：本项目没有订阅，列表为空，单条与重投是规范中的 404；成功路径的契约在 WebhookDeliveryIT
+        assertThat(api.call(
+                                "GET /v1/webhook-deliveries",
+                                HttpMethod.GET,
+                                "/v1/webhook-deliveries?limit=5&session_id=" + sessionId,
+                                null,
+                                null)
+                        .status())
+                .isEqualTo(200);
+        String absentDelivery = "whd_01JC8Z5A0000000000000000AA";
+        assertThat(api.call(
+                                "GET /v1/webhook-deliveries/{delivery_id}",
+                                HttpMethod.GET,
+                                "/v1/webhook-deliveries/" + absentDelivery,
+                                null,
+                                null)
+                        .text("code"))
+                .isEqualTo("webhook_delivery.not_found");
+        assertThat(api.call(
+                                "POST /v1/webhook-deliveries/{delivery_id}:redeliver",
+                                HttpMethod.POST,
+                                "/v1/webhook-deliveries/" + absentDelivery + ":redeliver",
+                                null,
+                                null)
+                        .text("code"))
+                .isEqualTo("webhook_delivery.not_found");
+
         assertThat(ContractValidator.validatedOperations()).containsAll(ContractValidator.allOperations());
-        assertThat(ContractValidator.allOperations()).hasSize(14);
+        assertThat(ContractValidator.allOperations()).hasSize(17);
     }
 }
