@@ -1,6 +1,7 @@
 package cn.refinex.meridian.runtime.session.infra;
 
 import cn.refinex.meridian.common.context.Interaction;
+import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.json.JsonMappers;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.persistence.jdbc.JdbcValues;
@@ -34,7 +35,8 @@ public class SessionRepository extends TenantScopedRepository {
     private static final String COLUMNS = """
             id, tenant_id, project_id, agent_version_id, environment_id, environment_revision, end_user_id,
             interaction, status, last_seq, created_at, updated_at, custom_tools::text AS custom_tools,
-            end_user_attributes::text AS end_user_attributes, metadata::text AS metadata, terminated_at, deleted_at
+            end_user_attributes::text AS end_user_attributes, metadata::text AS metadata, terminated_at, deleted_at,
+            api_key_id
             """;
 
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {};
@@ -49,7 +51,7 @@ public class SessionRepository extends TenantScopedRepository {
     }
 
     /**
-     * 插入一个空闲会话，事件序号从 0 开始。
+     * 插入一个空闲会话，事件序号从 0 开始。创建它的 API Key 取自当前 {@code PlatformContext}（ADR-0048）。
      *
      * @param session 新建参数
      * @param now 当前时间，取自注入的 {@code Clock}
@@ -59,10 +61,10 @@ public class SessionRepository extends TenantScopedRepository {
                         INSERT INTO rt.sessions (id, tenant_id, project_id, agent_version_id, environment_id,
                                                  environment_revision, end_user_id, end_user_attributes, interaction,
                                                  status, metadata, custom_tools, last_seq, last_activity_at,
-                                                 created_at, updated_at)
+                                                 created_at, updated_at, api_key_id)
                         VALUES (:id, :tenant_id, :project_id, :agent_version_id, :environment_id,
                                 :environment_revision, :end_user_id, :end_user_attributes, :interaction,
-                                'idle', :metadata, :custom_tools, 0, :now, :now, :now)
+                                'idle', :metadata, :custom_tools, 0, :now, :now, :now, :api_key)
                         """)
                 .param("id", session.id())
                 .param("agent_version_id", session.agentVersionId())
@@ -74,6 +76,7 @@ public class SessionRepository extends TenantScopedRepository {
                 .param("metadata", JdbcValues.jsonbOf(session.metadata()))
                 .param("custom_tools", JdbcValues.jsonb(EngineJson.writeCustomTools(session.customTools())))
                 .param("now", now)
+                .param("api_key", PlatformContexts.current().apiKeyId())
                 .update();
     }
 
@@ -167,6 +170,7 @@ public class SessionRepository extends TenantScopedRepository {
                 JsonMappers.lenient().readValue(rs.getString("end_user_attributes"), EndUserAttributes.class),
                 JsonMappers.lenient().readValue(rs.getString("metadata"), STRING_MAP),
                 JdbcValues.instant(rs, "terminated_at"),
-                JdbcValues.instant(rs, "deleted_at"));
+                JdbcValues.instant(rs, "deleted_at"),
+                rs.getString("api_key_id"));
     }
 }

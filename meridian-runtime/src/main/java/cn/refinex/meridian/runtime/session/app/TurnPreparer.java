@@ -334,6 +334,8 @@ public class TurnPreparer {
                 .leaseEpoch(turn.epoch())
                 .interaction(session.interaction())
                 .endUserId(session.endUserId())
+                // 会话中的模型调用计入创建它的 API Key 的预算与用量（ADR-0048）
+                .apiKeyId(session.apiKeyId())
                 .build();
     }
 }

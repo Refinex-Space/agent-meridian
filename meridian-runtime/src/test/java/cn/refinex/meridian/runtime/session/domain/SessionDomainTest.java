@@ -121,6 +121,7 @@ class SessionDomainTest {
                 null,
                 null,
                 terminatedAt,
-                deletedAt);
+                deletedAt,
+                null);
     }
 }

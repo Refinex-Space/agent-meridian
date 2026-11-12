@@ -178,13 +178,13 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 T16 计量、预算与审计（开工 2026-11-12；基线 `verify.sh` 中 `SubagentSessionIT` 偶发失败、单独重跑通过，登记 D66）。设计见 ADR-0048。
 
 - [ ] ADR-0048、架构设计 v1.22
-- [ ] persistence：outbox 认领后在事务外发布、失败不阻塞队头（D49 C-12）；`StreamConsumer`（消费组、认领重投、死信回调、`XTRIM MINID`，D04）；`common.budget`（级别与 Redis 键）
-- [ ] cp 迁移 `V0004`：`usage_records`、`audit_logs`（按月分区、只追加）、`budgets`、`budget_usage`、`budget_alerts`、`budget_corrections`、`stream_dead_letters`、分区函数与权限、outbox 新列；rt `V0008`
-- [ ] cp 用量消费者（按价格表版本计价、幂等、账本汇总、软阈值告警）与分区维护（A01、A02、A07）
-- [ ] cp 审计消费者与查询接口；runtime 审计消息补操作者与资源（A05）
-- [ ] cp 预算管理接口与 Redis 限额同步、默认零预算（A08 的 control-plane 侧）
-- [ ] cp 对账任务（A04）
-- [ ] cp 用量报表与 `GET /v1/usage`（A06）
+- [x] persistence：outbox 认领后在事务外发布、失败不阻塞队头（D49 C-12）；`StreamConsumer`（消费组、认领重投、死信回调、`XTRIM MINID`，D04）；`common.budget`（级别与 Redis 键）
+- [x] cp 迁移 `V0004`：`usage_records`、`audit_logs`（按月分区、只追加）、`budgets`、`budget_usage`、`budget_alerts`、`budget_corrections`、`stream_dead_letters`、分区函数与权限、outbox 新列；rt `V0008`
+- [x] cp 用量消费者（按价格表版本计价、幂等、账本汇总、软阈值告警）与分区维护（A01、A02、A07）
+- [x] cp 审计消费者与查询接口；runtime 审计消息补操作者与资源（A05）
+- [x] cp 预算管理接口与 Redis 限额同步、默认零预算（A08 的 control-plane 侧）
+- [x] cp 对账任务（A04）
+- [x] cp 用量报表与 `GET /v1/usage`（A06）
 - [ ] runtime：限额来自 Redis、按月计数、预扣记录带键；联网搜索计量（A03、A08 的 runtime 侧）
 - [ ] 脚本与本地环境（dev 租户与 smoke 脚本设置预算）、文档与 CLAUDE.md、`verify.sh`（A09）
 

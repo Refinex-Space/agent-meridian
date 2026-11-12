@@ -26,6 +26,7 @@ import java.util.Map;
  * @param metadata 调用方附加的元数据；没有时为空映射
  * @param terminatedAt 归档或删除的时间；可为空，表示未终止
  * @param deletedAt 删除的时间；可为空，表示未删除
+ * @param apiKeyId 创建会话的 API Key；控制台用户创建时为空。轮次的预算与用量计入它（ADR-0048）
  */
 public record Session(
         String id,
@@ -44,7 +45,8 @@ public record Session(
         EndUserAttributes endUserAttributes,
         Map<String, String> metadata,
         Instant terminatedAt,
-        Instant deletedAt) {
+        Instant deletedAt,
+        String apiKeyId) {
 
     /** 对集合做不可变复制。 */
     public Session {

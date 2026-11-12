@@ -21,6 +21,7 @@ import cn.refinex.meridian.runtime.modelrouting.infra.FileBudgetLimits;
 import cn.refinex.meridian.runtime.modelrouting.infra.FileModelCatalog;
 import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient;
 import cn.refinex.meridian.runtime.modelrouting.infra.RedisBudgetLedger;
+import cn.refinex.meridian.runtime.modelrouting.infra.RedisBudgetLimits;
 import cn.refinex.meridian.runtime.modelrouting.infra.RedisRateLimiter;
 import cn.refinex.meridian.runtime.support.DbAssertions;
 import cn.refinex.meridian.runtime.support.RuntimeTestDatabase;
@@ -66,6 +67,7 @@ final class ModelRoutingFixture implements AutoCloseable {
     private final String baseUrl;
     private final StringBuilder models = new StringBuilder();
     private String accountRateLimit = "";
+    private volatile boolean redisLimits;
 
     ModelRoutingFixture(Path directory, String baseUrl) {
         this(
@@ -89,7 +91,9 @@ final class ModelRoutingFixture implements AutoCloseable {
         this.catalog = new FileModelCatalog(providers);
         this.gateway = new RoutingModelGateway(
                 catalog,
-                new FileBudgetLimits(budgets),
+                (tenant, scopes) -> redisLimits
+                        ? new RedisBudgetLimits(RuntimeTestRedis.template()).withLimits(tenant, scopes)
+                        : new FileBudgetLimits(budgets).withLimits(tenant, scopes),
                 secrets,
                 new RedisRateLimiter(RuntimeTestRedis.template()),
                 ledger,
@@ -192,6 +196,16 @@ final class ModelRoutingFixture implements AutoCloseable {
     ModelRoutingFixture rateLimit(int rpm, int tpm) {
         accountRateLimit = "rate_limit:\n  rpm: " + rpm + "\n  tpm: " + tpm + "\n";
         writeProviders();
+        return this;
+    }
+
+    /**
+     * 改为生产的限额来源：读 control-plane 同步到 Redis 的限额哈希，没有设置的级别为 0（ADR-0048）。
+     *
+     * @return 本夹具
+     */
+    ModelRoutingFixture limitsFromRedis() {
+        redisLimits = true;
         return this;
     }
 

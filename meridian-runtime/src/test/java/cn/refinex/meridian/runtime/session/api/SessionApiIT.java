@@ -64,10 +64,12 @@ class SessionApiIT extends ApiTestBase {
                 .isEqualTo("non_idempotent");
         assertThat(byVersion.body().get("last_seq").asLong()).isZero();
         assertThat(DbAssertions.row(
-                        "SELECT agent_version_id, environment_revision FROM rt.sessions WHERE id = ?",
+                        "SELECT agent_version_id, environment_revision, api_key_id FROM rt.sessions WHERE id = ?",
                         byVersion.text("id")))
                 .containsEntry("agent_version_id", "agv_dev_assistant_1")
-                .containsEntry("environment_revision", 1L);
+                .containsEntry("environment_revision", 1L)
+                .as("会话记下创建它的 API Key，轮次的预算与用量计入它（ADR-0048）")
+                .containsEntry("api_key_id", "key_test_a");
         assertThat(api.listThreads(byVersion.text("id"), null).body().get("data"))
                 .singleElement()
                 .satisfies(thread ->
