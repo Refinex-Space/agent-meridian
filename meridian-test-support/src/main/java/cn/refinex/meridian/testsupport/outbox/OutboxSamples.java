@@ -15,7 +15,14 @@ public final class OutboxSamples {
 
     /** 审计主题的样本名，与 {@code action} 的点换成下划线相同。 */
     public static final List<String> AUDIT = List.of(
-            "turn_finished", "tool_executed", "sandbox_command", "permission_decided", "pending_action_concluded");
+            "turn_finished",
+            "tool_executed",
+            "sandbox_command",
+            "permission_decided",
+            "pending_action_concluded",
+            "session_deleted",
+            "session_purged",
+            "session_events_expired");
 
     private OutboxSamples() {}
 

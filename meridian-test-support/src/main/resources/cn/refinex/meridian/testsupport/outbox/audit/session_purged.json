@@ -1,0 +1,13 @@
+{
+  "action": "session.purged",
+  "occurred_at": "2026-11-12T08:00:00Z",
+  "tenant_id": "ten_sample",
+  "project_id": "prj_sample",
+  "actor": {"type": "service", "subject": "runtime"},
+  "resource_type": "session",
+  "resource_id": "ses_sample",
+  "session_id": "ses_sample",
+  "deleted_at": "2026-11-12T07:00:00Z",
+  "workspace_entries": 2,
+  "objects": 5
+}

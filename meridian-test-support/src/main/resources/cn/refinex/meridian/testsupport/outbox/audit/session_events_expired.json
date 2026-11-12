@@ -1,0 +1,15 @@
+{
+  "action": "session_events.expired",
+  "occurred_at": "2026-11-12T08:00:00Z",
+  "tenant_id": "ten_sample",
+  "project_id": null,
+  "actor": {"type": "service", "subject": "runtime"},
+  "resource_type": "tenant",
+  "resource_id": "ten_sample",
+  "cutoff": "2025-11-12T08:00:00Z",
+  "retention_days": 365,
+  "sessions": 3,
+  "events": 120,
+  "archives_deleted": 1,
+  "archives_rewritten": 1
+}

@@ -1,0 +1,11 @@
+{
+  "action": "session.deleted",
+  "occurred_at": "2026-11-12T08:00:00Z",
+  "tenant_id": "ten_sample",
+  "project_id": "prj_sample",
+  "actor": {"type": "api_key", "subject": "key_sample"},
+  "resource_type": "session",
+  "resource_id": "ses_sample",
+  "session_id": "ses_sample",
+  "previous_status": "idle"
+}

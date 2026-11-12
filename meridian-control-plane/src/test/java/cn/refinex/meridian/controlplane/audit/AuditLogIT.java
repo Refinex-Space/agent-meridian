@@ -95,7 +95,7 @@ class AuditLogIT extends ControlPlaneTestBase {
                                     "occurred_at",
                                     occurredAt))));
         }
-        await("五条运行时审计入库", () -> ids.stream().allMatch(id -> count("audit_logs", id) == 1));
+        await("运行时审计入库", () -> ids.stream().allMatch(id -> count("audit_logs", id) == 1));
 
         assertThat(search(tenant, "session_id=" + session + "&limit=100"))
                 .extracting(node -> node.get("action").asString())
@@ -104,7 +104,10 @@ class AuditLogIT extends ControlPlaneTestBase {
                         "tool.executed",
                         "sandbox.command",
                         "permission.decided",
-                        "pending_action.concluded");
+                        "pending_action.concluded",
+                        "session.deleted",
+                        "session.purged",
+                        "session_events.expired");
         // 权限判定：资源是工具调用，平铺的字段并入 details
         JsonNode decided = search(tenant, "action=permission.decided&session_id=" + session)
                 .getFirst();
