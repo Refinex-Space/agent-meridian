@@ -81,7 +81,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | a9db160 |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 4c867bf |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 已完成 | f5de788 |
-| T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 已完成 | 待填 |
+| T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 已完成 | 9aa41da |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 未开始 | — |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 未开始 | — |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 未开始 | — |
@@ -449,7 +449,7 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 顺带修复：`OutboxIT` 中断言队头阻塞的用例改为断言新行为（D49 要求修掉该行为）
 - 遗留：D66（`SubagentSessionIT` 偶发 BlockHound 失败，R2）、D67（`sessions.budget_limit` 未使用）、D68（用量明细与 CSV，T19b）、D69（死信与停止投递的 outbox 消息没有处理工具）、D70（知识检索次数与存储量的计量，T18、T19）
 
-### 2026-11-12 T17a 已完成（提交 待填）
+### 2026-11-12 T17a 已完成（提交 9aa41da）
 
 - 交付：control-plane 的 `webhook` 上下文（迁移 `V0005` 的 `cp.webhooks`，管理接口 `/admin/v1/tenants/{t}/projects/{p}/webhooks`，签名密钥 `whsec_` 用租户数据密钥加密保存、只在创建时返回，给 runtime 的内部订阅接口与 `config.invalidate` 的 `webhook` 类型），租户配额下发 `event_retention_days`；runtime 迁移 `V0010`（`webhook_events` 订阅事件与会话事件同事务写入，`webhook_deliveries` 投递记录，`sessions` 的归档与保留列），`webhook`（投递器按项目订阅扇出、`Meridian-Signature: t=,v1=` 的 HMAC-SHA256、8 次退避与 24 小时截止、认领与至少一次、Reactor Netty 发送器复用 `EndpointPolicy` 与 `GuardedResolverGroup` 防 SSRF 与 DNS 重绑定、公开的投递记录列表、查询与重投），`retention`（`SessionPurger` 清理已删除会话的事件、线程、轮次、状态、工作区、产物、沙箱与快照、对象存储前缀并写审计 `session.purged`，`EventArchiver` 90 天无活动归档为 gzip JSON Lines，`EventRetentionSweeper` 按租户保留天数删除数据库与归档中的过期事件并写审计 `session_events.expired`），`SessionEventReader` 合并归档与数据库透明读取（列表与 SSE 补发）；`SandboxDriver.deleteSessionSandboxes` 按会话标签删除 kind 中的 claim；删除与归档撤销出网授权，已删除会话不再获取沙箱；ID 前缀 `whk`、`whd`；ADR-0049，架构设计 v1.23
 - 验收：A01–A05 全部 passing（`WebhookDeliveryIT`、`HttpWebhookSenderTest`、`WebhookAdminIT`、`SessionPurgeIT`、`SessionPurgeKindIT`（kind 集群 `meridian`）、`EventArchiveIT`、`EventRetentionIT`、审计契约测试，`verify.sh` 通过）
