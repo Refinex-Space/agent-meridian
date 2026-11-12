@@ -79,7 +79,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 已完成 | 251ed4e |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 已完成 | ed57d00 |
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | a9db160 |
-| T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 待填 |
+| T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 4c867bf |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 未开始 | — |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 未开始 | — |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 未开始 | — |
@@ -426,7 +426,7 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 顺带修复：租户设置带联网搜索后端时 500（生成的 `@Size` 落在 `URI` 字段上）
 - 遗留：D59（凭据库的生产部署与重新包装）、D60（Anthropic、Gemini 没有真实模型验证）、D61（联网搜索后端在 runtime 侧的校验与凭据引用，T15b）、D62（DNS 重绑定，T37）；`dev` 与 Compose `app` 的 runtime 仍读 `dev-config/providers`（开发智能体引用 `mdl_dev_*`，T15b 改由 control-plane 下发智能体后切换）
 
-### 2026-11-12 T15b 已完成（提交 待填）
+### 2026-11-12 T15b 已完成（提交 4c867bf）
 
 - 交付：智能体规格的 JSON Schema（`meridian-api` 的 `agent-spec.schema.json`，与 `ResolvedAgentSpec` 一一对应）；control-plane 的 `agent`（草稿与发布、发布不可变、六项校验与快照、版本对比、引用与删除冲突）、`environment`（修订历史）、`skill`（JSON 技能包、frontmatter 校验、对象存储、版本只追加）、`mcp`（端点校验、MCP SDK 0.17.2 探测并保存工具清单、按工具的副作用）、`policy`（租户与项目策略、记住此决定）上下文，迁移 `V0003`，租户设置下发（D61），`config.invalidate` 新增 6 种类型，内部接口（版本与当前版本解析、环境修订、技能、权限规则、租户设置），公开 `GET /v1/agents`（`meridian-security` 的 `PublicApiAdmission` 与 MVC `ApiKeyFilter`，D55），操作类别 `AGENT_READ`、`AGENT_WRITE`，ID 前缀 `prl`，`KnowledgeCatalogClient` 的开发实现（`TODO(T18)`）；engine 的 `McpServerSpec.toolSideEffects`、`AgentEngine.evictAgentVersions`（D32）、D53 A-F5；runtime 的 `ControlPlaneAgentConfigProvider`（按项目校验，D18）、`ControlPlanePolicyStore`（D22）、`AgentConfigInvalidationListener`、`agent-config.source`（`file` 只允许 dev、test）、`ConfigUnavailableException`；test-support 的 `TestMcpServer`；`scripts/dev/agent-smoke.sh`；ADR-0047，架构设计 v1.21
 - 验收：A01–A09 全部 passing（`AgentVersionIT`、`AgentResourcesIT`、`AgentConfigDomainTest`、`AgentSpecSchemaTest`、`AgentConfigSessionIT`；`-Plive` 的 `AgentConfigLiveIT` 与真实链路 `agent-smoke.sh --dashscope` 都通过，全程不读 `dev-config/`）
