@@ -81,7 +81,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | a9db160 |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 4c867bf |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 已完成 | f5de788 |
-| T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 进行中 | — |
+| T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 已完成 | 待填 |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 未开始 | — |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 未开始 | — |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 未开始 | — |
@@ -175,16 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T17a（开工基线 `scripts/dev/verify.sh` 通过，2026-11-12）：
-
-- [x] ADR-0049、架构设计与规范（Webhook、会话清理、事件归档与保留）
-- [x] control-plane：`cp.webhooks`、管理接口、内部接口（订阅与签名密钥、租户保留天数）
-- [x] runtime：Webhook 投递（订阅事件写入、投递器、签名、退避、投递记录与重投接口）（A01）
-- [x] runtime：会话删除的清理作业（数据库、对象存储、kind 沙箱、审计、可重试）（A02）
-- [x] runtime：事件归档与透明读取（列表与 SSE 补发）（A03）
-- [x] runtime：事件保留（租户配置、到期删除事件与归档文件、审计）（A04）
-- [ ] 登记事项 D30、D35、D37（删除会话的残留部分）、D42、D50 C-10/C-11，评估 D48、D49
-- [ ] 收尾：模块 `CLAUDE.md`、文档、`acceptance.json`、`verify.sh`（A05）
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -258,27 +249,27 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D27 | T09b | Embedding 与 rerank 只接入了 OpenAI 兼容格式（rerank 为 DashScope 的 `compatible-api/v1/reranks`）的供应商，`ProviderVectorClient` 不区分供应商类型；其他格式（DashScope 原生 rerank、Cohere 等）需要按供应商类型扩展 | T15a（以约束处理：Embedding 与 rerank 模型只能挂在 OpenAI 兼容账号下，ADR-0045；其他格式按需再接） |
 | D28 | T09b | 用量记录新增 `kind`：`embedding_tokens`、`rerank_tokens`（用途 `embedding`、`rerank`，只有输入 token），control-plane 的消费者与价格表要按 `kind` 计价 | T16（已落地：Embedding、rerank 按模型的价格表输入单价计价，`UsageLedgerIT`） |
 | D29 | T10a | harness 的 `WorkspaceContextMiddleware` 把受保护路径 `AGENTS.md`（智能体层的系统提示词）注入系统提示词的 `<agents_context>`，与装配时的 `sysPrompt` 重复，每次请求多一份提示词 | T10b（已落地：装配时 `disableWorkspaceContext()`，智能体层只经 `sysPrompt` 进入，当前时间以 `<platform_context>` 消息注入，ADR-0035） |
-| D30 | T10a | 工作区（`rt.workspace_entries` 与对象存储 `rt/{tenant}/{session}/workspace/`）要在删除会话时按命名空间前缀与对象前缀清除；目前没有会话数据的清除作业 | T17a |
+| D30 | T10a | 工作区（`rt.workspace_entries` 与对象存储 `rt/{tenant}/{session}/workspace/`）要在删除会话时按命名空间前缀与对象前缀清除；目前没有会话数据的清除作业 | T17a（已落地：`SessionPurger` 按 `namespace[4]` 删除工作区条目，并按条目记下的对象键与会话前缀删除大内容，ADR-0049） |
 | D31 | T10a | `RemoteFilesystem` 的 `ls`、`glob`、`grep` 每次逐页读出整个会话命名空间（大文件也从对象存储读出），会话文件多时延迟与对象存储读取量上升；可在 `WorkspaceStorePort` 增加按前缀只读元数据的查询，或启用 `WorkspaceIndex` | R1 未测量（P7 的智能体没有文件工具）；改为 T29 的压测项 |
 | D32 | T10b | 租户提示词在装配时读取并随智能体实例缓存（键不含租户设置），租户设置变更后实例淘汰前不生效；MCP 端点允许内网地址，登记时应校验端点（拒绝链路本地与元数据地址）| T15b（已落地：收到 `tenant_settings` 通知时经 `AgentEngine.evictAgentVersions` 淘汰该租户的实例，正在执行的本轮结束后关闭；登记 MCP 服务时按 `EndpointPolicy` 校验端点并探测工具清单，ADR-0047） |
 | D34 | T11 | sandbox-router 以 `--authz-mode=allow-all` 运行：能访问 router 的调用方可以操作沙箱命名空间中的任意沙箱，目前只靠 NetworkPolicy 把 router 的入网限制在 runtime 的命名空间；生产部署时评估 `scoped-token` 或 `tokenreview` | T28 |
-| D35 | T11 | 快照对象（`rt/snapshots/{tenant}/{project}/{session}/`）没有清除：从快照恢复后旧快照仍留在对象存储，删除会话时也要按前缀清除；`SnapshotStorePort` 目前没有删除方法 | T12a 已落地回收部分：每个会话至多保留一个快照，新快照提交后删除被取代的旧快照（恢复后保留用过的快照，作为沙箱意外消失时的恢复来源）；`SandboxService.deleteSessionSandbox` 按前缀清除快照与产物（runtime 直接用对象存储，端口不加删除方法，ADR-0037）。T17a：删除会话时调用它 |
+| D35 | T11 | 快照对象（`rt/snapshots/{tenant}/{project}/{session}/`）没有清除：从快照恢复后旧快照仍留在对象存储，删除会话时也要按前缀清除；`SnapshotStorePort` 目前没有删除方法 | T12a 已落地回收部分；T17a 已落地删除部分：`SessionPurger` 调 `deleteSessionSandbox`（快照与产物前缀），`SessionPurgeIT` |
 | D36 | T11 | 2.0.4 的扩展把快照归档整个读进内存（`byte[]`），100 MB 工作区的快照或恢复在 runtime 侧占用约同等大小的堆；runtime 的堆与并发回收数要按工作区上限估算 | R1 已评估（回收器逐个处理，同一时刻一个快照在内存，6 GiB 堆下不构成约束，P7）；并发回收与更大工作区的配置给 T28 |
-| D37 | T12a | 无人管理的沙箱：获取沙箱的事务在认领之后失败时会删除新沙箱，但 runtime 进程在认领之后、提交之前崩溃时，带会话标签 `meridian.refinex.cn/session-id` 的 `SandboxClaim` 没有记进任何会话，一直占用资源；需要一个按标签比对 `rt.sessions.sandbox_state` 的清理作业（也覆盖已删除会话的残留） | T17a（会话删除与保留作业）或 T28（部署运维） |
+| D37 | T12a | 无人管理的沙箱：获取沙箱的事务在认领之后失败时会删除新沙箱，但 runtime 进程在认领之后、提交之前崩溃时，带会话标签 `meridian.refinex.cn/session-id` 的 `SandboxClaim` 没有记进任何会话，一直占用资源；需要一个按标签比对 `rt.sessions.sandbox_state` 的清理作业（也覆盖已删除会话的残留） | T17a 已落地已删除会话的部分：`SandboxDriver.deleteSessionSandboxes` 按会话标签删除（`SessionPurgeKindIT`），已删除的会话不再获取沙箱；存活会话的无主 claim 需要按集群全量比对，留给 T28 |
 | D33 | T10b | `KnowledgePrefetchMiddleware` 前置检索注入的切片同样是外部内容，要用 `SourceTags`（`knowledge_search` 来源）包标签，并带 `ContextCompositionMiddleware` 的注入标记 | T19 |
 | D38 | T12b | 出网代理（Envoy 的 Lua 过滤器）回调 runtime 的 `/internal/v1/egress:authorize` 用开发期静态服务凭据（Secret `meridian-egress-proxy-credential`，本机取 `MERIDIAN_DEV_SERVICE_CREDENTIAL`，`dev`、`test` 之外不被接受）；Envoy 不能签发服务 JWT，T14b 要为代理另定凭据方式（例如 control-plane 为 `egress-proxy` 签发的长期凭据，或由边车刷新 JWT 写入文件、Lua 每次读取），并决定是否按调用方服务限定内部接口 | T14b（已落地：代理是服务客户端 `egress-proxy`，Lua 用客户端密钥换取服务 JWT 并按 worker 缓存；内部接口按调用方限定，ADR-0044） |
 | D39 | T12b | 沙箱的网络策略放行集群 DNS（解析代理的服务名），CoreDNS 会把任意外部域名的查询转发出去，沙箱可以用 DNS 查询外带数据（DNS 隧道）；可选做法：CoreDNS 对沙箱网段只解析 `cluster.local`、沙箱改用固定 ClusterIP 的代理地址不放行 DNS，或 DNS 出口加策略（ADR-0039） | T37 |
 | D40 | T12b | 出网代理的可观测与运维：管理接口只绑定 127.0.0.1，`/stats/prometheus` 没有被采集；访问日志（JSON，含源 IP、目标、状态码）只在容器标准输出；下线时不排空（SIGTERM 即退出，进行中的隧道被切断）；生产的沙箱节点池污点（`meridian.io/sandbox=true:NoSchedule`）在沙箱模板与代理上都还没有容忍配置 | T27（指标与日志）、T28（排空与节点池） |
 | D41 | T13 | 子线程的事件经 `EventSinkPort` 逐条在各自的事务中写入（每条锁一次轮次行与会话行），事件量大、并行的子智能体会放大数据库写入；需要在容量测试中计入，必要时按批写入 | R1 未测量（P7 没有子智能体负载）；改为 T29 的压测项 |
-| D42 | T13 | 子线程的 `session.error`（信封 `thread_id` 为子线程，`retry_status=terminal`）与主线程的同名事件类型相同：Webhook 订阅 `session.error` 时是否推送子线程的错误、是否按线程区分，需要在实现 Webhook 时决定 | T17a |
+| D42 | T13 | 子线程的 `session.error`（信封 `thread_id` 为子线程，`retry_status=terminal`）与主线程的同名事件类型相同：Webhook 订阅 `session.error` 时是否推送子线程的错误、是否按线程区分，需要在实现 Webhook 时决定 | T17a（已决：只推送主线程与会话级的事件，子线程的 `session.error` 不推送，ADR-0049） |
 | D43 | T13 | 取消 AgentScope 的执行（失去租约、强杀模拟、子智能体超时）后，AgentScope 内部的 `CancellationException` 与被取消的供应商 HTTP 流经 Reactor 的 `onErrorDropped` 以 ERROR 记录（T06 起的恢复与 fencing 测试中同样出现），按 ERROR 告警会误报；可对这类取消降级日志 | T27 |
 | D44 | R1 | 数据库连接池默认 10 是单节点的首要瓶颈（P7：3000 个 SSE 连接时等待 482，连接池 30 后 p99 127 毫秒）；会话沙箱的获取与回收在事务内做远程操作，期间占住一个连接（审查 C-02）。生产的 Hikari 连接池（至少 30）与 PostgreSQL 的 `max_connections` 要按 Pod 数规划 | T28 |
 | D45 | R1 | 轮次认领是单线程串行的（`TurnWorkerLifecycle.drain`），单节点轮次启动速率约 70 至 74 轮/秒，并发轮次上限约为 70 × 平均每轮秒数（P7）；需要更高时并行认领或一次认领多个 | T28（容量规划），T29 复测 |
 | D46 | R1 | SSE 每个连接每 5 秒一次对账查询，N 个连接即每秒 N/5 次，5000 个连接时连接池 30 也排队（P7）；可以在 `SessionStreamHub` 按会话共享一次对账 | T28（容量规划），T29 复测 |
 | D47 | R1 | 一轮内有批次 checkpoint 时，结束时的保存走 AgentScope 的 CAS 冲突覆盖，每轮多一次写入并打一条 `agent_state CAS conflict — OVERWRITE applied` 的 WARN（审查 A-F3，2.0.4 没有同步版本号的入口）；按 WARN 告警会误报 | T27（日志降级或过滤），T30 复查 2.1 |
-| D48 | R1 | 会话沙箱的远程操作在 `rt.sessions` 行锁内（ADR-0037），同会话发送事件的请求等到操作结束（最长 `operation-timeout` 10 分钟）；续租已不受影响（ADR-0041）。可评估改为按会话的咨询锁串行沙箱操作 | T17a |
-| D49 | R1 | runtime 健壮性小项（审查）：C-07 工作区写入没有租约条件；C-08 steer 消费提交与批次 checkpoint 之间强杀会丢 steer；C-09 状态写入的围栏不含轮次 ID（先用故障注入确认）；C-12 可重试错误置回无退避、数据库瞬断计入恢复次数、终态后续租误计 `meridian.lease.lost`、下线时先改库后取消、`stop` 与 `drain` 竞态；C-13 回收器单行失败饿死后续；C-12 的 outbox 毒丸与持锁发布给 T16 | T17a（outbox 部分已由 T16 落地：认领后在事务外发布、失败计数不阻塞队头，`OutboxIT`） |
-| D50 | R1 | 沙箱与出网后续（审查）：C-10 回收先快照再删除再提交的失败代价、`sandbox_last_used_at` 取轮次开始时间、`findIdle` 不过滤已删除会话；C-11 `DatabaseSandboxStates.save`/`clear` 未接入出网撤销、删除与归档不淘汰出网缓存（最多 30 秒）；S-F4 产物在列出之后被后台进程继续写大、`readOutput` 整文件进堆（需要给 `SandboxDriver` 加带上限的读取） | T17a（C-10、C-11），T37（S-F4） |
+| D48 | R1 | 会话沙箱的远程操作在 `rt.sessions` 行锁内（ADR-0037），同会话发送事件的请求等到操作结束（最长 `operation-timeout` 10 分钟）；续租已不受影响（ADR-0041）。可评估改为按会话的咨询锁串行沙箱操作 | R2（T17a 评估：清理与归档也在会话行锁内做远程操作，与获取、回收同一把锁；改咨询锁要同时改获取、回收、清理、归档四处并重新做 P9 的竞争测试，不在 T17a 的范围内改） |
+| D49 | R1 | runtime 健壮性小项（审查）：C-07 工作区写入没有租约条件；C-08 steer 消费提交与批次 checkpoint 之间强杀会丢 steer；C-09 状态写入的围栏不含轮次 ID（先用故障注入确认）；C-12 可重试错误置回无退避、数据库瞬断计入恢复次数、终态后续租误计 `meridian.lease.lost`、下线时先改库后取消、`stop` 与 `drain` 竞态；C-13 回收器单行失败饿死后续；C-12 的 outbox 毒丸与持锁发布给 T16 | R2（outbox 部分已由 T16 落地；其余是调度与恢复的防御性小项，与 T17a 的数据生命周期无关，T17a 未改） |
+| D50 | R1 | 沙箱与出网后续（审查）：C-10 回收先快照再删除再提交的失败代价、`sandbox_last_used_at` 取轮次开始时间、`findIdle` 不过滤已删除会话；C-11 `DatabaseSandboxStates.save`/`clear` 未接入出网撤销、删除与归档不淘汰出网缓存（最多 30 秒）；S-F4 产物在列出之后被后台进程继续写大、`readOutput` 整文件进堆（需要给 `SandboxDriver` 加带上限的读取） | T17a 已落地 C-11（删除、归档与 `DatabaseSandboxStates` 撤销出网授权）与 C-10 的 `findIdle` 过滤已删除会话；C-10 其余（回收的失败代价、`sandbox_last_used_at` 取轮次开始时间）给 R2；S-F4 给 T37 |
 | D51 | R1 | 安全加固（审查）：S-F5 自定义工具的 `input_schema` 不校验（灾难性回溯、远程 `$ref`）；S-F7 SSE 没有每 Key 连接上限、Key 吊销后连接保持；S-F8 `none` 档工作区没有配额、单文件上限按字符数；S-F13 来源标签的转义只覆盖 ASCII 空白；S-F14 批准时改写的入参是否重走规则；S-F15 审计与账本保存完整命令与入参、没有脱敏；S-F3 代理在 Envoy 层拒绝回环与未指定地址的上游 | T37 |
 | D52 | R1 | 供应商接入前的校验（审查）：S-F11 `user.message` 的 `image.url` 不限协议，Anthropic、Ollama 的转换器会读本机文件或下载；S-F10 `SecretResolver` 不校验密钥属于调用方租户，供应商与搜索的 `base_url` 没有 SSRF 校验 | T15a（已落地：`image.url` 只接受 http(s)；凭据解析校验租户；`common.net.EndpointPolicy` 在写入供应商账号、模型、联网搜索后端时与 runtime 读取目录时校验端点；Gemini 适配器拒绝 URL 媒体，ADR-0045、ADR-0046） |
 | D53 | R1 | AgentScope 集成后续（审查）：A-F5 装配自检失败不 `close` 智能体、MCP 资源在后续工具构造失败时不关；A-F6 `AgentEventDisposition` 与 `TurnEventMapper` 两张表各自独立；A-F7 `plan_write` 不经账本；A-F8 MCP 服务重启后的重连语义；A-F9 幂等键依赖供应商的 `tool_use_id`；A-F10 `HarnessAgent.close()` 在 commonPool 上等待 | T15b（A-F5 已落地：装配自检或后续工具构造失败时关闭已建的智能体与 MCP 客户端，提交 81510f7），T19（A-F8：MCP 连接仍在装配时建立、随实例缓存，服务重启后的重连语义未处理），T27（A-F10），其余 R2 复查 |
@@ -299,6 +290,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D68 | T16 | 用量报表只有聚合，没有明细列表与 CSV 导出；T25b 的“明细表、导出 CSV”需要按游标列出 `usage_records` 的接口 | T19b |
 | D69 | T16 | `cp.stream_dead_letters` 只有写入：没有查看与重放的接口或脚本，坏消息只能人工查表后重新发布；outbox 中 `attempts` 达到上限的消息同样只能人工处理 | T27（告警）、R2 |
 | D70 | T16 | 知识检索的次数没有计量：`search_calls` 只记联网搜索；知识库存储量的用量种类由 T18 加入 `UsageKind`、`UsageMessages` 与 `usage_records.kind` 的检查约束 | T18、T19 |
+| D71 | T17a | 事件归档把会话的全部现存事件读进内存再压缩上传（`EventArchiver.readAll`、`EventArchives.write`），保留清理重写文件同样整份读入；单个会话事件很多（数十万条）时内存占用大，应改为流式读写与分段上传 | T28（容量与运维） |
+| D72 | T17a | Webhook 的签名密钥不能轮换（只能删除后重建，Webhook ID 随之改变）；投递记录的列表只按 Webhook、会话、状态过滤，没有时间范围 | T19b（控制台的 Webhook 页面需要时补轮换接口与时间过滤） |
+| D73 | T17a | 删除通知的投递与会话清理的先后：清理等待该会话的 Webhook 投递至多 12 小时，之后未完成的投递随会话删除（外键级联），投递记录不再可查；接收方长时间不可用时业务系统收不到删除通知 | R2（评审是否把投递记录与会话解耦，单独按 30 天保留） |
 
 ## 技术债
 
@@ -454,6 +448,14 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：预算以 token 计（价格表可能多币种、沙箱与搜索没有单价），租户、项目、API Key 按自然月、会话不分周期；每级可设默认值，没有设置为 0；限额是每租户一个 Redis 哈希、提交后增量写入加 5 分钟全量重写；对账目标是账本加未过期预扣；审计消息统一标准字段，runtime 的平铺字段并入 `details`；`group_by` 用逗号分隔的字符串（契约校验库不支持 3.1 的数组查询参数）
 - 顺带修复：`OutboxIT` 中断言队头阻塞的用例改为断言新行为（D49 要求修掉该行为）
 - 遗留：D66（`SubagentSessionIT` 偶发 BlockHound 失败，R2）、D67（`sessions.budget_limit` 未使用）、D68（用量明细与 CSV，T19b）、D69（死信与停止投递的 outbox 消息没有处理工具）、D70（知识检索次数与存储量的计量，T18、T19）
+
+### 2026-11-12 T17a 已完成（提交 待填）
+
+- 交付：control-plane 的 `webhook` 上下文（迁移 `V0005` 的 `cp.webhooks`，管理接口 `/admin/v1/tenants/{t}/projects/{p}/webhooks`，签名密钥 `whsec_` 用租户数据密钥加密保存、只在创建时返回，给 runtime 的内部订阅接口与 `config.invalidate` 的 `webhook` 类型），租户配额下发 `event_retention_days`；runtime 迁移 `V0010`（`webhook_events` 订阅事件与会话事件同事务写入，`webhook_deliveries` 投递记录，`sessions` 的归档与保留列），`webhook`（投递器按项目订阅扇出、`Meridian-Signature: t=,v1=` 的 HMAC-SHA256、8 次退避与 24 小时截止、认领与至少一次、Reactor Netty 发送器复用 `EndpointPolicy` 与 `GuardedResolverGroup` 防 SSRF 与 DNS 重绑定、公开的投递记录列表、查询与重投），`retention`（`SessionPurger` 清理已删除会话的事件、线程、轮次、状态、工作区、产物、沙箱与快照、对象存储前缀并写审计 `session.purged`，`EventArchiver` 90 天无活动归档为 gzip JSON Lines，`EventRetentionSweeper` 按租户保留天数删除数据库与归档中的过期事件并写审计 `session_events.expired`），`SessionEventReader` 合并归档与数据库透明读取（列表与 SSE 补发）；`SandboxDriver.deleteSessionSandboxes` 按会话标签删除 kind 中的 claim；删除与归档撤销出网授权，已删除会话不再获取沙箱；ID 前缀 `whk`、`whd`；ADR-0049，架构设计 v1.23
+- 验收：A01–A05 全部 passing（`WebhookDeliveryIT`、`HttpWebhookSenderTest`、`WebhookAdminIT`、`SessionPurgeIT`、`SessionPurgeKindIT`（kind 集群 `meridian`）、`EventArchiveIT`、`EventRetentionIT`、审计契约测试，`verify.sh` 通过）
+- 决策：只推送主线程与会话级的事件（D42）；投递经 outbox 解耦，接收方按事件 ID 去重；清理等待该会话的投递至多 12 小时；归档按会话一个文件、再次归档合并后删除旧文件，读取在可重复读的只读事务中取指针与数据库事件；保留清理按会话记下已清理的截止时间，避免反复扫描；Webhook 管理复用 `API_KEY_READ`、`API_KEY_WRITE` 两个操作类别
+- 顺带修复：runtime 测试的 BlockHound 放行 `VirtualThread#submitRunContinuation`（事件循环唤醒虚拟线程时 `ForkJoinPool` 竞争下短暂 park，被拦截后虚拟线程永不再运行，`WebhookDeliveryIT` 偶发永久挂起）；测试 PostgreSQL 的 `max_connections` 调到 300（缓存的 Spring 上下文增多后连接用尽）
+- 遗留：D37 存活会话的无主 claim（T28）、D48 与 D49（R2）、D50 C-10 其余（R2）与 S-F4（T37）、D71（归档整份读入内存，T28）、D72（签名密钥轮换与投递记录的时间过滤，T19b）、D73（清理与删除通知投递的先后，R2）；kind 集群 `meridian` 保留给 T28、T29（不用时 `kind delete cluster --name meridian` 释放内存）
 
 ## 计划变更记录
 

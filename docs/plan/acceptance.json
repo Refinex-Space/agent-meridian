@@ -1301,36 +1301,36 @@
       "id": "T17a-A01",
       "task": "T17a",
       "description": "Webhook：四种事件按订阅投递，签名可被验证；接收方返回 500 时按退避重试；接收方按事件 `id` 去重；手动重投可用。验证：集成测试（WireMock 接收方）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dit.test=WebhookDeliveryIT：Tests run: 3, Failures: 0（WireMock 接收方：四种事件按订阅扇出、停用与未订阅的不投递，Meridian-Signature 按 HMAC-SHA256(密钥, t.请求体) 验证通过、错误密钥不通过；500 后按 30 秒退避重试成功、一直失败共 8 次后 failed；重试与手动重投的请求体与事件 id 相同；POST /v1/webhook-deliveries/{id}:redeliver 202 并再次投递；子线程 session.error 不推送；其他项目 404）。另 HttpWebhookSenderTest 4 例（超时、不跟随重定向、IP 字面量与解析结果的地址策略）、WebhookDomainTest（签名与 openssl 参照值一致）、control-plane WebhookAdminIT 3 例与 RoleMatrixIT 737 例通过"
     },
     {
       "id": "T17a-A02",
       "task": "T17a",
       "description": "删除会话后，数据库、对象存储、kind 集群中都没有该会话的残留；删除有审计记录；中途失败后重试能完成。验证：集成测试（含 `kind` 标签的沙箱部分）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "SessionPurgeIT：Tests run: 2, Failures: 0（删除 202 并写审计 session.deleted；删除通知未投递前不清理、超过 12 小时不再等；注入按标签删除沙箱失败后会话仍在、重试完成；完成后 GET 404，rt 中全部带 session_id 的表、sessions、workspace_entries 为 0，快照、产物、大结果、工作区（含更深命名空间的对象）、归档文件都不存在，替身驱动中该会话的沙箱与残留沙箱为 0，审计 session.purged）。./mvnw -Pkind -pl meridian-runtime -am verify -Dit.test=SessionPurgeKindIT：Tests run: 1, Failures: 0（kind 集群：真实会话沙箱与一个带会话标签、未记进会话的 SandboxClaim 都被删除，按标签查询为空，产物与快照前缀为空）"
     },
     {
       "id": "T17a-A03",
       "task": "T17a",
       "description": "事件归档后，`GET /v1/sessions/{id}/events` 仍返回完整、按序的事件；SSE 补发同样能读到归档事件。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "EventArchiveIT：Tests run: 1, Failures: 0（91 天后归档：库中事件为 0、文件在 rt/{tenant}/{session}/events/；GET /v1/sessions/{id}/events 分页返回与归档前逐条相同的事件；归档后新事件写回数据库，列表 seq 1–7 连续；SSE 从头、Last-Event-ID=3、?threads=main 都补发完整且按序，内容与归档前相同；再次归档合并为新文件并删除旧文件，读取仍完整）"
     },
     {
       "id": "T17a-A04",
       "task": "T17a",
       "description": "事件保留：租户配置的保留天数生效，到期的事件与归档文件被删除并写审计。验证：集成测试（可控时钟）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "EventRetentionIT：Tests run: 1, Failures: 0（可控时钟，保留天数由替身给出：200 天时不删除；改为 100 天后，库中早于截止时间的事件删除、全部过期的归档文件删除并清空指针、部分过期的文件剔除后重写并删除旧文件；审计 session_events.expired 带 retention_days=100、cutoff、删除的事件与文件数；再次扫描不再处理、不再写审计）。control-plane 的 AdminAuditAndQuotaIT 验证内部接口下发 event_retention_days"
     },
     {
       "id": "T17a-A05",
       "task": "T17a",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`scripts/dev/verify.sh`（提交 dfd6baf）：BUILD SUCCESS（全部模块的格式、编译、单元与集成测试、架构测试、enforcer、覆盖率；runtime 集成测试 282 个、control-plane 270 个全部通过），check-pom-versions OK，ruff、mypy 无问题，sandbox-runtime 23 passed，exit=0"
     },
     {
       "id": "T17b-A01",

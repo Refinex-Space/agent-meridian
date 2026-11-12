@@ -75,7 +75,7 @@ package cn.refinex.meridian.runtime.dispatch;
 | 角色矩阵与管理 API 的授权 | `security.rbac` | `RoleMatrix`、`@RequiresPermission`、MVC 拦截器；角色绑定由应用实现 `GrantSource`，业务代码不写角色判断 |
 | 服务间 HTTP 调用约定（超时、重试、服务 JWT 注入） | `security.servicejwt` | `ServiceRestClients.create(baseUrl, audience)`：基于 Spring `RestClient`，超时与按目标服务换取并缓存的服务 JWT（`ServiceTokenClient`）；`/internal/` 由两种 Web 栈的过滤器保护，处理器首行 `ServiceCredentialAuthorization.require(exchange, 调用方…)` 或 `ServiceCredentialFilter.require(request, 调用方…)` 限定调用方（ADR-0044） |
 | JWT 的签名与校验、JWKS | Nimbus JOSE + JWT | 不自写 JWS 解析与 JWKS 缓存：校验经 `ServiceJwtVerifier`、`OidcTokenVerifier`（`JWKSourceBuilder` 负责缓存与未知 `kid` 刷新），签发只在 control-plane 的 `servicetoken` 上下文 |
-| SSRF 地址策略（地址分类、IP 字面量的全部写法、配置端点的校验） | `common.net` | `AddressPolicy.classify`/`isBlocked`/`literal`（`web_fetch` 逐跳判定），`EndpointPolicy`（供应商与搜索后端的 `base_url`：危险地址始终拒绝，私有网段按配置放行，ADR-0045） |
+| SSRF 地址策略（地址分类、IP 字面量的全部写法、配置端点的校验） | `common.net` | `AddressPolicy.classify`/`isBlocked`/`literal`（`web_fetch` 逐跳判定），`EndpointPolicy`（供应商与搜索后端的 `base_url`：危险地址始终拒绝，私有网段按配置放行，ADR-0045；Webhook 地址同样用它，默认不放行内网，ADR-0049）；runtime 发出的 HTTP 在连接时校验解析结果用 `tooling.infra.GuardedResolverGroup`（`web_fetch`、Webhook 投递） |
 | 平台工具基类 | `engine.agentscope.tools` | 所有平台工具继承同一个抽象基类 |
 
 判断规则：

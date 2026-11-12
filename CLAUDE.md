@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AgentMeridian 是部署在企业内的多租户智能体平台：业务系统通过 Sessions/Events API（REST + SSE）使用带 Harness 能力的智能体，管理员在控制台治理模型、凭据、预算与审计。
 
-M0（内核与运行时核心，T01–T13）有条件完成，R1 的结论与进入 M1 的前提见 `docs/poc/M0-总结.md`；当前是 M1 控制面与治理（T14a 起）。已实现的是 control-plane 的租户体系（租户、项目、成员与角色、API Key、限流、租户并发配额，T14a）、身份（OIDC 控制台用户、服务 JWT 的签发，T14b）与凭据库、供应商账号、模型目录、价格表（T15a，runtime 的模型调用经内部接口解析）、智能体与版本、环境、技能、MCP 服务、权限策略、租户设置及其分发（T15b，runtime 的智能体配置经内部接口读取，`config.invalidate` 通知失效）、用量账本与审计日志的消费与查询、四级预算（Redis 限额与每小时对账）、用量报表（T16，runtime 的预算限额读 control-plane 写进 Redis 的值，新租户默认零预算）、runtime（会话、事件与 SSE、调度与租约、崩溃恢复、投递与待处理动作、权限合成、模型路由与计量、平台工具、会话沙箱与出网、子智能体）、engine-agentscope、common、persistence、security、OpenAPI 规范、沙箱镜像与 chart；knowledge、model-client 还是空骨架，console 尚未建立。每个任务交付了什么、对应哪个 ADR，见 `docs/plan/PLAN.md` 的会话日志与 `docs/adr/README.md`。
+M0（内核与运行时核心，T01–T13）有条件完成，R1 的结论与进入 M1 的前提见 `docs/poc/M0-总结.md`；当前是 M1 控制面与治理（T14a 起）。已实现的是 control-plane 的租户体系（租户、项目、成员与角色、API Key、限流、租户并发配额，T14a）、身份（OIDC 控制台用户、服务 JWT 的签发，T14b）与凭据库、供应商账号、模型目录、价格表（T15a，runtime 的模型调用经内部接口解析）、智能体与版本、环境、技能、MCP 服务、权限策略、租户设置及其分发（T15b，runtime 的智能体配置经内部接口读取，`config.invalidate` 通知失效）、用量账本与审计日志的消费与查询、四级预算（Redis 限额与每小时对账）、用量报表（T16，runtime 的预算限额读 control-plane 写进 Redis 的值，新租户默认零预算）、Webhook 的配置（T17a，投递与投递记录在 runtime）、runtime（会话、事件与 SSE、调度与租约、崩溃恢复、投递与待处理动作、权限合成、模型路由与计量、平台工具、会话沙箱与出网、子智能体、Webhook 投递、会话清理与事件归档、保留，T17a）、engine-agentscope、common、persistence、security、OpenAPI 规范、沙箱镜像与 chart；knowledge、model-client 还是空骨架，console 尚未建立。每个任务交付了什么、对应哪个 ADR，见 `docs/plan/PLAN.md` 的会话日志与 `docs/adr/README.md`。
 
 ## 交付流程
 
@@ -61,7 +61,7 @@ Maven 命令一律在仓库根目录用 `./mvnw` 执行，单模块用 `-pl <模
   3. `scripts/dev/install-agent-sandbox.sh meridian`：安装 agent-sandbox v1.0.10 控制器与 CRD（校验清单摘要与镜像版本）。
   4. `scripts/dev/deploy-sandbox.sh meridian`：构建沙箱镜像、`kind load`、建出网代理的客户端密钥 Secret（取 env 文件的 `MERIDIAN_EGRESS_PROXY_CLIENT_SECRET`）、安装 chart（`values-kind.yaml`：出网代理回调宿主的 `host.docker.internal:18080`，向 `:18081` 的 control-plane 换取服务 JWT）、部署 P14 的目标服务 `deploy/kind/egress-echo.yaml`，等预热池就绪；改了镜像重跑它（会重建预热池中未认领的沙箱）。连 kind 的本地 runtime 用 `run-runtime.sh --server.port=18080`，同时要有 `run-control-plane.sh`。
 - kind 的 Pod 网段是 `10.244.0.0/16`：不能与 Docker Desktop 的 `host.docker.internal`（`192.168.65.254`）重叠，否则 Pod 访问不到宿主上的 runtime；T12b 之前建的集群（`192.168.0.0/16`）要删掉重建。
-- `kind delete cluster --name meridian`：删除集群，释放内存（R1、T17a 还会用到它，删除后按上面的顺序重建）。
+- `kind delete cluster --name meridian`：删除集群，释放内存（T28、T29 还会用到它，删除后按上面的顺序重建）。
 
 ## 本机环境
 
