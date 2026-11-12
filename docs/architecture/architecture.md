@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.21 |
+| 版本 | v1.22 |
 | 日期 | 2026-11-12 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -332,6 +332,7 @@ erDiagram
 | `skl` | 技能 | `mcp` | MCP 服务 |
 | `mbr` | 成员 | `rbd` | 角色绑定 |
 | `prb` | 价格表 | `prl` | 权限规则（租户与项目策略） |
+| `bdg` | 预算 | `bal` | 预算告警 |
 
 ## 数据架构
 
@@ -357,7 +358,7 @@ erDiagram
 
 | 表 | 关键列 | 说明 |
 |---|---|---|
-| `sessions` | `id`、`agent_version_id`、`environment_id`、`environment_revision`、`end_user_id`、`interaction`、`status`、`last_seq`、`sandbox_state jsonb`、`sandbox_pod_ip`、`sandbox_last_used_at`、`sandbox_snapshot_key`、`sandbox_metered_at`、`budget_limit`、`deleted_at` | `last_seq` 用于分配事件序号；`deleted_at` 不为空表示已删除、等待清理（ADR-0030）；`sandbox_state` 为 `{sandbox_id, size, state}`，回收后清空并在 `sandbox_snapshot_key` 留下快照（ADR-0037） |
+| `sessions` | `id`、`agent_version_id`、`environment_id`、`environment_revision`、`end_user_id`、`interaction`、`status`、`last_seq`、`sandbox_state jsonb`、`sandbox_pod_ip`、`sandbox_last_used_at`、`sandbox_snapshot_key`、`sandbox_metered_at`、`budget_limit`、`api_key_id`、`deleted_at` | `last_seq` 用于分配事件序号；`deleted_at` 不为空表示已删除、等待清理（ADR-0030）；`sandbox_state` 为 `{sandbox_id, size, state}`，回收后清空并在 `sandbox_snapshot_key` 留下快照（ADR-0037）；`api_key_id` 是创建会话的 API Key，轮次的预算与用量计入它，`budget_limit` 未使用（会话级预算在 control-plane 的 `budgets`，ADR-0048） |
 | `threads` | `id`、`session_id`、`parent_thread_id`、`parent_tool_use_id`、`agent_name`、`status` | 主线程的 `parent_thread_id` 为空 |
 | `turns` | `id`、`thread_id`、`tenant_id`、`kind`、`status`、`priority`、`not_before`、`lease_owner`、`lease_epoch`、`lease_expires_at`、`claim_count`、`recovery_attempt`、`interrupt_requested_at`、`stop_reason` | 轮次队列与租约 |
 | `turn_inputs` | `turn_id`、`payload jsonb` | 每轮的完整输入，用于恢复时重放 |
@@ -370,14 +371,16 @@ erDiagram
 | `permission_rules` | `layer`（`tenant`、`project`、`session`）、`tool_name`、`rule_content`、`behavior`、`session_id`、`source_action_id` | 五层权限中的租户、项目、会话三层；会话级的"记住此决定"写在这里。T15b 起租户与项目策略（含项目级的"记住此决定"）在 control-plane 的 `cp.permission_rules`，本表的这两层只供开发配置使用（ADR-0031、ADR-0047） |
 | `workspace_entries` | `namespace text[]`、`key`、`version`、`size`、`inline_content`、`object_key` | `MeridianBaseStore` 的存储 |
 | `sandbox_outputs` | `session_id`、`path`、`size`、`sha256`、`object_key`、`synced_at` | `sandbox` 档 `outputs/` 同步到对象存储的清单（ADR-0037） |
-| `outbox` | `id`、`topic`、`payload`、`created_at`、`published_at` | 用量与审计的可靠投递 |
+| `outbox` | `id`、`topic`、`payload`、`created_at`、`published_at`、`claimed_until`、`attempts` | 用量与审计的可靠投递；Relay 认领后在事务外发布，失败不阻塞后面的消息（ADR-0048） |
 
 `turns` 上有一个部分唯一索引：`UNIQUE (thread_id) WHERE status IN ('queued','running','awaiting_action')`。所以每个线程同时最多一个未结束的轮次，插入用 `ON CONFLICT DO NOTHING`。
 
-**control-plane（schema `cp`）**：`tenants`（含并发配额 `max_concurrent_turns`、事件保留天数 `event_retention_days`；租户与项目软删除，删除时吊销其下的 API Key）、`tenant_settings`（租户级系统提示词、联网搜索后端等）、`projects`、`members`（按身份提供方的主体标识 `subject` 识别）、`role_bindings`（`role`、租户级角色的 `project_id` 为空）、`api_keys`（只存 SHA-256 哈希和 `mk_live_` 之后随机部分的前 8 位，带作用域、每分钟上限、过期与吊销时间）、`provider_accounts`（类型、端点、凭据引用、RPM 与 TPM）、`models`（上下文窗口、能力、备用模型、价格表）、`price_books` 与 `price_book_versions`（版本只追加、发布即生效）、`secrets`（信封加密的密文，可空的 `project_id`）、`secret_data_keys`（按租户的数据密钥，由主密钥包装）（ADR-0045）、`agents`、`agent_versions`（`spec jsonb`，草稿可改、发布后只读）与 `agent_version_refs`（已发布版本引用的模型、技能、MCP 服务、凭据、知识库）、`environments`（带 `revision`）与 `environment_revisions`（修订历史）、`skills`、`skill_versions`（文件在对象存储）、`mcp_servers`（带探测到的工具清单）、`permission_rules`（租户与项目策略）（ADR-0047）、`budgets`、`webhooks`。另有两张按月分区的表，主键都是 `(id, occurred_at)`，`occurred_at` 取自消息载荷，重投时落在同一分区，保证幂等：
+**control-plane（schema `cp`）**：`tenants`（含并发配额 `max_concurrent_turns`、事件保留天数 `event_retention_days`；租户与项目软删除，删除时吊销其下的 API Key）、`tenant_settings`（租户级系统提示词、联网搜索后端等）、`projects`、`members`（按身份提供方的主体标识 `subject` 识别）、`role_bindings`（`role`、租户级角色的 `project_id` 为空）、`api_keys`（只存 SHA-256 哈希和 `mk_live_` 之后随机部分的前 8 位，带作用域、每分钟上限、过期与吊销时间）、`provider_accounts`（类型、端点、凭据引用、RPM 与 TPM）、`models`（上下文窗口、能力、备用模型、价格表）、`price_books` 与 `price_book_versions`（版本只追加、发布即生效）、`secrets`（信封加密的密文，可空的 `project_id`）、`secret_data_keys`（按租户的数据密钥，由主密钥包装）（ADR-0045）、`agents`、`agent_versions`（`spec jsonb`，草稿可改、发布后只读）与 `agent_version_refs`（已发布版本引用的模型、技能、MCP 服务、凭据、知识库）、`environments`（带 `revision`）与 `environment_revisions`（修订历史）、`skills`、`skill_versions`（文件在对象存储）、`mcp_servers`（带探测到的工具清单）、`permission_rules`（租户与项目策略）（ADR-0047）、`budgets`（四级预算，`scope_id` 为空表示该级的默认值）、`budget_usage`（每级每周期的账本汇总，与账本同一事务累加）、`budget_alerts`（软阈值告警）、`budget_corrections`（对账修正记录）、`stream_dead_letters`（消费者无法处理的消息）（ADR-0048）、`webhooks`。另有两张按月（UTC）分区的表，主键都是 `(id, occurred_at)`，`id` 是 outbox 消息 ID，`occurred_at` 取自消息载荷，重投时落在同一分区，保证幂等：
 
-- `usage_records`。
+- `usage_records`：只追加，带计量种类、数量、各类 token、价格表版本、币种与成本（`numeric(24, 12)`，不舍入）。
 - `audit_logs`，只追加。
+
+两张表的分区由迁移角色拥有的 `SECURITY DEFINER` 函数 `ensure_ledger_partitions(month)`、`drop_expired_ledger_partitions()` 创建与删除，应用角色在两张表与全部分区上只有 `INSERT`、`SELECT`（ADR-0048）。
 
 **knowledge（schema `kb`）**：`knowledge_bases`、`documents`、`chunks`（`embedding vector(n)`、`tsv tsvector`、`acl_tags text[]`、`source_locator jsonb`）、`ingestion_jobs`。
 
@@ -393,7 +396,7 @@ flowchart LR
     CP -->|Pub/Sub key.revoked| RT & KB
 ```
 
-用量和审计采用 outbox 模式：业务事务里写 `outbox`，Relay 发布到 Redis Stream，control-plane 的消费者按 `(id, occurred_at)` 幂等入库。Redis 短暂不可用时，记录不会丢。
+用量和审计采用 outbox 模式：业务事务里写 `outbox`，Relay 发布到 Redis Stream，control-plane 的消费者按 `(id, occurred_at)` 幂等入库。Redis 短暂不可用时，记录不会丢。消费者是消费组 `control-plane`（多实例各取一部分），一批在一个事务中处理，失败时逐条重试，非瞬时错误的消息转入 `stream_dead_letters` 后确认；空闲 60 秒的待确认消息由存活实例认领重投；确认后按最小待确认 ID 裁剪 Stream。审计消息的标准字段是 `action`、`occurred_at`、`tenant_id`、`project_id`、`actor`（`{type, subject}`）、`resource_type`、`resource_id`、`session_id`、`details`，其余顶层字段并入 `details`；审计日志的写入只有审计消费者一个入口（ADR-0048）。
 
 配置经内部接口按需读取、runtime 缓存，`config.invalidate`（`{"type":…,"tenant_id":…,"id":…}`）在提交后通知立即淘汰：`tenant_quota`（ADR-0042），`secret`、`provider_account`、`model`、`price_book`（ADR-0045），`agent`、`environment`、`skill`、`mcp_server`、`permission_policy`、`tenant_settings`（ADR-0047）。已发布的智能体版本带发布时的规格快照（含 MCP 服务的端点与凭据引用），环境按修订号读取，两者都不可变；会变的只有智能体的当前版本、环境的当前修订、租户设置与策略。Pub/Sub 丢消息时由缓存的过期时间兜底。
 
@@ -403,7 +406,7 @@ flowchart LR
 
 - **会话事件**：默认保留 365 天，租户可配置。会话 90 天无活动后，事件导出为对象存储中一个按会话命名的文件，数据库中删除，`sessions` 记录归档位置；API 读取归档事件时延迟更高。
 - **删除会话**：级联删除事件（含归档文件）、线程、轮次、智能体状态、工作区、产物、沙箱与快照，在 24 小时内完成，并写一条审计记录。
-- **用量账本、审计日志**：保留 3 年，不随会话删除。
+- **用量账本、审计日志**：保留 3 年，不随会话删除。分区维护任务提前创建下个月的分区，删除早于 36 个月的分区（截止月份按数据库时间计算，ADR-0048）。
 
 ## 运行时架构
 
@@ -1030,6 +1033,8 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 | 项目观察者 | 只读，包括会话回放和用量 |
 | 审批人 | 处理本项目的待处理动作 |
 
+预算、预算告警与租户用量报表是租户级的操作类别 `BUDGET_READ`、`BUDGET_WRITE`，审计查询是 `AUDIT_READ`，只有所有者与租户管理员；项目用量报表是项目级的 `USAGE_READ`，另给项目开发者与项目观察者（ADR-0048）。
+
 模型目录（供应商账号、模型、价格表）与凭据是租户级的操作类别：`MODEL_WRITE`、`SECRET_READ`、`SECRET_WRITE` 只有所有者与租户管理员，`MODEL_READ` 另给项目开发者与项目观察者（ADR-0045）。
 
 智能体与版本、环境、技能、MCP 服务与项目策略是项目级的操作类别 `AGENT_READ`、`AGENT_WRITE`：写操作只有所有者与项目开发者，租户管理员与项目观察者只读；租户策略与租户设置同权（ADR-0047）。
@@ -1103,9 +1108,9 @@ API Key 带作用域：`sessions:write`、`sessions:read`、`knowledge:read`、`
 | 智能体（只读） | `GET /v1/agents`、`GET /v1/agents/{id}`：本项目已发布的智能体与当前版本，由 control-plane 提供（ADR-0047） | 是 |
 | 知识库 | `/v1/knowledge-bases`、`/documents`、`/search` | 是 |
 | 模型直通 | `POST /v1/chat/completions`、`POST /v1/responses`、`POST /v1/embeddings`（OpenAI 兼容）。服务之间的内部接口（`/internal/v1/embeddings`、`/internal/v1/rerank` 等）另写 `meridian-internal-v1.yaml`，不随公开 API 发布（ADR-0033） | 是 |
-| 用量 | `GET /v1/usage` | 是 |
+| 用量 | `GET /v1/usage`：本项目的用量按天、模型、智能体、API Key 聚合，由 control-plane 提供（ADR-0048） | 是 |
 | 会话分叉与回退 | `POST /v1/sessions/{id}:fork`、`POST /v1/sessions/{id}:rewind` | 二期 |
-| 管理类资源 | 租户、项目、成员与角色、API Key（T14a），智能体、环境、技能、MCP、凭据、预算等的写操作 | 管理 API `/admin/v1/`（`meridian-admin-v1.yaml`），一期只对控制台开放 |
+| 管理类资源 | 租户、项目、成员与角色、API Key（T14a），智能体、环境、技能、MCP、凭据、预算（含告警）、用量报表与审计查询（ADR-0048）等 | 管理 API `/admin/v1/`（`meridian-admin-v1.yaml`），一期只对控制台开放 |
 
 ### 事件
 
@@ -1194,9 +1199,10 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 
 - **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天。沙箱 vCPU 秒是沙箱存活时间乘以规格的 vCPU 数，在每轮结束、回收与删除会话时分段记录，用量种类 `sandbox_vcpu_seconds`（ADR-0037）。
 - **账本**：每条记录带租户、项目、API Key、智能体版本、会话、线程、轮次、模型、价格表版本。价格表有版本，调价不影响历史记录：版本发布即生效、不可修改，runtime 的用量消息在结算时带上模型当前的 `price_book_id` 与 `price_book_version`，计价按记录中的版本（ADR-0045）。
-- **预算**：分租户、项目、API Key、会话四级，每级有软阈值（告警）和硬阈值（停止）。
-- **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。Redis 计数以 token（输入加输出）计，四级计数都记（没有限额的级别也记，供对账），键带租户哈希标签；用量记录经 outbox 的 `usage` 主题投递，输入、输出、缓存读、缓存写、推理 token 分别记，带调用用途（推理、压缩、Embedding、rerank）；Embedding 与 rerank 的记录种类分别为 `embedding_tokens`、`rerank_tokens`（ADR-0033）。T16 之前限额来自开发配置，没有配置的级别不限（ADR-0032）。
-- **对账**：Redis 中的预算计数每小时与账本对账一次，以账本为准。
+- **预算**：分租户、项目、API Key、会话四级，每级有软阈值（告警）和硬阈值（停止），单位是 token（模型调用的输入加输出；沙箱与搜索只进账本）。租户、项目、API Key 按自然月（UTC）计，会话不分周期。每级可以设置"该级所有范围的默认值"，具体范围的设置优先；没有设置的级别硬阈值为 0，新租户在管理员设置之前不能调用模型。会话中的调用计入创建会话的 API Key。账本汇总越过软阈值时写一条告警（`budget_alerts`）与审计 `budget.soft_limit_reached`（ADR-0048）。
+- **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。Redis 计数以 token（输入加输出）计，四级计数都记（没有限额的级别也记，供对账），键带租户哈希标签；用量记录经 outbox 的 `usage` 主题投递，输入、输出、缓存读、缓存写、推理 token 分别记，带调用用途（推理、压缩、Embedding、rerank）；Embedding 与 rerank 的记录种类分别为 `embedding_tokens`、`rerank_tokens`（ADR-0033）。限额由 control-plane 在提交后写进每租户一个 Redis 哈希 `budget:{租户}:limits`、每 5 分钟全量重写，runtime 每次预扣用一次 `HMGET` 读四级；计数键带周期，预扣记录带上占用的计数键并记进租户的预扣集合（ADR-0048）。
+- **对账**：Redis 中的预算计数每小时与账本对账一次，以账本为准：目标值为账本汇总加未过期的预扣，差值用 `INCRBY` 修正，写 `budget_corrections` 并计指标，修正量偏大时告警（ADR-0048）。
+- **成本**：按记录中的价格表版本计算，缓存读写与推理按各自的单价，其余输入与输出按输入、输出单价；沙箱与搜索没有单价，成本为空。
 
 ## 可观测性
 
@@ -1482,6 +1488,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.19 | 2026-11-09 | T14b：服务 JWT 的换取（客户端凭据模式）、JWKS、密钥与轮换、按调用方限定内部接口；控制台用户经 `Meridian-Project` 调用公开 API 的作用域来源与限流；`PlatformContext` 增加控制台用户；出网代理的回调凭据；技术基线补 Nimbus；本地开发的 `auth` profile（ADR-0044） |
 | v1.18 | 2026-11-09 | Q2 已决：身份只认标准 OIDC，声明映射可配置，SAML、LDAP 经 Keycloak 转接，Keycloak 作为参考实现与可选组件（ADR-0043） |
 | v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
+| v1.22 | 2026-11-12 | T16：用量账本与审计日志的消费、分区与保留，审计消息的标准字段，四级预算的单位、周期、默认值与 Redis 限额，对账口径，会话记下创建它的 API Key，outbox 认领后在事务外发布，`GET /v1/usage` 由 control-plane 提供，操作类别 `BUDGET_READ`、`BUDGET_WRITE`、`AUDIT_READ`、`USAGE_READ`，ID 前缀 `bdg`、`bal`（ADR-0048） |
 | v1.21 | 2026-11-12 | T15b：智能体规格的 JSON Schema 与 `ResolvedAgentSpec` 一一对应，草稿与发布、发布时的快照与引用、环境修订、技能包与 MCP 服务的登记与探测、租户与项目策略移到 control-plane、配置分发的内部接口与 `config.invalidate` 类型、租户设置变更淘汰实例、MCP 工具按工具标注副作用、`GET /v1/agents` 由 control-plane 提供、ID 前缀 `prl`、操作类别 `AGENT_READ`、`AGENT_WRITE`（ADR-0047） |
 | v1.20 | 2026-11-11 | T15a：Q3 已决；凭据的归属、信封加密、内部解析接口与审计、供应商端点的地址策略、价格表版本与用量记录、ID 前缀 `prb`、模型目录与凭据的操作类别（ADR-0045）；Anthropic、Gemini 用平台适配器，技术基线补两个模型扩展（ADR-0046） |
 | v1.15 | 2026-11-09 | T13：`ThreadRegistryPort` 的线程事件与停止原因；`PolicyMiddleware` 的拉起名额；子智能体的执行组件、子线程上下文、终态与停止原因、超时与中断、配置项、审计与删除的落地约定；崩溃恢复中子线程不恢复、父线程只看本线程的调用（ADR-0040） |

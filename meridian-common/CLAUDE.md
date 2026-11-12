@@ -18,6 +18,7 @@
 - `concurrent`：`Blocking.call/run` 在虚拟线程上执行阻塞调用，并把 Reactor Context 中的 `PlatformContext` 绑定为 `ScopedValue`。
 - `net`（T15a，ADR-0045）：`AddressPolicy.classify` 给地址分类（私有、回环、链路本地、云元数据、保留……），`isBlocked` 是 `web_fetch` 的"只放行公网"，`literal` 解析 IP 字面量的全部写法；`EndpointPolicy` 校验管理员配置的端点（`http(s)`、无用户信息，危险地址始终拒绝，私有与保留网段按配置放行，回环按开关）。
 - `error.ReferencedException`：资源仍被引用（409），`ProblemMapper` 输出 `references`。
+- `budget`（T16，ADR-0048）：`BudgetLevel`、`BudgetKeys`（已用计数、限额哈希、预扣的 Redis 键与周期）；`audit`：`AuditActor`（审计消息的操作者）。control-plane 与 runtime 共用，键的格式改了两边同时生效。
 
 ## 不变量
 

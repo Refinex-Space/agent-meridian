@@ -64,7 +64,9 @@ package cn.refinex.meridian.runtime.dispatch;
 | `PlatformContext` 与传递 | `common.context` | MVC 服务用 `ScopedValue`；runtime 用 Reactor Context |
 | 租户作用域仓储、跨租户系统仓储 | `persistence.tenant` | `TenantScopedRepository`（项目级或租户级）、`SystemRepository` 加 `@CrossTenant` |
 | outbox 写入与投递 | `persistence.outbox` | — |
-| Redis Stream 发布与消费、Pub/Sub | `persistence.redis` | — |
+| Redis Stream 发布与消费、Pub/Sub | `persistence.redis` | `StreamConsumer`：消费组循环、认领重投、死信回调、确认后裁剪（ADR-0048） |
+| 四级预算的级别、周期与 Redis 键 | `common.budget` | `BudgetLevel`、`BudgetKeys`：control-plane 写限额与对账、runtime 预扣与结算共用（ADR-0048） |
+| 审计消息的操作者 | `common.audit` | `AuditActor`：control-plane 与 runtime 的审计消息共用（ADR-0048） |
 | 对象存储客户端 | `persistence.objectstore` | S3 兼容 |
 | 阻塞调用的虚拟线程调度 | `common.concurrent` | `Blocking.call(...)`，runtime 中所有 JDBC 都经过它；阻塞的流与工具执行 `subscribeOn(Blocking.scheduler())`，不用有线程上限的 `Schedulers.boundedElastic()`（P7） |
 | HTTP 幂等键（`Idempotency-Key`） | `persistence.idempotency` | 各服务共用，每个服务在自己的 schema 中建幂等表 |
