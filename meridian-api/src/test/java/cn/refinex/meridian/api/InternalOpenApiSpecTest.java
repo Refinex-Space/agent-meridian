@@ -41,6 +41,13 @@ class InternalOpenApiSpecTest {
             "POST /internal/v1/project-access:resolve",
             "POST /internal/v1/secrets:resolve",
             "GET /internal/v1/models/{model_id}",
+            "POST /internal/v1/agent-versions/{agent_version_id}:resolve",
+            "POST /internal/v1/agents/{agent_id}:resolve",
+            "GET /internal/v1/environments/{environment_id}",
+            "GET /internal/v1/skills/{skill_id}/versions/{version}",
+            "GET /internal/v1/projects/{project_id}/permission-rules",
+            "POST /internal/v1/projects/{project_id}/permission-rules",
+            "GET /internal/v1/tenants/{tenant_id}/settings",
             "POST /oauth2/token",
             "GET /oauth2/jwks");
 

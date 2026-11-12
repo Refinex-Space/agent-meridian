@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Admin API
   version: 1.0.0
-  summary: 控制台使用的管理 API：租户、租户设置、项目、成员、角色绑定、API Key、凭据与模型目录。
+  summary: 控制台使用的管理 API：租户、租户设置、项目、成员、角色绑定、API Key、凭据与模型目录，智能体与版本、环境、技能、MCP 服务与权限策略。
   description: |
     只供控制台调用（ADR-0042），与控制台同版本发布，不对业务系统开放；业务系统使用公开 API（`meridian-v1.yaml`）。
 
@@ -39,6 +39,16 @@ tags:
     description: 模型目录：租户内全部项目可用的模型，带上下文窗口、能力、备用模型与价格表。
   - name: PriceBooks
     description: 价格表：按版本计价，新版本发布即生效，已有用量记录不受影响。
+  - name: Agents
+    description: 智能体与版本：草稿可修改，发布后不可变；规格见 `schema/agent-spec.schema.json`（ADR-0047）。
+  - name: Environments
+    description: 环境：执行档位、沙箱规格与出网白名单，修改即递增修订号并保留历史。
+  - name: Skills
+    description: 技能包：`SKILL.md` 与附带文件，版本化，文件存对象存储。
+  - name: McpServers
+    description: MCP 服务：端点、传输、凭据引用与工具的副作用等级；登记时探测并保存工具清单。
+  - name: PermissionRules
+    description: 租户与项目策略：五层权限合成中的第 2、3 层，含“记住此决定”的项目级规则。
 
 paths:
   /admin/v1/tenants:
@@ -222,7 +232,7 @@ paths:
       operationId: updateTenantSettings
       tags: [Tenants]
       summary: 修改租户设置
-      description: 整体替换租户设置。设置下发到 runtime 由 T15b 完成。
+      description: 整体替换租户设置。runtime 经 `config.invalidate` 立即使用新设置：新的轮次带新的租户提示词，联网搜索按新后端。
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -1351,6 +1361,1088 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: createAgent
+      tags: [Agents]
+      summary: 创建智能体
+      description: |
+        智能体属于项目，名字在项目内唯一，也是发布时写进规格的 `name`（AgentScope 智能体名与日志标识）。创建后没有版本，
+        先建草稿版本再发布。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentRequest'
+            example:
+              name: support-assistant
+              description: 售后客服助手，回答订单与退换货问题。
+      responses:
+        '201':
+          $ref: '#/components/responses/AgentCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listAgents
+      tags: [Agents]
+      summary: 列出智能体
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 智能体列表，按创建时间从早到晚，带当前发布的版本。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      operationId: getAgent
+      tags: [Agents]
+      summary: 查看智能体
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateAgent
+      tags: [Agents]
+      summary: 修改智能体
+      description: |
+        改名字或说明。名字在下一次发布时写进规格，已发布的版本不变。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAgentRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteAgent
+      tags: [Agents]
+      summary: 删除智能体
+      description: |
+        删除后不能再用它创建会话（按智能体 ID 或固定版本都不行），正在运行的会话继续使用已绑定的版本。runtime 经
+        `config.invalidate` 立即生效。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      operationId: createAgentVersion
+      tags: [Agents]
+      summary: 创建草稿版本
+      description: |
+        规格按 `schema/agent-spec.schema.json` 校验结构（错误的 `field` 是 `spec.` 加 JSON 路径），版本号按智能体递增。
+        标为“发布时填写”的字段可以省略。基于某个版本创建草稿：读出它的 `spec` 再提交。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentVersionRequest'
+      responses:
+        '201':
+          $ref: '#/components/responses/AgentVersionCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listAgentVersions
+      tags: [Agents]
+      summary: 列出版本
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 版本列表，按版本号从小到大，含草稿。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentVersionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions:compare:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      operationId: compareAgentVersions
+      tags: [Agents]
+      summary: 版本对比
+      description: |
+        按 JSON 路径列出 `target` 相对 `base` 的差异：新增、删除、修改的字段；数组按位置比较。草稿也可以参与对比
+        （发布前展示与上一版本的差异）。
+      parameters:
+        - $ref: '#/components/parameters/BaseVersion'
+        - $ref: '#/components/parameters/TargetVersion'
+      responses:
+        '200':
+          description: 两个版本规格的差异。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentVersionComparison'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/AgentVersionNumber'
+    get:
+      operationId: getAgentVersion
+      tags: [Agents]
+      summary: 查看版本
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentVersionOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateAgentVersion
+      tags: [Agents]
+      summary: 修改草稿版本
+      description: |
+        整体替换草稿的规格。已发布的版本不可修改：409 `agent.version_published`。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentVersionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentVersionOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteAgentVersion
+      tags: [Agents]
+      summary: 删除草稿版本
+      description: |
+        只能删除草稿；已发布的版本 409 `agent.version_published`。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions/{version}:publish:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/AgentVersionNumber'
+    post:
+      operationId: publishAgentVersion
+      tags: [Agents]
+      summary: 发布版本
+      description: |
+        发布前校验结构与引用：模型存在且是对话模型、工具集合法、子智能体的工具集是父智能体的子集、知识库存在、MCP 服务
+        存在且启用的工具在探测到的清单中、技能版本存在；失败为 400 `request.validation_failed`，`errors` 指向字段。通过后把智能体名、
+        MCP 服务的端点与凭据引用、技能名写进规格快照，版本从此不可修改；该智能体的新会话立即使用它（`config.invalidate`），
+        运行中的会话不受影响。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentVersionOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: createEnvironment
+      tags: [Environments]
+      summary: 创建环境
+      description: |
+        执行档位 `none` 或 `sandbox`；`sandbox` 档必须选规格，`none` 档不能选。出网白名单只对 `sandbox` 档生效，
+        为空表示无出网。修订号从 1 开始。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvironmentRequest'
+            example:
+              name: 数据分析
+              tier: sandbox
+              size: medium
+              egress_allowlist: [pypi.org, '*.pythonhosted.org']
+      responses:
+        '201':
+          $ref: '#/components/responses/EnvironmentCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listEnvironments
+      tags: [Environments]
+      summary: 列出环境
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 环境列表，按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments/{environment_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentId'
+    get:
+      operationId: getEnvironment
+      tags: [Environments]
+      summary: 查看环境
+      responses:
+        '200':
+          $ref: '#/components/responses/EnvironmentOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateEnvironment
+      tags: [Environments]
+      summary: 修改环境
+      description: |
+        整体替换。档位、规格或白名单变化时修订号加一并保留修订历史；只改名字不产生新修订。新会话立即使用新修订
+        （`config.invalidate`），运行中的会话继续使用创建时的修订。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvironmentRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/EnvironmentOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteEnvironment
+      tags: [Environments]
+      summary: 删除环境
+      description: |
+        删除后不能再用它创建会话，运行中的会话继续使用已绑定的修订。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments/{environment_id}/revisions:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentId'
+    get:
+      operationId: listEnvironmentRevisions
+      tags: [Environments]
+      summary: 列出修订历史
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 修订历史，按修订号从小到大。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentRevisionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments/{environment_id}/revisions/{revision}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentId'
+      - $ref: '#/components/parameters/Revision'
+    get:
+      operationId: getEnvironmentRevision
+      tags: [Environments]
+      summary: 查看一个修订
+      responses:
+        '200':
+          description: 环境的一个修订。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentRevision'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: createSkill
+      tags: [Skills]
+      summary: 上传技能
+      description: |
+        上传技能包作为版本 1：`SKILL.md` 必须有 YAML frontmatter，`name`（小写字母、数字、短横线，至多 64 个字符，项目内
+        唯一）与 `description`（至多 1024 个字符）必填；其余文件是附带资源（UTF-8 文本），存入对象存储。至多 100 个文件，单个文件
+        至多 1 MB、合计至多 5 MB，路径为相对路径，不能含 `..`。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillPackage'
+            example:
+              files:
+                - path: SKILL.md
+                  content: "---\nname: docx\ndescription: Turn Markdown into a Word document.\n---\n# Markdown to Word\n"
+                - path: scripts/md_to_docx.py
+                  content: "import sys\n"
+      responses:
+        '201':
+          $ref: '#/components/responses/SkillCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listSkills
+      tags: [Skills]
+      summary: 列出技能
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 技能列表，按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills/{skill_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SkillId'
+    get:
+      operationId: getSkill
+      tags: [Skills]
+      summary: 查看技能
+      responses:
+        '200':
+          $ref: '#/components/responses/SkillOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteSkill
+      tags: [Skills]
+      summary: 删除技能
+      description: |
+        被未删除智能体的版本引用时返回 409 `skill.in_use`，`references` 列出这些版本。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills/{skill_id}/versions:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SkillId'
+    post:
+      operationId: createSkillVersion
+      tags: [Skills]
+      summary: 上传新版本
+      description: |
+        规则与上传技能相同，frontmatter 的 `name` 必须与技能名一致。版本号递增，已有版本不可修改。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillPackage'
+      responses:
+        '201':
+          $ref: '#/components/responses/SkillVersionCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listSkillVersions
+      tags: [Skills]
+      summary: 列出技能版本
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 技能版本，按版本号从小到大。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillVersionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills/{skill_id}/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SkillId'
+      - $ref: '#/components/parameters/SkillVersionNumber'
+    get:
+      operationId: getSkillVersion
+      tags: [Skills]
+      summary: 查看技能版本
+      responses:
+        '200':
+          $ref: '#/components/responses/SkillVersionOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: createMcpServer
+      tags: [McpServers]
+      summary: 登记 MCP 服务
+      description: |
+        端点按地址策略校验（链路本地与云元数据地址始终拒绝，内网地址只在平台放行的网段内允许）；请求头凭据必须是本项目可用
+        的凭据，凭据值是请求头的完整取值（例如 `Bearer xxx`）。登记时连接一次服务、列出工具并保存，连不上或握手失败为 400
+        `mcp_server.probe_failed`，不保存。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpServerRequest'
+            example:
+              name: crm
+              transport: streamable_http
+              url: https://crm.internal.example.com/mcp
+              header_secret_ids: {Authorization: sec_01JC8Z4C7Q9X3M2N6P0R5T8W1Y}
+              side_effect: non_idempotent
+              tool_side_effects: {lookup_order: none}
+      responses:
+        '201':
+          $ref: '#/components/responses/McpServerCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listMcpServers
+      tags: [McpServers]
+      summary: 列出 MCP 服务
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: MCP 服务列表，按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers/{mcp_server_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/McpServerId'
+    get:
+      operationId: getMcpServer
+      tags: [McpServers]
+      summary: 查看 MCP 服务
+      responses:
+        '200':
+          $ref: '#/components/responses/McpServerOk'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateMcpServer
+      tags: [McpServers]
+      summary: 修改 MCP 服务
+      description: |
+        整体替换并重新探测工具清单。已发布的智能体版本持有发布时的快照，修改在下一次发布时生效。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpServerRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/McpServerOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteMcpServer
+      tags: [McpServers]
+      summary: 删除 MCP 服务
+      description: |
+        被未删除智能体的版本引用时返回 409 `mcp_server.in_use`，`references` 列出这些版本。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers/{mcp_server_id}:probe:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/McpServerId'
+    post:
+      operationId: probeMcpServer
+      tags: [McpServers]
+      summary: 重新探测工具清单
+      description: |
+        连接服务、重新列出工具并保存；失败为 400 `mcp_server.probe_failed`，保存的清单不变。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          $ref: '#/components/responses/McpServerOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/permission-rules:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: createTenantPermissionRule
+      tags: [PermissionRules]
+      summary: 添加租户策略规则
+      description: |
+        租户策略是五层权限合成中的第 2 层，作用于租户内全部项目的会话；只能收紧，不能放开平台安全规则。相同的规则
+        （工具、内容、结果）已存在时 409 `permission_rule.already_exists`。runtime 经 `config.invalidate` 立即生效。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionRuleRequest'
+            example:
+              tool_name: web_fetch
+              rule_content: domain:internal.example.com
+              behavior: deny
+      responses:
+        '201':
+          $ref: '#/components/responses/PermissionRuleCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listTenantPermissionRules
+      tags: [PermissionRules]
+      summary: 列出租户策略规则
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 租户策略规则，按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionRulePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/permission-rules/{permission_rule_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/PermissionRuleId'
+    delete:
+      operationId: deleteTenantPermissionRule
+      tags: [PermissionRules]
+      summary: 删除租户策略规则
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/permission-rules:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: createProjectPermissionRule
+      tags: [PermissionRules]
+      summary: 添加项目策略规则
+      description: |
+        项目策略是第 3 层；会话中审批时“记住此决定”（项目级）写入的规则也在这里，`source` 为 `remembered`。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionRuleRequest'
+      responses:
+        '201':
+          $ref: '#/components/responses/PermissionRuleCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listProjectPermissionRules
+      tags: [PermissionRules]
+      summary: 列出项目策略规则
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 项目策略规则（含记住的决定），按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionRulePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/permission-rules/{permission_rule_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/PermissionRuleId'
+    delete:
+      operationId: deleteProjectPermissionRule
+      tags: [PermissionRules]
+      summary: 删除项目策略规则
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          $ref: '#/components/responses/Deleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ConsoleAuth:
@@ -1449,6 +2541,83 @@ components:
       in: path
       required: true
       description: 价格表 ID（prb_…）。
+      schema:
+        type: string
+
+    AgentId:
+      name: agent_id
+      in: path
+      required: true
+      description: 智能体 ID（agt_…）。
+      schema:
+        type: string
+    AgentVersionNumber:
+      name: version
+      in: path
+      required: true
+      description: 智能体版本号，从 1 开始。
+      schema:
+        type: integer
+        minimum: 1
+    BaseVersion:
+      name: base
+      in: query
+      required: true
+      description: 对比的基准版本号。
+      schema:
+        type: integer
+        minimum: 1
+    TargetVersion:
+      name: target
+      in: query
+      required: true
+      description: 对比的目标版本号。
+      schema:
+        type: integer
+        minimum: 1
+    EnvironmentId:
+      name: environment_id
+      in: path
+      required: true
+      description: 环境 ID（env_…）。
+      schema:
+        type: string
+    Revision:
+      name: revision
+      in: path
+      required: true
+      description: 环境修订号，从 1 开始。
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    SkillId:
+      name: skill_id
+      in: path
+      required: true
+      description: 技能 ID（skl_…）。
+      schema:
+        type: string
+    SkillVersionNumber:
+      name: version
+      in: path
+      required: true
+      description: 技能版本号，从 1 开始。
+      schema:
+        type: integer
+        minimum: 1
+    McpServerId:
+      name: mcp_server_id
+      in: path
+      required: true
+      description: MCP 服务 ID（mcp_…）。
+      schema:
+        type: string
+    PermissionRuleId:
+      name: permission_rule_id
+      in: path
+      required: true
+      description: 权限规则 ID（prl_…）。
       schema:
         type: string
 
@@ -1629,6 +2798,149 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/PriceBook'
+    AgentCreated:
+      description: 已创建。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Agent'
+    AgentOk:
+      description: 智能体。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Agent'
+    AgentVersionCreated:
+      description: 已创建。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AgentVersion'
+    AgentVersionOk:
+      description: 智能体版本。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AgentVersion'
+    EnvironmentCreated:
+      description: 已创建。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Environment'
+    EnvironmentOk:
+      description: 环境。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Environment'
+    SkillCreated:
+      description: 已创建，带版本 1。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Skill'
+    SkillOk:
+      description: 技能。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Skill'
+    SkillVersionCreated:
+      description: 已创建。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SkillVersion'
+    SkillVersionOk:
+      description: 技能版本。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SkillVersion'
+    McpServerCreated:
+      description: 已登记，带探测到的工具清单。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/McpServer'
+    McpServerOk:
+      description: MCP 服务。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/McpServer'
+    PermissionRuleCreated:
+      description: 已创建。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Idempotent-Replayed:
+          $ref: '#/components/headers/IdempotentReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PermissionRule'
     Deleted:
       description: 已删除，没有响应体。
       headers:
@@ -1638,8 +2950,9 @@ components:
           $ref: '#/components/headers/IdempotentReplayed'
     BadRequest:
       description: |
-        请求不合法：`request.invalid`（格式错误）、`request.validation_failed`（字段校验失败，见 `errors`）、
-        `request.invalid_cursor`（游标无效）、`request.invalid_id`（ID 格式错误）。
+        请求不合法：`request.invalid`（格式错误）、`request.validation_failed`（字段校验失败，见 `errors`；智能体规格的错误
+        字段是 `spec.` 加 JSON 路径）、`request.invalid_cursor`（游标无效）、`request.invalid_id`（ID 格式错误）、
+        `mcp_server.probe_failed`（连接 MCP 服务、握手或列出工具失败）。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -1669,7 +2982,9 @@ components:
       description: |
         资源不存在或已删除：`tenant.not_found`、`project.not_found`、`member.not_found`、`role_binding.not_found`、
         `api_key.not_found`、`secret.not_found`、`catalog.provider_account_not_found`、`catalog.model_not_found`、
-        `catalog.price_book_not_found`。
+        `catalog.price_book_not_found`、`agent.not_found`、`agent.version_not_found`、`environment.not_found`、
+        `environment.revision_not_found`、`skill.not_found`、`skill.version_not_found`、`mcp_server.not_found`、
+        `permission_rule.not_found`。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -1681,8 +2996,10 @@ components:
       description: |
         `member.already_exists`：该主体已是租户成员；`role_binding.already_exists`：同一角色已授予；`member.last_owner`：
         不能移除或撤销最后一位所有者；`secret.name_taken`、`catalog.name_taken`：同一范围内已有同名的凭据、供应商账号、模型或
-        价格表；`secret.in_use`、`catalog.in_use`：资源仍被引用，`references` 列出引用方；`idempotency.key_reused`、
-        `idempotency.in_progress`：幂等键冲突。
+        价格表；`agent.name_taken`、`environment.name_taken`、`skill.name_taken`、`mcp_server.name_taken`：项目内已有同名的
+        资源；`agent.version_published`：已发布的版本不可修改、删除或再次发布；`permission_rule.already_exists`：相同的规则
+        已存在；`secret.in_use`、`catalog.in_use`、`skill.in_use`、`mcp_server.in_use`：资源仍被引用，`references` 列出引用方；
+        `idempotency.key_reused`、`idempotency.in_progress`：幂等键冲突。
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -2210,7 +3527,7 @@ components:
       required: [type, id, name]
       properties:
         type:
-          description: 引用方的资源类型：`provider_account`、`model`、`tenant_settings`（T15b 起另有 `mcp_server`、`agent_version`）。
+          description: 引用方的资源类型：`provider_account`、`model`、`tenant_settings`、`mcp_server`、`agent_version`。
           type: string
         id:
           description: 引用方的 ID；租户设置为租户 ID。
@@ -2733,6 +4050,668 @@ components:
       properties:
         prices:
           $ref: '#/components/schemas/TokenPrices'
+    Agent:
+      description: 智能体：版本的容器，属于项目。
+      type: object
+      required: [id, tenant_id, project_id, name, description, current_version, created_at, updated_at]
+      properties:
+        id:
+          description: 智能体 ID（agt_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        name:
+          description: 名字，项目内唯一，发布时写进规格。
+          type: string
+        description:
+          description: 说明；没有时为空字符串。
+          type: string
+        current_version:
+          description: 当前发布的版本（版本号最大的已发布版本），新会话按智能体 ID 创建时使用它；没有发布过时为 null。
+          oneOf:
+            - $ref: '#/components/schemas/PublishedVersionRef'
+            - type: 'null'
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    PublishedVersionRef:
+      description: 一个已发布的智能体版本。
+      type: object
+      required: [id, version, published_at]
+      properties:
+        id:
+          description: 智能体版本 ID（agv_…），创建会话时可用它固定版本。
+          type: string
+        version:
+          description: 版本号。
+          type: integer
+        published_at:
+          description: 发布时间。
+          type: string
+          format: date-time
+    AgentPage:
+      description: 一页智能体。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/Agent'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    CreateAgentRequest:
+      description: 创建智能体。
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名字：小写字母开头，小写字母、数字、下划线、短横线，至多 64 个字符；项目内唯一。
+          type: string
+          pattern: '^[a-z][a-z0-9_-]{0,63}$'
+        description:
+          description: 说明，至多 2000 个字符。
+          type: string
+          maxLength: 2000
+    UpdateAgentRequest:
+      description: 修改智能体：只改给出的字段。
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          description: 新名字，规则同创建。
+          type: string
+          pattern: '^[a-z][a-z0-9_-]{0,63}$'
+        description:
+          description: 新说明，至多 2000 个字符。
+          type: string
+          maxLength: 2000
+    AgentVersionStatus:
+      description: 版本状态：`draft` 草稿（可修改、可删除）、`published` 已发布（不可变）。
+      type: string
+      enum: [draft, published]
+    AgentVersion:
+      description: 智能体的一个版本。
+      type: object
+      required: [id, agent_id, version, status, spec, created_by, created_at, updated_at, published_by, published_at]
+      properties:
+        id:
+          description: 智能体版本 ID（agv_…）。
+          type: string
+        agent_id:
+          description: 所属智能体 ID。
+          type: string
+        version:
+          description: 版本号，按智能体从 1 递增。
+          type: integer
+        status:
+          $ref: '#/components/schemas/AgentVersionStatus'
+        spec:
+          description: 规格，结构见 `schema/agent-spec.schema.json`；已发布的版本带发布时写入的快照字段。
+          type: object
+          additionalProperties: true
+        created_by:
+          description: 创建者的主体标识。
+          type: string
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+        published_by:
+          description: 发布者的主体标识；草稿为 null。
+          type: [string, 'null']
+        published_at:
+          description: 发布时间；草稿为 null。
+          type: [string, 'null']
+          format: date-time
+    AgentVersionPage:
+      description: 一页智能体版本。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentVersion'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    AgentVersionRequest:
+      description: 草稿版本的内容。
+      type: object
+      required: [spec]
+      additionalProperties: false
+      properties:
+        spec:
+          description: 规格，按 `schema/agent-spec.schema.json` 校验；标为“发布时填写”的字段可以省略。
+          type: object
+          additionalProperties: true
+    AgentVersionComparison:
+      description: 两个版本规格的差异。
+      type: object
+      required: [agent_id, base_version, target_version, changes]
+      properties:
+        agent_id:
+          description: 智能体 ID。
+          type: string
+        base_version:
+          description: 基准版本号。
+          type: integer
+        target_version:
+          description: 目标版本号。
+          type: integer
+        changes:
+          description: 差异，按路径排序；两个规格相同时为空数组。
+          type: array
+          items:
+            $ref: '#/components/schemas/SpecChange'
+    SpecChange:
+      description: 规格中的一处差异。
+      type: object
+      required: [path, kind, before, after]
+      properties:
+        path:
+          description: JSON 指针（RFC 6901），例如 `/subagents/0/tools`。
+          type: string
+        kind:
+          description: '`added`：目标版本新增；`removed`：目标版本删除；`changed`：取值不同。'
+          type: string
+          enum: [added, removed, changed]
+        before:
+          description: 基准版本中的取值；新增时为 null。
+        after:
+          description: 目标版本中的取值；删除时为 null。
+    EnvironmentTier:
+      description: 执行档位：`none` 平台虚拟文件系统、没有 `bash`；`sandbox` 会话沙箱。
+      type: string
+      enum: [none, sandbox]
+    SandboxSize:
+      description: 沙箱规格：`small`（1 vCPU、2 GiB）、`medium`（2 vCPU、4 GiB）、`large`（4 vCPU、8 GiB）。
+      type: string
+      enum: [small, medium, large]
+    Environment:
+      description: 环境：执行档位、沙箱规格与出网白名单，带修订号。
+      type: object
+      required: [id, tenant_id, project_id, name, revision, tier, size, egress_allowlist, created_at, updated_at]
+      properties:
+        id:
+          description: 环境 ID（env_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        name:
+          description: 名字，项目内唯一。
+          type: string
+        revision:
+          description: 当前修订号，从 1 开始，档位、规格或白名单变化时加一。
+          type: integer
+          format: int64
+        tier:
+          $ref: '#/components/schemas/EnvironmentTier'
+        size:
+          description: 沙箱规格；`none` 档为 null。
+          oneOf:
+            - $ref: '#/components/schemas/SandboxSize'
+            - type: 'null'
+        egress_allowlist:
+          description: 出网白名单（域名，`*.` 前缀匹配任意层级子域名、不含域名本身）。
+          type: array
+          items:
+            type: string
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    EnvironmentPage:
+      description: 一页环境。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/Environment'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    EnvironmentRequest:
+      description: 环境的内容（创建，或整体替换）。
+      type: object
+      required: [name, tier]
+      additionalProperties: false
+      properties:
+        name:
+          description: 名字，至多 100 个字符，项目内唯一。
+          type: string
+          minLength: 1
+          maxLength: 100
+        tier:
+          $ref: '#/components/schemas/EnvironmentTier'
+        size:
+          description: 沙箱规格：`sandbox` 档必填，`none` 档不能给出。
+          oneOf:
+            - $ref: '#/components/schemas/SandboxSize'
+            - type: 'null'
+        egress_allowlist:
+          description: 出网白名单，至多 100 个域名：小写，`*.` 前缀表示子域名，不接受 IP、端口与路径；只对 `sandbox` 档生效。
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            minLength: 1
+            maxLength: 253
+    EnvironmentRevision:
+      description: 环境的一个修订（不可变）。
+      type: object
+      required: [environment_id, revision, tier, size, egress_allowlist, created_by, created_at]
+      properties:
+        environment_id:
+          description: 环境 ID。
+          type: string
+        revision:
+          description: 修订号。
+          type: integer
+          format: int64
+        tier:
+          $ref: '#/components/schemas/EnvironmentTier'
+        size:
+          description: 沙箱规格；`none` 档为 null。
+          oneOf:
+            - $ref: '#/components/schemas/SandboxSize'
+            - type: 'null'
+        egress_allowlist:
+          description: 出网白名单。
+          type: array
+          items:
+            type: string
+        created_by:
+          description: 产生该修订的主体标识。
+          type: string
+        created_at:
+          description: 产生时间。
+          type: string
+          format: date-time
+    EnvironmentRevisionPage:
+      description: 一页环境修订。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvironmentRevision'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    Skill:
+      description: 技能：版本化的 `SKILL.md` 与附带文件，属于项目。
+      type: object
+      required: [id, tenant_id, project_id, name, description, latest_version, created_at, updated_at]
+      properties:
+        id:
+          description: 技能 ID（skl_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        name:
+          description: 技能名（frontmatter 的 `name`），项目内唯一。
+          type: string
+        description:
+          description: 最新版本 frontmatter 的 `description`。
+          type: string
+        latest_version:
+          description: 最新版本号。
+          type: integer
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次上传新版本的时间。
+          type: string
+          format: date-time
+    SkillPage:
+      description: 一页技能。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/Skill'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    SkillPackage:
+      description: 技能包：`SKILL.md` 与附带文件。
+      type: object
+      required: [files]
+      additionalProperties: false
+      properties:
+        files:
+          description: 文件，必须含 `SKILL.md`；至多 100 个，路径不能重复。
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SkillFileContent'
+    SkillFileContent:
+      description: 技能包中的一个文件。
+      type: object
+      required: [path, content]
+      additionalProperties: false
+      properties:
+        path:
+          description: 相对路径，例如 `SKILL.md`、`scripts/md_to_docx.py`；不能以 `/` 开头、不能含 `..` 与反斜杠。
+          type: string
+          minLength: 1
+          maxLength: 255
+        content:
+          description: 文件内容（UTF-8 文本），至多 1 MB。
+          type: string
+    SkillVersion:
+      description: 技能的一个版本（不可变）。
+      type: object
+      required: [skill_id, version, name, description, files, created_by, created_at]
+      properties:
+        skill_id:
+          description: 技能 ID。
+          type: string
+        version:
+          description: 版本号，从 1 开始。
+          type: integer
+        name:
+          description: frontmatter 的 `name`。
+          type: string
+        description:
+          description: frontmatter 的 `description`。
+          type: string
+        files:
+          description: 文件清单，按路径排序。
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFile'
+        created_by:
+          description: 上传者的主体标识。
+          type: string
+        created_at:
+          description: 上传时间。
+          type: string
+          format: date-time
+    SkillFile:
+      description: 技能版本中的一个文件。
+      type: object
+      required: [path, size, sha256]
+      properties:
+        path:
+          description: 相对路径。
+          type: string
+        size:
+          description: 字节数。
+          type: integer
+        sha256:
+          description: 内容的 SHA-256（十六进制）。
+          type: string
+    SkillVersionPage:
+      description: 一页技能版本。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillVersion'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    McpTransport:
+      description: MCP 传输：`streamable_http` 或 `sse`（旧版 HTTP + SSE）。
+      type: string
+      enum: [streamable_http, sse]
+    SideEffect:
+      description: 工具调用的副作用等级：`none` 无副作用；`idempotent` 重复执行结果相同；`non_idempotent` 有副作用，恢复时不重放。
+      type: string
+      enum: [none, idempotent, non_idempotent]
+    McpServer:
+      description: 登记的 MCP 服务。
+      type: object
+      required: [id, tenant_id, project_id, name, transport, url, header_secret_ids, side_effect, tool_side_effects, tools,
+                 probed_at, created_at, updated_at]
+      properties:
+        id:
+          description: MCP 服务 ID（mcp_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        name:
+          description: 服务名，项目内唯一，也是工具名前缀 `mcp__{name}__` 中的部分。
+          type: string
+        transport:
+          $ref: '#/components/schemas/McpTransport'
+        url:
+          description: 服务端点。
+          type: string
+        header_secret_ids:
+          description: 注入的请求头：头名 → 凭据 ID。
+          type: object
+          additionalProperties:
+            type: string
+        side_effect:
+          description: 服务级副作用等级，作用于没有单独标注的工具；为 null 时按 `non_idempotent` 处理。
+          oneOf:
+            - $ref: '#/components/schemas/SideEffect'
+            - type: 'null'
+        tool_side_effects:
+          description: 按工具单独标注的副作用等级：工具名 → 等级。
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SideEffect'
+        tools:
+          description: 最近一次探测到的工具清单，按名字排序。
+          type: array
+          items:
+            $ref: '#/components/schemas/McpTool'
+        probed_at:
+          description: 最近一次探测成功的时间。
+          type: string
+          format: date-time
+        created_at:
+          description: 登记时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改或探测的时间。
+          type: string
+          format: date-time
+    McpTool:
+      description: MCP 服务的一个工具。
+      type: object
+      required: [name, description, side_effect]
+      properties:
+        name:
+          description: 服务端的工具名（不含前缀）。
+          type: string
+        description:
+          description: 服务端给出的说明；没有时为空字符串。
+          type: string
+        side_effect:
+          $ref: '#/components/schemas/SideEffect'
+    McpServerPage:
+      description: 一页 MCP 服务。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServer'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    McpServerRequest:
+      description: MCP 服务的内容（登记，或整体替换）。
+      type: object
+      required: [name, transport, url]
+      additionalProperties: false
+      properties:
+        name:
+          description: 服务名：小写字母开头，小写字母、数字、下划线，至多 32 个字符。
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,31}$'
+        transport:
+          $ref: '#/components/schemas/McpTransport'
+        url:
+          description: 服务端点（http 或 https）。
+          type: string
+          maxLength: 2048
+        header_secret_ids:
+          description: 注入的请求头：头名（字母、数字、短横线）→ 本项目可用的凭据 ID；至多 8 个。
+          type: object
+          maxProperties: 8
+          additionalProperties:
+            type: string
+        side_effect:
+          description: 服务级副作用等级；不给出时按 `non_idempotent` 处理。
+          oneOf:
+            - $ref: '#/components/schemas/SideEffect'
+            - type: 'null'
+        tool_side_effects:
+          description: 按工具单独标注的副作用等级：工具名 → 等级。
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SideEffect'
+    PermissionBehavior:
+      description: 规则命中后的结果：`allow` 放行、`deny` 拒绝、`ask` 需要确认。
+      type: string
+      enum: [allow, deny, ask]
+    PermissionRule:
+      description: 租户或项目策略中的一条权限规则。
+      type: object
+      required: [id, tenant_id, project_id, tool_name, rule_content, behavior, source, source_action_id, created_by, created_at]
+      properties:
+        id:
+          description: 规则 ID（prl_…）。
+          type: string
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID；租户策略为 null。
+          type: [string, 'null']
+        tool_name:
+          description: 工具名，例如 `bash`、`mcp__crm__lookup_order`。
+          type: string
+        rule_content:
+          description: 规则内容（路径 glob、命令前缀、域名、资源 ID）；为 null 表示整工具规则。
+          type: [string, 'null']
+        behavior:
+          $ref: '#/components/schemas/PermissionBehavior'
+        source:
+          description: '`policy`：管理员添加；`remembered`：审批时“记住此决定”（项目级）写入。'
+          type: string
+          enum: [policy, remembered]
+        source_action_id:
+          description: 记住的决定来源的待处理动作 ID（act_…）；管理员添加的为 null。
+          type: [string, 'null']
+        created_by:
+          description: 添加者或做出决定的主体标识。
+          type: string
+        created_at:
+          description: 添加时间。
+          type: string
+          format: date-time
+    PermissionRulePage:
+      description: 一页权限规则。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的条目。
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionRule'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    PermissionRuleRequest:
+      description: 添加一条权限规则。
+      type: object
+      required: [tool_name, behavior]
+      additionalProperties: false
+      properties:
+        tool_name:
+          description: 工具名，至多 200 个字符。
+          type: string
+          minLength: 1
+          maxLength: 200
+        rule_content:
+          description: 规则内容，至多 1000 个字符；不给出或为 null 表示整工具规则。
+          type: [string, 'null']
+          maxLength: 1000
+        behavior:
+          $ref: '#/components/schemas/PermissionBehavior'
     Problem:
       description: RFC 9457 错误响应，扩展字段 `code` 与 `request_id`。
       type: object
@@ -2765,7 +4744,7 @@ components:
           items:
             $ref: '#/components/schemas/FieldViolation'
         references:
-          description: 引用方，只在资源仍被引用（`secret.in_use`、`catalog.in_use`）时出现。
+          description: 引用方，只在资源仍被引用（`secret.in_use`、`catalog.in_use`、`skill.in_use`、`mcp_server.in_use`）时出现。
           type: array
           items:
             $ref: '#/components/schemas/ResourceReference'

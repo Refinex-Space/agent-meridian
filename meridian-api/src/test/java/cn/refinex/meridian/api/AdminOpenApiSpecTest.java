@@ -30,7 +30,7 @@ class AdminOpenApiSpecTest {
     /** 规范在类路径中的位置。 */
     static final String SPEC = "openapi/meridian-admin-v1.yaml";
 
-    /** 管理接口：T14a 的租户与项目、成员与角色、API Key，T15a 的凭据、供应商账号、模型与价格表（ADR-0045）。 */
+    /** 管理接口：T14a 的租户与项目、成员与角色、API Key，T15a 的凭据、供应商账号、模型与价格表（ADR-0045），T15b 的智能体与版本、环境、技能、MCP 服务与权限规则（ADR-0047）。 */
     private static final Set<String> EXPECTED_OPERATIONS = Set.of(
             "POST /admin/v1/tenants",
             "GET /admin/v1/tenants",
@@ -77,7 +77,45 @@ class AdminOpenApiSpecTest {
             "GET /admin/v1/tenants/{tenant_id}/price-books",
             "GET /admin/v1/tenants/{tenant_id}/price-books/{price_book_id}",
             "POST /admin/v1/tenants/{tenant_id}/price-books/{price_book_id}/versions",
-            "GET /admin/v1/tenants/{tenant_id}/price-books/{price_book_id}/versions");
+            "GET /admin/v1/tenants/{tenant_id}/price-books/{price_book_id}/versions",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}",
+            "PATCH /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}",
+            "DELETE /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions:compare",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions/{version}",
+            "PUT /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions/{version}",
+            "DELETE /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions/{version}",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/agents/{agent_id}/versions/{version}:publish",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments/{environment_id}",
+            "PUT /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments/{environment_id}",
+            "DELETE /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments/{environment_id}",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments/{environment_id}/revisions",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/environments/{environment_id}/revisions/{revision}",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills/{skill_id}",
+            "DELETE /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills/{skill_id}",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills/{skill_id}/versions",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills/{skill_id}/versions",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/skills/{skill_id}/versions/{version}",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers/{mcp_server_id}",
+            "PUT /admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers/{mcp_server_id}",
+            "DELETE /admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers/{mcp_server_id}",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers/{mcp_server_id}:probe",
+            "POST /admin/v1/tenants/{tenant_id}/permission-rules",
+            "GET /admin/v1/tenants/{tenant_id}/permission-rules",
+            "DELETE /admin/v1/tenants/{tenant_id}/permission-rules/{permission_rule_id}",
+            "POST /admin/v1/tenants/{tenant_id}/projects/{project_id}/permission-rules",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/permission-rules",
+            "DELETE /admin/v1/tenants/{tenant_id}/projects/{project_id}/permission-rules/{permission_rule_id}");
 
     private static final Set<PathItem.HttpMethod> WRITES = Set.of(
             PathItem.HttpMethod.POST, PathItem.HttpMethod.PUT, PathItem.HttpMethod.PATCH, PathItem.HttpMethod.DELETE);

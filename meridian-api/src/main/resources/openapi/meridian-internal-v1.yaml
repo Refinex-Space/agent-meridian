@@ -2,14 +2,14 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Internal API
   version: 1.0.0
-  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，control-plane 提供服务令牌、API Key 校验、租户配额、控制台用户的项目权限、凭据解析与模型目录。
+  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，control-plane 提供服务令牌、API Key 校验、租户配额与设置、控制台用户的项目权限、凭据解析、模型目录、智能体配置与权限策略。
   description: |
     只供平台内部服务调用（knowledge 经 `meridian-model-client`，沙箱出网代理经 Envoy 的 Lua 过滤器，runtime 与 knowledge
     经 `meridian-security` 的服务间调用客户端访问 control-plane），不对业务系统开放，不随公开 API 发布。
 
     **提供方。** 标签 `InternalModels`、`InternalEgress` 由 runtime 提供；`InternalServiceTokens`、`InternalApiKeys`、
-    `InternalTenants`、`InternalProjectAccess`、`InternalSecrets`、`InternalModelCatalog` 由 control-plane 提供（ADR-0042、ADR-0044、
-    ADR-0045）。各服务只生成并实现自己的标签。
+    `InternalTenants`、`InternalProjectAccess`、`InternalSecrets`、`InternalModelCatalog`、`InternalAgentConfig`、
+    `InternalPermissionRules` 由 control-plane 提供（ADR-0042、ADR-0044、ADR-0045、ADR-0047）。各服务只生成并实现自己的标签。
 
     **认证。** `/internal/` 下的请求带 `Authorization: Bearer <服务 JWT>`：control-plane 签发，RS256，有效 5 分钟，`aud` 是被调用
     的服务名，`sub` 是调用方服务名。服务用自己的客户端密钥在 `POST /oauth2/token` 换取（OAuth2 客户端凭据模式），公钥在
@@ -32,7 +32,7 @@ tags:
   - name: InternalApiKeys
     description: control-plane 提供：按哈希校验 API Key（架构设计「认证」，ADR-0042）。
   - name: InternalTenants
-    description: control-plane 提供：租户并发配额（架构设计「认领」中的租户并发计数行，ADR-0042）。
+    description: control-plane 提供：租户并发配额（架构设计「认领」中的租户并发计数行，ADR-0042）与租户设置（ADR-0047）。
   - name: InternalServiceTokens
     description: control-plane 提供：服务 JWT 的签发与公钥（架构设计「认证」中"服务之间"一行，ADR-0044）。
   - name: InternalProjectAccess
@@ -41,6 +41,10 @@ tags:
     description: control-plane 提供：凭据明文的解析，只给 runtime，每次解析写审计（架构设计「凭据」，ADR-0045）。
   - name: InternalModelCatalog
     description: control-plane 提供：模型目录与供应商账号的解析，不含凭据明文（ADR-0045）。
+  - name: InternalAgentConfig
+    description: control-plane 提供：已发布的智能体版本、环境修订与技能内容，runtime 据此装配引擎（ADR-0047）。
+  - name: InternalPermissionRules
+    description: control-plane 提供：租户与项目策略，以及“记住此决定”写入的项目级规则（ADR-0047）。
 
 paths:
   /internal/v1/embeddings:
@@ -378,6 +382,275 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /internal/v1/agent-versions/{agent_version_id}:resolve:
+    post:
+      operationId: resolveAgentVersion
+      tags: [InternalAgentConfig]
+      summary: 解析一个已发布的智能体版本
+      description: |
+        调用方：`runtime`。返回发布时的规格快照（与 `ResolvedAgentSpec` 一一对应）与它引用的全部技能版本的内容（含子智能体的），
+        runtime 不再需要其他查询就能装配引擎（凭据明文除外，凭据只以 ID 出现）。草稿与不存在的版本 404 `agent.version_not_found`。
+        不按租户过滤：runtime 用响应中的 `tenant_id`、`project_id` 校验调用方项目。智能体已删除时 `agent_deleted` 为 true（运行中的
+        会话继续使用，新会话拒绝）。版本不可变，runtime 可以长期缓存，收到 `config.invalidate` 的 `agent` 消息时淘汰该智能体的条目。
+      parameters:
+        - name: agent_version_id
+          in: path
+          required: true
+          description: 智能体版本 ID（agv_…）。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 已发布的版本与技能内容。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolvedAgentVersion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/AgentVersionNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/agents/{agent_id}:resolve:
+    post:
+      operationId: resolveCurrentAgentVersion
+      tags: [InternalAgentConfig]
+      summary: 解析智能体当前发布的版本
+      description: |
+        调用方：`runtime`。按智能体 ID 创建会话时使用：版本号最大的已发布版本，响应与按版本 ID 解析相同。智能体不存在、已删除或没有
+        发布过版本时 404 `agent.not_found`。runtime 缓存 60 秒，收到 `config.invalidate` 的 `agent` 消息（发布、删除）立即淘汰。
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          description: 智能体 ID（agt_…）。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 当前发布的版本与技能内容。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolvedAgentVersion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/AgentNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/environments/{environment_id}:
+    get:
+      operationId: getResolvedEnvironment
+      tags: [InternalAgentConfig]
+      summary: 环境的当前修订或指定修订
+      description: |
+        调用方：`runtime`。不给 `revision` 时返回当前修订（创建会话时固化），已删除的环境 404；给出 `revision` 时返回该修订，环境已删除
+        也返回（运行中的会话继续使用）。runtime 用响应中的 `tenant_id`、`project_id` 校验调用方项目。当前修订缓存 60 秒，收到
+        `config.invalidate` 的 `environment` 消息立即淘汰；指定修订不可变。
+      parameters:
+        - name: environment_id
+          in: path
+          required: true
+          description: 环境 ID（env_…）。
+          schema:
+            type: string
+        - name: revision
+          in: query
+          description: 修订号；不给出表示当前修订。
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: 环境的一个修订。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolvedEnvironment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/EnvironmentNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/skills/{skill_id}/versions/{version}:
+    get:
+      operationId: getSkillContent
+      tags: [InternalAgentConfig]
+      summary: 一个技能版本的内容
+      description: |
+        调用方：`runtime`。技能版本不可变；解析智能体版本时已随响应给出，这里供缓存未命中时单独读取。runtime 用响应中的 `tenant_id`、
+        `project_id` 校验调用方项目。
+      parameters:
+        - name: skill_id
+          in: path
+          required: true
+          description: 技能 ID（skl_…）。
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          description: 技能版本号。
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: 技能版本的内容。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/SkillVersionNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/projects/{project_id}/permission-rules:
+    get:
+      operationId: getProjectPermissionRules
+      tags: [InternalPermissionRules]
+      summary: 项目所属租户的租户策略与项目策略
+      description: |
+        调用方：`runtime`。每轮合成权限时的第 2、3 层（架构设计「权限判定」）：租户策略与项目策略（含“记住此决定”写入的项目级规则），
+        各按创建顺序。项目不存在或已删除时 404 `project.not_found`。runtime 缓存 60 秒，收到 `config.invalidate` 的
+        `permission_policy` 消息（`id` 为租户 ID 或项目 ID）立即淘汰。
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 项目 ID（prj_…）。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 两层规则。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectPermissionRules'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/ProjectNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+    post:
+      operationId: rememberProjectPermissionRule
+      tags: [InternalPermissionRules]
+      summary: 记住此决定（项目级）
+      description: |
+        调用方：`runtime`。审批时选择项目级“记住此决定”，写入一条 `source` 为 `remembered` 的项目策略规则；相同的规则（工具、内容、
+        结果）已存在时不重复写入，返回已有的规则。写入后发布 `config.invalidate` 的 `permission_policy`。
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 项目 ID（prj_…）。
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RememberRuleRequest'
+            example:
+              tool_name: bash
+              rule_content: git status
+              behavior: allow
+              source_action_id: act_01JC8Z7A7Q9X3M2N6P0R5T8W1Y
+              decided_by: key_01JC8Z2C9E1G3J5L7N9Q1S3U5W
+      responses:
+        '200':
+          description: 写入的或已有的规则。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalPermissionRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/ProjectNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/tenants/{tenant_id}/settings:
+    get:
+      operationId: getInternalTenantSettings
+      tags: [InternalTenants]
+      summary: 租户设置
+      description: |
+        调用方：`runtime`。租户层系统提示词与联网搜索后端（ADR-0035）。租户没有设置时两项都为空。runtime 缓存 60 秒，收到
+        `config.invalidate` 的 `tenant_settings` 消息立即淘汰，并淘汰该租户已装配的智能体实例（租户提示词随实例缓存）。
+        已删除的租户 404 `tenant.not_found`。
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          description: 租户 ID（ten_…）。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 租户设置。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalTenantSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/TenantNotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
   /oauth2/token:
     post:
       operationId: issueServiceToken
@@ -473,6 +746,42 @@ components:
             $ref: '#/components/schemas/Problem'
     CatalogModelNotFound:
       description: '`catalog.model_not_found`：模型不存在。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    AgentVersionNotFound:
+      description: '`agent.version_not_found`：版本不存在或还是草稿。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    AgentNotFound:
+      description: '`agent.not_found`：智能体不存在、已删除或没有发布过版本。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    EnvironmentNotFound:
+      description: '`environment.not_found`：环境不存在（或已删除且没有给出修订号）；`environment.revision_not_found`：修订不存在。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    SkillVersionNotFound:
+      description: '`skill.version_not_found`：技能版本不存在。'
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -829,6 +1138,195 @@ components:
         e:
           description: 公钥指数，base64url。
           type: string
+    ResolvedAgentVersion:
+      description: 已发布的智能体版本与它引用的技能内容。
+      type: object
+      required: [tenant_id, project_id, agent_id, agent_version_id, version, agent_deleted, spec, skills]
+      properties:
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        agent_id:
+          description: 智能体 ID。
+          type: string
+        agent_version_id:
+          description: 智能体版本 ID。
+          type: string
+        version:
+          description: 版本号。
+          type: integer
+        agent_deleted:
+          description: 智能体是否已删除：已删除时不能用它创建新会话，运行中的会话继续使用。
+          type: boolean
+        spec:
+          description: 发布时的规格快照，结构见 `schema/agent-spec.schema.json`，所有字段齐全。
+          type: object
+          additionalProperties: true
+        skills:
+          description: 规格（含子智能体）引用的全部技能版本的内容，按技能 ID 与版本排序。
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillContent'
+    SkillContent:
+      description: 一个技能版本的内容，对应 engine-spi 的 `SkillDefinition`。
+      type: object
+      required: [tenant_id, project_id, skill_id, version, name, files]
+      properties:
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        skill_id:
+          description: 技能 ID。
+          type: string
+        version:
+          description: 版本号。
+          type: integer
+        name:
+          description: 技能名（frontmatter 的 `name`）。
+          type: string
+        files:
+          description: 文件：相对路径 → UTF-8 文本，含 `SKILL.md`。
+          type: object
+          additionalProperties:
+            type: string
+    ResolvedEnvironment:
+      description: 环境的一个修订，对应 engine-spi 的 `EnvironmentSpec`。
+      type: object
+      required: [tenant_id, project_id, environment_id, revision, tier, size, egress_allowlist]
+      properties:
+        tenant_id:
+          description: 所属租户 ID。
+          type: string
+        project_id:
+          description: 所属项目 ID。
+          type: string
+        environment_id:
+          description: 环境 ID。
+          type: string
+        revision:
+          description: 修订号。
+          type: integer
+          format: int64
+        tier:
+          description: 执行档位。
+          type: string
+          enum: [none, sandbox]
+        size:
+          description: 沙箱规格：`small`、`medium`、`large`；`none` 档为 null。
+          type: [string, 'null']
+        egress_allowlist:
+          description: 出网白名单。
+          type: array
+          items:
+            type: string
+    ProjectPermissionRules:
+      description: 一个项目在权限合成中的租户层与项目层规则。
+      type: object
+      required: [tenant_id, project_id, tenant_rules, project_rules]
+      properties:
+        tenant_id:
+          description: 项目所属租户 ID。
+          type: string
+        project_id:
+          description: 项目 ID。
+          type: string
+        tenant_rules:
+          description: 租户策略规则，按创建顺序。
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalPermissionRule'
+        project_rules:
+          description: 项目策略规则（含记住的决定），按创建顺序。
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalPermissionRule'
+    InternalPermissionRule:
+      description: 一条权限规则。
+      type: object
+      required: [id, tool_name, rule_content, behavior, source]
+      properties:
+        id:
+          description: 规则 ID（prl_…）。
+          type: string
+        tool_name:
+          description: 工具名。
+          type: string
+        rule_content:
+          description: 规则内容；为 null 表示整工具规则。
+          type: [string, 'null']
+        behavior:
+          description: 命中后的结果。
+          type: string
+          enum: [allow, deny, ask]
+        source:
+          description: '`policy`：管理员添加；`remembered`：记住的决定。'
+          type: string
+          enum: [policy, remembered]
+    RememberRuleRequest:
+      description: 记住的一条项目级决定。
+      type: object
+      required: [tool_name, behavior, source_action_id]
+      additionalProperties: false
+      properties:
+        tool_name:
+          description: 工具名。
+          type: string
+          minLength: 1
+          maxLength: 200
+        rule_content:
+          description: 规则内容；为 null 表示整工具规则。
+          type: [string, 'null']
+          maxLength: 1000
+        behavior:
+          description: 批准为 `allow`，拒绝为 `deny`。
+          type: string
+          enum: [allow, deny]
+        source_action_id:
+          description: 来源的待处理动作 ID（act_…）。
+          type: string
+          minLength: 1
+          maxLength: 64
+        decided_by:
+          description: 做出决定的主体（API Key ID 或控制台用户）；没有时为 null。
+          type: [string, 'null']
+          maxLength: 255
+    InternalTenantSettings:
+      description: runtime 使用的租户设置。
+      type: object
+      required: [tenant_id, system_prompt, web_search]
+      properties:
+        tenant_id:
+          description: 租户 ID。
+          type: string
+        system_prompt:
+          description: 租户层系统提示词；没有时为空字符串。
+          type: string
+        web_search:
+          description: 联网搜索后端；没有配置时为 null。
+          oneOf:
+            - $ref: '#/components/schemas/InternalWebSearchSettings'
+            - type: 'null'
+    InternalWebSearchSettings:
+      description: 联网搜索后端。
+      type: object
+      required: [backend, base_url, secret_id]
+      properties:
+        backend:
+          description: 后端类型。
+          type: string
+          enum: [searxng, bocha]
+        base_url:
+          description: 后端的基础 URL；runtime 使用前按地址策略再校验一次（ADR-0045）。
+          type: string
+        secret_id:
+          description: 租户级凭据 ID；不需要凭据时为 null。
+          type: [string, 'null']
     TenantQuota:
       description: 租户配额。
       type: object

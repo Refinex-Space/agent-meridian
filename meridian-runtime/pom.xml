@@ -160,6 +160,8 @@
                               处理器返回 ChatCompletion 或 Flux<ServerSentEvent<String>>（ADR-0033）
                             -->
                             <schemaMappings>SseFrame=org.springframework.http.codec.ServerSentEvent&lt;String&gt;,ChatCompletion=java.lang.Object</schemaMappings>
+                            <!-- 智能体（Agents）由 control-plane 提供（ADR-0047），runtime 只生成自己的标签 -->
+                            <apisToGenerate>Sessions,Events,Threads,PendingActions,Models</apisToGenerate>
                             <configOptions>
                                 <reactive>true</reactive>
                                 <interfaceOnly>true</interfaceOnly>

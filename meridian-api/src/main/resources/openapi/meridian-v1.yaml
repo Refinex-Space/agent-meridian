@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: AgentMeridian API
   version: 1.0.0
-  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作、SSE 事件流与 OpenAI 兼容的模型直通。
+  summary: 业务系统接入 AgentMeridian 的公开 API：会话、事件、线程、待处理动作、SSE 事件流、OpenAI 兼容的模型直通与已发布的智能体。
   description: |
     业务系统通过本 API 使用平台上的智能体：创建会话、发送事件、订阅事件流、回应待处理动作。
 
@@ -44,6 +44,8 @@ tags:
     description: 待处理动作：需要调用方回应的事项。
   - name: Models
     description: 模型直通：OpenAI 兼容的对话补全与文本向量，与智能体共用平台的限流、预算与计量。
+  - name: Agents
+    description: 智能体（只读）：本项目已发布的智能体与它们当前的版本，创建会话时引用。由 control-plane 提供（ADR-0047）。
 
 paths:
   /v1/sessions:
@@ -679,6 +681,76 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /v1/agents:
+    get:
+      operationId: listAgents
+      tags: [Agents]
+      summary: 列出智能体
+      description: |
+        列出当前项目中已发布过版本的智能体，每个带当前版本（版本号最大的已发布版本，按智能体 ID 创建会话时使用它）。草稿、
+        已删除的智能体不出现。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 已发布的智能体列表，按创建时间从早到晚。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/agents/{agent_id}:
+    get:
+      operationId: getAgent
+      tags: [Agents]
+      summary: 查询智能体
+      description: 当前项目中已发布过版本的智能体；没有发布过版本、已删除或属于其他项目时 404 `agent.not_found`。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          description: 智能体 ID（agt_…）。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 智能体。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/AgentNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -798,6 +870,15 @@ components:
             $ref: '#/components/schemas/Problem'
     SessionNotFound:
       description: '`session.not_found`：会话不存在，或不属于 API Key 所在的项目。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    AgentNotFound:
+      description: '`agent.not_found`：智能体不存在、没有发布过版本、已删除或不属于当前项目。'
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -933,6 +1014,61 @@ components:
           description: 失败原因。
           type: string
 
+    Agent:
+      description: 一个已发布的智能体。
+      type: object
+      required: [id, name, description, current_version, created_at, updated_at]
+      properties:
+        id:
+          description: 智能体 ID（agt_…），创建会话时的 `agent` 取它表示使用当前版本。
+          type: string
+        name:
+          description: 名字，项目内唯一。
+          type: string
+        description:
+          description: 说明；没有时为空字符串。
+          type: string
+        current_version:
+          $ref: '#/components/schemas/AgentVersionRef'
+        created_at:
+          description: 创建时间。
+          type: string
+          format: date-time
+        updated_at:
+          description: 最近一次修改时间。
+          type: string
+          format: date-time
+    AgentVersionRef:
+      description: 智能体当前发布的版本。
+      type: object
+      required: [id, version, published_at]
+      properties:
+        id:
+          description: 智能体版本 ID（agv_…），创建会话时的 `agent` 取它表示固定这个版本。
+          type: string
+        version:
+          description: 版本号，从 1 开始。
+          type: integer
+        published_at:
+          description: 发布时间。
+          type: string
+          format: date-time
+    AgentPage:
+      description: 一页智能体。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的智能体。
+          type: array
+          items:
+            $ref: '#/components/schemas/Agent'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
     SessionStatus:
       description: |
         会话状态（架构设计「状态机」）：`idle` 空闲，`running` 执行中，`requires_action` 等待调用方回应待处理动作，

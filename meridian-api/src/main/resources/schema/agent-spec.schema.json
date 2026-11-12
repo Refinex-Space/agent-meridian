@@ -1,0 +1,454 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meridian.refinex.cn/schema/agent-spec.schema.json",
+  "title": "AgentSpec",
+  "description": "智能体版本的规格，与 meridian-engine-spi 的 ResolvedAgentSpec 一一对应（字段 snake_case，枚举取小写值，时长为 ISO 8601）。控制台编辑草稿、control-plane 保存与发布、runtime 装配引擎用的是同一份文档（ADR-0047）。标为“发布时填写”的字段由 control-plane 在发布时写入快照，草稿中可以省略，给出了也会被覆盖。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "model",
+    "system_prompt",
+    "tools",
+    "mcp_servers",
+    "skills",
+    "subagents",
+    "permissions",
+    "compaction",
+    "plan_mode",
+    "knowledge",
+    "max_iters",
+    "expose_thinking"
+  ],
+  "properties": {
+    "agent_id": {
+      "description": "智能体 ID（agt_…）。发布时填写。",
+      "type": "string",
+      "pattern": "^agt_[A-Za-z0-9_]{1,64}$",
+      "examples": ["agt_01JC8Z4V7Q9X3M2N6P0R5T8W1Y"]
+    },
+    "agent_version_id": {
+      "description": "智能体版本 ID（agv_…），引擎实例缓存键的一部分。发布时填写。",
+      "type": "string",
+      "pattern": "^agv_[A-Za-z0-9_]{1,64}$",
+      "examples": ["agv_01JC8Z5A7Q9X3M2N6P0R5T8W1Y"]
+    },
+    "name": {
+      "description": "智能体名，取自智能体资源的名字，用作 AgentScope 智能体名与日志标识。发布时填写。",
+      "$ref": "#/$defs/agent_name"
+    },
+    "model": {
+      "$ref": "#/$defs/model"
+    },
+    "system_prompt": {
+      "description": "智能体层的系统提示词；平台基础提示词与租户提示词由平台另行分层拼接在它之前。",
+      "type": "string",
+      "maxLength": 32000,
+      "examples": ["你是企业内的通用助手，回答简洁、准确。"]
+    },
+    "tools": {
+      "description": "启用的平台工具。bash 只在 sandbox 档环境中生效；声明了子智能体时必须包含 spawn_subagent。MCP 工具经 mcp_servers 挂载。",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/platform_tool"
+      }
+    },
+    "mcp_servers": {
+      "description": "挂载的 MCP 服务，服务名不能重复。",
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/mcp_server"
+      }
+    },
+    "skills": {
+      "description": "可用技能，引用到具体版本。",
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/skill_ref"
+      }
+    },
+    "subagents": {
+      "description": "可拉起的子智能体，名字不能重复；每个子智能体的工具集必须是父智能体工具集的子集。",
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/subagent"
+      }
+    },
+    "permissions": {
+      "$ref": "#/$defs/permission_policy"
+    },
+    "compaction": {
+      "$ref": "#/$defs/compaction"
+    },
+    "plan_mode": {
+      "description": "是否启用计划模式（plan_enter、plan_write、plan_exit）。",
+      "type": "boolean",
+      "examples": [false]
+    },
+    "knowledge": {
+      "$ref": "#/$defs/knowledge"
+    },
+    "max_iters": {
+      "description": "单轮最大推理次数，默认 50，上限 200。",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200,
+      "examples": [50]
+    },
+    "expose_thinking": {
+      "description": "是否在 agent.thinking 事件中带出思考内容。",
+      "type": "boolean",
+      "examples": [false]
+    }
+  },
+  "$defs": {
+    "agent_name": {
+      "description": "智能体或子智能体的名字：小写字母开头，小写字母、数字、下划线、短横线，至多 64 个字符。",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "examples": ["assistant"]
+    },
+    "platform_tool": {
+      "description": "平台工具名，与 engine-spi 的 PlatformToolNames 一一对应。",
+      "type": "string",
+      "enum": [
+        "read_file",
+        "list_files",
+        "glob_files",
+        "grep_files",
+        "write_file",
+        "edit_file",
+        "bash",
+        "web_search",
+        "web_fetch",
+        "knowledge_search",
+        "spawn_subagent"
+      ],
+      "examples": ["read_file"]
+    },
+    "side_effect": {
+      "description": "工具调用的副作用等级：none、idempotent、non_idempotent。",
+      "type": "string",
+      "enum": ["none", "idempotent", "non_idempotent"],
+      "examples": ["idempotent"]
+    },
+    "model": {
+      "description": "模型引用与生成参数。模型 ID 来自本租户的模型目录，种类必须是 chat。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id"],
+      "properties": {
+        "model_id": {
+          "description": "主模型 ID（mdl_…）。",
+          "type": "string",
+          "pattern": "^mdl_[A-Za-z0-9_]{1,64}$",
+          "examples": ["mdl_01JC8Z4E7G9J1L3N5Q7S9U1W3Y"]
+        },
+        "fallback_model_id": {
+          "description": "备用模型 ID（mdl_…）；为 null 时使用模型目录给主模型配置的备用模型。",
+          "type": ["string", "null"],
+          "pattern": "^mdl_[A-Za-z0-9_]{1,64}$",
+          "examples": ["mdl_01JC8Z4E7G9J1L3N5Q7S9U1W4Z"]
+        },
+        "max_output_tokens": {
+          "description": "单次模型调用的最大输出 token 数；为 null 时使用模型目录的默认值。",
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "examples": [2048]
+        },
+        "temperature": {
+          "description": "采样温度，[0, 2]；为 null 时使用模型默认值。",
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 2,
+          "examples": [0.7]
+        }
+      }
+    },
+    "mcp_server": {
+      "description": "挂载的一个 MCP 服务。草稿只需给出 mcp_server_id 与 enabled_tools；名字、端点、传输、凭据引用与副作用等级在发布时从已登记的 MCP 服务写入快照。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mcp_server_id", "enabled_tools"],
+      "properties": {
+        "mcp_server_id": {
+          "description": "MCP 服务 ID（mcp_…），必须是本项目已登记的服务。",
+          "type": "string",
+          "pattern": "^mcp_[A-Za-z0-9_]{1,64}$",
+          "examples": ["mcp_01JC8Z6B7Q9X3M2N6P0R5T8W1Y"]
+        },
+        "name": {
+          "description": "工具名前缀中的服务名（mcp__{name}__{tool}）。发布时填写。",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "examples": ["crm"]
+        },
+        "url": {
+          "description": "服务端点（http 或 https）。发布时填写。",
+          "type": "string",
+          "pattern": "^https?://",
+          "maxLength": 2048,
+          "examples": ["https://mcp.internal.example.com/mcp"]
+        },
+        "transport": {
+          "description": "传输方式：streamable_http 或 sse。发布时填写。",
+          "type": "string",
+          "enum": ["streamable_http", "sse"],
+          "examples": ["streamable_http"]
+        },
+        "header_secret_ids": {
+          "description": "注入的请求头：头名 → 凭据 ID（sec_…），凭据值是请求头的完整取值。发布时填写。",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9-]{1,64}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^sec_[A-Za-z0-9_]{1,64}$"
+          },
+          "examples": [{"Authorization": "sec_01JC8Z4C7Q9X3M2N6P0R5T8W1Y"}]
+        },
+        "side_effect": {
+          "description": "服务级的副作用等级，作用于没有单独标注的工具；为 null 时按 non_idempotent 处理。发布时填写。",
+          "oneOf": [
+            {"$ref": "#/$defs/side_effect"},
+            {"type": "null"}
+          ],
+          "examples": ["non_idempotent"]
+        },
+        "tool_side_effects": {
+          "description": "按工具单独标注的副作用等级：工具名（不含前缀）→ 等级。发布时填写。",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/side_effect"
+          },
+          "examples": [{"lookup_order": "none"}]
+        },
+        "enabled_tools": {
+          "description": "启用的工具名（不含前缀），必须在服务登记时探测到的工具清单中；空数组表示启用全部工具。",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "examples": ["lookup_order"]
+          }
+        }
+      }
+    },
+    "skill_ref": {
+      "description": "引用的一个技能版本，必须是本项目已上传的技能。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skill_id", "version"],
+      "properties": {
+        "skill_id": {
+          "description": "技能 ID（skl_…）。",
+          "type": "string",
+          "pattern": "^skl_[A-Za-z0-9_]{1,64}$",
+          "examples": ["skl_01JC8Z6C7Q9X3M2N6P0R5T8W1Y"]
+        },
+        "version": {
+          "description": "技能版本号，从 1 开始。",
+          "type": "integer",
+          "minimum": 1,
+          "examples": [1]
+        },
+        "name": {
+          "description": "技能名，取自该版本 SKILL.md 的 frontmatter。发布时填写。",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+          "examples": ["docx"]
+        }
+      }
+    },
+    "subagent_tool": {
+      "description": "子智能体可用的工具：除 spawn_subagent 之外的平台工具名，或父智能体挂载的 MCP 工具全名 mcp__{server}__{tool}。",
+      "type": "string",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/platform_tool",
+          "not": {"const": "spawn_subagent"}
+        },
+        {
+          "pattern": "^mcp__[a-z][a-z0-9_]{0,31}__[A-Za-z0-9_-]{1,64}$"
+        }
+      ],
+      "examples": ["read_file"]
+    },
+    "subagent": {
+      "description": "可拉起的一个子智能体（嵌套深度固定为 1）。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "model",
+        "system_prompt",
+        "tools",
+        "skills",
+        "permissions",
+        "max_iters",
+        "timeout"
+      ],
+      "properties": {
+        "name": {
+          "description": "子智能体名，即 spawn_subagent 的 subagent 参数。",
+          "$ref": "#/$defs/agent_name"
+        },
+        "description": {
+          "description": "给父智能体看的用途说明。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "examples": ["阅读并总结给定的文件。"]
+        },
+        "model": {
+          "$ref": "#/$defs/model"
+        },
+        "system_prompt": {
+          "description": "子智能体的系统提示词。",
+          "type": "string",
+          "maxLength": 32000,
+          "examples": ["你只负责阅读文件并给出摘要。"]
+        },
+        "tools": {
+          "description": "可用工具，必须是父智能体工具集的子集。",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/subagent_tool"
+          }
+        },
+        "skills": {
+          "description": "可用技能。",
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/skill_ref"
+          }
+        },
+        "permissions": {
+          "$ref": "#/$defs/permission_policy"
+        },
+        "max_iters": {
+          "description": "单次执行的最大推理次数，[1, 200]。",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "examples": [20]
+        },
+        "timeout": {
+          "description": "单次执行的超时，ISO 8601 时长，(0, 600 秒]。",
+          "type": "string",
+          "pattern": "^PT(?=\\d)(\\d+H)?(\\d+M)?(\\d+(\\.\\d+)?S)?$",
+          "examples": ["PT5M"]
+        }
+      }
+    },
+    "permission_policy": {
+      "description": "权限策略：一个模式加一组规则，作为五层合成中的智能体层。DEFAULT 模式下没有命中 allow 的工具调用都要确认，智能体要显式放行它的工具。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "rules"],
+      "properties": {
+        "mode": {
+          "description": "权限模式：default、accept_edits、explore、bypass、dont_ask。",
+          "type": "string",
+          "enum": ["default", "accept_edits", "explore", "bypass", "dont_ask"],
+          "examples": ["default"]
+        },
+        "rules": {
+          "description": "规则，按声明顺序。",
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/permission_rule"
+          }
+        }
+      }
+    },
+    "permission_rule": {
+      "description": "一条权限规则。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool_name", "behavior", "layer"],
+      "properties": {
+        "tool_name": {
+          "description": "工具名，例如 bash、mcp__crm__query。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "examples": ["read_file"]
+        },
+        "rule_content": {
+          "description": "规则内容，语法由工具解释（路径 glob、命令前缀、域名、资源 ID）；为 null 表示整工具规则。",
+          "type": ["string", "null"],
+          "maxLength": 1000,
+          "examples": ["reports/**"]
+        },
+        "behavior": {
+          "description": "命中后的结果：allow、deny、ask。",
+          "type": "string",
+          "enum": ["allow", "deny", "ask"],
+          "examples": ["allow"]
+        },
+        "layer": {
+          "description": "规则所属的层，智能体规格中只能是 agent_version。",
+          "type": "string",
+          "const": "agent_version",
+          "examples": ["agent_version"]
+        }
+      }
+    },
+    "compaction": {
+      "description": "上下文压缩：阈值等于模型上下文窗口减去预留 token。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reserved_tokens"],
+      "properties": {
+        "reserved_tokens": {
+          "description": "为本轮后续输出与工具结果预留的 token 数，默认 20000。",
+          "type": "integer",
+          "minimum": 1,
+          "examples": [20000]
+        }
+      }
+    },
+    "knowledge": {
+      "description": "知识库绑定与前置检索。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["knowledge_base_ids", "prefetch", "prefetch_top_k"],
+      "properties": {
+        "knowledge_base_ids": {
+          "description": "绑定的知识库 ID（kb_…），knowledge_search 只能检索这些知识库；开启前置检索时至少一个。",
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "pattern": "^kb_[A-Za-z0-9_]{1,64}$",
+            "examples": ["kb_01JC8Z6D7Q9X3M2N6P0R5T8W1Y"]
+          }
+        },
+        "prefetch": {
+          "description": "是否在每轮开始时用最后一条用户消息检索并注入结果。",
+          "type": "boolean",
+          "examples": [false]
+        },
+        "prefetch_top_k": {
+          "description": "前置检索注入的切片数，[1, 50]，默认 5。",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "examples": [5]
+        }
+      }
+    }
+  }
+}

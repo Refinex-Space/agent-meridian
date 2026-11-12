@@ -48,7 +48,9 @@ class OpenApiSpecTest {
             "GET /v1/sessions/{session_id}/threads/{thread_id}/stream",
             "GET /v1/sessions/{session_id}/pending-actions",
             "POST /v1/chat/completions",
-            "POST /v1/embeddings");
+            "POST /v1/embeddings",
+            "GET /v1/agents",
+            "GET /v1/agents/{agent_id}");
 
     /** 架构设计「事件」的事件类型清单中，持久化的 agent、session、span 与 user 四个域。 */
     private static final Set<String> EXPECTED_SESSION_EVENTS = Set.of(
