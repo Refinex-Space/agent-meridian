@@ -289,7 +289,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D52 | R1 | 供应商接入前的校验（审查）：S-F11 `user.message` 的 `image.url` 不限协议，Anthropic、Ollama 的转换器会读本机文件或下载；S-F10 `SecretResolver` 不校验密钥属于调用方租户，供应商与搜索的 `base_url` 没有 SSRF 校验 | T15a（已落地：`image.url` 只接受 http(s)；凭据解析校验租户；`common.net.EndpointPolicy` 在写入供应商账号、模型、联网搜索后端时与 runtime 读取目录时校验端点；Gemini 适配器拒绝 URL 媒体，ADR-0045、ADR-0046） |
 | D53 | R1 | AgentScope 集成后续（审查）：A-F5 装配自检失败不 `close` 智能体、MCP 资源在后续工具构造失败时不关；A-F6 `AgentEventDisposition` 与 `TurnEventMapper` 两张表各自独立；A-F7 `plan_write` 不经账本；A-F8 MCP 服务重启后的重连语义；A-F9 幂等键依赖供应商的 `tool_use_id`；A-F10 `HarnessAgent.close()` 在 commonPool 上等待 | T15b（A-F5 已落地：装配自检或后续工具构造失败时关闭已建的智能体与 MCP 客户端，提交 81510f7），T19（A-F8：MCP 连接仍在装配时建立、随实例缓存，服务重启后的重连语义未处理），T27（A-F10），其余 R2 复查 |
 | D54 | R1 | 工程质量（审查）：Q-M1 token 估算在 runtime 与 engine 重复；Q-M2 重试退避重复且 `VectorModelService` 缺上限；Q-M3 `app` 依赖具体 `infra`、跨上下文依赖对方的 `infra`（修订规范或加 ArchUnit 规则）；Q-L1、L2、L3 摘要、Map 拷贝、输出上限常量重复；Q-L5 配置默认值双写；Q-L6 `application-test.yml` 在 `src/main`；Q-L8 三处无超时的 `.block()`；Q-L9 `Optional` 作参数；Q-L11 两处丢 cause；Q-L12 靠 `sleep` 的静默断言；Q-L13 `md_to_docx.py` 与执行服务符号链接的测试缺口；Q-L14 test-support 的 enforcer 多放行、`ScriptedOpenAiServer` 的 `Instant.now()` | R2（Q-M3 的规范决定），Q-L6 给 T28；T17b 已收口重复实现：Q-M1 `common.text.TextTokens`、Q-M2 engine-spi 的 `ProviderRetryPolicy`（`VectorModelService` 有了上限）、Q-L1 `common.crypto.Sha256`、Q-L3 `PlatformTool.MAX_OUTPUT_CHARS`；Q-L2 的不可变 Map 拷贝是一行惯用写法，不抽工具方法 |
-| D55 | T14a | MVC 服务的公开 API 还没有 API Key 过滤器与按 Key 限流：`meridian-security` 只有 WebFlux 版（`ApiKeyWebFilter`）；control-plane 的 `/v1/agents`（T15b）、knowledge 的 `/v1/knowledge-bases*`（T18）上线前要加 MVC 版，复用 `ApiKeyAuthenticator`、`ApiKeyRateLimiter`，并订阅 `key.revoked` 淘汰缓存 | T15b（control-plane 已落地：`meridian-security` 的 `PublicApiAdmission` 由 WebFlux `ApiKeyWebFilter` 与 MVC `ApiKeyFilter` 共用，control-plane 用进程内的 `ApiKeyResolver`，吊销立即生效，`ApiKeyFilterTest`），T18（knowledge） |
+| D55 | T14a | MVC 服务的公开 API 还没有 API Key 过滤器与按 Key 限流：`meridian-security` 只有 WebFlux 版（`ApiKeyWebFilter`）；control-plane 的 `/v1/agents`（T15b）、knowledge 的 `/v1/knowledge-bases*`（T18）上线前要加 MVC 版，复用 `ApiKeyAuthenticator`、`ApiKeyRateLimiter`，并订阅 `key.revoked` 淘汰缓存 | T15b（control-plane 已落地：`meridian-security` 的 `PublicApiAdmission` 由 WebFlux `ApiKeyWebFilter` 与 MVC `ApiKeyFilter` 共用，control-plane 用进程内的 `ApiKeyResolver`，吊销立即生效，`ApiKeyFilterTest`），T18（knowledge 已落地：`ApiKeyFilter` 加 `ControlPlaneApiKeyResolver`，`web.ApiKeyRevocationListener` 订阅 `key.revoked`，`KnowledgeApiIT`） |
 | D56 | T14a | `config.invalidate`、`key.revoked` 走 Pub/Sub，不保证送达：吊销有 60 秒缓存过期兜底，但租户并发配额的变更丢失后，runtime 的 `max_running` 要等下一次变更才更新；需要一个定期对账（按 control-plane 的配额刷新已有计数行）或改用 Stream | T27 |
 | D57 | T14a | 平台管理员来自配置 `meridian.control-plane.platform-admins`（主体标识列表）；Q2 已决（ADR-0043）：T14b 再支持按组或角色声明配置 | T14b（已落地：`meridian.control-plane.platform-admin-groups` 按令牌的组声明判定，ADR-0044） |
 | D58 | T14b | 服务 JWT 的生产部署（部署文档待办）：签名密钥从密钥管理系统加载（实现 `servicetoken.app.SigningKeySource`；开发实现 `DirectorySigningKeys` 只适合单副本或共享卷）、多副本 control-plane 共用同一组密钥、定期轮换的触发方式（`rotate()` 目前只有测试调用）；各服务的客户端密钥由 Secret 管理系统下发与更换；接入商业 IdP（Entra ID 的 `oid` 与组 ID、Okta 的组声明）的配置说明 | T28（Helm 与部署文档）、T26（接入说明） |
@@ -298,13 +298,13 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D61 | T15a | 联网搜索后端的端点只在 control-plane 写入租户设置时校验，runtime 侧的租户设置仍读开发配置、没有再校验；`tenant_settings.web_search.secret_id` 没有校验凭据存在且是租户级 | T15b（已落地：runtime 读取租户设置时按地址策略再校验联网搜索端点，不允许时按未配置处理；control-plane 写入时校验 `secret_id` 存在且是租户级，ADR-0047） |
 | D62 | T15a | 端点校验与实际连接之间的 DNS 重绑定：control-plane 写入时、runtime 刷新目录时各解析一次，供应商客户端连接时再由 JDK、OkHttp 解析，两次之间换了地址校验不到；以网络策略为最终边界（ADR-0045） | T37 |
 | D63 | T15b | `dev-config/` 的剩余用途只有测试与本地开发：`test` profile 的 `agent-config.source`、`catalog-source` 为 `file`（测试夹具读 `dev-config/agents`、`dev-config/providers`）；`dev` profile 默认 `file`（`run-runtime.sh`、Compose `app` 的 runtime 挂载 `dev-config/`）；预算限额 `dev-config/budgets`。其他 profile 选 `file` 时启动失败，生产只经 control-plane | T16（已落地：预算限额改由 control-plane 写进 Redis，`budget-source=file` 只允许 test），T28（生产 chart 不挂载 `dev-config/`） |
-| D64 | T15b | `TODO(T18)`：发布时知识库的存在性由 control-plane 的 `ConfiguredKnowledgeCatalog` 按配置 `meridian.control-plane.knowledge.dev-knowledge-base-ids` 判定，没有经 knowledge 服务校验存在且属于该项目 | T18 |
+| D64 | T15b | `TODO(T18)`：发布时知识库的存在性由 control-plane 的 `ConfiguredKnowledgeCatalog` 按配置 `meridian.control-plane.knowledge.dev-knowledge-base-ids` 判定，没有经 knowledge 服务校验存在且属于该项目 | T18（已落地：`KnowledgeServiceCatalog` 调 knowledge 的 `GET /internal/v1/knowledge-bases/{id}` 并比较租户与项目，出站服务 JWT 由 control-plane 进程内签发，ADR-0051，`AgentVersionIT`） |
 | D65 | T15b | 引用检查只统计未删除智能体的已发布版本：智能体软删除后，绑定其版本的会话仍可运行，但它引用的模型、凭据、MCP 服务、技能可以被删除，这些会话的下一轮解析失败（ADR-0047 第 4 条） | R2（评审是否要求删除智能体前先结束会话，或引用检查改为统计未删除的会话） |
 | D66 | T16 | runtime 测试偶发失败：BlockHound 在 Netty 线程上抓到 `Ids.newUlid()` 的阻塞（`ulid-creator` 单调工厂的 `ReentrantLock` 在并发生成时争用，`RequestIdWebFilter` 在事件循环上调用），表现为某个请求 500（T16 开工基线中 `SubagentSessionIT` 的 SSE 连接，重跑通过）。可选：`RuntimeBlockHoundIntegration` 放行 `UlidFactory.create`（临界区只有几条指令），或请求 ID 改用非单调 ULID | R2 |
 | D67 | T16 | `rt.sessions.budget_limit`（会话级预算的金额）没有使用：会话级预算改在 control-plane 的 `budgets`（token，ADR-0048）。列保留在 V0001 中，是否删除或改作创建会话时的会话级硬阈值待定 | R2 |
 | D68 | T16 | 用量报表只有聚合，没有明细列表与 CSV 导出；T25b 的“明细表、导出 CSV”需要按游标列出 `usage_records` 的接口 | T19b |
 | D69 | T16 | `cp.stream_dead_letters` 只有写入：没有查看与重放的接口或脚本，坏消息只能人工查表后重新发布；outbox 中 `attempts` 达到上限的消息同样只能人工处理 | T27（告警）、R2 |
-| D70 | T16 | 知识检索的次数没有计量：`search_calls` 只记联网搜索；知识库存储量的用量种类由 T18 加入 `UsageKind`、`UsageMessages` 与 `usage_records.kind` 的检查约束 | T18、T19 |
+| D70 | T16 | 知识检索的次数没有计量：`search_calls` 只记联网搜索；知识库存储量的用量种类由 T18 加入 `UsageKind`、`UsageMessages` 与 `usage_records.kind` 的检查约束 | T18（存储量已落地：`knowledge_storage_gb_days`，cp `V0006`，`StorageMeteringIT`、`UsageLedgerIT`），T19（检索次数） |
 | D71 | T17a | 事件归档把会话的全部现存事件读进内存再压缩上传（`EventArchiver.readAll`、`EventArchives.write`），保留清理重写文件同样整份读入；单个会话事件很多（数十万条）时内存占用大，应改为流式读写与分段上传 | T28（容量与运维） |
 | D72 | T17a | Webhook 的签名密钥不能轮换（只能删除后重建，Webhook ID 随之改变）；投递记录的列表只按 Webhook、会话、状态过滤，没有时间范围 | T19b（控制台的 Webhook 页面需要时补轮换接口与时间过滤） |
 | D73 | T17a | 删除通知的投递与会话清理的先后：清理等待该会话的 Webhook 投递至多 12 小时，之后未完成的投递随会话删除（外键级联），投递记录不再可查；接收方长时间不可用时业务系统收不到删除通知 | R2（评审是否把投递记录与会话解耦，单独按 30 天保留） |
@@ -312,6 +312,10 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D75 | T17b | 按文件 ID 引用的图片作为文件放进工作区，不作为图片输入交给模型（视觉）：内核要读出内容转成 Base64 图片块，涉及大小上限与预扣估算 | M2（按业务方需要） |
 | D76 | T17b | 同一事件的 `created_at` 在 SSE 帧（`Instant`，保留 6 位小数）与列表接口（`OffsetDateTime`，去掉末尾的 0）中的文本表示不同（同一时刻；开工基线 `EventArchiveIT` 偶发失败的原因） | T26（SDK 与接入文档时统一时间的序列化） |
 | D77 | T17b | 引用平台文件的 `user.message` 按 queue 投递，保存的事件中 `delivery` 仍是请求的值（与跟在中断后面的消息相同）；调用方要从事件判断实际投递方式时需要额外字段 | T26 |
+| D78 | T18 | knowledge 调 runtime 的内部模型接口只在请求体带租户与项目，知识库 ID 没有进入用量消息与账本（架构设计「跨服务数据流」写的是"请求头带上租户、项目、知识库"）；按知识库看 Embedding、rerank 的用量要改内部接口、runtime 的用量消息、样本与 control-plane 的解析 | T19（rerank 同一接口）或 R2 |
+| D79 | T18 | doc-parser 不校验服务 JWT，只靠集群内网与网络策略限定只有 knowledge 能访问（ADR-0051）；Helm 中的 NetworkPolicy、内存限额（至少 3 GB）与 CPU 还没有落地 | T28 |
+| D80 | T18 | PDF 的路由靠启发式：平均每页少于 50 个可见字符视为扫描件，横竖各至少 3 条线视为表格；没有框线的表格按正文切分，Word 文档没有页码。检索效果受切分影响，P8 定稿时按真实文档复核 | T19（P8） |
+| D81 | T18 | 知识库存储量取每日执行时的大小（不是当天的平均值）；知识库本身没有删除与修改接口，`storage_reports` 只随知识库删除 | T19b（控制台需要时补知识库的修改与删除） |
 
 ## 技术债
 
