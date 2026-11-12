@@ -3,8 +3,9 @@
 # 新租户的所有者也是 dev-admin（按 sub，即 realm 文件中固定的用户 ID），
 # Key 明文默认写入 deploy/compose/.env 的 MERIDIAN_DEV_API_KEY（.env 不存在时从 .env.example 复制；.env 已被 Git 忽略），
 # 给出 --output 时只把明文写进该文件。只打印 ID 与显示前缀，不打印明文。Key 带 sessions:read、sessions:write、models:invoke，
-# 限流取上限（压测用）。前提：Compose 的 auth profile（Keycloak）与 control-plane 在运行。
-# 用法：scripts/dev/dev-api-key.sh [--control-plane=http://localhost:18081] [--quota=20] [--output=<文件>]
+# 限流取上限（压测用）。新租户默认零预算（ADR-0048），脚本把四级预算都设为不限；给出 --no-budgets 时不设（app-smoke.sh 验证零预算）。
+# 前提：Compose 的 auth profile（Keycloak）与 control-plane 在运行。
+# 用法：scripts/dev/dev-api-key.sh [--control-plane=http://localhost:18081] [--quota=20] [--output=<文件>] [--no-budgets]
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -13,11 +14,13 @@ cd "${repo_root}"
 control_plane="http://localhost:18081"
 quota=""
 output=""
+budgets=true
 for arg in "$@"; do
     case "${arg}" in
         --control-plane=*) control_plane="${arg#--control-plane=}" ;;
         --quota=*) quota="${arg#--quota=}" ;;
         --output=*) output="${arg#--output=}" ;;
+        --no-budgets) budgets=false ;;
         *) echo "未知参数：${arg}" >&2; exit 2 ;;
     esac
 done
@@ -45,6 +48,11 @@ quota_field=""
 [[ -n "${quota}" ]] && quota_field=",\"max_concurrent_turns\":${quota}"
 tenant_id="$(call POST /admin/v1/tenants "{\"name\":\"开发租户\",\"owner\":{\"subject\":\"${dev_admin_sub}\"}${quota_field}}" id)"
 project_id="$(call POST "/admin/v1/tenants/${tenant_id}/projects" '{"name":"开发项目"}' id)"
+if [[ "${budgets}" == true ]]; then
+    for level in tenant project api_key session; do
+        call POST "/admin/v1/tenants/${tenant_id}/budgets" "{\"level\":\"${level}\",\"hard_limit_tokens\":null}" id >/dev/null
+    done
+fi
 key_body='{"name":"开发 Key","scopes":["sessions:read","sessions:write","models:invoke"],"rate_limit_per_minute":100000}'
 key_json_path="/admin/v1/tenants/${tenant_id}/projects/${project_id}/api-keys"
 plaintext="$(call POST "${key_json_path}" "${key_body}" key)"

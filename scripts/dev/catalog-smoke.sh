@@ -99,6 +99,11 @@ project_id="$(field "['id']")"
 admin POST "${base}/projects/${project_id}/api-keys" "$(body '{"name":"目录检查","scopes":["models:invoke"]}')"
 (umask 077 && field "['key']" >"${work}/key")
 echo "PASS 新建租户 ${tenant_id}、项目 ${project_id} 与 API Key"
+# 新租户默认零预算（ADR-0048）：四级都显式设为不限，模型调用才能进行
+for level in tenant project api_key session; do
+    admin POST "${base}/budgets" "$(body "$(printf '{"level":"%s","hard_limit_tokens":null}' "${level}")")"
+done
+echo "PASS 四级预算设为不限"
 
 # 2. 凭据、供应商账号、价格表、模型（脚本化模型服务）
 admin POST "${base}/secrets" "$(secret_body "脚本化模型" random)"
