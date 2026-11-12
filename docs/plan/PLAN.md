@@ -78,7 +78,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | R1 | [M0 评审与收口](tasks/R1-m0-review.md) | 1 | T13 | high | 中 | P7、P11，以及 P1 至 P15 的汇总 | 已完成 | 34b708c |
 | T14a | [control-plane 基础：租户、成员、API Key 与限流](tasks/T14a-control-plane-tenancy-apikeys.md) | 2 | R1（结论为进入 M1） | high | 大 | 无 | 已完成 | 251ed4e |
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 已完成 | ed57d00 |
-| T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | 待填 |
+| T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | a9db160 |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 未开始 | — |
 | T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 未开始 | — |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 未开始 | — |
@@ -415,7 +415,7 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：A01–A05 全部 passing（角色矩阵 219 例由 OIDC 令牌驱动；两种声明配置；P14 在 kind 上以服务 JWT 复测通过）
 - 遗留：D58（服务 JWT 的生产部署：密钥管理系统、多副本共享密钥、轮换触发、IdP 接入说明，T28、T26）；Compose `app-smoke.sh` 的新步骤没有在本机实跑（Docker 内存紧张）
 
-### 2026-11-11 T15a 已完成（提交 待填）
+### 2026-11-11 T15a 已完成（提交 a9db160）
 
 - 交付：Q3 已决（OpenAI 兼容、Anthropic、Gemini）；control-plane 的 `secret` 上下文（信封加密：按租户的 AES-256 数据密钥，AES-GCM 绑定租户、凭据与版本；`KeyEncryptionService` 的本地主密钥与 Vault Transit 实现；只能写入、轮换、删除的管理 API，列表带最后使用时间与引用方；`/internal/v1/secrets:resolve` 只接受 runtime，校验租户与项目，每次解析写审计）与 `catalog` 上下文（供应商账号、模型、价格表的管理 API，价格表版本只追加、发布即生效；`/internal/v1/models/{id}`；删除被引用资源 409 带 `references`；变更发布 `config.invalidate`），迁移 `V0002`，新操作类别 `MODEL_*`、`SECRET_*`，ID 前缀 `prb`；`common.net`（`AddressPolicy` 从 runtime 移入并分类、`EndpointPolicy`）；runtime 的 `ControlPlaneModelCatalog`（缓存 60 秒、读取时再校验端点）、`ControlPlaneSecretResolver`（明文缓存 5 分钟）、`CatalogInvalidationListener`、`catalog-source`（`file` 只允许 dev、test）、模型属于租户（D23）、目录备用模型、用量消息带价格表版本；engine 的 Anthropic、Gemini 平台适配器（D25）；D52 的图片地址与端点校验；`scripts/dev/catalog-smoke.sh`；ADR-0045、ADR-0046（变更型，用户在会话中确认），架构设计 v1.20
 - 验收：A01–A06 全部 passing（`SecretStoreIT`、`VaultTransitIT`、`ModelCatalogIT`、`ControlPlaneCatalogIT`、`ProviderAdaptersIT`；`-Plive` 的 `ControlPlaneCatalogLiveIT` 与真实链路 `catalog-smoke.sh --dashscope` 都通过）
