@@ -80,7 +80,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T14b | [身份：OIDC、Keycloak 与服务 JWT](tasks/T14b-oidc-and-service-jwt.md) | 2 | T14a | high | 中 | 无 | 已完成 | ed57d00 |
 | T15a | [凭据库、供应商、模型目录与价格表](tasks/T15a-secrets-providers-models.md) | 2 | T14b | high | 大 | 无 | 已完成 | a9db160 |
 | T15b | [智能体版本、环境、技能、MCP 与配置分发](tasks/T15b-agents-environments-config.md) | 2 | T15a | high | 大 | 无 | 已完成 | 4c867bf |
-| T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 未开始 | — |
+| T16 | [计量、预算与审计](tasks/T16-metering-budget-audit.md) | 2 | T15b | high | 中 | 无 | 进行中 | — |
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 未开始 | — |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 未开始 | — |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 未开始 | — |
@@ -175,7 +175,18 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T16 计量、预算与审计（开工 2026-11-12；基线 `verify.sh` 中 `SubagentSessionIT` 偶发失败、单独重跑通过，登记 D66）。设计见 ADR-0048。
+
+- [ ] ADR-0048、架构设计 v1.22
+- [ ] persistence：outbox 认领后在事务外发布、失败不阻塞队头（D49 C-12）；`StreamConsumer`（消费组、认领重投、死信回调、`XTRIM MINID`，D04）；`common.budget`（级别与 Redis 键）
+- [ ] cp 迁移 `V0004`：`usage_records`、`audit_logs`（按月分区、只追加）、`budgets`、`budget_usage`、`budget_alerts`、`budget_corrections`、`stream_dead_letters`、分区函数与权限、outbox 新列；rt `V0008`
+- [ ] cp 用量消费者（按价格表版本计价、幂等、账本汇总、软阈值告警）与分区维护（A01、A02、A07）
+- [ ] cp 审计消费者与查询接口；runtime 审计消息补操作者与资源（A05）
+- [ ] cp 预算管理接口与 Redis 限额同步、默认零预算（A08 的 control-plane 侧）
+- [ ] cp 对账任务（A04）
+- [ ] cp 用量报表与 `GET /v1/usage`（A06）
+- [ ] runtime：限额来自 Redis、按月计数、预扣记录带键；联网搜索计量（A03、A08 的 runtime 侧）
+- [ ] 脚本与本地环境（dev 租户与 smoke 脚本设置预算）、文档与 CLAUDE.md、`verify.sh`（A09）
 
 ## 控制台设计轨道
 
@@ -285,6 +296,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D63 | T15b | `dev-config/` 的剩余用途只有测试与本地开发：`test` profile 的 `agent-config.source`、`catalog-source` 为 `file`（测试夹具读 `dev-config/agents`、`dev-config/providers`）；`dev` profile 默认 `file`（`run-runtime.sh`、Compose `app` 的 runtime 挂载 `dev-config/`）；预算限额 `dev-config/budgets`。其他 profile 选 `file` 时启动失败，生产只经 control-plane | T16（预算限额改由 control-plane 下发），T28（生产 chart 不挂载 `dev-config/`） |
 | D64 | T15b | `TODO(T18)`：发布时知识库的存在性由 control-plane 的 `ConfiguredKnowledgeCatalog` 按配置 `meridian.control-plane.knowledge.dev-knowledge-base-ids` 判定，没有经 knowledge 服务校验存在且属于该项目 | T18 |
 | D65 | T15b | 引用检查只统计未删除智能体的已发布版本：智能体软删除后，绑定其版本的会话仍可运行，但它引用的模型、凭据、MCP 服务、技能可以被删除，这些会话的下一轮解析失败（ADR-0047 第 4 条） | R2（评审是否要求删除智能体前先结束会话，或引用检查改为统计未删除的会话） |
+| D66 | T16 | runtime 测试偶发失败：BlockHound 在 Netty 线程上抓到 `Ids.newUlid()` 的阻塞（`ulid-creator` 单调工厂的 `ReentrantLock` 在并发生成时争用，`RequestIdWebFilter` 在事件循环上调用），表现为某个请求 500（T16 开工基线中 `SubagentSessionIT` 的 SSE 连接，重跑通过）。可选：`RuntimeBlockHoundIntegration` 放行 `UlidFactory.create`（临界区只有几条指令），或请求 ID 改用非单调 ULID | R2 |
 
 ## 技术债
 
