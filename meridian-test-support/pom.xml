@@ -78,6 +78,15 @@
             <groupId>com.github.dasniko</groupId>
             <artifactId>testcontainers-keycloak</artifactId>
         </dependency>
+        <!-- 进程内的 MCP 服务（ADR-0047）：MCP Java SDK 的 Servlet 传输跑在嵌入式 Tomcat 上 -->
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-core</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.assertj</groupId>

@@ -41,6 +41,16 @@
             <groupId>com.nimbusds</groupId>
             <artifactId>nimbus-jose-jwt</artifactId>
         </dependency>
+        <!-- 智能体规格按 meridian-api 的 agent-spec.schema.json 校验（ADR-0047） -->
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+        </dependency>
+        <!-- 登记 MCP 服务时探测并保存工具清单（ADR-0047） -->
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
@@ -130,6 +140,26 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>generate-public-server</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/../meridian-api/src/main/resources/openapi/meridian-v1.yaml</inputSpec>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <apiPackage>cn.refinex.meridian.controlplane.openapi.pub</apiPackage>
+                            <generateApis>true</generateApis>
+                            <generateModels>false</generateModels>
+                            <!-- 公开 API 中只有智能体（Agents）由 control-plane 提供（ADR-0047），其余标签由 runtime 提供 -->
+                            <apisToGenerate>Agents</apisToGenerate>
+                            <configOptions>
+                                <interfaceOnly>true</interfaceOnly>
+                                <skipDefaultInterface>true</skipDefaultInterface>
+                                <useTags>true</useTags>
+                            </configOptions>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>generate-internal-server</id>
                         <goals>
                             <goal>generate</goal>
@@ -141,7 +171,7 @@
                             <modelPackage>cn.refinex.meridian.api.internal.model</modelPackage>
                             <generateApis>true</generateApis>
                             <generateModels>false</generateModels>
-                            <apisToGenerate>InternalApiKeys,InternalTenants,InternalServiceTokens,InternalProjectAccess,InternalSecrets,InternalModelCatalog</apisToGenerate>
+                            <apisToGenerate>InternalApiKeys,InternalTenants,InternalServiceTokens,InternalProjectAccess,InternalSecrets,InternalModelCatalog,InternalAgentConfig,InternalPermissionRules</apisToGenerate>
                             <configOptions>
                                 <interfaceOnly>true</interfaceOnly>
                                 <skipDefaultInterface>true</skipDefaultInterface>

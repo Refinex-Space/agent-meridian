@@ -48,6 +48,17 @@ public class SecretReferenceRepository extends TenantScopedRepository {
                             SELECT web_search ->> 'secret_id', 'tenant_settings', tenant_id, NULL
                               FROM cp.tenant_settings
                              WHERE tenant_id = :tenant_id AND web_search ->> 'secret_id' = ANY(:ids)
+                            UNION ALL
+                            SELECT h.value, 'mcp_server', m.id, m.name
+                              FROM cp.mcp_servers m, jsonb_each_text(m.header_secret_ids) h
+                             WHERE m.tenant_id = :tenant_id AND h.value = ANY(:ids)
+                            UNION ALL
+                            SELECT r.ref_id, 'agent_version', v.id, a.name || ' v' || v.version
+                              FROM cp.agent_version_refs r
+                              JOIN cp.agent_versions v ON v.id = r.agent_version_id
+                              JOIN cp.agents a ON a.id = v.agent_id
+                             WHERE r.tenant_id = :tenant_id AND r.ref_type = 'secret' AND r.ref_id = ANY(:ids)
+                               AND a.deleted_at IS NULL
                         ) refs
                         ORDER BY secret_id, type, id
                         """)

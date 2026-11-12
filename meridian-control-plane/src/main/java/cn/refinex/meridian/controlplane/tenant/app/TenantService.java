@@ -11,6 +11,7 @@ import cn.refinex.meridian.common.page.PageResult;
 import cn.refinex.meridian.controlplane.audit.app.AdminAudit;
 import cn.refinex.meridian.controlplane.config.ControlPlaneProperties;
 import cn.refinex.meridian.controlplane.member.app.MemberService;
+import cn.refinex.meridian.controlplane.secret.app.SecretService;
 import cn.refinex.meridian.controlplane.tenant.domain.Tenant;
 import cn.refinex.meridian.controlplane.tenant.domain.TenantDeleted;
 import cn.refinex.meridian.controlplane.tenant.domain.TenantErrorCode;
@@ -47,6 +48,7 @@ public class TenantService {
     private final TransactionTemplate transactions;
     private final ControlPlaneProperties properties;
     private final EndpointPolicy endpoints;
+    private final SecretService secrets;
     private final Clock clock;
 
     /**
@@ -62,6 +64,7 @@ public class TenantService {
      * @param transactions 事务模板
      * @param properties control-plane 配置，取默认配额
      * @param endpoints 端点策略，校验联网搜索后端的地址（ADR-0045，D52）
+     * @param secrets 凭据用例，校验联网搜索后端的凭据是本租户的租户级凭据（D61）
      * @param clock 时钟
      */
     public TenantService(
@@ -75,6 +78,7 @@ public class TenantService {
             TransactionTemplate transactions,
             ControlPlaneProperties properties,
             EndpointPolicy endpoints,
+            SecretService secrets,
             Clock clock) {
         this.tenants = tenants;
         this.settings = settings;
@@ -86,6 +90,7 @@ public class TenantService {
         this.transactions = transactions;
         this.properties = properties;
         this.endpoints = endpoints;
+        this.secrets = secrets;
         this.clock = clock;
     }
 
@@ -218,7 +223,8 @@ public class TenantService {
     }
 
     /**
-     * 整体替换租户设置。
+     * 整体替换租户设置：联网搜索后端的端点按地址策略校验、凭据必须是本租户的租户级凭据（D61）；提交后经 {@code config.invalidate}
+     * （{@code tenant_settings}）通知 runtime，新的轮次使用新设置（ADR-0047）。
      *
      * @param actor 操作者的主体标识
      * @param tenantId 租户 ID
@@ -230,6 +236,9 @@ public class TenantService {
             String actor, String tenantId, String systemPrompt, TenantSettings.WebSearch webSearch) {
         if (webSearch != null) {
             Endpoints.check(endpoints, webSearch.baseUrl(), "web_search.base_url");
+            if (webSearch.secretId() != null) {
+                secrets.requireUsable(tenantId, null, webSearch.secretId(), "web_search.secret_id");
+            }
         }
         return PlatformContexts.call(
                 Scopes.tenant(tenantId),
@@ -240,6 +249,7 @@ public class TenantService {
                     Map<String, Object> details = new LinkedHashMap<>();
                     details.put("web_search_backend", webSearch == null ? null : webSearch.backend());
                     audit.record("tenant_settings.updated", actor, tenantId, null, "tenant", tenantId, details);
+                    invalidations.resourceChanged(ConfigInvalidations.TENANT_SETTINGS, tenantId, tenantId);
                     return updated;
                 }));
     }

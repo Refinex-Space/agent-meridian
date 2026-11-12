@@ -46,6 +46,10 @@ public enum Permission {
     API_KEY_READ(Level.PROJECT),
     /** 创建、修改、吊销 API Key。 */
     API_KEY_WRITE(Level.PROJECT),
+    /** 查看本项目的智能体与版本、环境、技能、MCP 服务与项目策略（ADR-0047）。 */
+    AGENT_READ(Level.PROJECT),
+    /** 管理本项目的智能体（含发布版本）、环境、技能、MCP 服务与项目策略（ADR-0047）。 */
+    AGENT_WRITE(Level.PROJECT),
     /** 处理待处理动作（审批）。 */
     PENDING_ACTION_DECIDE(Level.PROJECT),
     /** 公开 API：读取会话、事件与事件流（作用域 {@code sessions:read}，ADR-0044）。 */

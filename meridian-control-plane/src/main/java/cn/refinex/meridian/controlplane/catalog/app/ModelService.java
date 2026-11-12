@@ -14,6 +14,8 @@ import cn.refinex.meridian.common.net.EndpointPolicy;
 import cn.refinex.meridian.common.page.Cursor;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.common.page.PageResult;
+import cn.refinex.meridian.controlplane.agent.domain.SpecReference;
+import cn.refinex.meridian.controlplane.agent.infra.AgentVersionRefRepository;
 import cn.refinex.meridian.controlplane.audit.app.AdminAudit;
 import cn.refinex.meridian.controlplane.catalog.domain.CatalogErrorCode;
 import cn.refinex.meridian.controlplane.catalog.domain.CatalogModel;
@@ -29,6 +31,7 @@ import cn.refinex.meridian.controlplane.web.Endpoints;
 import cn.refinex.meridian.controlplane.web.Scopes;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +53,7 @@ public class ModelService {
     private final EndpointPolicy endpoints;
     private final AdminAudit audit;
     private final ConfigInvalidations invalidations;
+    private final AgentVersionRefRepository agentVersions;
     private final TransactionTemplate transactions;
     private final Clock clock;
 
@@ -62,6 +66,7 @@ public class ModelService {
      * @param endpoints 端点策略
      * @param audit 审计
      * @param invalidations 配置变更广播
+     * @param agentVersions 已发布智能体版本的引用，删除前检查
      * @param transactions 事务模板
      * @param clock 时钟
      */
@@ -72,6 +77,7 @@ public class ModelService {
             EndpointPolicy endpoints,
             AdminAudit audit,
             ConfigInvalidations invalidations,
+            AgentVersionRefRepository agentVersions,
             TransactionTemplate transactions,
             Clock clock) {
         this.models = models;
@@ -80,6 +86,7 @@ public class ModelService {
         this.endpoints = endpoints;
         this.audit = audit;
         this.invalidations = invalidations;
+        this.agentVersions = agentVersions;
         this.transactions = transactions;
         this.clock = clock;
     }
@@ -180,7 +187,7 @@ public class ModelService {
     }
 
     /**
-     * 删除：被其他模型作为备用时以 {@code catalog.in_use} 拒绝并列出它们。
+     * 删除：被其他模型作为备用、或被未删除智能体的已发布版本引用时（ADR-0047），以 {@code catalog.in_use} 拒绝并列出它们。
      *
      * @param actor 操作者
      * @param tenantId 租户 ID
@@ -191,7 +198,8 @@ public class ModelService {
                 Scopes.tenant(tenantId),
                 () -> transactions.executeWithoutResult(status -> {
                     CatalogModel model = require(id, true);
-                    List<ResourceReference> referencedBy = models.fallbackReferences(id);
+                    List<ResourceReference> referencedBy = new ArrayList<>(models.fallbackReferences(id));
+                    referencedBy.addAll(agentVersions.referencing(SpecReference.Type.MODEL, id));
                     if (!referencedBy.isEmpty()) {
                         throw new ReferencedException(
                                 CatalogErrorCode.IN_USE, "模型 " + model.name() + " 仍是其他模型的备用模型", referencedBy);

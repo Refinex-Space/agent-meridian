@@ -1,15 +1,18 @@
 package cn.refinex.meridian.controlplane.tenant.api;
 
+import cn.refinex.meridian.api.internal.model.InternalTenantSettings;
+import cn.refinex.meridian.api.internal.model.InternalWebSearchSettings;
 import cn.refinex.meridian.api.internal.model.TenantQuota;
 import cn.refinex.meridian.controlplane.openapi.internal.InternalTenantsApi;
 import cn.refinex.meridian.controlplane.tenant.app.TenantService;
+import cn.refinex.meridian.controlplane.tenant.domain.TenantSettings;
 import cn.refinex.meridian.security.servicejwt.ServiceCredentialFilter;
 import cn.refinex.meridian.security.servicejwt.ServiceJwts;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 租户配额的内部接口（ADR-0042）：runtime 为租户创建并发计数行、收到 {@code config.invalidate} 时读取。 */
+/** 租户的内部接口：配额（ADR-0042，runtime 为租户创建并发计数行、收到 {@code config.invalidate} 时读取）与租户设置（ADR-0047）。 */
 @RestController
 public class InternalTenantsApiController implements InternalTenantsApi {
 
@@ -31,5 +34,22 @@ public class InternalTenantsApiController implements InternalTenantsApi {
     public ResponseEntity<TenantQuota> getTenantQuotas(String tenantId) {
         ServiceCredentialFilter.require(request, ServiceJwts.RUNTIME, ServiceJwts.KNOWLEDGE);
         return ResponseEntity.ok(new TenantQuota(tenantId, tenants.get(tenantId).maxConcurrentTurns()));
+    }
+
+    @Override
+    public ResponseEntity<InternalTenantSettings> getInternalTenantSettings(String tenantId) {
+        ServiceCredentialFilter.require(request, ServiceJwts.RUNTIME);
+        TenantSettings settings = tenants.settings(tenantId);
+        TenantSettings.WebSearch webSearch = settings.webSearch();
+        return ResponseEntity.ok(new InternalTenantSettings()
+                .tenantId(tenantId)
+                .systemPrompt(settings.systemPrompt())
+                .webSearch(
+                        webSearch == null
+                                ? null
+                                : new InternalWebSearchSettings()
+                                        .backend(InternalWebSearchSettings.BackendEnum.fromValue(webSearch.backend()))
+                                        .baseUrl(webSearch.baseUrl())
+                                        .secretId(webSearch.secretId())));
     }
 }

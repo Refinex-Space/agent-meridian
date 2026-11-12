@@ -2,6 +2,7 @@ package cn.refinex.meridian.controlplane.support;
 
 import cn.refinex.meridian.testsupport.SpringContainerProperties;
 import cn.refinex.meridian.testsupport.auth.KeycloakRealm;
+import cn.refinex.meridian.testsupport.mcp.TestMcpServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -56,6 +57,15 @@ public abstract class ControlPlaneTestBase {
 
     private static final Map<String, Cached> TOKENS = new ConcurrentHashMap<>();
 
+    /** 进程内 MCP 服务接受的 Bearer 令牌；凭据库中的凭据值是 {@code "Bearer " + MCP_TOKEN}（ADR-0047）。 */
+    public static final String MCP_TOKEN = "test-mcp-token-T15b";
+
+    /** 进程内的 MCP 服务，同一 JVM 中的测试共用（登记时探测它）。 */
+    public static final TestMcpServer MCP = TestMcpServer.start(MCP_TOKEN);
+
+    /** 开发期知识库目录中存在的知识库（T18 之前的 {@code ConfiguredKnowledgeCatalog}）。 */
+    public static final String KNOWN_KNOWLEDGE_BASE = "kb_test_known";
+
     @LocalServerPort
     protected int port;
 
@@ -63,7 +73,10 @@ public abstract class ControlPlaneTestBase {
     static void controlPlaneProperties(DynamicPropertyRegistry registry) {
         SpringContainerProperties.postgres(registry);
         SpringContainerProperties.redis(registry);
+        // 技能文件存对象存储（ADR-0047）
+        SpringContainerProperties.minio(registry);
         registry.add("meridian.security.oidc.issuer", KeycloakRealm::issuer);
+        registry.add("meridian.control-plane.knowledge.dev-knowledge-base-ids[0]", () -> KNOWN_KNOWLEDGE_BASE);
         registry.add("meridian.control-plane.service-tokens.key-directory", KEY_DIRECTORY::toString);
         registry.add("meridian.control-plane.service-tokens.clients[0].service", () -> RUNTIME_CLIENT);
         registry.add("meridian.control-plane.service-tokens.clients[0].secret", () -> RUNTIME_SECRET);

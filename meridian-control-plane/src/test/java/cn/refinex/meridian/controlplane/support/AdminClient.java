@@ -28,6 +28,10 @@ public final class AdminClient {
                     "openapi/meridian-internal-v1.yaml")
             .build();
 
+    private static final OpenApiInteractionValidator PUBLIC = OpenApiInteractionValidator.createForSpecificationUrl(
+                    "openapi/meridian-v1.yaml")
+            .build();
+
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static final HttpClient HTTP =
@@ -85,6 +89,26 @@ public final class AdminClient {
             headers.put("Authorization", "Bearer " + credential);
         }
         return send(INTERNAL, method, path, body, headers);
+    }
+
+    /**
+     * 调本应用的公开接口（{@code /v1/agents}），按 {@code meridian-v1.yaml} 校验请求与响应。
+     *
+     * @param method 方法
+     * @param path 路径（含查询参数）
+     * @param credential API Key 或控制台用户的令牌；可为空
+     * @param project {@code Meridian-Project}；可为空
+     * @return 响应
+     */
+    public Reply api(String method, String path, String credential, String project) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        if (credential != null) {
+            headers.put("Authorization", "Bearer " + credential);
+        }
+        if (project != null) {
+            headers.put("Meridian-Project", project);
+        }
+        return send(PUBLIC, method, path, null, headers);
     }
 
     /**

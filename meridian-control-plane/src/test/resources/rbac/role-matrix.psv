@@ -4,6 +4,8 @@
 # 路径与请求体中的占位符由夹具替换：{tenant} {project}（各项目级角色绑定的项目）{other_project} {spare_member}
 # {spare_binding}（spare 的项目级绑定）{owner2_member} {owner2_binding}（第二位所有者）{key}（{project} 下的 API Key）
 # T15a：{secret}（被供应商账号引用）{spare_secret} {provider}（挂着模型）{spare_provider} {price_book} {model} {spare_model}
+# T15b：{agent}（版本 1 已发布、版本 2 是草稿）{mcp}（被引用）{spare_mcp} {mcp_url} {mcp_secret} {environment} {skill}（被引用）
+# {spare_skill} {tenant_rule} {project_rule}；智能体、环境、技能、MCP 服务与项目策略的查看是 AGENT_READ，管理是 AGENT_WRITE（ADR-0047）
 createTenant            | POST   | /admin/v1/tenants | {"name":"新租户","owner":{"subject":"someone"}} | A D D D D D D
 listTenants             | GET    | /admin/v1/tenants | | A A A A A A A
 getTenant               | GET    | /admin/v1/tenants/{tenant} | | A A A A A A D
@@ -55,3 +57,41 @@ listPriceBooks          | GET    | /admin/v1/tenants/{tenant}/price-books | | D 
 getPriceBook            | GET    | /admin/v1/tenants/{tenant}/price-books/{price_book} | | D A A A A D D
 publishPriceBookVersion | POST   | /admin/v1/tenants/{tenant}/price-books/{price_book}/versions | {"prices":{"input":"1","output":"2","cache_read":"0.2","cache_write":"1","reasoning":"2"}} | D A A D D D D
 listPriceBookVersions   | GET    | /admin/v1/tenants/{tenant}/price-books/{price_book}/versions | | D A A A A D D
+createAgent             | POST   | /admin/v1/tenants/{tenant}/projects/{project}/agents | {"name":"role-agent"} | D A D A D D D
+listAgents              | GET    | /admin/v1/tenants/{tenant}/projects/{project}/agents |  | D A A A A D D
+getAgent                | GET    | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent} |  | D A A A A D D
+updateAgent             | PATCH  | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent} | {"description":"改说明"} | D A D A D D D
+deleteAgent             | DELETE | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent} |  | D A D A D D D
+createAgentVersion      | POST   | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent}/versions | {"spec":{"model":{"model_id":"{model}"},"system_prompt":"角色矩阵","tools":["read_file"],"mcp_servers":[],"skills":[],"subagents":[],"permissions":{"mode":"default","rules":[]},"compaction":{"reserved_tokens":20000},"plan_mode":false,"knowledge":{"knowledge_base_ids":[],"prefetch":false,"prefetch_top_k":5},"max_iters":50,"expose_thinking":false}} | D A D A D D D
+listAgentVersions       | GET    | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent}/versions |  | D A A A A D D
+compareAgentVersions    | GET    | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent}/versions:compare?base=1&target=2 |  | D A A A A D D
+getAgentVersion         | GET    | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent}/versions/1 |  | D A A A A D D
+updateAgentVersion      | PUT    | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent}/versions/2 | {"spec":{"model":{"model_id":"{model}"},"system_prompt":"角色矩阵","tools":["read_file"],"mcp_servers":[],"skills":[],"subagents":[],"permissions":{"mode":"default","rules":[]},"compaction":{"reserved_tokens":20000},"plan_mode":false,"knowledge":{"knowledge_base_ids":[],"prefetch":false,"prefetch_top_k":5},"max_iters":50,"expose_thinking":false}} | D A D A D D D
+deleteAgentVersion      | DELETE | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent}/versions/2 |  | D A D A D D D
+publishAgentVersion     | POST   | /admin/v1/tenants/{tenant}/projects/{project}/agents/{agent}/versions/2:publish |  | D A D A D D D
+createEnvironment       | POST   | /admin/v1/tenants/{tenant}/projects/{project}/environments | {"name":"新环境","tier":"none"} | D A D A D D D
+listEnvironments        | GET    | /admin/v1/tenants/{tenant}/projects/{project}/environments |  | D A A A A D D
+getEnvironment          | GET    | /admin/v1/tenants/{tenant}/projects/{project}/environments/{environment} |  | D A A A A D D
+updateEnvironment       | PUT    | /admin/v1/tenants/{tenant}/projects/{project}/environments/{environment} | {"name":"改名环境","tier":"sandbox","size":"small","egress_allowlist":["pypi.org"]} | D A D A D D D
+deleteEnvironment       | DELETE | /admin/v1/tenants/{tenant}/projects/{project}/environments/{environment} |  | D A D A D D D
+listEnvironmentRevisions | GET    | /admin/v1/tenants/{tenant}/projects/{project}/environments/{environment}/revisions |  | D A A A A D D
+getEnvironmentRevision  | GET    | /admin/v1/tenants/{tenant}/projects/{project}/environments/{environment}/revisions/1 |  | D A A A A D D
+createSkill             | POST   | /admin/v1/tenants/{tenant}/projects/{project}/skills | {"files":[{"path":"SKILL.md","content":"---\nname: role-skill\ndescription: 角色矩阵\n---\n"}]} | D A D A D D D
+listSkills              | GET    | /admin/v1/tenants/{tenant}/projects/{project}/skills |  | D A A A A D D
+getSkill                | GET    | /admin/v1/tenants/{tenant}/projects/{project}/skills/{skill} |  | D A A A A D D
+deleteSkill             | DELETE | /admin/v1/tenants/{tenant}/projects/{project}/skills/{spare_skill} |  | D A D A D D D
+createSkillVersion      | POST   | /admin/v1/tenants/{tenant}/projects/{project}/skills/{skill}/versions | {"files":[{"path":"SKILL.md","content":"---\nname: fixture-skill\ndescription: 第二版\n---\n"}]} | D A D A D D D
+listSkillVersions       | GET    | /admin/v1/tenants/{tenant}/projects/{project}/skills/{skill}/versions |  | D A A A A D D
+getSkillVersion         | GET    | /admin/v1/tenants/{tenant}/projects/{project}/skills/{skill}/versions/1 |  | D A A A A D D
+createMcpServer         | POST   | /admin/v1/tenants/{tenant}/projects/{project}/mcp-servers | {"name":"role_mcp","transport":"streamable_http","url":"{mcp_url}","header_secret_ids":{"Authorization":"{mcp_secret}"}} | D A D A D D D
+listMcpServers          | GET    | /admin/v1/tenants/{tenant}/projects/{project}/mcp-servers |  | D A A A A D D
+getMcpServer            | GET    | /admin/v1/tenants/{tenant}/projects/{project}/mcp-servers/{mcp} |  | D A A A A D D
+updateMcpServer         | PUT    | /admin/v1/tenants/{tenant}/projects/{project}/mcp-servers/{mcp} | {"name":"crm","transport":"streamable_http","url":"{mcp_url}","header_secret_ids":{"Authorization":"{mcp_secret}"},"side_effect":"idempotent"} | D A D A D D D
+deleteMcpServer         | DELETE | /admin/v1/tenants/{tenant}/projects/{project}/mcp-servers/{spare_mcp} |  | D A D A D D D
+probeMcpServer          | POST   | /admin/v1/tenants/{tenant}/projects/{project}/mcp-servers/{mcp}:probe |  | D A D A D D D
+createTenantPermissionRule | POST   | /admin/v1/tenants/{tenant}/permission-rules | {"tool_name":"web_fetch","behavior":"deny"} | D A A D D D D
+listTenantPermissionRules | GET    | /admin/v1/tenants/{tenant}/permission-rules |  | A A A A A A D
+deleteTenantPermissionRule | DELETE | /admin/v1/tenants/{tenant}/permission-rules/{tenant_rule} |  | D A A D D D D
+createProjectPermissionRule | POST   | /admin/v1/tenants/{tenant}/projects/{project}/permission-rules | {"tool_name":"bash","rule_content":"git status","behavior":"allow"} | D A D A D D D
+listProjectPermissionRules | GET    | /admin/v1/tenants/{tenant}/projects/{project}/permission-rules |  | D A A A A D D
+deleteProjectPermissionRule | DELETE | /admin/v1/tenants/{tenant}/projects/{project}/permission-rules/{project_rule} |  | D A D A D D D

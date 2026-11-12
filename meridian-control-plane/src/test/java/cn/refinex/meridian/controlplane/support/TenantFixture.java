@@ -152,6 +152,130 @@ public record TenantFixture(Map<String, String> values) {
                         .text("id"));
     }
 
+    /**
+     * 加上智能体配置的资源（T15b，ADR-0047）：请求头凭据 {@code mcp_secret}（值为 {@code Bearer} 加进程内 MCP 服务的令牌）；登记的 MCP
+     * 服务 {@code mcp}（Streamable HTTP，被已发布的版本引用）与 {@code spare_mcp}（SSE，没有引用方）；环境 {@code environment}；技能
+     * {@code skill}（{@value #SKILL_NAME}，被引用）与 {@code spare_skill}；智能体 {@code agent}：版本 1 已发布（引用 {@code model}、
+     * {@code mcp}、{@code skill}），版本 2 是草稿；租户策略规则 {@code tenant_rule} 与项目策略规则 {@code project_rule}；另有
+     * {@code mcp_url}。
+     *
+     * @param client 客户端
+     * @return 加上这些资源的夹具
+     */
+    public TenantFixture withAgentConfig(AdminClient client) {
+        Map<String, String> v = new LinkedHashMap<>(values);
+        String owner = ControlPlaneTestBase.token("owner");
+        String base = "/admin/v1/tenants/" + v.get("tenant");
+        String project = base + "/projects/" + v.get("project");
+        v.put("mcp_url", ControlPlaneTestBase.MCP.streamableUrl());
+        v.put(
+                "mcp_secret",
+                ok(client.admin(
+                                "POST",
+                                base + "/secrets",
+                                owner,
+                                "{\"name\":\"MCP 令牌\",\"value\":\"Bearer " + ControlPlaneTestBase.MCP_TOKEN + "\"}"))
+                        .text("id"));
+        v.put(
+                "mcp",
+                ok(client.admin(
+                                "POST",
+                                project + "/mcp-servers",
+                                owner,
+                                mcpServer(
+                                        "crm",
+                                        "streamable_http",
+                                        ControlPlaneTestBase.MCP.streamableUrl(),
+                                        v.get("mcp_secret"))))
+                        .text("id"));
+        v.put(
+                "spare_mcp",
+                ok(client.admin(
+                                "POST",
+                                project + "/mcp-servers",
+                                owner,
+                                mcpServer("crm_sse", "sse", ControlPlaneTestBase.MCP.sseUrl(), v.get("mcp_secret"))))
+                        .text("id"));
+        v.put(
+                "environment",
+                ok(client.admin("POST", project + "/environments", owner, "{\"name\":\"夹具环境\",\"tier\":\"none\"}"))
+                        .text("id"));
+        v.put(
+                "skill",
+                ok(client.admin("POST", project + "/skills", owner, skillPackage(SKILL_NAME, "夹具技能")))
+                        .text("id"));
+        v.put(
+                "spare_skill",
+                ok(client.admin("POST", project + "/skills", owner, skillPackage("spare-skill", "备用技能")))
+                        .text("id"));
+        String agent = ok(client.admin("POST", project + "/agents", owner, "{\"name\":\"fixture-agent\"}"))
+                .text("id");
+        v.put("agent", agent);
+        TenantFixture filled = new TenantFixture(Map.copyOf(v));
+        ok(client.admin("POST", project + "/agents/" + agent + "/versions", owner, filled.fill(VERSION)));
+        ok(client.admin("POST", project + "/agents/" + agent + "/versions/1:publish", owner, null));
+        ok(client.admin("POST", project + "/agents/" + agent + "/versions", owner, filled.fill(VERSION)));
+        v.put(
+                "tenant_rule",
+                ok(client.admin(
+                                "POST",
+                                base + "/permission-rules",
+                                owner,
+                                "{\"tool_name\":\"web_fetch\",\"behavior\":\"ask\"}"))
+                        .text("id"));
+        v.put(
+                "project_rule",
+                ok(client.admin(
+                                "POST",
+                                project + "/permission-rules",
+                                owner,
+                                "{\"tool_name\":\"read_file\",\"rule_content\":\"docs/**\",\"behavior\":\"allow\"}"))
+                        .text("id"));
+        return new TenantFixture(Map.copyOf(v));
+    }
+
+    /** 夹具技能的名字（frontmatter 的 {@code name}）。 */
+    public static final String SKILL_NAME = "fixture-skill";
+
+    /**
+     * 夹具智能体的版本请求体：引用夹具模型、MCP 服务的 {@code lookup_order} 与夹具技能，放行 {@code read_file}。占位符经 {@link #fill}
+     * 替换。
+     */
+    public static final String VERSION = """
+            {"spec":{"model":{"model_id":"{model}"},"system_prompt":"夹具智能体","tools":["read_file"],
+             "mcp_servers":[{"mcp_server_id":"{mcp}","enabled_tools":["lookup_order"]}],
+             "skills":[{"skill_id":"{skill}","version":1}],"subagents":[],
+             "permissions":{"mode":"default","rules":[{"tool_name":"read_file","behavior":"allow","layer":"agent_version"}]},
+             "compaction":{"reserved_tokens":20000},"plan_mode":false,
+             "knowledge":{"knowledge_base_ids":[],"prefetch":false,"prefetch_top_k":5},"max_iters":50,"expose_thinking":false}}
+            """;
+
+    /**
+     * 登记 MCP 服务的请求体。
+     *
+     * @param name 服务名
+     * @param transport 传输
+     * @param url 端点
+     * @param secretId {@code Authorization} 头的凭据
+     * @return JSON
+     */
+    public static String mcpServer(String name, String transport, String url, String secretId) {
+        return "{\"name\":\"" + name + "\",\"transport\":\"" + transport + "\",\"url\":\"" + url
+                + "\",\"header_secret_ids\":{\"Authorization\":\"" + secretId + "\"}}";
+    }
+
+    /**
+     * 只有 {@code SKILL.md} 的技能包请求体。
+     *
+     * @param name frontmatter 的 {@code name}
+     * @param description frontmatter 的 {@code description}
+     * @return JSON
+     */
+    public static String skillPackage(String name, String description) {
+        return "{\"files\":[{\"path\":\"SKILL.md\",\"content\":\"---\\nname: " + name + "\\ndescription: " + description
+                + "\\n---\\n# " + name + "\\n\"}]}";
+    }
+
     /** 价格表请求中的单价字段。 */
     public static final String PRICES =
             "\"prices\":{\"input\":\"0.8\",\"output\":\"2\",\"cache_read\":\"0.16\",\"cache_write\":\"0.8\",\"reasoning\":\"8\"}";

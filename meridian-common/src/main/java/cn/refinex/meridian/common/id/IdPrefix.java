@@ -51,7 +51,9 @@ public enum IdPrefix {
     /** 角色绑定（ADR-0042）。 */
     ROLE_BINDING("rbd"),
     /** 价格表（ADR-0045）。 */
-    PRICE_BOOK("prb");
+    PRICE_BOOK("prb"),
+    /** 租户与项目策略中的权限规则（ADR-0047）。 */
+    PERMISSION_RULE("prl");
 
     private final String value;
 

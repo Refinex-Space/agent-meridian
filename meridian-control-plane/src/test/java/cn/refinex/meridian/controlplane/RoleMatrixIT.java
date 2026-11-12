@@ -36,13 +36,13 @@ class RoleMatrixIT extends ControlPlaneTestBase {
 
     @BeforeAll
     void sharedFixture() {
-        shared = TenantFixture.create(client());
+        shared = TenantFixture.create(client()).withAgentConfig(client());
     }
 
     @ParameterizedTest(name = "{0} 由 {4} 执行：{5}")
     @MethodSource("cases")
     void roleMatrix(String id, String method, String path, String body, String subject, String expected) {
-        TenantFixture fixture = method.equals("GET") ? shared : TenantFixture.create(client());
+        TenantFixture fixture = method.equals("GET") ? shared : fresh(path, body);
         Reply reply = client().admin(method, fixture.fill(path), token(subject), fixture.fill(body));
 
         if (expected.equals("A")) {
@@ -56,6 +56,32 @@ class RoleMatrixIT extends ControlPlaneTestBase {
             assertThat(reply.text("code")).isEqualTo("access.forbidden");
         }
     }
+
+    /** 写操作用新建的租户；路径或请求体引用了智能体配置的资源（T15b）时才建它们，其余的行省掉这部分开销。 */
+    private TenantFixture fresh(String path, String body) {
+        TenantFixture fixture = TenantFixture.create(client());
+        String text = path + (body == null ? "" : body);
+        boolean agentConfig = AGENT_CONFIG_PLACEHOLDERS.stream().anyMatch(text::contains)
+                || AGENT_CONFIG_PATHS.stream().anyMatch(path::contains);
+        return agentConfig ? fixture.withAgentConfig(client()) : fixture;
+    }
+
+    /** 智能体配置资源的占位符（{@link TenantFixture#withAgentConfig}）。 */
+    private static final List<String> AGENT_CONFIG_PLACEHOLDERS = List.of(
+            "{agent}",
+            "{mcp}",
+            "{spare_mcp}",
+            "{mcp_url}",
+            "{mcp_secret}",
+            "{environment}",
+            "{skill}",
+            "{spare_skill}",
+            "{tenant_rule}",
+            "{project_rule}");
+
+    /** 智能体配置的路径：创建这些资源的写操作也要有项目里的其他资源（例如发布引用的 MCP 服务）。 */
+    private static final List<String> AGENT_CONFIG_PATHS =
+            List.of("/agents", "/environments", "/skills", "/mcp-servers", "/permission-rules");
 
     @Test
     void everyAdminOperationIsInTheTable() throws IOException {

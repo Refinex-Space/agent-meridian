@@ -33,6 +33,24 @@ public class ConfigInvalidations {
     /** 消息类型：价格表发布新版本，runtime 淘汰引用它的模型，用量记录随之带上新版本。 */
     public static final String PRICE_BOOK = "price_book";
 
+    /** 消息类型：智能体发布了新版本或被删除（{@code id} 为智能体 ID），runtime 淘汰当前版本与该智能体的版本缓存（ADR-0047）。 */
+    public static final String AGENT = "agent";
+
+    /** 消息类型：环境被修改（产生新修订）或删除，runtime 淘汰当前修订的缓存。 */
+    public static final String ENVIRONMENT = "environment";
+
+    /** 消息类型：技能上传了新版本或被删除。技能版本不可变，runtime 不缓存"最新版本"，只为完整起见发布。 */
+    public static final String SKILL = "skill";
+
+    /** 消息类型：MCP 服务变更或删除。已发布的版本持有发布时的快照，runtime 不需要淘汰，只为完整起见发布。 */
+    public static final String MCP_SERVER = "mcp_server";
+
+    /** 消息类型：租户或项目策略变更（{@code id} 为租户 ID 或项目 ID），runtime 淘汰权限规则的缓存。 */
+    public static final String PERMISSION_POLICY = "permission_policy";
+
+    /** 消息类型：租户设置变更（{@code id} 为租户 ID），runtime 淘汰租户设置并淘汰该租户已装配的智能体实例（D32）。 */
+    public static final String TENANT_SETTINGS = "tenant_settings";
+
     private static final Logger log = LoggerFactory.getLogger(ConfigInvalidations.class);
 
     private final RedisMessaging redis;
@@ -63,9 +81,10 @@ public class ConfigInvalidations {
     }
 
     /**
-     * 一个资源变更（ADR-0045 第 4 条）：在当前事务提交后发布 {@code {"type":…,"tenant_id":…,"id":…}}。
+     * 一个资源变更（ADR-0045 第 4 条、ADR-0047）：在当前事务提交后发布 {@code {"type":…,"tenant_id":…,"id":…}}。
      *
-     * @param type 资源类型：{@link #SECRET}、{@link #PROVIDER_ACCOUNT}、{@link #MODEL}、{@link #PRICE_BOOK}
+     * @param type 资源类型：{@link #SECRET}、{@link #PROVIDER_ACCOUNT}、{@link #MODEL}、{@link #PRICE_BOOK}、{@link #AGENT}、
+     *     {@link #ENVIRONMENT}、{@link #SKILL}、{@link #MCP_SERVER}、{@link #PERMISSION_POLICY}、{@link #TENANT_SETTINGS}
      * @param tenantId 租户 ID
      * @param id 资源 ID
      */
