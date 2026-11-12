@@ -1,6 +1,7 @@
 package cn.refinex.meridian.engine.agentscope.model;
 
 import cn.refinex.meridian.common.concurrent.Blocking;
+import cn.refinex.meridian.common.crypto.Sha256;
 import cn.refinex.meridian.engine.spi.error.ProviderRejectedException;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -29,13 +30,9 @@ import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.ToolSchema;
 import io.agentscope.core.model.transport.HttpTransportException;
 import io.agentscope.extensions.model.gemini.formatter.GeminiChatFormatter;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -181,12 +178,7 @@ final class GeminiContentModel extends ChatModelBase {
     }
 
     private static String fingerprint(String apiKey) {
-        try {
-            return HexFormat.of()
-                    .formatHex(MessageDigest.getInstance("SHA-256").digest(apiKey.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
+        return Sha256.hex(apiKey);
     }
 
     private static void closeClient(String key, Client client, RemovalCause cause) {

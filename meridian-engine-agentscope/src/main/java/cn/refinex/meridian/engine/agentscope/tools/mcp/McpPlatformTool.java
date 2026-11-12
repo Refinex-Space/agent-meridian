@@ -33,9 +33,6 @@ final class McpPlatformTool extends PlatformTool {
     /** {@code _meta} 中幂等键的名字。 */
     static final String IDEMPOTENCY_META_KEY = "meridian/idempotency_key";
 
-    /** 一次输出的字符上限，与其他平台工具相同。 */
-    static final int MAX_OUTPUT_CHARS = 50_000;
-
     /** 等待工具调用的上限，略大于客户端的请求超时。 */
     static final Duration CALL_TIMEOUT = McpConnector.REQUEST_TIMEOUT.plusSeconds(10);
 
@@ -99,9 +96,9 @@ final class McpPlatformTool extends PlatformTool {
         }
         String text = redact(render(result), credentials);
         String note = "";
-        if (text.length() > MAX_OUTPUT_CHARS) {
-            note = "\n[Output truncated to " + MAX_OUTPUT_CHARS + " of " + text.length() + " characters.]";
-            text = text.substring(0, MAX_OUTPUT_CHARS);
+        if (text.length() > PlatformTool.MAX_OUTPUT_CHARS) {
+            note = "\n[Output truncated to " + PlatformTool.MAX_OUTPUT_CHARS + " of " + text.length() + " characters.]";
+            text = text.substring(0, PlatformTool.MAX_OUTPUT_CHARS);
         }
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("server", server.name());

@@ -18,6 +18,7 @@ import cn.refinex.meridian.engine.spi.driver.ModelInvoker.ToolDefinition;
 import cn.refinex.meridian.engine.spi.error.BudgetExceededException;
 import cn.refinex.meridian.engine.spi.event.TokenUsage;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.CallPurpose;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
@@ -38,8 +39,8 @@ class RoutedModelInvokerTest {
             .projectId("prj_t")
             .apiKeyId("key_t")
             .build();
-    private static final RoutedModel.RetryPolicy FAST_RETRY =
-            new RoutedModel.RetryPolicy(2, Duration.ofMillis(1), Duration.ofSeconds(1));
+    private static final ProviderRetryPolicy FAST_RETRY =
+            new ProviderRetryPolicy(2, Duration.ofMillis(1), Duration.ofSeconds(1));
 
     private final InMemoryModelGateway gateway = new InMemoryModelGateway().route(MODEL, "up-direct", 32_000, 800);
     private final StaticProviderClientFactory providers = new StaticProviderClientFactory();

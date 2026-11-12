@@ -99,6 +99,19 @@ class EventAdmissionTest {
     }
 
     @Test
+    void messagesReferencingPlatformFilesAreDowngradedToQueue() {
+        UserEvent.Message withFile = new UserEvent.Message(
+                List.of(new MessageContent.Text("看附件"), new MessageContent.FileRef("fil_1", null, null)),
+                UserEvent.Delivery.STEER);
+        UserEvent.Message withImageUrl = new UserEvent.Message(
+                List.of(new MessageContent.Image("https://e.com/a.png", null, null)), UserEvent.Delivery.STEER);
+
+        assertThat(EventAdmission.deliveries(List.of(withFile, withImageUrl)))
+                .as("文件在轮次开始时才放进工作区（ADR-0050）；URL 图片不受影响")
+                .containsExactly(UserEvent.Delivery.QUEUE, UserEvent.Delivery.STEER);
+    }
+
+    @Test
     void errorCodesAreWellFormed() {
         ErrorCodes.verify(EventErrorCode.values());
         assertThat(action("act_1", PendingAction.Type.PLAN_EXIT, PendingActionStatus.PENDING)

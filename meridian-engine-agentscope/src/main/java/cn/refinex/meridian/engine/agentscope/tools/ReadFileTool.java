@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * {@code read_file}：读取工作区中的文本文件，按行号输出；规则内容为路径 glob，副作用等级 {@code none}（架构设计「平台工具」）。
  *
- * <p>输出有上限：默认最多 {@value #DEFAULT_LIMIT} 行，每行最多 {@value #MAX_LINE_CHARS} 字符，总长最多 {@value #MAX_OUTPUT_CHARS}
+ * <p>输出有上限：默认最多 {@value #DEFAULT_LIMIT} 行，每行最多 {@value #MAX_LINE_CHARS} 字符，总长最多 {@value PlatformTool#MAX_OUTPUT_CHARS}
  * 字符（低于工具结果卸载的 80000 字符阈值，结果不会被卸载到 {@code large_tool_results/}）。截断时在末尾说明如何用
  * {@code offset} 继续读取。结果带读取状态，供 {@code edit_file}、{@code write_file} 检查"先读后改"。
  */
@@ -19,9 +19,6 @@ public final class ReadFileTool extends PlatformTool {
 
     /** 单行的字符上限，超出部分截断。 */
     static final int MAX_LINE_CHARS = 2000;
-
-    /** 一次输出的字符上限。 */
-    static final int MAX_OUTPUT_CHARS = 50_000;
 
     static final String DESCRIPTION = """
             Read a text file from the session workspace and return its lines with line numbers.
@@ -104,7 +101,7 @@ public final class ReadFileTool extends PlatformTool {
                 line = line.substring(0, MAX_LINE_CHARS) + " … [line truncated]";
             }
             String numbered = String.format("%6d\t%s\n", i + 1, line);
-            if (out.length() + numbered.length() > MAX_OUTPUT_CHARS) {
+            if (out.length() + numbered.length() > PlatformTool.MAX_OUTPUT_CHARS) {
                 break;
             }
             out.append(numbered);

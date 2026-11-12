@@ -337,6 +337,182 @@ class ModelEndpointsIT extends ApiTestBase {
                 .isEqualTo("messages.0.tool_call_id");
     }
 
+    // ---- /v1/responses（T17b-A04，ADR-0050） ----
+
+    @Test
+    void nonStreamingResponseFollowsTheSubsetAndIsMetered() {
+        ApiTestClient api = api(ApiTestKeys.KEY_A);
+        int usageBefore = usageRecords().size();
+        String request = """
+                {"model": "%s", "instructions": "回答控制在一句话以内", "max_output_tokens": 128, "temperature": 0.3,
+                 "store": false,
+                 "input": [{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "好的"}]},
+                           {"role": "developer", "content": [{"type": "input_text", "text": "补充说明"}]},
+                           {"role": "user", "content": "#script:chat"}]}
+                """.formatted(CHAT);
+        String key = "responses-" + System.nanoTime();
+
+        ApiResponse response = api.call("POST /v1/responses", HttpMethod.POST, "/v1/responses", request, key);
+
+        assertThat(response.status()).isEqualTo(200);
+        JsonNode body = response.body();
+        assertThat(body.get("id").asString()).startsWith("resp_");
+        assertThat(body.get("object").asString()).isEqualTo("response");
+        assertThat(body.get("status").asString()).isEqualTo("completed");
+        assertThat(body.get("model").asString()).isEqualTo(CHAT);
+        assertThat(body.get("incomplete_details").isNull()).isTrue();
+        assertThat(body.get("error").isNull()).isTrue();
+        JsonNode item = body.get("output").get(0);
+        assertThat(item.get("type").asString()).isEqualTo("message");
+        assertThat(item.get("id").asString()).startsWith("msg_");
+        assertThat(item.get("role").asString()).isEqualTo("assistant");
+        assertThat(item.get("content").get(0).get("type").asString()).isEqualTo("output_text");
+        assertThat(item.get("content").get(0).get("text").asString()).startsWith("你好，我是脚本化模型。");
+        JsonNode usage = body.get("usage");
+        assertThat(usage.get("total_tokens").asInt())
+                .isEqualTo(usage.get("input_tokens").asInt()
+                        + usage.get("output_tokens").asInt());
+
+        // 与对话补全共用 ModelInvoker：一条用量记录，数值与响应一致
+        List<Map<String, Object>> records = usageRecords();
+        assertThat(records).hasSize(usageBefore + 1);
+        assertThat(records.getLast())
+                .containsEntry("model_id", CHAT)
+                .containsEntry("api_key_id", "key_test_a")
+                .containsEntry("input_tokens", usage.get("input_tokens").asInt())
+                .containsEntry("output_tokens", usage.get("output_tokens").asInt());
+        // instructions 是第一条系统消息，developer 与 system 相同，历史的助手消息原样带上
+        String sent = SERVER.calls().getLast().body();
+        assertThat(sent).contains("回答控制在一句话以内", "补充说明", "好的");
+
+        ApiResponse replayed = api.call("POST /v1/responses", HttpMethod.POST, "/v1/responses", request, key);
+        assertThat(replayed.headers().getFirst("Idempotent-Replayed")).isEqualTo("true");
+        assertThat(replayed.text("id")).isEqualTo(body.get("id").asString());
+        assertThat(usageRecords()).as("重放不再调用模型").hasSize(usageBefore + 1);
+    }
+
+    @Test
+    void streamingResponseSendsTheEventSequenceAndEndsWithUsage() {
+        Stream stream = responses(ApiTestKeys.KEY_A, """
+                {"model": "%s", "stream": true, "input": "#script:chat"}
+                """.formatted(CHAT));
+
+        assertThat(stream.status()).isEqualTo(200);
+        List<JsonNode> events = stream.chunks();
+        List<String> types = events.stream().map(e -> e.get("type").asString()).toList();
+        assertThat(types.subList(0, 4))
+                .containsExactly(
+                        "response.created",
+                        "response.in_progress",
+                        "response.output_item.added",
+                        "response.content_part.added");
+        assertThat(types.subList(types.size() - 4, types.size()))
+                .containsExactly(
+                        "response.output_text.done",
+                        "response.content_part.done",
+                        "response.output_item.done",
+                        "response.completed");
+        assertThat(types.subList(4, types.size() - 4)).isNotEmpty().allMatch("response.output_text.delta"::equals);
+        assertThat(events)
+                .extracting(e -> e.get("sequence_number").asInt())
+                .containsExactlyElementsOf(java.util.stream.IntStream.range(0, events.size())
+                        .boxed()
+                        .toList());
+        assertThat(stream.raw()).as("SSE 的 event: 与 type 相同").contains("event:response.created\n");
+
+        String deltas = events.stream()
+                .filter(e -> e.get("type").asString().equals("response.output_text.delta"))
+                .map(e -> e.get("delta").asString())
+                .reduce("", String::concat);
+        JsonNode completed = events.getLast().get("response");
+        assertThat(completed.get("status").asString()).isEqualTo("completed");
+        assertThat(completed
+                        .get("output")
+                        .get(0)
+                        .get("content")
+                        .get(0)
+                        .get("text")
+                        .asString())
+                .isEqualTo(deltas);
+        assertThat(events.get(events.size() - 4).get("text").asString()).isEqualTo(deltas);
+        assertThat(completed.get("usage").get("output_tokens").asInt()).isPositive();
+        assertThat(events.getFirst().get("response").get("status").asString()).isEqualTo("in_progress");
+        assertThat(events.getFirst().get("response").get("usage").isNull()).isTrue();
+    }
+
+    @Test
+    void responsesErrorsBeforeAndAfterTheFirstChunk() {
+        Stream unavailable = responses(ApiTestKeys.KEY_A, """
+                {"model": "%s", "stream": true, "input": "#script:error-before-first-chunk"}
+                """.formatted(CHAT));
+        assertThat(unavailable.status()).isEqualTo(503);
+        assertThat(unavailable.problemCode()).isEqualTo("model.provider_unavailable");
+
+        Stream broken = responses(ApiTestKeys.KEY_A, """
+                {"model": "%s", "stream": true, "input": "#script:error-after-first-chunk"}
+                """.formatted(CHAT));
+        assertThat(broken.status()).isEqualTo(200);
+        JsonNode failed = broken.chunks().getLast();
+        assertThat(failed.get("type").asString()).isEqualTo("response.failed");
+        assertThat(failed.get("response").get("status").asString()).isEqualTo("failed");
+        assertThat(failed.get("response").get("error").get("code").asString()).isEqualTo("model.provider_unavailable");
+
+        ApiResponse streamWithKey = api(ApiTestKeys.KEY_A)
+                .call(
+                        "POST /v1/responses",
+                        HttpMethod.POST,
+                        "/v1/responses",
+                        "{\"model\": \"" + CHAT + "\", \"stream\": true, \"input\": \"你好\"}",
+                        "responses-stream-" + System.nanoTime());
+        assertThat(streamWithKey.status()).isEqualTo(400);
+    }
+
+    @Test
+    void unsupportedParametersAndInputItemsAreRejectedExplicitly() {
+        ApiTestClient api = api(ApiTestKeys.KEY_A);
+        ApiResponse unsupported =
+                api.call("POST /v1/responses", HttpMethod.POST, "/v1/responses", """
+                {"model": "%s", "input": "你好", "previous_response_id": "resp_1", "store": true,
+                 "tools": [{"type": "function", "name": "lookup_order"}], "reasoning": {"effort": "low"}}
+                """.formatted(CHAT), null);
+        assertThat(unsupported.status()).isEqualTo(400);
+        assertThat(unsupported.text("code")).isEqualTo("model.unsupported_parameter");
+        assertThat(unsupported
+                        .body()
+                        .get("errors")
+                        .valueStream()
+                        .map(e -> e.get("field").asString()))
+                .containsExactly("tools", "previous_response_id", "reasoning", "store");
+
+        ApiResponse image =
+                api.callInvalid("POST /v1/responses", HttpMethod.POST, "/v1/responses", """
+                {"model": "%s", "input": [{"role": "user", "content": [{"type": "input_image", "image_url": "https://e.com/a.png"}]},
+                                          {"type": "function_call_output", "call_id": "c1", "output": "x"}]}
+                """.formatted(CHAT), Map.of());
+        assertThat(image.text("code")).isEqualTo("model.unsupported_parameter");
+        assertThat(image.body()
+                        .get("errors")
+                        .valueStream()
+                        .map(e -> e.get("field").asString()))
+                .containsExactly("input[0].content[0].type", "input[1].type");
+
+        ApiResponse unknown = api.callInvalid(
+                "POST /v1/responses",
+                HttpMethod.POST,
+                "/v1/responses",
+                "{\"model\": \"" + CHAT + "\", \"input\": \"你好\", \"top_k\": 3}",
+                Map.of());
+        assertThat(unknown.status()).isEqualTo(400);
+        assertThat(unknown.text("code")).isEqualTo("request.invalid");
+
+        ApiResponse badRole =
+                api.callInvalid("POST /v1/responses", HttpMethod.POST, "/v1/responses", """
+                {"model": "%s", "input": [{"role": "tool", "content": "x"}]}
+                """.formatted(CHAT), Map.of());
+        assertThat(badRole.status()).isEqualTo(400);
+        assertThat(badRole.text("code")).isEqualTo("request.validation_failed");
+    }
+
     // ---- /v1/embeddings 与内部接口（A02） ----
 
     @Test
@@ -442,8 +618,17 @@ class ModelEndpointsIT extends ApiTestBase {
     // ---- 辅助 ----
 
     private Stream stream(String apiKey, String body) {
+        return stream(apiKey, body, "/v1/chat/completions", "ChatCompletionChunk");
+    }
+
+    /** {@code /v1/responses} 的流式请求：每个事件按 {@code ResponseStreamEvent} 校验，没有结束标记。 */
+    private Stream responses(String apiKey, String body) {
+        return stream(apiKey, body, "/v1/responses", "ResponseStreamEvent");
+    }
+
+    private Stream stream(String apiKey, String body, String path, String chunkSchema) {
         EntityExchangeResult<byte[]> result = client().post()
-                .uri("/v1/chat/completions")
+                .uri(path)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
@@ -469,14 +654,14 @@ class ModelEndpointsIT extends ApiTestBase {
             // 每个块（除了结束标记与错误块）按规范的 ChatCompletionChunk 校验
             for (String chunk : data) {
                 if (!chunk.equals(ModelsApiController.DONE) && !chunk.startsWith("{\"error\"")) {
-                    ContractValidator.validateSchema(chunk, "ChatCompletionChunk");
+                    ContractValidator.validateSchema(chunk, chunkSchema);
                 }
             }
         } else {
             response.withBody(text);
             ContractValidator.validate(
-                    "POST /v1/chat/completions",
-                    new SimpleRequest.Builder(Request.Method.POST, "/v1/chat/completions")
+                    "POST " + path,
+                    new SimpleRequest.Builder(Request.Method.POST, path)
                             .withHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                             .withContentType(MediaType.APPLICATION_JSON_VALUE)
                             .withBody(body)

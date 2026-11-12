@@ -1,11 +1,13 @@
-package cn.refinex.meridian.runtime.modelrouting.domain;
+package cn.refinex.meridian.common.text;
 
 import java.util.List;
 
 /**
- * Embedding 与 rerank 输入的 token 估算，用于限流与预扣，以及供应商没有报告用量时的计量。规则与内核的 {@code TokenEstimator} 相同
- * （ADR-0032）：ASCII 每 3 个字符 1 个 token，其余字符每个 1 个，误差方向偏多。内核的估算器在 {@code meridian-engine-agentscope} 中，
- * runtime 的业务包不能引用它（ArchUnit 规则 2）。
+ * 按字符数估算文本的 token，用于预算预扣、限流，以及供应商没有报告用量时的计量（架构设计「模型调用」，ADR-0032）：ASCII 每 3 个字符
+ * 1 个 token，其余字符每个 1 个，误差方向偏多。内核的 {@code TokenEstimator}（消息、工具与媒体块）与 runtime 的 Embedding、rerank
+ * 都以它估算文本，规则只有这一份（R1 Q-M1）。
+ *
+ * <p>纯函数，线程安全。
  */
 public final class TextTokens {
 

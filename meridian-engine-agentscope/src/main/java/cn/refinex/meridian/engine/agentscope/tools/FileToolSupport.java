@@ -1,5 +1,6 @@
 package cn.refinex.meridian.engine.agentscope.tools;
 
+import cn.refinex.meridian.common.crypto.Sha256;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.ToolResultBlock;
@@ -8,10 +9,6 @@ import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.state.AgentState;
 import io.agentscope.harness.agent.filesystem.model.FileData;
 import io.agentscope.harness.agent.filesystem.model.ReadResult;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -92,12 +89,7 @@ final class FileToolSupport {
      * @return 哈希
      */
     static String sha256(String content) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(content.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", e);
-        }
+        return Sha256.hex(content);
     }
 
     /**

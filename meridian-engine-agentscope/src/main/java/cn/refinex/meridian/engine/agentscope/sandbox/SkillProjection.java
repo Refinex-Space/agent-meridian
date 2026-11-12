@@ -1,16 +1,14 @@
 package cn.refinex.meridian.engine.agentscope.sandbox;
 
+import cn.refinex.meridian.common.crypto.Sha256;
 import cn.refinex.meridian.engine.spi.driver.SandboxDriver;
 import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,8 +74,8 @@ final class SkillProjection {
         }
         StringBuilder lines = new StringBuilder();
         files.forEach((path, content) ->
-                lines.append(sha256(content)).append("  ./").append(path).append('\n'));
-        return sha256(lines.toString().getBytes(StandardCharsets.UTF_8));
+                lines.append(Sha256.hex(content)).append("  ./").append(path).append('\n'));
+        return Sha256.hex(lines.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -117,13 +115,5 @@ final class SkillProjection {
             throw new UncheckedIOException("打包文件失败", e);
         }
         return bytes.toByteArray();
-    }
-
-    private static String sha256(byte[] content) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", e);
-        }
     }
 }

@@ -9,6 +9,7 @@ import cn.refinex.meridian.engine.agentscope.model.ProviderClients;
 import cn.refinex.meridian.engine.agentscope.model.ProviderHttpTransport;
 import cn.refinex.meridian.engine.agentscope.model.RoutedModel;
 import cn.refinex.meridian.engine.agentscope.model.RoutedModelFactory;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import cn.refinex.meridian.engine.spi.port.SecretResolver;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
@@ -255,7 +256,7 @@ final class ModelRoutingFixture implements AutoCloseable {
      * @param retryPolicy 重试策略
      * @return 模型
      */
-    RoutedModel routedModel(ModelSpec spec, RoutedModel.RetryPolicy retryPolicy) {
+    RoutedModel routedModel(ModelSpec spec, ProviderRetryPolicy retryPolicy) {
         return routedModel(spec, retryPolicy, new OpenAiCompatibleClientFactory(transport));
     }
 
@@ -267,8 +268,7 @@ final class ModelRoutingFixture implements AutoCloseable {
      * @param providerFactory 底层客户端工厂
      * @return 模型
      */
-    RoutedModel routedModel(
-            ModelSpec spec, RoutedModel.RetryPolicy retryPolicy, ProviderClientFactory providerFactory) {
+    RoutedModel routedModel(ModelSpec spec, ProviderRetryPolicy retryPolicy, ProviderClientFactory providerFactory) {
         return (RoutedModel) new RoutedModelFactory(gateway, new ProviderClients(List.of(providerFactory)), retryPolicy)
                 .create("agv_fixture", spec);
     }
@@ -304,8 +304,8 @@ final class ModelRoutingFixture implements AutoCloseable {
     }
 
     /** 快速重试的策略：首次等待 10 毫秒，原地等待最长 5 秒。 */
-    static RoutedModel.RetryPolicy fastRetry() {
-        return new RoutedModel.RetryPolicy(2, Duration.ofMillis(10), Duration.ofSeconds(5));
+    static ProviderRetryPolicy fastRetry() {
+        return new ProviderRetryPolicy(2, Duration.ofMillis(10), Duration.ofSeconds(5));
     }
 
     @Override

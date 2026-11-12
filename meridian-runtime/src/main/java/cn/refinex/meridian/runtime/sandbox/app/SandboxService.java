@@ -2,6 +2,7 @@ package cn.refinex.meridian.runtime.sandbox.app;
 
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
+import cn.refinex.meridian.common.crypto.Sha256;
 import cn.refinex.meridian.common.error.ConflictException;
 import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.engine.spi.driver.SandboxDriver;
@@ -27,11 +28,8 @@ import cn.refinex.meridian.runtime.sandbox.infra.SessionSandboxRepository;
 import cn.refinex.meridian.runtime.session.domain.SessionErrorCode;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -341,7 +339,7 @@ public class SandboxService {
             String key = SandboxObjectKeys.output(platform.tenantId(), platform.projectId(), sessionId, file.path());
             objects.put(key, content, contentType(file.path()));
             // 以读到的内容为准：清单与读取之间文件可能又被改过
-            outputs.upsert(sessionId, file.path(), content.length, sha256(content), key, clock.instant());
+            outputs.upsert(sessionId, file.path(), content.length, Sha256.hex(content), key, clock.instant());
         }
         for (String path : plan.deletions()) {
             objects.delete(SandboxObjectKeys.output(platform.tenantId(), platform.projectId(), sessionId, path));
@@ -467,14 +465,6 @@ public class SandboxService {
         return MediaTypeFactory.getMediaType(path)
                 .orElse(MediaType.APPLICATION_OCTET_STREAM)
                 .toString();
-    }
-
-    private static String sha256(byte[] content) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", e);
-        }
     }
 
     /** 空闲回收的判定结果。 */

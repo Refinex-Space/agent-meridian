@@ -51,7 +51,7 @@ public final class ContractValidator {
 
     /** runtime 提供的公开标签，与本模块 POM 中 {@code generate-public-server} 的 {@code apisToGenerate} 相同。 */
     private static final Set<String> RUNTIME_TAGS =
-            Set.of("Sessions", "Events", "Threads", "PendingActions", "Models", "Webhooks");
+            Set.of("Sessions", "Events", "Threads", "PendingActions", "Models", "Webhooks", "Files", "Workspace");
 
     /**
      * 由别的服务提供的公开标签：{@code Agents}（ADR-0047，契约校验在其 {@code AgentVersionIT}）与 {@code Usage}（ADR-0048，契约校验在其

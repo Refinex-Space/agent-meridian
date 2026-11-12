@@ -52,6 +52,12 @@ public abstract class PlatformTool extends ToolBase {
 
     private static final Logger log = LoggerFactory.getLogger(PlatformTool.class);
 
+    /**
+     * 平台工具一次输出的约定上限，单位字符：超过时由工具自己截断并提示如何续读（低于工具结果卸载阈值 80000，ADR-0034）。各工具共用这一个
+     * 值（R1 Q-L3）；{@code bash} 的上限更低，见 {@code BashTool}。
+     */
+    public static final int MAX_OUTPUT_CHARS = 50_000;
+
     private final SideEffect sideEffect;
     private final RuleSyntax ruleSyntax;
     private final ToolLedgerPort ledger;

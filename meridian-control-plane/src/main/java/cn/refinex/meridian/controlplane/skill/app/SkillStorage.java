@@ -1,13 +1,11 @@
 package cn.refinex.meridian.controlplane.skill.app;
 
+import cn.refinex.meridian.common.crypto.Sha256;
 import cn.refinex.meridian.controlplane.skill.domain.SkillFile;
 import cn.refinex.meridian.controlplane.skill.domain.SkillVersion;
 import cn.refinex.meridian.persistence.objectstore.ObjectStore;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -45,7 +43,7 @@ public class SkillStorage {
         for (Map.Entry<String, String> file : files.entrySet()) {
             byte[] bytes = file.getValue().getBytes(StandardCharsets.UTF_8);
             objects.put(objectRoot + file.getKey(), bytes, contentType(file.getKey()));
-            manifest.add(new SkillFile(file.getKey(), bytes.length, sha256(bytes)));
+            manifest.add(new SkillFile(file.getKey(), bytes.length, Sha256.hex(bytes)));
         }
         return List.copyOf(manifest);
     }
@@ -70,13 +68,5 @@ public class SkillStorage {
 
     private static String contentType(String path) {
         return path.endsWith(".md") ? "text/markdown; charset=utf-8" : "text/plain; charset=utf-8";
-    }
-
-    private static String sha256(byte[] bytes) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", e);
-        }
     }
 }

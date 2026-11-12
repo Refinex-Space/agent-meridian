@@ -15,6 +15,7 @@ import cn.refinex.meridian.engine.spi.event.TokenUsage;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.CallPurpose;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelCallRecord;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.UsageSource;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
@@ -51,8 +52,8 @@ class RoutedModelTest {
             .turnId("trn_t")
             .leaseEpoch(1L)
             .build();
-    private static final RoutedModel.RetryPolicy FAST_RETRY =
-            new RoutedModel.RetryPolicy(2, Duration.ofMillis(1), Duration.ofSeconds(1));
+    private static final ProviderRetryPolicy FAST_RETRY =
+            new ProviderRetryPolicy(2, Duration.ofMillis(1), Duration.ofSeconds(1));
     private static final List<Msg> MESSAGES = List.of(Msg.builder()
             .role(MsgRole.USER)
             .content(TextBlock.builder().text("你好").build())
@@ -283,7 +284,7 @@ class RoutedModelTest {
 
     @Test
     void backoffDoublesHonoursRetryAfterAndGivesUpBeyondTheInPlaceLimit() {
-        RoutedModel.RetryPolicy policy = new RoutedModel.RetryPolicy(2, Duration.ofMillis(500), Duration.ofSeconds(10));
+        ProviderRetryPolicy policy = new ProviderRetryPolicy(2, Duration.ofMillis(500), Duration.ofSeconds(10));
 
         assertThat(policy.backoff(0, Optional.empty())).contains(Duration.ofMillis(500));
         assertThat(policy.backoff(1, Optional.empty())).contains(Duration.ofSeconds(1));

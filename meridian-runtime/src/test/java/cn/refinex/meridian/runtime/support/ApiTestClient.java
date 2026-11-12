@@ -12,11 +12,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.test.web.reactive.server.EntityExchangeResult;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.reactive.function.BodyInserters;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -27,6 +30,7 @@ import tools.jackson.databind.JsonNode;
 public final class ApiTestClient {
 
     private final WebTestClient client;
+    private final String baseUrl;
     private final String apiKey;
     private final Map<String, String> defaultHeaders;
 
@@ -48,8 +52,9 @@ public final class ApiTestClient {
      * @param defaultHeaders 每个请求都带的请求头
      */
     public ApiTestClient(int port, String bearer, Map<String, String> defaultHeaders) {
+        this.baseUrl = "http://localhost:" + port;
         this.client = WebTestClient.bindToServer()
-                .baseUrl("http://localhost:" + port)
+                .baseUrl(baseUrl)
                 .responseTimeout(Duration.ofSeconds(30))
                 .build();
         this.apiKey = bearer;
@@ -202,6 +207,103 @@ public final class ApiTestClient {
                 withQuery("/v1/sessions/" + sessionId + "/pending-actions", query),
                 null,
                 null);
+    }
+
+    /**
+     * 以 {@code multipart/form-data} 上传一个文件（{@code POST /v1/files}），只校验响应（校验库不解析表单请求体）。
+     *
+     * @param filename 表单中的文件名
+     * @param content 内容
+     * @param idempotencyKey 幂等键；可为空
+     * @return 响应
+     */
+    public ApiResponse uploadFile(String filename, byte[] content, String idempotencyKey) {
+        MultipartBodyBuilder form = new MultipartBodyBuilder();
+        form.part("file", new ByteArrayResource(content) {
+                    @Override
+                    public String getFilename() {
+                        return filename;
+                    }
+                })
+                .contentType(MediaType.APPLICATION_OCTET_STREAM);
+        WebTestClient.RequestBodySpec spec = client.post().uri("/v1/files");
+        headers(idempotencyKey).forEach(spec::header);
+        EntityExchangeResult<byte[]> result = spec.contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(form.build()))
+                .exchange()
+                .expectBody(byte[].class)
+                .returnResult();
+        return jsonResponse("POST /v1/files", Request.Method.POST, "/v1/files", result);
+    }
+
+    /**
+     * 发出一个响应体为二进制内容的请求（文件内容、工作区文件），可带二进制请求体，只校验响应。
+     *
+     * @param operation 操作名
+     * @param method HTTP 方法
+     * @param path 路径（工作区路径已 URL 编码）
+     * @param body 请求体；可为空
+     * @return 响应：成功时 {@code bytes} 是内容，错误时 {@code problem} 是 problem+json
+     */
+    public BinaryResponse binary(String operation, HttpMethod method, String path, byte[] body) {
+        // 绝对 URI 原样发出：工作区路径中的 %2F 不被再次编码
+        WebTestClient.RequestBodySpec spec = client.method(method).uri(URI.create(baseUrl + path));
+        headers(null).forEach(spec::header);
+        WebTestClient.RequestHeadersSpec<?> request = body == null
+                ? spec
+                : spec.contentType(MediaType.APPLICATION_OCTET_STREAM).bodyValue(body);
+        EntityExchangeResult<byte[]> result =
+                request.exchange().expectBody(byte[].class).returnResult();
+        byte[] bytes = result.getResponseBody() == null ? new byte[0] : result.getResponseBody();
+        SimpleResponse.Builder response =
+                SimpleResponse.Builder.status(result.getStatus().value());
+        result.getResponseHeaders().forEach((name, values) -> response.withHeader(name, values));
+        MediaType type = result.getResponseHeaders().getContentType();
+        boolean json = type != null
+                && (type.isCompatibleWith(MediaType.APPLICATION_JSON)
+                        || type.isCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+        if (json && bytes.length > 0) {
+            response.withBody(new String(bytes, StandardCharsets.UTF_8));
+        } else if (bytes.length > 0) {
+            // 二进制内容按 type: string, format: binary 校验，只要求有响应体
+            response.withBody(new String(bytes, StandardCharsets.ISO_8859_1));
+        }
+        ContractValidator.validateResponse(operation, path, Request.Method.valueOf(method.name()), response.build());
+        return new BinaryResponse(
+                result.getStatus().value(),
+                result.getResponseHeaders(),
+                bytes,
+                json && bytes.length > 0
+                        ? JsonMappers.lenient().readTree(new String(bytes, StandardCharsets.UTF_8))
+                        : null);
+    }
+
+    private Map<String, String> headers(String idempotencyKey) {
+        Map<String, String> headers = new LinkedHashMap<>(defaultHeaders);
+        if (apiKey != null) {
+            headers.putIfAbsent(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
+        }
+        if (idempotencyKey != null) {
+            headers.put("Idempotency-Key", idempotencyKey);
+        }
+        return headers;
+    }
+
+    private static ApiResponse jsonResponse(
+            String operation, Request.Method method, String path, EntityExchangeResult<byte[]> result) {
+        String responseBody =
+                result.getResponseBody() == null ? null : new String(result.getResponseBody(), StandardCharsets.UTF_8);
+        SimpleResponse.Builder response =
+                SimpleResponse.Builder.status(result.getStatus().value());
+        result.getResponseHeaders().forEach((name, values) -> response.withHeader(name, values));
+        if (responseBody != null && !responseBody.isEmpty()) {
+            response.withBody(responseBody);
+        }
+        ContractValidator.validateResponse(operation, path, method, response.build());
+        JsonNode json = responseBody == null || responseBody.isEmpty()
+                ? null
+                : JsonMappers.lenient().readTree(responseBody);
+        return new ApiResponse(result.getStatus().value(), result.getResponseHeaders(), json);
     }
 
     /**
@@ -379,4 +481,14 @@ public final class ApiTestClient {
             return body.get(field).asString();
         }
     }
+
+    /**
+     * 一次二进制响应。
+     *
+     * @param status 状态码
+     * @param headers 响应头
+     * @param bytes 响应体
+     * @param problem 错误时的 problem+json；成功时为空
+     */
+    public record BinaryResponse(int status, HttpHeaders headers, byte[] bytes, JsonNode problem) {}
 }

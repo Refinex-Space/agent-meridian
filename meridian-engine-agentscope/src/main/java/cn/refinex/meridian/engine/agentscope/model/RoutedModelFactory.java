@@ -3,6 +3,7 @@ package cn.refinex.meridian.engine.agentscope.model;
 import cn.refinex.meridian.engine.agentscope.assembly.ModelFactory;
 import cn.refinex.meridian.engine.spi.port.ModelGateway;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelDescriptor;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import io.agentscope.core.model.Model;
 import java.time.Duration;
@@ -24,7 +25,7 @@ public final class RoutedModelFactory implements ModelFactory {
 
     private final ModelGateway gateway;
     private final ProviderClients clients;
-    private final RoutedModel.RetryPolicy retryPolicy;
+    private final ProviderRetryPolicy retryPolicy;
 
     /**
      * 创建工厂。
@@ -33,7 +34,7 @@ public final class RoutedModelFactory implements ModelFactory {
      * @param clients 底层客户端的登记与缓存
      * @param retryPolicy 首包之前的重试策略
      */
-    public RoutedModelFactory(ModelGateway gateway, ProviderClients clients, RoutedModel.RetryPolicy retryPolicy) {
+    public RoutedModelFactory(ModelGateway gateway, ProviderClients clients, ProviderRetryPolicy retryPolicy) {
         this.gateway = Objects.requireNonNull(gateway, "gateway");
         this.clients = Objects.requireNonNull(clients, "clients");
         this.retryPolicy = Objects.requireNonNull(retryPolicy, "retryPolicy");

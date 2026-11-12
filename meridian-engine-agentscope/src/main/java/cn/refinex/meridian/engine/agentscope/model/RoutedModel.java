@@ -12,6 +12,7 @@ import cn.refinex.meridian.engine.spi.port.ModelGateway.CallPurpose;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelCallRecord;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelRoute;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.UsageSource;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.Msg;
@@ -61,7 +62,7 @@ public final class RoutedModel extends ChatModelBase {
 
     private final ModelGateway gateway;
     private final ProviderClients clients;
-    private final RetryPolicy retryPolicy;
+    private final ProviderRetryPolicy retryPolicy;
     private final ModelSpec spec;
     private final String agentVersionId;
 
@@ -78,7 +79,7 @@ public final class RoutedModel extends ChatModelBase {
     RoutedModel(
             ModelGateway gateway,
             ProviderClients clients,
-            RetryPolicy retryPolicy,
+            ProviderRetryPolicy retryPolicy,
             ModelSpec spec,
             String agentVersionId,
             int contextWindow) {
@@ -179,9 +180,7 @@ public final class RoutedModel extends ChatModelBase {
                     }
                     boolean beforeFirstPacket = !meter.receivedAny();
                     Integer status = ProviderErrors.statusOf(error);
-                    if (beforeFirstPacket
-                            && kind == ProviderErrors.Kind.RETRYABLE
-                            && retry < retryPolicy.maxRetries()) {
+                    if (beforeFirstPacket && kind == ProviderErrors.Kind.RETRYABLE) {
                         Optional<Duration> wait = retryPolicy.backoff(retry, observer.retryAfter());
                         if (wait.isPresent()) {
                             log.warn(
@@ -225,47 +224,6 @@ public final class RoutedModel extends ChatModelBase {
                 .executionConfig(SINGLE_ATTEMPT)
                 .build();
         return GenerateOptions.mergeOptions(platform, options);
-    }
-
-    /**
-     * 首包之前的重试策略。
-     *
-     * @param maxRetries 最多重试次数；架构设计「模型调用」规定 2
-     * @param initialBackoff 第一次重试前的等待，之后每次翻倍
-     * @param maxInPlaceWait 原地等待的上限：{@code Retry-After} 要求等更久时不再原地重试，交给降级或重新排队
-     */
-    public record RetryPolicy(int maxRetries, Duration initialBackoff, Duration maxInPlaceWait) {
-
-        /** 默认策略：重试 2 次，首次等待 500 毫秒，原地等待最长 10 秒。 */
-        public static final RetryPolicy DEFAULT = new RetryPolicy(2, Duration.ofMillis(500), Duration.ofSeconds(10));
-
-        /**
-         * 创建策略。
-         *
-         * @throws IllegalArgumentException 重试次数为负时
-         * @throws NullPointerException 缺少时长时
-         */
-        public RetryPolicy {
-            if (maxRetries < 0) {
-                throw new IllegalArgumentException("maxRetries 不能为负：" + maxRetries);
-            }
-            Objects.requireNonNull(initialBackoff, "initialBackoff");
-            Objects.requireNonNull(maxInPlaceWait, "maxInPlaceWait");
-        }
-
-        /**
-         * 第 {@code retry} 次重试（从 0 起）之前的等待：指数退避与 {@code Retry-After} 取较大者。
-         *
-         * @param retry 已重试的次数
-         * @param retryAfter 供应商要求的等待
-         * @return 等待时长；超过原地等待上限时为空
-         */
-        Optional<Duration> backoff(int retry, Optional<Duration> retryAfter) {
-            Duration exponential = initialBackoff.multipliedBy(1L << Math.min(retry, 16));
-            Duration wait =
-                    retryAfter.filter(after -> after.compareTo(exponential) > 0).orElse(exponential);
-            return wait.compareTo(maxInPlaceWait) > 0 ? Optional.empty() : Optional.of(wait);
-        }
     }
 
     /** 一次 {@code doStream} 的入参与估算。 */

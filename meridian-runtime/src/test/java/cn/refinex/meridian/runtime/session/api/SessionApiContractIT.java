@@ -8,6 +8,7 @@ import cn.refinex.meridian.runtime.support.ApiTestClient.ApiResponse;
 import cn.refinex.meridian.runtime.support.ApiTestKeys;
 import cn.refinex.meridian.runtime.support.ContractValidator;
 import cn.refinex.meridian.runtime.support.SseTestClient.Frame;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -39,21 +40,71 @@ class SessionApiContractIT extends ApiTestBase {
                         .status())
                 .isEqualTo(200);
 
-        ApiResponse sent = api.sendEvents(sessionId, """
+        // 文件（T17b）：上传、查看、下载，再在消息中引用
+        ApiResponse image = api.uploadFile("pixel.png", PNG, "contract-file-" + System.nanoTime());
+        assertThat(image.status()).isEqualTo(201);
+        assertThat(image.text("media_type")).isEqualTo("image/png");
+        ApiResponse document = api.uploadFile("a.txt", "合同正文".getBytes(StandardCharsets.UTF_8), null);
+        String imageId = image.text("id");
+        String documentId = document.text("id");
+        assertThat(api.call("GET /v1/files/{file_id}", HttpMethod.GET, "/v1/files/" + documentId, null, null)
+                        .text("filename"))
+                .isEqualTo("a.txt");
+        assertThat(api.binary(
+                                "GET /v1/files/{file_id}/content",
+                                HttpMethod.GET,
+                                "/v1/files/" + imageId + "/content",
+                                null)
+                        .bytes())
+                .isEqualTo(PNG);
+
+        ApiResponse sent =
+                api.sendEvents(sessionId, """
                 {"events": [
                   {"type": "user.message", "delivery": "queue",
                    "content": [{"type": "text", "text": "看看这些"},
                                {"type": "image", "url": "https://example.com/a.png", "media_type": "image/png"},
-                               {"type": "image", "file_id": "fil_01JC8Z5A0000000000000000AA"},
-                               {"type": "file", "file_id": "fil_01JC8Z5A0000000000000000AB", "filename": "a.pdf"}]},
+                               {"type": "image", "file_id": "%s"},
+                               {"type": "file", "file_id": "%s", "filename": "a.pdf"}]},
                   {"type": "user.interrupt"}
                 ]}
-                """, "contract-events-" + System.nanoTime());
+                """.formatted(imageId, documentId), "contract-events-" + System.nanoTime());
         assertThat(sent.status()).isEqualTo(202);
         assertThat(api.listEvents(sessionId, "limit=1").body().get("has_more").asBoolean())
                 .isTrue();
         assertThat(api.listThreads(sessionId, "limit=10").status()).isEqualTo(200);
         assertThat(api.listPendingActions(sessionId, "status=pending").status()).isEqualTo(200);
+
+        // 工作区（T17b）：none 档写入、读取与列表
+        String workspacePath = "/v1/sessions/" + sessionId + "/workspace/files/notes%2Fplan.md";
+        assertThat(api.binary(
+                                "PUT /v1/sessions/{session_id}/workspace/files/{path}",
+                                HttpMethod.PUT,
+                                workspacePath,
+                                "# 计划".getBytes(StandardCharsets.UTF_8))
+                        .status())
+                .isEqualTo(200);
+        assertThat(new String(
+                        api.binary(
+                                        "GET /v1/sessions/{session_id}/workspace/files/{path}",
+                                        HttpMethod.GET,
+                                        workspacePath,
+                                        null)
+                                .bytes(),
+                        StandardCharsets.UTF_8))
+                .isEqualTo("# 计划");
+        assertThat(api.call(
+                                "GET /v1/sessions/{session_id}/workspace:list",
+                                HttpMethod.GET,
+                                "/v1/sessions/" + sessionId + "/workspace:list?prefix=notes/&limit=10",
+                                null,
+                                null)
+                        .body()
+                        .get("data")
+                        .get(0)
+                        .get("path")
+                        .asString())
+                .isEqualTo("notes/plan.md");
 
         ApiResponse archived = api.archiveSession(sessionId, "contract-archive-" + System.nanoTime());
         assertThat(archived.status()).isEqualTo(200);
@@ -111,6 +162,14 @@ class SessionApiContractIT extends ApiTestBase {
                         .text("code"))
                 .isEqualTo("model.not_found");
         assertThat(api.call(
+                                "POST /v1/responses",
+                                HttpMethod.POST,
+                                "/v1/responses",
+                                "{\"model\": \"mdl_absent\", \"input\": \"你好\"}",
+                                null)
+                        .text("code"))
+                .isEqualTo("model.not_found");
+        assertThat(api.call(
                                 "POST /v1/embeddings",
                                 HttpMethod.POST,
                                 "/v1/embeddings",
@@ -147,6 +206,10 @@ class SessionApiContractIT extends ApiTestBase {
                 .isEqualTo("webhook_delivery.not_found");
 
         assertThat(ContractValidator.validatedOperations()).containsAll(ContractValidator.allOperations());
-        assertThat(ContractValidator.allOperations()).hasSize(17);
+        assertThat(ContractValidator.allOperations()).hasSize(24);
     }
+
+    /** 1×1 的 PNG。 */
+    private static final byte[] PNG = java.util.Base64.getDecoder()
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==");
 }

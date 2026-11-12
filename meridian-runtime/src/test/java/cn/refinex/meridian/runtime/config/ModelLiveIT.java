@@ -14,6 +14,7 @@ import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
 import cn.refinex.meridian.engine.spi.event.EventType;
 import cn.refinex.meridian.engine.spi.event.StopReason;
 import cn.refinex.meridian.engine.spi.event.UserEvent.Delivery;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import cn.refinex.meridian.engine.spi.spec.CompactionSpec;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import cn.refinex.meridian.runtime.dispatch.domain.TurnOutcome;
@@ -106,7 +107,7 @@ class ModelLiveIT {
     @Test
     void streamingRecordsTheFirstTokenTimeAndSettlesTheUsage() {
         routing = ModelRoutingFixture.live(directory).model(MODEL_ID, CHAT_MODEL, 131_072, 128);
-        RoutedModel model = routing.routedModel(ModelSpec.of(MODEL_ID), RoutedModel.RetryPolicy.DEFAULT);
+        RoutedModel model = routing.routedModel(ModelSpec.of(MODEL_ID), ProviderRetryPolicy.DEFAULT);
         String sessionId = "ses_" + Ids.newUlid();
         List<Msg> messages = List.of(Msg.builder()
                 .role(MsgRole.USER)
@@ -190,7 +191,7 @@ class ModelLiveIT {
 
     private WorkerFixture fixture(int contextWindow, UnaryOperator<TestSpecs.AgentSpecBuilder> agent) {
         routing = ModelRoutingFixture.live(directory).model(MODEL_ID, CHAT_MODEL, contextWindow, 256);
-        RoutedModel routed = routing.routedModel(ModelSpec.of(MODEL_ID), RoutedModel.RetryPolicy.DEFAULT);
+        RoutedModel routed = routing.routedModel(ModelSpec.of(MODEL_ID), ProviderRetryPolicy.DEFAULT);
         return new WorkerFixture(
                 ScriptedModel.builder().build(), spec -> agent.apply(spec.model(ModelSpec.of(MODEL_ID))), routed);
     }

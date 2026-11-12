@@ -3,6 +3,7 @@ package cn.refinex.meridian.runtime.modelrouting.app;
 import cn.refinex.meridian.common.concurrent.Blocking;
 import cn.refinex.meridian.common.error.NotFoundException;
 import cn.refinex.meridian.common.id.Ids;
+import cn.refinex.meridian.common.text.TextTokens;
 import cn.refinex.meridian.engine.spi.error.ProviderRejectedException;
 import cn.refinex.meridian.engine.spi.error.ProviderUnavailableException;
 import cn.refinex.meridian.engine.spi.event.TokenUsage;
@@ -11,10 +12,10 @@ import cn.refinex.meridian.engine.spi.port.ModelGateway.CallPurpose;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelCallRecord;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelRoute;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.UsageSource;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelKind;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelRoutingErrorCode;
 import cn.refinex.meridian.runtime.modelrouting.domain.RerankScore;
-import cn.refinex.meridian.runtime.modelrouting.domain.TextTokens;
 import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient;
 import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient.EmbeddingResult;
 import cn.refinex.meridian.runtime.modelrouting.infra.ProviderVectorClient.ProviderCallException;
@@ -48,14 +49,8 @@ public class VectorModelService {
 
     private static final Logger log = LoggerFactory.getLogger(VectorModelService.class);
 
-    /** 最多重试次数（架构设计「模型调用」）。 */
-    static final int MAX_RETRIES = 2;
-
-    /** 第一次重试前的等待，之后每次翻倍。 */
-    static final Duration INITIAL_BACKOFF = Duration.ofMillis(500);
-
-    /** 原地等待的上限：{@code Retry-After} 要求等更久时不再重试。 */
-    static final Duration MAX_IN_PLACE_WAIT = Duration.ofSeconds(10);
+    /** 首包之前的重试规则，与 {@code RoutedModel} 相同（架构设计「模型调用」）。 */
+    private static final ProviderRetryPolicy RETRIES = ProviderRetryPolicy.DEFAULT;
 
     private final RoutingModelGateway gateway;
     private final ModelCatalogPort catalog;
@@ -173,8 +168,8 @@ public class VectorModelService {
 
     private <T> Mono<T> attempt(ModelRoute route, int estimate, java.util.function.Supplier<Mono<T>> call, int retry) {
         return Mono.defer(call).onErrorResume(ProviderCallException.class, failure -> {
-            if (failure.retryable() && retry < MAX_RETRIES) {
-                Optional<Duration> wait = backoff(retry, failure.retryAfter());
+            if (failure.retryable()) {
+                Optional<Duration> wait = RETRIES.backoff(retry, failure.retryAfter());
                 if (wait.isPresent()) {
                     log.warn(
                             "供应商请求失败，{} 毫秒后重试 model={} status={} retry={}",
@@ -196,14 +191,6 @@ public class VectorModelService {
             log.error("释放预扣失败，预算计数以对账为准 reservationId={}", reservation.reservationId(), error);
             return Mono.empty();
         });
-    }
-
-    /** 第 {@code retry} 次重试前的等待：指数退避与 {@code Retry-After} 取较大者，超过原地等待上限时为空。 */
-    static Optional<Duration> backoff(int retry, Optional<Duration> retryAfter) {
-        Duration exponential = INITIAL_BACKOFF.multipliedBy(1L << retry);
-        Duration wait =
-                retryAfter.filter(after -> after.compareTo(exponential) > 0).orElse(exponential);
-        return wait.compareTo(MAX_IN_PLACE_WAIT) > 0 ? Optional.empty() : Optional.of(wait);
     }
 
     private static RuntimeException toPlatformException(ModelRoute route, ProviderCallException failure) {

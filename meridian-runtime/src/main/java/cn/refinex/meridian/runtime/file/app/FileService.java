@@ -2,6 +2,7 @@ package cn.refinex.meridian.runtime.file.app;
 
 import cn.refinex.meridian.common.context.PlatformContext;
 import cn.refinex.meridian.common.context.PlatformContexts;
+import cn.refinex.meridian.common.crypto.Sha256;
 import cn.refinex.meridian.common.error.CommonErrorCode;
 import cn.refinex.meridian.common.error.FieldViolation;
 import cn.refinex.meridian.common.error.MeridianException;
@@ -19,10 +20,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
-import java.util.HexFormat;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -84,7 +82,7 @@ public class FileService {
         String filename = FileNames.normalize(clientFilename);
         String mediaType = mediaTypes.detect(content, filename);
         String key = StoredFile.objectKey(context.tenantId(), context.projectId(), id);
-        String sha256 = sha256(content);
+        String sha256 = Sha256.hex(content);
         try (InputStream in = Files.newInputStream(content)) {
             objects.put(key, in, size, mediaType);
         } catch (IOException e) {
@@ -179,27 +177,6 @@ public class FileService {
             return Files.size(content);
         } catch (IOException e) {
             throw new UncheckedIOException("读取上传内容失败", e);
-        }
-    }
-
-    /**
-     * 内容的 SHA-256。
-     *
-     * @param content 本机文件
-     * @return 小写十六进制
-     */
-    public static String sha256(Path content) {
-        try (InputStream in = Files.newInputStream(content)) {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] buffer = new byte[64 * 1024];
-            for (int read = in.read(buffer); read >= 0; read = in.read(buffer)) {
-                digest.update(buffer, 0, read);
-            }
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (IOException e) {
-            throw new UncheckedIOException("读取上传内容失败", e);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", e);
         }
     }
 }

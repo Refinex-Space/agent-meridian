@@ -6,11 +6,11 @@ import cn.refinex.meridian.engine.agentscope.model.GeminiClientFactory;
 import cn.refinex.meridian.engine.agentscope.model.OpenAiCompatibleClientFactory;
 import cn.refinex.meridian.engine.agentscope.model.ProviderClients;
 import cn.refinex.meridian.engine.agentscope.model.ProviderHttpTransport;
-import cn.refinex.meridian.engine.agentscope.model.RoutedModel;
 import cn.refinex.meridian.engine.agentscope.model.RoutedModelFactory;
 import cn.refinex.meridian.engine.agentscope.model.RoutedModelInvoker;
 import cn.refinex.meridian.engine.spi.driver.ModelInvoker;
 import cn.refinex.meridian.engine.spi.port.ModelGateway;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -65,7 +65,7 @@ public class ModelFactoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(ModelFactory.class)
     public ModelFactory routedModelFactory(ModelGateway gateway, ProviderClients clients) {
-        return new RoutedModelFactory(gateway, clients, RoutedModel.RetryPolicy.DEFAULT);
+        return new RoutedModelFactory(gateway, clients, ProviderRetryPolicy.DEFAULT);
     }
 
     /**
@@ -78,6 +78,6 @@ public class ModelFactoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ModelInvoker modelInvoker(ModelGateway gateway, ProviderClients clients) {
-        return new RoutedModelInvoker(gateway, clients, RoutedModel.RetryPolicy.DEFAULT);
+        return new RoutedModelInvoker(gateway, clients, ProviderRetryPolicy.DEFAULT);
     }
 }

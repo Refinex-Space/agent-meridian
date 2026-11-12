@@ -7,7 +7,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import cn.refinex.meridian.engine.agentscope.middleware.CompactionGuardMiddleware;
 import cn.refinex.meridian.engine.agentscope.model.ProviderClients;
-import cn.refinex.meridian.engine.agentscope.model.RoutedModel;
 import cn.refinex.meridian.engine.agentscope.model.RoutedModelFactory;
 import cn.refinex.meridian.engine.agentscope.testkit.model.InMemoryModelGateway;
 import cn.refinex.meridian.engine.agentscope.testkit.model.ScriptedModel;
@@ -23,6 +22,7 @@ import cn.refinex.meridian.engine.spi.event.SpanEvent;
 import cn.refinex.meridian.engine.spi.event.StopReason;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.CallPurpose;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelCallRecord;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import cn.refinex.meridian.engine.spi.spec.CompactionSpec;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import cn.refinex.meridian.engine.spi.spec.PermissionPolicy;
@@ -58,7 +58,7 @@ class CompactionGuardScenarioTest {
                 .respond(r -> r.text("## 目标\n用户发了两段长文本。").usage(1_250, 12))
                 .respond(r -> r.text("答复二").usage(1_400, 3))
                 .build();
-        EngineHarness harness = harness(upstream, RoutedModel.RetryPolicy.DEFAULT);
+        EngineHarness harness = harness(upstream, ProviderRetryPolicy.DEFAULT);
 
         List<EngineEvent> first = harness.run(claim(harness, "trn_1", 1), userText(FIRST));
         assertThat(of(first, AgentOutputEvent.ContextCompacted.class))
@@ -97,7 +97,7 @@ class CompactionGuardScenarioTest {
         ScriptedModel upstream = ScriptedModel.builder()
                 .respond(r -> r.text("答复一").usage(1_300, 3))
                 .build();
-        EngineHarness harness = harness(upstream, RoutedModel.RetryPolicy.DEFAULT);
+        EngineHarness harness = harness(upstream, ProviderRetryPolicy.DEFAULT);
         harness.run(claim(harness, "trn_1", 1), userText(FIRST));
         gateway.budgetLimit(gateway.used() + 100);
 
@@ -120,7 +120,7 @@ class CompactionGuardScenarioTest {
                 .respond(r -> r.text("答复一").usage(1_300, 3))
                 .failBeforeFirstChunk(new HttpTransportException("供应商返回 400", 400, "{}"))
                 .build();
-        EngineHarness harness = harness(upstream, RoutedModel.RetryPolicy.DEFAULT);
+        EngineHarness harness = harness(upstream, ProviderRetryPolicy.DEFAULT);
         harness.run(claim(harness, "trn_1", 1), userText(FIRST));
 
         List<EngineEvent> second = harness.run(claim(harness, "trn_2", 2), userText(SECOND));
@@ -156,7 +156,7 @@ class CompactionGuardScenarioTest {
                 .build();
         StaticProviderClientFactory providers = new StaticProviderClientFactory().register(UPSTREAM, upstream);
         Model routed = new RoutedModelFactory(
-                        gateway, new ProviderClients(List.of(providers)), RoutedModel.RetryPolicy.DEFAULT)
+                        gateway, new ProviderClients(List.of(providers)), ProviderRetryPolicy.DEFAULT)
                 .create("agv_compact", ModelSpec.of(MODEL_ID));
         EngineHarness harness = EngineHarness.createFiltered(
                 routed,
@@ -183,7 +183,7 @@ class CompactionGuardScenarioTest {
                 .failBeforeFirstChunk(new HttpTransportException("供应商返回 503", 503, "{}"))
                 .build();
         EngineHarness harness =
-                harness(upstream, new RoutedModel.RetryPolicy(2, Duration.ofMillis(1), Duration.ofSeconds(1)));
+                harness(upstream, new ProviderRetryPolicy(2, Duration.ofMillis(1), Duration.ofSeconds(1)));
         harness.run(claim(harness, "trn_1", 1), userText(FIRST));
 
         List<EngineEvent> second = harness.run(claim(harness, "trn_2", 2), userText(SECOND));
@@ -197,7 +197,7 @@ class CompactionGuardScenarioTest {
         assertThat(harness.states.jsonOf(USER_ID, "thr_compact")).doesNotContain("__compaction_summary__");
     }
 
-    private EngineHarness harness(ScriptedModel upstream, RoutedModel.RetryPolicy retryPolicy) {
+    private EngineHarness harness(ScriptedModel upstream, ProviderRetryPolicy retryPolicy) {
         StaticProviderClientFactory providers = new StaticProviderClientFactory().register(UPSTREAM, upstream);
         Model routed = new RoutedModelFactory(gateway, new ProviderClients(List.of(providers)), retryPolicy)
                 .create("agv_compact", ModelSpec.of(MODEL_ID));

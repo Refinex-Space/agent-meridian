@@ -3,6 +3,7 @@ package cn.refinex.meridian.engine.agentscope.model;
 import cn.refinex.meridian.engine.spi.driver.ModelInvoker;
 import cn.refinex.meridian.engine.spi.event.TokenUsage;
 import cn.refinex.meridian.engine.spi.port.ModelGateway;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.Msg;
@@ -42,7 +43,7 @@ public final class RoutedModelInvoker implements ModelInvoker {
 
     private final ModelGateway gateway;
     private final ProviderClients clients;
-    private final RoutedModel.RetryPolicy retryPolicy;
+    private final ProviderRetryPolicy retryPolicy;
 
     /**
      * 创建调用器。
@@ -51,7 +52,7 @@ public final class RoutedModelInvoker implements ModelInvoker {
      * @param clients 底层客户端的登记与缓存，与智能体的模型工厂共享
      * @param retryPolicy 首包之前的重试策略
      */
-    public RoutedModelInvoker(ModelGateway gateway, ProviderClients clients, RoutedModel.RetryPolicy retryPolicy) {
+    public RoutedModelInvoker(ModelGateway gateway, ProviderClients clients, ProviderRetryPolicy retryPolicy) {
         this.gateway = Objects.requireNonNull(gateway, "gateway");
         this.clients = Objects.requireNonNull(clients, "clients");
         this.retryPolicy = Objects.requireNonNull(retryPolicy, "retryPolicy");

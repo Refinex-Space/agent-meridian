@@ -60,6 +60,9 @@ package cn.refinex.meridian.runtime.dispatch;
 | problem+json 映射、请求 ID、`traceparent` | `security.web` | MVC 和 WebFlux 各一个适配器，共用同一套映射逻辑 |
 | 游标分页 | `common.page` | `Cursor`、`PageResult` |
 | JSON 序列化配置（snake_case、时间格式） | `common.json` | 平台 API 用 Jackson 3 |
+| SHA-256 摘要的十六进制 | `common.crypto` | `Sha256.hex(bytes / text / Path)`；要原始字节、截断或分段更新时直接用 `MessageDigest`（R1 Q-L1） |
+| 按字符数估算 token | `common.text` | `TextTokens`：内核的 `TokenEstimator` 与 runtime 的 Embedding、rerank 共用（R1 Q-M1） |
+| 首包之前的供应商重试 | `engine.spi.port` | `ProviderRetryPolicy`：`RoutedModel` 与 `VectorModelService` 共用的次数、指数退避与 `Retry-After` 上限（R1 Q-M2） |
 | 时钟 | `common.time` | 注入 `java.time.Clock`，禁止直接 `Instant.now()` |
 | `PlatformContext` 与传递 | `common.context` | MVC 服务用 `ScopedValue`；runtime 用 Reactor Context |
 | 租户作用域仓储、跨租户系统仓储 | `persistence.tenant` | `TenantScopedRepository`（项目级或租户级）、`SystemRepository` 加 `@CrossTenant` |

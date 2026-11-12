@@ -16,13 +16,10 @@ import java.util.Objects;
  * {@code web_fetch}：抓取一个网页并以 Markdown 交给模型（架构设计「平台工具」，ADR-0035）。
  *
  * <p>SSRF 防护、重定向逐跳校验、5 MB 上限与 HTML 转 Markdown 都在 {@link WebFetchPort} 的 runtime 实现中；本工具负责入参校验、
- * 分段输出（单次至多 {@value #MAX_OUTPUT_CHARS} 字符，{@code offset} 续读）与来源标签。规则内容为域名
+ * 分段输出（单次至多 {@value PlatformTool#MAX_OUTPUT_CHARS} 字符，{@code offset} 续读）与来源标签。规则内容为域名
  * （{@code web_fetch(domain:docs.example.com)}，含子域名）。
  */
 public final class WebFetchTool extends PlatformTool {
-
-    /** 一次输出的字符上限，低于工具结果卸载阈值（80000）。 */
-    static final int MAX_OUTPUT_CHARS = 50_000;
 
     /** 等待抓取结果的上限：连接、重定向与读取 5 MB 的总时长由端口实现控制，这里只兜底。 */
     static final Duration FETCH_TIMEOUT = Duration.ofSeconds(90);
@@ -115,7 +112,7 @@ public final class WebFetchTool extends PlatformTool {
             throw new ToolInputException(
                     "offset " + offset + " is beyond the end of the content (" + content.length() + " characters).");
         }
-        int end = Math.min(content.length(), offset + MAX_OUTPUT_CHARS);
+        int end = Math.min(content.length(), offset + PlatformTool.MAX_OUTPUT_CHARS);
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("url", page.finalUrl().toString());
         attributes.put("content_type", page.contentType());

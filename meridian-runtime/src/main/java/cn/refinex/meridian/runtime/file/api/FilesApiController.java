@@ -2,6 +2,7 @@ package cn.refinex.meridian.runtime.file.api;
 
 import cn.refinex.meridian.api.model.UploadedFile;
 import cn.refinex.meridian.common.concurrent.Blocking;
+import cn.refinex.meridian.common.crypto.Sha256;
 import cn.refinex.meridian.common.error.CommonErrorCode;
 import cn.refinex.meridian.common.error.FieldViolation;
 import cn.refinex.meridian.common.error.ValidationException;
@@ -103,7 +104,7 @@ public class FilesApiController implements FilesApi {
 
     private Mono<ResponseEntity<UploadedFile>> upload(
             ServerWebExchange exchange, String idempotencyKey, String filename, Path temp) {
-        return Blocking.call(() -> idempotencyKey == null ? null : FileService.sha256(temp))
+        return Blocking.call(() -> idempotencyKey == null ? null : Sha256.hex(temp))
                 .defaultIfEmpty("")
                 .flatMap(sha256 -> idempotent.execute(
                         exchange,

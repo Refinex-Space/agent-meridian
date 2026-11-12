@@ -9,6 +9,7 @@ import cn.refinex.meridian.engine.spi.error.ProviderRejectedException;
 import cn.refinex.meridian.engine.spi.error.ProviderUnavailableException;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.ModelRoute;
 import cn.refinex.meridian.engine.spi.port.ModelGateway.Provider;
+import cn.refinex.meridian.engine.spi.port.ProviderRetryPolicy;
 import cn.refinex.meridian.engine.spi.port.SecretValue;
 import cn.refinex.meridian.engine.spi.spec.ModelSpec;
 import io.agentscope.core.message.ContentBlock;
@@ -48,8 +49,8 @@ class ProviderAdaptersIT {
             .turnId("trn_t")
             .leaseEpoch(1L)
             .build();
-    private static final RoutedModel.RetryPolicy FAST_RETRY =
-            new RoutedModel.RetryPolicy(2, Duration.ofMillis(1), Duration.ofSeconds(2));
+    private static final ProviderRetryPolicy FAST_RETRY =
+            new ProviderRetryPolicy(2, Duration.ofMillis(1), Duration.ofSeconds(2));
     private static final List<Msg> MESSAGES = List.of(
             Msg.builder()
                     .role(MsgRole.SYSTEM)
