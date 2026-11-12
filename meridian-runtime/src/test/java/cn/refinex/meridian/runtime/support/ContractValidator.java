@@ -11,6 +11,7 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.parser.OpenAPIV3Parser;
 import io.swagger.v3.parser.core.models.ParseOptions;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,6 +48,12 @@ public final class ContractValidator {
     private static final SchemaValidator SCHEMAS = new SchemaValidator(API, new MessageResolver());
 
     private static final Set<String> VALIDATED = ConcurrentHashMap.newKeySet();
+
+    /** runtime 提供的公开标签，与本模块 POM 中 {@code generate-public-server} 的 {@code apisToGenerate} 相同。 */
+    private static final Set<String> RUNTIME_TAGS = Set.of("Sessions", "Events", "Threads", "PendingActions", "Models");
+
+    /** 由别的服务提供的公开标签：{@code Agents} 在 control-plane（ADR-0047，契约校验在其 {@code AgentVersionIT}）。 */
+    private static final Set<String> OTHER_SERVICE_TAGS = Set.of("Agents");
 
     private ContractValidator() {}
 
@@ -156,16 +163,25 @@ public final class ContractValidator {
     }
 
     /**
-     * 规范中的全部操作。
+     * 规范中由 runtime 提供的全部操作：标签属于 {@link #RUNTIME_TAGS}。其余操作的标签必须属于 {@link #OTHER_SERVICE_TAGS}
+     * （由别的服务提供、在那里做契约校验），否则抛异常，新增标签时要在这里决定归属。
      *
      * @return 操作集合，形如 {@code GET /v1/sessions}
+     * @throws IllegalStateException 规范中有归属不明的标签时
      */
     public static Set<String> allOperations() {
         Set<String> operations = new TreeSet<>();
         API.getPaths()
-                .forEach((path, item) -> item.readOperationsMap()
-                        .keySet()
-                        .forEach(method -> operations.add(method.name() + " " + path)));
+                .forEach((path, item) -> item.readOperationsMap().forEach((method, operation) -> {
+                    String name = method.name() + " " + path;
+                    List<String> tags = operation.getTags() == null ? List.of() : operation.getTags();
+                    if (tags.stream().anyMatch(RUNTIME_TAGS::contains)) {
+                        operations.add(name);
+                    } else if (tags.isEmpty() || !OTHER_SERVICE_TAGS.containsAll(tags)) {
+                        throw new IllegalStateException(
+                                name + " 的标签 " + tags + " 归属不明：加入 RUNTIME_TAGS 或 OTHER_SERVICE_TAGS");
+                    }
+                }));
         return operations;
     }
 
