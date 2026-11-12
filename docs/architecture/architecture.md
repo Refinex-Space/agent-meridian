@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.23 |
+| 版本 | v1.24 |
 | 日期 | 2026-11-12 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -240,7 +240,7 @@ agent-meridian/
 | 接口 | 用途 |
 |---|---|
 | `AgentEngine` | 执行一轮、中断、下线，见"内核适配层"；恢复确认选择 `retry` 时用原幂等键重新执行工具调用、读取装配后的保留工具名（ADR-0031）；按智能体版本淘汰实例，租户设置变更时由 runtime 调用（ADR-0047） |
-| `SandboxDriver` | 沙箱的创建、恢复、快照、删除；技能资源的投影、产物的清单与读取（ADR-0037）；按会话标签删除残留的沙箱（ADR-0049）。入参和返回值是平台的 `SandboxHandle` 和序列化后的状态，内部使用 AgentScope Kubernetes 扩展的 `SandboxClient` |
+| `SandboxDriver` | 沙箱的创建、恢复、快照、删除；技能资源的投影、产物的清单与读取（ADR-0037）；按会话标签删除残留的沙箱（ADR-0049）；把上传文件写进工作区（ADR-0050）。入参和返回值是平台的 `SandboxHandle` 和序列化后的状态，内部使用 AgentScope Kubernetes 扩展的 `SandboxClient` |
 | `ModelInvoker` | OpenAI 兼容直通接口用的聊天调用，内部使用 `RoutedModel` |
 
 `PlatformContext` 定义在 `meridian-common`，所以 security、engine-agentscope、runtime 都能使用它。
@@ -370,7 +370,9 @@ erDiagram
 | `tool_invocations` | `id`、`turn_id`、`thread_id`、`tool_use_id`、`tool_name`、`side_effect`、`idempotency_key`、`status`、`input jsonb`、`result_ref` | 工具账本 |
 | `pending_actions` | `id`、`turn_id`、`thread_id`、`type`、`payload jsonb`、`status`、`decided_by`、`remember_scope`、`expires_at`、`response jsonb`、`consumed_turn_id` | 待处理动作；`response` 是回应或超时、中断、自动拒绝给出的结论，`consumed_turn_id` 是交出结论的恢复轮（ADR-0031） |
 | `permission_rules` | `layer`（`tenant`、`project`、`session`）、`tool_name`、`rule_content`、`behavior`、`session_id`、`source_action_id` | 五层权限中的租户、项目、会话三层；会话级的"记住此决定"写在这里。T15b 起租户与项目策略（含项目级的"记住此决定"）在 control-plane 的 `cp.permission_rules`，本表的这两层只供开发配置使用（ADR-0031、ADR-0047） |
-| `workspace_entries` | `namespace text[]`、`key`、`version`、`size`、`inline_content`、`object_key` | `MeridianBaseStore` 的存储 |
+| `workspace_entries` | `namespace text[]`、`key`、`version`、`size`、`content_size`、`inline_content`、`object_key` | `MeridianBaseStore` 的存储；`content_size` 是文件内容的字节数，供工作区 API 列表（ADR-0050） |
+| `files` | `id`、`filename`、`media_type`、`size_bytes`、`sha256`、`object_key`、`created_by` | 上传的文件，项目级；媒体类型由服务端检测，内容在对象存储 `rt/{tenant}/{project}/files/{file_id}`（ADR-0050） |
+| `turn_usage` | `turn_id`、`model_id`、`session_id`、`calls`、各类 token | 每轮每个模型的用量累计，与 outbox 的 `usage` 消息同一事务累加，`session.usage` 据此给出本轮与会话累计（ADR-0050） |
 | `sandbox_outputs` | `session_id`、`path`、`size`、`sha256`、`object_key`、`synced_at` | `sandbox` 档 `outputs/` 同步到对象存储的清单（ADR-0037） |
 | `outbox` | `id`、`topic`、`payload`、`created_at`、`published_at`、`claimed_until`、`attempts` | 用量与审计的可靠投递；Relay 认领后在事务外发布，失败不阻塞后面的消息（ADR-0048） |
 | `webhook_events` | `event_id`、`session_id`、`type`、`payload` | Webhook 的 outbox：订阅的四种事件与事件同一事务写入，投递器按项目的订阅扇出后删除（ADR-0049） |
@@ -410,6 +412,7 @@ flowchart LR
 - **会话事件**：默认保留 365 天，租户可配置（`cp.tenants.event_retention_days`，经内部接口的租户配额下发）。会话 90 天无活动后，事件导出为对象存储中一个按会话命名的文件（gzip 的 JSON Lines，每行一个事件信封），数据库中删除，`sessions` 记录归档位置与覆盖到的最大 seq；之后的新事件仍写数据库，再次归档时合并。API 与 SSE 补发经同一个读取入口透明地读取归档文件与数据库，延迟更高。保留清理逐租户删除早于截止时间的事件，归档文件中过期的事件被剔除，全部过期时删除文件，每个租户每次清理写一条审计（ADR-0049）。
 - **删除会话**：级联删除事件（含归档文件）、线程、轮次、智能体状态、工作区、产物、沙箱与快照，在 24 小时内完成，并写审计（删除请求 `session.deleted`、清理完成 `session.purged`）。清理作业等该会话的 Webhook 投递结束，最长等到删除后 12 小时；每一步可重复执行，中途失败下一轮重试；完成后会话行删除，查询返回 404（ADR-0049）。
 - **Webhook 投递记录**：保留 30 天，随会话清理一起删除（ADR-0049）。
+- **上传文件**：属于项目，不随会话删除（放进工作区的副本随会话的工作区清除）；一期没有删除接口与保留期。会话清理时一并删除 `turn_usage`（ADR-0050）。
 - **用量账本、审计日志**：保留 3 年，不随会话删除。分区维护任务提前创建下个月的分区，删除早于 36 个月的分区（截止月份按数据库时间计算，ADR-0048）。
 
 ## 运行时架构
@@ -894,6 +897,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 **直通接口、Embedding 与 rerank（ADR-0033）：**
 
 - `/v1/chat/completions` 经 `ModelInvoker`（`RoutedModelInvoker`，每次调用一个只含主模型的 `RoutedModel`），与智能体共用解析、限流、预扣、重试与结算；直通调用的 `PlatformContext` 没有会话，预算只计租户、项目、API Key。流式先等第一个信号再提交响应：首包之前的错误以对应状态码的 problem+json 返回，之后的错误以一条 `{"error": {...}}` 结束流。
+- `/v1/responses` 是 OpenAI Responses 的子集（文本输入输出、流式、`usage`），与对话补全共用 `ModelInvoker`；平台不保存响应，不支持的常见参数返回 400 `model.unsupported_parameter`（ADR-0050）。
 - `/v1/embeddings`、`/internal/v1/embeddings`、`/internal/v1/rerank` 经 runtime 的 `VectorModelService` 与平台自己的 HTTP 客户端（不用 AgentScope 的 RAG 组件），每次供应商请求同样经 `ModelGateway` 的路径限流、预扣、结算，重试规则与首包之前相同。模型目录区分种类（`chat`、`embedding`、`rerank`），种类与接口不符返回 400；模型可以有自己的端点（DashScope 的 rerank 在 `compatible-api/v1`）；Embedding 按模型的单次上限拆批。
 
 ## 工作区与沙箱
@@ -915,6 +919,8 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 这样所有路径都落在平台存储，runtime 节点的本地磁盘上没有会话数据。
 
 **`sandbox` 档**用 `filesystem(KubernetesFilesystemSpec)`，再用 `filesystemRoute(prefix, fs)` 挂载两类路径：受保护路径挂 `ReadOnlyFilesystem`，`large_tool_results/` 挂 `RemoteFilesystem`。harness 会把它们包装成 `RoutedSandboxFilesystem`，`execute` 始终在沙箱内执行。规范的默认工作区投影（`workspaceProjectionEnabled`）关闭，技能资源的投影方式见下文。
+
+**上传文件（ADR-0050）。** 本轮输入引用的平台文件（`fil_…`）在调用内核之前放到 `uploads/{file_id}/{filename}`：`none` 档经 `WorkspaceStorePort` 写入（不存在才创建），`sandbox` 档在获取沙箱之后经 `SandboxDriver.writeFiles` 写入沙箱；内核从 `TurnContext.workspaceFiles` 得到路径，交给模型的是路径而不是内容。
 
 **`MeridianBaseStore`** 是平台自研的 `BaseStore` 实现，**必须**覆盖 `putIfVersion`：默认实现返回 false，会导致所有写入失败。删除会话时按命名空间前缀清除。
 
@@ -1109,8 +1115,8 @@ Webhook 配置与 API Key 同属业务系统的接入配置，同用 `API_KEY_RE
 | 事件 | `POST /v1/sessions/{id}/events`、`GET /v1/sessions/{id}/events`、`GET /v1/sessions/{id}/stream` | 是 |
 | 线程 | `GET /v1/sessions/{id}/threads`、`GET /v1/sessions/{id}/threads/{tid}/stream` | 是 |
 | 待处理动作 | `GET /v1/sessions/{id}/pending-actions` | 是 |
-| 工作区 | `GET/PUT /v1/sessions/{id}/workspace/files/{path}`、`GET /v1/sessions/{id}/workspace:list`（沙箱档只读 `outputs/` 副本） | 是 |
-| 文件 | `POST /v1/files`、`GET /v1/files/{id}`、`GET /v1/files/{id}/content` | 是 |
+| 工作区 | `GET/PUT /v1/sessions/{id}/workspace/files/{path}`、`GET /v1/sessions/{id}/workspace:list`。`none` 档读写平台存储中的工作区，受保护路径只读；沙箱档只读 `outputs/` 副本、不能写入；路径整体 URL 编码（ADR-0050） | 是 |
+| 文件 | `POST /v1/files`（`files:write`，大小上限可配置，默认 32 MB）、`GET /v1/files/{id}`、`GET /v1/files/{id}/content`。媒体类型由服务端检测，文件名规范化；在 `user.message` 中按 `file_id` 引用，轮次开始时放进工作区（ADR-0050） | 是 |
 | 智能体（只读） | `GET /v1/agents`、`GET /v1/agents/{id}`：本项目已发布的智能体与当前版本，由 control-plane 提供（ADR-0047） | 是 |
 | 知识库 | `/v1/knowledge-bases`、`/documents`、`/search` | 是 |
 | 模型直通 | `POST /v1/chat/completions`、`POST /v1/responses`、`POST /v1/embeddings`（OpenAI 兼容）。服务之间的内部接口（`/internal/v1/embeddings`、`/internal/v1/rerank` 等）另写 `meridian-internal-v1.yaml`，不随公开 API 发布（ADR-0033） | 是 |
@@ -1147,6 +1153,8 @@ Webhook 配置与 API Key 同属业务系统的接入配置，同用 `API_KEY_RE
 | 只在流上 | `event_start`、`event_delta`、`ping` |
 
 `session.status_requires_action` 的 `data.actions` 列出全部待处理动作，每项带 `id`、`type`（取值同"待处理动作"一节）、相关工具调用和截止时间。
+
+`session.usage` 在每轮结束（`idle`、`requires_action`）时、终态事件之前写入，给出本轮合计、按模型的明细与会话累计的模型用量，只计 `model_tokens`（推理与压缩，含子线程），与账本中本轮的记录之和相同；置回队列的执行不写（ADR-0050）。
 
 ### SSE 协议
 
@@ -1496,6 +1504,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.19 | 2026-11-09 | T14b：服务 JWT 的换取（客户端凭据模式）、JWKS、密钥与轮换、按调用方限定内部接口；控制台用户经 `Meridian-Project` 调用公开 API 的作用域来源与限流；`PlatformContext` 增加控制台用户；出网代理的回调凭据；技术基线补 Nimbus；本地开发的 `auth` profile（ADR-0044） |
 | v1.18 | 2026-11-09 | Q2 已决：身份只认标准 OIDC，声明映射可配置，SAML、LDAP 经 Keycloak 转接，Keycloak 作为参考实现与可选组件（ADR-0043） |
 | v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
+| v1.24 | 2026-11-12 | T17b：文件资源（`rt.files`、服务端检测媒体类型、文件名规范化）、引用的校验与轮次开始时放进工作区（`SandboxDriver.writeFiles`、`TurnContext.workspaceFiles`）、工作区 API 的两档、`session.usage` 的口径与 `rt.turn_usage`、`/v1/responses` 子集（ADR-0050） |
 | v1.23 | 2026-11-12 | T17a：Webhook 的配置、签名密钥、outbox、投递器、重试计划与投递记录接口，只推送主线程的事件；会话删除的清理作业与审计、等待 Webhook 投递、按标签清除残留沙箱；事件归档的格式与透明读取；事件保留的下发与执行；删除与归档撤销出网授权；ID 前缀 `whk`、`whd`（ADR-0049） |
 | v1.22 | 2026-11-12 | T16：用量账本与审计日志的消费、分区与保留，审计消息的标准字段，四级预算的单位、周期、默认值与 Redis 限额，对账口径，会话记下创建它的 API Key，outbox 认领后在事务外发布，`GET /v1/usage` 由 control-plane 提供，操作类别 `BUDGET_READ`、`BUDGET_WRITE`、`AUDIT_READ`、`USAGE_READ`，ID 前缀 `bdg`、`bal`（ADR-0048） |
 | v1.21 | 2026-11-12 | T15b：智能体规格的 JSON Schema 与 `ResolvedAgentSpec` 一一对应，草稿与发布、发布时的快照与引用、环境修订、技能包与 MCP 服务的登记与探测、租户与项目策略移到 control-plane、配置分发的内部接口与 `config.invalidate` 类型、租户设置变更淘汰实例、MCP 工具按工具标注副作用、`GET /v1/agents` 由 control-plane 提供、ID 前缀 `prl`、操作类别 `AGENT_READ`、`AGENT_WRITE`（ADR-0047） |
