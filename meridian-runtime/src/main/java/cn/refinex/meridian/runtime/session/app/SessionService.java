@@ -120,7 +120,7 @@ public class SessionService {
         validateMetadata(command.metadata());
         validateCustomTools(command.customTools());
         ResolvedAgentSpec agent = command.agent().startsWith(IdPrefix.AGENT_VERSION.value() + "_")
-                ? agentConfigs.agentVersion(command.agent())
+                ? agentConfigs.agentVersionForNewSession(command.agent())
                 : agentConfigs.currentAgentVersion(command.agent());
         EnvironmentSpec environment = agentConfigs.currentEnvironment(command.environmentId());
         if (!command.customTools().isEmpty()) {

@@ -86,6 +86,12 @@
             <scope>test</scope>
         </dependency>
         <!-- 契约测试：按 meridian-v1.yaml 校验每个请求与响应（ADR-0029） -->
+        <!-- 智能体规格的 JSON Schema 与 ResolvedAgentSpec 的一致性测试（ADR-0047） -->
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.atlassian.oai</groupId>
             <artifactId>openapi-request-validator-core</artifactId>

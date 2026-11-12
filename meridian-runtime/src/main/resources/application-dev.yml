@@ -15,8 +15,12 @@ spring:
 
 meridian:
   runtime:
+    agent-config:
+      # 本地开发默认读 dev-config/agents（ADR-0047）；MERIDIAN_RUNTIME_AGENT_CONFIG_SOURCE=control-plane 时只用经管理 API 发布的智能体
+      # （scripts/dev/agent-smoke.sh），通常与 catalog-source 一起切换
+      source: ${MERIDIAN_RUNTIME_AGENT_CONFIG_SOURCE:file}
     model-routing:
-      # 开发配置的智能体引用 dev-config/providers 中的模型 ID（mdl_dev_*），T15b 之前仍读文件目录（ADR-0045）；
+      # 开发配置的智能体引用 dev-config/providers 中的模型 ID（mdl_dev_*），所以本地开发默认仍读文件目录（ADR-0045）；
       # 改为 control-plane 时先经管理 API 建供应商账号与模型，再让智能体引用新的模型 ID
       catalog-source: ${MERIDIAN_RUNTIME_CATALOG_SOURCE:file}
       # 本机的脚本化模型服务在 localhost:18090

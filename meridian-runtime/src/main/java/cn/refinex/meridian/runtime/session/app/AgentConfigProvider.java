@@ -11,8 +11,9 @@ import cn.refinex.meridian.engine.spi.spec.SkillDefinition;
  * <p>找不到时抛 {@link cn.refinex.meridian.common.error.NotFoundException}，错误码为 {@code agent.not_found} 或
  * {@code environment.not_found}（{@code session.domain.SessionErrorCode}）。T15b 起按租户与项目隔离：一个项目只能使用自己的智能体与环境。
  *
- * <p>T06 的实现从开发配置目录读取 YAML（{@code config.FileAgentConfigProvider}）；T15b 起改为从 control-plane 下发的配置读取，
- * 文件实现只留给开发与测试。方法会阻塞，响应式调用方经 {@code Blocking} 调用。实现必须线程安全。
+ * <p>生产实现经 control-plane 的内部接口读取并缓存（{@code session.infra.ControlPlaneAgentConfigProvider}，ADR-0047）；开发配置目录的
+ * 文件实现（{@code config.FileAgentConfigProvider}）只留给 dev、test profile。绑定了 {@code PlatformContext} 时，资源必须属于其中的项目，
+ * 否则与不存在相同；没有上下文的系统路径（出网授权）不校验。方法会阻塞，响应式调用方经 {@code Blocking} 调用。实现必须线程安全。
  */
 public interface AgentConfigProvider {
 
@@ -24,6 +25,18 @@ public interface AgentConfigProvider {
      * @throws cn.refinex.meridian.common.error.NotFoundException 不存在时
      */
     ResolvedAgentSpec agentVersion(String agentVersionId);
+
+    /**
+     * 创建会话时按版本 ID 固定版本：与 {@link #agentVersion} 相同，但智能体已删除时与不存在相同（ADR-0047）。运行中的会话经
+     * {@link #agentVersion} 读取，不受删除影响。
+     *
+     * @param agentVersionId 智能体版本 ID（{@code agv_…}）
+     * @return 已解析的配置
+     * @throws cn.refinex.meridian.common.error.NotFoundException 不存在或智能体已删除时
+     */
+    default ResolvedAgentSpec agentVersionForNewSession(String agentVersionId) {
+        return agentVersion(agentVersionId);
+    }
 
     /**
      * 读取环境在指定修订号下的配置。

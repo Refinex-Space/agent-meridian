@@ -51,7 +51,8 @@
       "uniqueItems": true,
       "items": {
         "$ref": "#/$defs/platform_tool"
-      }
+      },
+      "examples": [["read_file", "spawn_subagent"]]
     },
     "mcp_servers": {
       "description": "挂载的 MCP 服务，服务名不能重复。",
