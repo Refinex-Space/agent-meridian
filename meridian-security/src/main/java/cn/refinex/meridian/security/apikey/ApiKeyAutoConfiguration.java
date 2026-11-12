@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.util.Arrays;
 import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -18,6 +19,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
  * API Key 认证的自动配置：解析器、认证器、限流器与 WebFlux 过滤器。
@@ -103,6 +105,25 @@ public class ApiKeyAutoConfiguration {
             ObjectProvider<ConsoleTokenAuthenticator> consoleAuthenticator,
             ObjectProvider<ApiKeyRateLimiter> rateLimiter) {
         return new ApiKeyWebFilter(authenticator, consoleAuthenticator.getIfAvailable(), rateLimiter.getIfAvailable());
+    }
+
+    /** MVC 服务（control-plane、knowledge）的公开 API 认证过滤器（D55）。 */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    @ConditionalOnClass(name = "org.springframework.web.servlet.HandlerExceptionResolver")
+    static class Servlet {
+
+        @Bean
+        ApiKeyFilter apiKeyFilter(
+                ApiKeyAuthenticator authenticator,
+                ObjectProvider<ConsoleTokenAuthenticator> consoleAuthenticator,
+                ObjectProvider<ApiKeyRateLimiter> rateLimiter,
+                @Qualifier("handlerExceptionResolver") HandlerExceptionResolver errors) {
+            return new ApiKeyFilter(
+                    new PublicApiAdmission(
+                            authenticator, consoleAuthenticator.getIfAvailable(), rateLimiter.getIfAvailable()),
+                    errors);
+        }
     }
 
     /** 应用有 Redis 时启用按 Key 限流（ADR-0042）。 */

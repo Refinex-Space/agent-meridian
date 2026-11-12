@@ -57,6 +57,19 @@ public class ConsoleAuthAutoConfiguration {
                 ConsoleUserResolver resolver, @Qualifier("handlerExceptionResolver") HandlerExceptionResolver errors) {
             return new ConsoleUserFilter(resolver, errors);
         }
+
+        /**
+         * MVC 服务的公开 API 接受控制台用户（D55）：配置了 OIDC，且应用提供了 {@link ProjectAccessResolver}（control-plane 进程内查询，
+         * knowledge 经 control-plane）时启用。
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        @ConditionalOnProperty(prefix = "meridian.security.oidc", name = "issuer")
+        @ConditionalOnBean(ProjectAccessResolver.class)
+        ConsoleTokenAuthenticator servletConsoleTokenAuthenticator(
+                OidcProperties properties, ConsoleUserResolver users, ProjectAccessResolver access) {
+            return new ConsoleApiAuthenticator(users, access, properties.rateLimitPerMinute());
+        }
     }
 
     /**
