@@ -20,3 +20,13 @@ scripts/ci/check-pom-versions.sh
   uv run --frozen mypy
   uv run --frozen pytest -q -W error
 )
+
+# doc-parser（Python，T18）：格式、静态检查、类型检查、单元测试；依赖固化模型的用例（标记 models）只在镜像的 test 阶段运行
+(
+  cd doc-parser
+  uv sync --frozen --quiet
+  uv run --frozen ruff format --check .
+  uv run --frozen ruff check .
+  uv run --frozen mypy
+  uv run --frozen pytest -q -W error
+)

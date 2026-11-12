@@ -1,0 +1,62 @@
+[project]
+name = "meridian-doc-parser"
+version = "0.1.0"
+description = "AgentMeridian 的文档解析服务：扫描件、复杂表格与图片解析为带结构的 Markdown 与块（默认 Docling）"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "docling==2.144.0",
+    "fastapi>=0.121",
+    "python-multipart>=0.0.20",
+    "rapidocr==3.10.0",
+    "onnxruntime>=1.23",
+    # Linux 上 torch 取 CPU 版的索引（x86_64 的 PyPI 版带 CUDA，体积数 GB）；macOS 开发机用 PyPI
+    "torch>=2.8",
+    "torchvision>=0.23",
+    "uvicorn>=0.38",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16",
+    "mypy>=1.18",
+    "pytest>=8.4",
+    "ruff>=0.14",
+]
+
+[tool.uv]
+package = false
+# 依赖只取发布满两周的版本（编码规范「依赖管理」）
+exclude-newer = "2026-10-29T00:00:00Z"
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["models: 需要固化的 Docling 模型（DOC_PARSER_ARTIFACTS），只在镜像的 test 阶段运行"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# 中文注释与文档字符串使用全角标点
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+strict = true
+mypy_path = "src"
+packages = ["doc_parser"]
+
+[[tool.mypy.overrides]]
+# 这些库没有类型标注
+module = ["rapidocr.*", "onnxruntime.*"]
+ignore_missing_imports = true
