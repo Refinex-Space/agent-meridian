@@ -108,7 +108,7 @@ public class SessionPurger {
      * @param session 会话
      * @return 清理完成时为 true；还在等 Webhook 投递或被别的节点处理时为 false
      */
-    boolean purge(DeletedSession session) {
+    public boolean purge(DeletedSession session) {
         Instant now = clock.instant();
         boolean graceOver = !session.deletedAt().isAfter(now.minus(properties.purgeWebhookGrace()));
         if (!graceOver && webhooks.hasUnfinished(session.sessionId())) {
