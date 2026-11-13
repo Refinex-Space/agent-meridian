@@ -179,7 +179,7 @@ T19 知识库检索与接入（2026-11-12 开工；基线 `verify.sh` 只有 D66
 
 - [x] 1. 检索核心（knowledge）：知识库的 `rerank_model`、model-client 的 rerank 与对话、混合检索 SQL（向量与全文各前 50，过滤下推）、RRF、rerank、查询改写；`EXPLAIN` 测试（A01）
 - [x] 2. 接口：内部 `POST /internal/v1/knowledge-bases:search`、公开 `POST /v1/knowledge-bases/{id}/search`、检索次数计量（D70）
-- [ ] 3. MCP Server `/mcp/knowledge`（API Key 认证，工具 `knowledge_search`）
+- [x] 3. MCP Server `/mcp/knowledge`（API Key 认证，工具 `knowledge_search`）
 - [ ] 4. runtime：~~内部对话接口（查询改写）~~（已完成，`ModelEndpointsIT`）、`KnowledgeSearchPort` 的 HTTP 实现（服务 JWT、会话的 `acl_tags`）、智能体配置 `knowledge.query_rewrite_model`
 - [ ] 5. engine：`KnowledgePrefetchMiddleware`（来源标签与注入标记，D33）与场景测试（A06）
 - [ ] 6. 权限隔离：REST、`knowledge_search`、MCP、前置检索四种形态（A02）
