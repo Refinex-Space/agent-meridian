@@ -58,6 +58,18 @@ final class EventMapper {
                 || input instanceof UserRecoveryConfirmationInput;
     }
 
+    /**
+     * 是否在回应中要求"记住此决定"到项目策略：项目策略的写入同管理 API 的 {@code AGENT_WRITE}，只有 {@code actions:respond} 的审批人
+     * 只能记到本会话（R2 审查 I-03）。
+     *
+     * @param input 用户事件
+     * @return 是带 {@code remember_scope=project} 的工具确认时为 true
+     */
+    static boolean remembersForProject(UserEventInput input) {
+        return input instanceof UserToolConfirmationInput confirmation
+                && confirmation.getRememberScope() == cn.refinex.meridian.api.model.RememberScope.PROJECT;
+    }
+
     static SendEventsResponse toResponse(List<StoredEvent> events) {
         return new SendEventsResponse()
                 .data(events.stream().map(EventMapper::toDto).toList());

@@ -87,16 +87,29 @@ class SessionPurgeIT extends ApiTestBase {
                 .satisfies(audit ->
                         assertThat(audit).contains("\"type\": \"api_key\"").contains("\"subject\": \"key_test_a\""));
 
-        // 删除通知（session.status_terminated）还在 Webhook 的 outbox 里：先不清理
+        // 删除后先等一个 purge-delay：执行中的轮次要到续租失败才放弃（R2 审查 C-01）
+        purger.purgeOnce();
+        assertThat(purgeAfter(sessionId)).as("还没到可以清理的时间，不算一次尝试").isNull();
+        clock.advance(Duration.ofMinutes(2));
+
+        // 删除通知（session.status_terminated）还在 Webhook 的 outbox 里：先不清理，只推迟这个会话（审查 C-02）
         purger.purgeOnce();
         assertThat(api(ApiTestKeys.KEY_A).getSession(sessionId).status()).isEqualTo(200);
+        assertThat(purgeAfter(sessionId)).isEqualTo(clock.instant().plus(Duration.ofMinutes(5)));
         webhooks.runOnce();
+        purger.purgeOnce();
+        assertThat(api(ApiTestKeys.KEY_A).getSession(sessionId).status())
+                .as("推迟期间不再尝试")
+                .isEqualTo(200);
+        clock.advance(Duration.ofMinutes(5));
 
-        // 中途失败：沙箱已删，按标签删除残留沙箱时出错；会话还在，可以重试
+        // 中途失败：沙箱已删，按标签删除残留沙箱时出错；会话还在，推迟后重试
         driver.failNext.set(true);
         purger.purgeOnce();
         assertThat(api(ApiTestKeys.KEY_A).getSession(sessionId).status()).isEqualTo(200);
         assertThat(driver.fake.liveFor(sessionId)).isEqualTo(1);
+        assertThat(purgeAfter(sessionId)).isEqualTo(clock.instant().plus(Duration.ofMinutes(5)));
+        clock.advance(Duration.ofMinutes(5));
 
         purger.purgeOnce();
 
@@ -140,6 +153,11 @@ class SessionPurgeIT extends ApiTestBase {
         assertThat(DbAssertions.list(
                         "SELECT count(*) FROM rt.webhook_events WHERE session_id = ?", Long.class, sessionId))
                 .containsExactly(0L);
+    }
+
+    private static java.time.Instant purgeAfter(String sessionId) {
+        return DbAssertions.instant(DbAssertions.row("SELECT purge_after FROM rt.sessions WHERE id = ?", sessionId)
+                .get("purge_after"));
     }
 
     /** 给会话铺上各类数据：沙箱、快照、产物、大结果、工作区（内联与对象存储）、归档文件。返回对象键。 */

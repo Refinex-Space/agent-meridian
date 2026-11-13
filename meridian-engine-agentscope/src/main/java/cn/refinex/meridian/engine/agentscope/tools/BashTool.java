@@ -224,8 +224,15 @@ public final class BashTool extends PlatformTool {
         int timeout = timeoutSeconds(call);
         String wrapped = "timeout -k " + KILL_GRACE_SECONDS + " " + timeout + " bash -c " + shellQuote(command);
         long started = System.nanoTime();
-        ExecuteResponse response =
-                sandbox.execute(call.runtimeContext(), wrapped, timeout + KILL_GRACE_SECONDS + KILL_GRACE_SECONDS);
+        ExecuteResponse response;
+        try {
+            response =
+                    sandbox.execute(call.runtimeContext(), wrapped, timeout + KILL_GRACE_SECONDS + KILL_GRACE_SECONDS);
+        } catch (RuntimeException e) {
+            // 连接中断、超时或执行被取消时命令可能已经在沙箱里运行：同样写审计（退出码 -1），再交给工具基类按错误处理（R2 审查 K-06）
+            audit(call, command, -1, false, Duration.ofNanos(System.nanoTime() - started));
+            throw e;
+        }
         Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
         int exitCode = response.exitCode() == null ? -1 : response.exitCode();
         boolean timedOut = exitCode == TIMEOUT_EXIT_CODE;

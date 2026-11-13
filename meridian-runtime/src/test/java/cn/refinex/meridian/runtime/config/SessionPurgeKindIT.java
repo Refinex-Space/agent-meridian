@@ -144,6 +144,8 @@ class SessionPurgeKindIT {
                         Duration.ofSeconds(60),
                         20,
                         Duration.ofHours(12),
+                        Duration.ofMinutes(2),
+                        Duration.ofMinutes(5),
                         Duration.ofHours(1),
                         Duration.ofDays(90),
                         20,

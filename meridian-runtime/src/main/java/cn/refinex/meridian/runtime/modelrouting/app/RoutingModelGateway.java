@@ -11,6 +11,7 @@ import cn.refinex.meridian.engine.spi.error.RateLimitTimeoutException;
 import cn.refinex.meridian.engine.spi.port.ModelGateway;
 import cn.refinex.meridian.engine.spi.port.SecretResolver;
 import cn.refinex.meridian.engine.spi.port.SecretValue;
+import cn.refinex.meridian.persistence.outbox.TransientFailures;
 import cn.refinex.meridian.runtime.modelrouting.domain.BudgetScope;
 import cn.refinex.meridian.runtime.modelrouting.domain.CatalogEntry;
 import cn.refinex.meridian.runtime.modelrouting.domain.ModelKind;
@@ -28,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 /**
  * {@link ModelGateway} 的实现，见架构设计「端口」「模型调用」「计量与预算」：
@@ -50,6 +52,12 @@ import reactor.core.publisher.Mono;
 public class RoutingModelGateway implements ModelGateway {
 
     private static final Logger log = LoggerFactory.getLogger(RoutingModelGateway.class);
+
+    /** 用量记录遇到瞬时错误的重试次数（不含首次，R2 审查 C-04）。 */
+    static final int USAGE_RECORD_RETRIES = 2;
+
+    /** 用量记录重试的初始退避。 */
+    static final Duration USAGE_RECORD_BACKOFF = Duration.ofMillis(200);
 
     private final ModelCatalogPort catalog;
     private final BudgetLimitPort budgets;
@@ -211,13 +219,16 @@ public class RoutingModelGateway implements ModelGateway {
             long billable = (long) record.usage().inputTokens() + record.usage().outputTokens();
             // 价格表版本取结算时目录中的当前版本：新版本发布后，之后结算的用量按新版本计价（ADR-0045 第 8 条）。调用期间模型被删除时
             // 目录里已经没有它，用量照样记录（不带价格表），不能因此丢账
+            // 用量记录对瞬时错误（数据库短暂不可用）重试；无论最终成败都结算 Redis，计数反映已经消耗的 token。记录仍然失败时错误照样
+            // 抛给调用方记日志：账本缺这一条，之后的对账以账本为准（R2 审查 C-04）
             return Blocking.call(() -> catalog.find(record.route().modelId()))
-                    .flatMap(entry -> Blocking.run(() -> usage.record(ModelUsageMessage.of(
+                    .flatMap(entry -> settleWithUsage(
+                            Blocking.run(() -> usage.record(ModelUsageMessage.of(
                                     context,
                                     record,
                                     clock.instant(),
-                                    entry.map(CatalogEntry::model).orElse(null))))
-                            .then(Blocking.run(() -> {
+                                    entry.map(CatalogEntry::model).orElse(null)))),
+                            Blocking.run(() -> {
                                 ledger.settle(
                                         context.tenantId(),
                                         BudgetScope.of(context),
@@ -239,6 +250,22 @@ public class RoutingModelGateway implements ModelGateway {
                         }
                     });
         });
+    }
+
+    /**
+     * 先写用量记录（瞬时错误重试 {@value #USAGE_RECORD_RETRIES} 次），再结算 Redis；记录最终失败时同样结算，再把记录的错误交出去。
+     *
+     * @param recordUsage 写用量记录，每次订阅执行一次
+     * @param settleRedis 结算 Redis 计数与令牌桶
+     * @return 完成信号
+     */
+    static Mono<Void> settleWithUsage(Mono<Void> recordUsage, Mono<Void> settleRedis) {
+        return recordUsage
+                .retryWhen(Retry.backoff(USAGE_RECORD_RETRIES, USAGE_RECORD_BACKOFF)
+                        .filter(TransientFailures::isTransient)
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
+                .onErrorResume(error -> settleRedis.then(Mono.error(error)))
+                .then(settleRedis);
     }
 
     @Override

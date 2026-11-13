@@ -33,25 +33,43 @@ public class SessionLifecycleRepository extends SystemRepository {
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * 已删除、等待清理的会话，删除最早的在前。
+     * 已删除、可以清理的会话，删除最早的在前：删除时间不晚于 {@code readyBefore}，且没有被推迟到 {@code now} 之后（R2 审查 C-01、C-02）。
      *
      * @param limit 至多条数
+     * @param readyBefore 删除时间的上限（删除后至少等一段时间）
+     * @param now 当前时间
      * @return 会话
      */
-    public List<DeletedSession> deletedSessions(int limit) {
+    public List<DeletedSession> deletedSessions(int limit, Instant readyBefore, Instant now) {
         return jdbc().sql("""
                         SELECT id, tenant_id, project_id, deleted_at FROM rt.sessions
-                         WHERE deleted_at IS NOT NULL
+                         WHERE deleted_at IS NOT NULL AND deleted_at <= :ready_before
+                           AND (purge_after IS NULL OR purge_after <= :now)
                          ORDER BY deleted_at
                          LIMIT :limit
                         """)
                 .param("limit", limit)
+                .param("ready_before", JdbcValues.timestamptz(readyBefore))
+                .param("now", JdbcValues.timestamptz(now))
                 .query((rs, row) -> new DeletedSession(
                         rs.getString("id"),
                         rs.getString("tenant_id"),
                         rs.getString("project_id"),
                         JdbcValues.instant(rs, "deleted_at")))
                 .list();
+    }
+
+    /**
+     * 推迟一个已删除会话的下一次清理（等待 Webhook 投递或清理失败时）。
+     *
+     * @param sessionId 会话 ID
+     * @param until 最早的下一次尝试时间
+     */
+    public void deferPurge(String sessionId, Instant until) {
+        jdbc().sql("UPDATE rt.sessions SET purge_after = :until WHERE id = :id AND deleted_at IS NOT NULL")
+                .param("id", sessionId)
+                .param("until", JdbcValues.timestamptz(until))
+                .update();
     }
 
     /**

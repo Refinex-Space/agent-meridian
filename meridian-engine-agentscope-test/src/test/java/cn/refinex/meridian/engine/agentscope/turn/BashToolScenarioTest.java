@@ -241,6 +241,26 @@ class BashToolScenarioTest {
     }
 
     @Test
+    void aCommandWhoseExecutionFailsIsStillAudited() {
+        // R2 审查 K-06：连接中断时命令可能已经在沙箱里运行，审计不能漏记
+        FakeSandbox sandbox = new FakeSandbox().respond(cmd -> {
+            throw new IllegalStateException("connection reset by sandbox-router");
+        });
+        EngineHarness harness = harness(bash("make deploy"), sandbox);
+
+        List<EngineEvent> events = harness.run(
+                harness.claim("thr_main", "trn_1", 1, policy(rule("bash", null, PermissionBehavior.ALLOW))),
+                userText("部署"));
+
+        assertThat(result(events, "call_1").state()).isEqualTo(AgentOutputEvent.ToolResultState.ERROR);
+        assertThat(harness.ledger.sandboxCommands()).singleElement().satisfies(c -> {
+            assertThat(c.command()).isEqualTo("make deploy");
+            assertThat(c.exitCode()).isEqualTo(-1);
+            assertThat(c.timedOut()).isFalse();
+        });
+    }
+
+    @Test
     void theMainThreadAndAChildThreadUseTheSameSessionSandbox() {
         ScriptedModel model = ScriptedModel.builder()
                 .respond(r -> r.toolCall("call_main", "bash", Map.of("command", "echo hi > shared.txt")))

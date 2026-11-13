@@ -82,21 +82,28 @@ public class SessionPurger {
     }
 
     /**
-     * 扫描一次。单个会话失败只记日志，下次重试。
+     * 扫描一次：只取删除超过 {@code purge-delay} 的会话（执行中的轮次已放弃）。单个会话等待 Webhook 投递或失败时推迟
+     * {@code purge-retry-delay} 再试，不挡住后面的会话（R2 审查 C-01、C-02）。
      *
      * @return 本次清理完成的会话数
      */
     public int purgeOnce() {
-        List<DeletedSession> deleted =
-                transactions.execute(status -> sessions.deletedSessions(properties.purgeBatchSize()));
+        Instant now = clock.instant();
+        List<DeletedSession> deleted = transactions.execute(status ->
+                sessions.deletedSessions(properties.purgeBatchSize(), now.minus(properties.purgeDelay()), now));
         int purged = 0;
         for (DeletedSession session : deleted == null ? List.<DeletedSession>of() : deleted) {
+            boolean done = false;
             try {
-                if (purge(session)) {
-                    purged++;
-                }
+                done = purge(session);
             } catch (RuntimeException e) {
-                log.warn("清理已删除的会话失败，下次重试 sessionId={}", session.sessionId(), e);
+                log.warn("清理已删除的会话失败，稍后重试 sessionId={}", session.sessionId(), e);
+            }
+            if (done) {
+                purged++;
+            } else {
+                transactions.executeWithoutResult(status ->
+                        sessions.deferPurge(session.sessionId(), clock.instant().plus(properties.purgeRetryDelay())));
             }
         }
         return purged;

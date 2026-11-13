@@ -63,6 +63,19 @@ public record PlatformContext(
     }
 
     /**
+     * 公开 API 幂等键的作用域主体：API Key 只属于一个项目，取 Key ID；控制台用户可以带不同的 {@code Meridian-Project} 调用，取
+     * {@link #actor()} 再加项目，否则同一用户同键同请求体在另一个项目重放会拿到前一个项目的结果（R2 审查 I-05）。
+     *
+     * @return 主体；两者都没有时为空
+     */
+    public String idempotencyPrincipal() {
+        if (apiKeyId != null || userId == null) {
+            return actor();
+        }
+        return actor() + "@" + projectId;
+    }
+
+    /**
      * 新建构建器。
      *
      * @return 空的构建器

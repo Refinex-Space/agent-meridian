@@ -265,6 +265,28 @@ class WebhookDeliveryIT extends ApiTestBase {
         assertThat(receiver.findAll(postRequestedFor(urlEqualTo("/ok")))).isEmpty();
     }
 
+    @Test
+    void aDeliveryClaimedAfterItsDeadlineIsNotSent() {
+        // R2 审查 C-08：订阅一直读不到（control-plane 不可用）时投递不计次数地重试，恢复时可能已过 24 小时截止时间
+        receiver.stubFor(post(urlEqualTo("/late")).willReturn(aResponse().withStatus(200)));
+        String sessionId = createSession(null);
+        subscribe(new WebhookSubscription("whk_late", url("/late"), Set.of("session.error"), true, "whsec_l"));
+        append(
+                sessionId,
+                mainThread(sessionId),
+                new SessionEvent.Error("tool.failed", "late", SessionEvent.RetryStatus.TERMINAL));
+        dispatcher.fanOut();
+
+        clock.advance(Duration.ofHours(24).plusMinutes(1));
+        dispatcher.deliverDue();
+
+        JsonNode delivery = delivery("whk_late", sessionId);
+        assertThat(delivery.get("status").asString()).isEqualTo("failed");
+        assertThat(delivery.get("attempts").asInt()).isZero();
+        assertThat(delivery.get("last_error").asString()).startsWith("deadline_exceeded");
+        assertThat(receiver.findAll(postRequestedFor(urlEqualTo("/late")))).isEmpty();
+    }
+
     private static void subscribe(WebhookSubscription... webhooks) {
         SUBSCRIPTIONS.put(ApiTestKeys.PROJECT_A, List.of(webhooks));
     }

@@ -69,11 +69,12 @@ public class EventsApiController implements EventsApi {
             Mono<SendEventsRequest> sendEventsRequest,
             String idempotencyKey,
             ServerWebExchange exchange) {
-        // sessions:write 可以发送全部事件；只有 actions:respond（审批人）时只能发送回应事件（ADR-0053）
+        // sessions:write 可以发送全部事件；只有 actions:respond（审批人）时只能发送回应事件（ADR-0053），且"记住此决定"只能记到本会话
         PublicApiPrincipal principal =
                 ApiKeyAuthorization.requireAny(exchange, ApiKeyScope.SESSIONS_WRITE, ApiKeyScope.ACTIONS_RESPOND);
         return sendEventsRequest.flatMap(request -> {
-            if (!request.getEvents().stream().allMatch(EventMapper::isResponse)) {
+            if (!request.getEvents().stream().allMatch(EventMapper::isResponse)
+                    || request.getEvents().stream().anyMatch(EventMapper::remembersForProject)) {
                 ApiKeyAuthorization.require(principal, ApiKeyScope.SESSIONS_WRITE);
             }
             return idempotent.execute(

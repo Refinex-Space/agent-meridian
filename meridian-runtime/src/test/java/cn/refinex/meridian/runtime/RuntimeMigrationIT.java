@@ -92,7 +92,7 @@ class RuntimeMigrationIT {
                 "sandbox_state",
                 "sandbox_pod_ip",
                 "sandbox_last_used_at",
-                "budget_limit");
+                "purge_after");
         assertColumns("threads", "id", "session_id", "parent_thread_id", "parent_tool_use_id", "agent_name", "status");
         assertColumns(
                 "turns",

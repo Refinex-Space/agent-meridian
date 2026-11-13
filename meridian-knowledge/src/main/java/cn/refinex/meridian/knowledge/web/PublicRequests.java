@@ -16,7 +16,7 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * 公开 API 的 POST 处理器执行业务的统一入口（架构设计「约定」：所有 POST 支持 {@code Idempotency-Key}，复用
  * {@code persistence.idempotency}），与 runtime 的 {@code IdempotentRequests} 相同的语义：同键同请求 24 小时内返回首次结果并带
- * {@code Idempotent-Replayed: true}，同键不同请求 409。作用域是请求主体（{@code PlatformContext.actor()}：API Key 或控制台用户），
+ * {@code Idempotent-Replayed: true}，同键不同请求 409。作用域是请求主体（{@code PlatformContext.idempotencyPrincipal()}：API Key，或控制台用户加项目），
  * {@code PlatformContext} 已由 {@code ApiKeyFilter} 绑定。
  */
 @Component
@@ -68,7 +68,7 @@ public class PublicRequests {
                 request.getRequestURI(),
                 fingerprintBody == null ? new byte[0] : FINGERPRINT.writeValueAsBytes(fingerprintBody));
         IdempotentResult result = idempotency.execute(
-                PlatformContexts.current().actor(),
+                PlatformContexts.current().idempotencyPrincipal(),
                 idempotencyKey,
                 fingerprint,
                 () -> new StoredResponse(status.value(), JsonMappers.lenient().writeValueAsString(action.get())));

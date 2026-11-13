@@ -20,7 +20,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 24 小时内同键同请求体返回首次结果，同键不同请求体返回 409（架构设计「API 设计」中的「约定」，ADR-0020）。
  *
  * <p>请求指纹是方法、路径与请求 DTO 的规范化 JSON（映射的键排序）的摘要，所以只是空白或字段顺序不同的请求体视为相同。
- * 幂等作用域是 API Key（{@code PlatformContext.apiKeyId}）：不同调用方的同名键互不影响。业务以异常结束时键被释放，可以重试。
+ * 幂等作用域是 API Key，或控制台用户加项目（{@code PlatformContext.idempotencyPrincipal()}）：不同调用方的同名键互不影响。业务以异常结束时键被释放，可以重试。
  * 重放的响应带 {@code Idempotent-Replayed: true}。
  *
  * <p>业务在虚拟线程上执行（{@code Blocking}），可以直接调用阻塞的用例。线程安全：无状态。
@@ -75,7 +75,7 @@ public class IdempotentRequests {
                 exchange.getRequest().getPath().pathWithinApplication().value(),
                 request == null ? new byte[0] : FINGERPRINT.writeValueAsBytes(request));
         return Blocking.call(() -> idempotency.execute(
-                        PlatformContexts.current().actor(),
+                        PlatformContexts.current().idempotencyPrincipal(),
                         idempotencyKey,
                         fingerprint,
                         () -> new StoredResponse(

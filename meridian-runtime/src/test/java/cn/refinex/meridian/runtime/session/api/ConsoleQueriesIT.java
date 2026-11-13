@@ -269,6 +269,14 @@ class ConsoleQueriesIT extends ApiTestBase {
         assertThat(readOnly.status()).isEqualTo(403);
         assertThat(readOnly.text("code")).isEqualTo("auth.insufficient_scope");
 
+        // R2 审查 I-03：审批人不能把决定记进项目策略（同管理 API 的 AGENT_WRITE），只能记到本会话
+        ApiResponse rememberForProject = approver.sendEvents(session, """
+                {"events": [{"type": "user.tool_confirmation", "action_id": "%s", "approved": true,
+                             "remember_scope": "project"}]}
+                """.formatted(action), null);
+        assertThat(rememberForProject.status()).isEqualTo(403);
+        assertThat(rememberForProject.text("code")).isEqualTo("auth.insufficient_scope");
+
         // 只有回应事件时可以发送；结论记下审批 Key
         assertThat(approver.sendEvents(session, confirmation, null).status()).isEqualTo(202);
         JsonNode resolved = find(api(ApiTestKeys.KEY_A), "status=resolved&session_id=" + session, action);

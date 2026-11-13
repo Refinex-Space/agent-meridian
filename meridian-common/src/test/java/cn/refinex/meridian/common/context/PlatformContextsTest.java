@@ -17,6 +17,30 @@ class PlatformContextsTest {
             .build();
 
     @Test
+    void consoleUsersHaveAnIdempotencyScopePerProject() {
+        PlatformContext key = PlatformContext.builder()
+                .tenantId("ten_A")
+                .projectId("prj_A")
+                .apiKeyId("key_A")
+                .build();
+        PlatformContext userInA = PlatformContext.builder()
+                .tenantId("ten_A")
+                .projectId("prj_A")
+                .userId("alice")
+                .build();
+        PlatformContext userInB = PlatformContext.builder()
+                .tenantId("ten_A")
+                .projectId("prj_B")
+                .userId("alice")
+                .build();
+
+        assertThat(key.idempotencyPrincipal()).isEqualTo("key_A");
+        assertThat(userInA.idempotencyPrincipal()).isEqualTo("user:alice@prj_A");
+        assertThat(userInB.idempotencyPrincipal()).isNotEqualTo(userInA.idempotencyPrincipal());
+        assertThat(userInA.actor()).isEqualTo("user:alice");
+    }
+
+    @Test
     void scopedBindingIsVisibleOnlyInsideTheScope() throws Exception {
         assertThat(PlatformContexts.find()).isEmpty();
 

@@ -12,6 +12,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param purgeBatchSize 每次扫描至多处理的已删除会话数
  * @param purgeWebhookGrace 清理等待该会话 Webhook 投递结束的最长时间（自删除时算起），默认 12 小时：重试计划总长约 10.7 小时，
  *     清理仍在删除后 24 小时内完成
+ * @param purgeDelay 删除后至少等多久才清理，默认 2 分钟：删除只在数据库里取消轮次，执行它的节点要到续租失败（至多一个租约有效期）
+ *     才放弃本轮，在此之前它仍可能写工作区、产物与用量（R2 审查 C-01）
+ * @param purgeRetryDelay 一个会话的清理在等待 Webhook 或失败之后推迟多久再试，默认 5 分钟（审查 C-02）
  * @param archiveInterval 事件归档的扫描间隔
  * @param archiveAfter 会话无活动多久后归档事件，默认 90 天
  * @param archiveBatchSize 每次扫描至多归档的会话数
@@ -25,6 +28,8 @@ public record RetentionProperties(
         @DefaultValue("60s") Duration purgeInterval,
         @DefaultValue("20") int purgeBatchSize,
         @DefaultValue("12h") Duration purgeWebhookGrace,
+        @DefaultValue("2m") Duration purgeDelay,
+        @DefaultValue("5m") Duration purgeRetryDelay,
         @DefaultValue("1h") Duration archiveInterval,
         @DefaultValue("90d") Duration archiveAfter,
         @DefaultValue("20") int archiveBatchSize,

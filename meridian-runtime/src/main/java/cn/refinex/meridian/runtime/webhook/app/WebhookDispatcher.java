@@ -49,6 +49,9 @@ public class WebhookDispatcher {
     /** Webhook 已删除或停用时记录的原因。 */
     static final String UNAVAILABLE = "webhook_unavailable: the webhook was deleted or disabled";
 
+    /** 认领时已过 24 小时截止时间的记录（例如订阅一直读不到）不再发送，以这个原因结束（R2 审查 C-08）。 */
+    static final String DEADLINE_EXCEEDED = "deadline_exceeded: the delivery deadline passed before it could be sent";
+
     private static final Logger log = LoggerFactory.getLogger(WebhookDispatcher.class);
 
     private final WebhookQueueRepository queue;
@@ -184,6 +187,13 @@ public class WebhookDispatcher {
 
     /** 投递一条认领到的记录并记录结果。 */
     private void deliver(DueDelivery delivery) {
+        if (!clock.instant().isBefore(delivery.deadline())) {
+            transactions.executeWithoutResult(
+                    status -> queue.record(delivery, false, clock.instant(), null, DEADLINE_EXCEEDED, null, false));
+            failed.increment();
+            log.warn("Webhook 投递已过截止时间，不再发送 deliveryId={} deadline={}", delivery.id(), delivery.deadline());
+            return;
+        }
         Optional<WebhookSubscription> webhook =
                 subscriptions.forProject(delivery.tenantId(), delivery.projectId()).stream()
                         .filter(candidate -> candidate.id().equals(delivery.webhookId()))
