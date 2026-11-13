@@ -210,13 +210,13 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 
 T20a（worktree `../agent-meridian-console`，分支 `console/T20`）：
 
-- [ ] 设计计划：`frontend-design.md`「设计定稿」（令牌草案、布局线框、自查与改掉的默认值）（A01）
+- [x] 设计计划：`frontend-design.md`「设计定稿」（令牌草案、布局线框、自查与改掉的默认值）（A01；实现中调整的值收尾时回写）
 - [ ] ADR-0021 前端依赖选型与版本（A08）
-- [ ] `console/` 工程：Vite、React 19、TS 严格、pnpm、ESLint、Prettier、Vitest、Testing Library、Storybook（a11y）、MSW、Playwright、openapi-typescript
-- [ ] 守护规则：颜色、图标库、能机检的禁用条目（A03）
-- [ ] 令牌（OKLCH 亮暗两套、`@theme` 映射）、字体（Plex Sans/Mono、Plex Sans SC 切片）、令牌页（A02）
-- [ ] 图标：Phosphor 封装、品牌标识与七个领域图标、并排展示（A04）
-- [ ] 基元：按钮、徽标、标签页、提示、滚动区域、骨架
+- [x] `console/` 工程：Vite、React 19、TS 严格、pnpm、ESLint、Prettier、Vitest、Testing Library、Storybook（a11y）、MSW、Playwright、openapi-typescript（Playwright 配置随性能测试补上）
+- [ ] 守护规则：颜色、图标库、能机检的禁用条目（A03；规则已写，RuleTester 测试与逐条验证待做）
+- [x] 令牌（OKLCH 亮暗两套、`@theme` 映射）、字体（Plex Sans/Mono、Plex Sans SC 切片）、令牌页（A02）
+- [x] 图标：Phosphor 封装、品牌标识与七个领域图标、并排展示（A04）
+- [x] 基元：按钮、徽标、标签页、提示、滚动区域、骨架
 - [ ] `SessionTimeline` 与会话详情原型（MSW 模拟 SSE、待处理动作、子线程）（A05）
 - [ ] 时间轴性能：Playwright 1 万条事件滚动 5 秒的帧时间（A06）
 - [ ] `pnpm -C console lint`、`typecheck`、`test`、`build-storybook` 接入 `scripts/dev/verify.sh`（A09）

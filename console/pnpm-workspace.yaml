@@ -1,0 +1,16 @@
+# 单包工程；本文件只承载 pnpm 的安装设置。
+packages:
+  - .
+
+# 只允许 esbuild 的安装脚本（校验本机二进制）。@ibm/plex-sans-sc 的 postinstall 是 IBM 的遥测上报，不允许执行。
+onlyBuiltDependencies:
+  - esbuild
+ignoredBuiltDependencies:
+  - '@ibm/plex-sans-sc'
+
+# 两处 peer 范围落后于实际兼容性，见 ADR-0021：eslint-plugin-jsx-a11y 6.10.2 只写到 ESLint 9（没有使用 ESLint 10
+# 移除的 API，ESLint 9 已停止支持）；openapi-typescript 7.13.0 只写到 TypeScript 5（生成结果在 6.0 下一致）。
+peerDependencyRules:
+  allowedVersions:
+    eslint-plugin-jsx-a11y>eslint: '10'
+    openapi-typescript>typescript: '6'

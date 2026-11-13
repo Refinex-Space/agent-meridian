@@ -1,0 +1,156 @@
+/*
+ * 设计令牌：控制台颜色、字体、字号、圆角、阴影、动效的唯一来源（frontend-design.md「设计定稿」）。
+ *
+ * 颜色用 OKLCH，每个令牌以 light-dark(亮色, 暗色) 写出两套值，主题由 color-scheme 决定（index.css）：
+ * 默认跟随系统，<html data-theme="light|dark"> 强制指定。Tailwind 的默认色板、字号、圆角、阴影、字距全部移除，
+ * 组件只能使用这里的令牌；`@theme static` 让全部变量都输出到 :root，令牌页与测试按名字读取。
+ */
+@theme static {
+  --color-*: initial;
+
+  /* 纸面与层次 */
+  --color-canvas: light-dark(oklch(0.974 0.003 165), oklch(0.212 0.015 236));
+  --color-surface: light-dark(oklch(1 0 0), oklch(0.254 0.019 239));
+  --color-surface-raised: light-dark(oklch(1 0 0), oklch(0.292 0.021 239));
+  --color-surface-inset: light-dark(oklch(0.962 0.004 165), oklch(0.228 0.016 237));
+  --color-surface-hover: light-dark(oklch(0.955 0.005 165), oklch(0.285 0.02 239));
+  --color-rule: light-dark(oklch(0.893 0.007 160), oklch(0.33 0.023 241));
+  --color-rule-strong: light-dark(oklch(0.64 0.012 165), oklch(0.545 0.02 238));
+
+  /* 墨与石墨 */
+  --color-ink: light-dark(oklch(0.25 0.015 166), oklch(0.93 0.008 229));
+  --color-ink-2: light-dark(oklch(0.497 0.015 164), oklch(0.745 0.015 232));
+  --color-ink-disabled: light-dark(oklch(0.7 0.01 165), oklch(0.5 0.015 232));
+
+  /* 海图蓝：主操作、链接、焦点、选中、运行中 */
+  --color-accent: light-dark(oklch(0.47 0.125 252), oklch(0.7 0.11 252));
+  --color-accent-hover: light-dark(oklch(0.41 0.12 252), oklch(0.76 0.1 252));
+  --color-accent-weak: light-dark(oklch(0.955 0.016 252), oklch(0.32 0.05 252));
+  --color-on-accent: light-dark(oklch(1 0 0), oklch(0.212 0.015 236));
+
+  /* 黄铜：只用于"此刻"与等待处理 */
+  --color-brass: light-dark(oklch(0.63 0.117 81), oklch(0.751 0.118 81));
+  --color-brass-ink: light-dark(oklch(0.52 0.1 78), oklch(0.78 0.11 82));
+  --color-brass-weak: light-dark(oklch(0.968 0.022 88), oklch(0.31 0.045 80));
+
+  /* 语义 */
+  --color-success: light-dark(oklch(0.522 0.093 161), oklch(0.72 0.11 160));
+  --color-danger: light-dark(oklch(0.542 0.17 28), oklch(0.7 0.14 28));
+  --color-danger-hover: light-dark(oklch(0.48 0.165 28), oklch(0.75 0.13 28));
+  --color-danger-weak: light-dark(oklch(0.962 0.018 28), oklch(0.31 0.06 28));
+  --color-reschedule: light-dark(oklch(0.62 0.085 252), oklch(0.62 0.07 252));
+  --color-terminated: light-dark(oklch(0.64 0.012 165), oklch(0.56 0.015 232));
+
+  /* 时间轴：子午线与子线程 */
+  --color-meridian: light-dark(oklch(0.497 0.015 164), oklch(0.745 0.015 232));
+  --color-lane: light-dark(oklch(0.61 0.012 165), oklch(0.6 0.02 238));
+
+  /* 字体 */
+  --font-*: initial;
+  --font-sans: 'IBM Plex Sans', 'IBM Plex Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'IBM Plex Sans SC', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --font-weight-*: initial;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* 字号阶梯：类名即像素值 */
+  --text-*: initial;
+  --text-12: 0.75rem;
+  --text-12--line-height: 1rem;
+  --text-13: 0.8125rem;
+  --text-13--line-height: 1.25rem;
+  --text-14: 0.875rem;
+  --text-14--line-height: 1.3125rem;
+  --text-16: 1rem;
+  --text-16--line-height: 1.5rem;
+  --text-18: 1.125rem;
+  --text-18--line-height: 1.5rem;
+  --text-22: 1.375rem;
+  --text-22--line-height: 1.75rem;
+  --text-28: 1.75rem;
+  --text-28--line-height: 2.25rem;
+
+  --leading-*: initial;
+  --leading-heading: 1.3;
+  --leading-body: 1.5;
+  --leading-table: 1.4;
+
+  --tracking-*: initial;
+
+  /* 圆角按层级 */
+  --radius-*: initial;
+  --radius-control: 4px;
+  --radius-panel: 6px;
+  --radius-overlay: 8px;
+
+  /* 阴影只有一种，只给浮层；颜色取墨色的色相 */
+  --shadow-*: initial;
+  --shadow-overlay:
+    0 1px 2px light-dark(oklch(0.25 0.02 166 / 0.06), oklch(0.1 0.02 236 / 0.4)),
+    0 8px 24px -6px light-dark(oklch(0.25 0.02 166 / 0.12), oklch(0.1 0.02 236 / 0.5));
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --blur-*: initial;
+
+  /* 动效 */
+  --ease-*: initial;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 250ms;
+  --breath: 2s;
+
+  --animate-*: initial;
+  --animate-breath: breath var(--breath) ease-in-out infinite;
+  --animate-skeleton: skeleton 1.6s ease-in-out infinite;
+
+  @keyframes breath {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.6;
+      transform: scale(0.85);
+    }
+  }
+
+  @keyframes skeleton {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  /* 浮层出现：不透明度加 2% 的缩放；减少动效时只用 fade-in */
+  --animate-overlay-in: overlay-in var(--duration-fast) var(--ease-out);
+  --animate-fade-in: fade-in var(--duration-fast) var(--ease-out);
+  --animate-spin: spin 0.8s linear infinite;
+
+  @keyframes overlay-in {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}

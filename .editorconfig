@@ -18,6 +18,10 @@ indent_size = 4
 [*.{yml,yaml,json}]
 indent_size = 2
 
+# 控制台（TypeScript、CSS）按前端惯例两格缩进，与 console/.prettierrc.json 一致
+[console/**]
+indent_size = 2
+
 [*.md]
 trim_trailing_whitespace = false
 

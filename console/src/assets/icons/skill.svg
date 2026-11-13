@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 技能：制图用的三角板，带分划：可复用的成套方法 -->
+  <path d="M40 48v168h168z"/>
+  <path d="M80 136v40h40z"/>
+  <path d="M40 88h20M40 128h20"/>
+</svg>

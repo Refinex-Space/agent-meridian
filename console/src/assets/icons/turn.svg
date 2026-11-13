@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 轮次：两条主刻度之间的一段（像尺寸线），中间的节点是这一轮的事件 -->
+  <path d="M40 128h176"/>
+  <path d="M40 88v80M216 88v80"/>
+  <circle cx="100" cy="128" r="12" fill="currentColor"/>
+  <circle cx="156" cy="128" r="12" fill="currentColor"/>
+</svg>

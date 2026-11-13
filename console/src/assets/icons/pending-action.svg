@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 待处理动作：等待处理的菱形里一个暂停记号：执行停在这里，等人回应 -->
+  <path d="M128 32l96 96-96 96-96-96z"/>
+  <path d="M112 104v48M144 104v48"/>
+</svg>

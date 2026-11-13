@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 智能体：菱形（测绘符号）作头，肩弧作身，不画机器人 -->
+  <path d="M128 40l40 40-40 40-40-40z"/>
+  <path d="M48 216a80 72 0 0 1 160 0"/>
+</svg>

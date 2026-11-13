@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 线程：子线程从主线分出、平行前进、再并回主线，与时间轴的分叉一致 -->
+  <path d="M88 32v192"/>
+  <path d="M88 48c0 32 80 24 80 56v48c0 32-80 24-80 56"/>
+</svg>

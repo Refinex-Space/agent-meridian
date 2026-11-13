@@ -1,0 +1,8 @@
+dist
+storybook-static
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+public/mockServiceWorker.js
+src/lib/api/v1.d.ts

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 子午线弧：圆心 88,128、半径 112，从 -60 度到 60 度 -->
+  <path d="M144 31a112 112 0 0 1 0 194"/>
+  <!-- 刻度：沿半径向内，赤道处（0 度）为主刻度 -->
+  <path d="M185 72l-15.6 9M200 128h-32M185 184l-15.6-9"/>
+  <!-- 此刻：圆心上的菱形，像六分仪的轴心 -->
+  <path d="M88 104l24 24-24 24-24-24z" fill="currentColor"/>
+</svg>

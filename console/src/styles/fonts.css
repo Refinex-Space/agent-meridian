@@ -1,0 +1,13 @@
+/*
+ * 字体自托管，只引用 400、500、600 三个字重；每个 @font-face 都带 unicode-range，浏览器只下载页面用到的切片。
+ * - IBM Plex Sans、IBM Plex Mono：@fontsource 的按语言子集切好的 woff2。
+ * - IBM Plex Sans SC：IBM 官方包按字频切好的 216 片 woff2（常用字集中在少数切片里），见 ADR-0021。
+ */
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import '@ibm/plex-sans-sc/fonts/split/woff2/hinted/IBMPlexSansSC-Regular.css';
+@import '@ibm/plex-sans-sc/fonts/split/woff2/hinted/IBMPlexSansSC-Medium.css';
+@import '@ibm/plex-sans-sc/fonts/split/woff2/hinted/IBMPlexSansSC-SemiBold.css';

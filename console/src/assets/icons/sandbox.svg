@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 沙箱：四角的界标围出隔离区，中间是被隔离的执行体 -->
+  <path d="M40 88V40h48M168 40h48v48M216 168v48h-48M88 216H40v-48"/>
+  <rect x="96" y="96" width="64" height="64" rx="8"/>
+</svg>
