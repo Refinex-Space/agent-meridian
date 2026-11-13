@@ -92,7 +92,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
 | T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 已完成 | 5220288 |
 | T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 已完成 | 1cf2761 |
-| T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 未开始 | — |
+| T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 进行中 | — |
 | T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 未开始 | — |
 | T25a | [控制台：知识库、待处理与概览](tasks/T25a-console-knowledge-pending-overview.md) | 4 | T24 | high | 大 | 无 | 未开始 | — |
 | T25b | [控制台：用量与预算、设置](tasks/T25b-console-usage-settings.md) | 4 | T25a | high | 大 | 无 | 未开始 | — |
@@ -175,7 +175,17 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T23 控制台：能力、模型与凭据
+
+- [ ] 后端补充：技能的引用方（`Skill.references`，已发布的智能体版本）；ADR-0056
+- [ ] 能力·技能：列表、上传技能包（浏览器端解析并预览 frontmatter 与正文）、详情（版本、文件、引用方）、上传新版本、删除
+- [ ] 能力·MCP 服务：登记（传输、地址、请求头凭据）、详情（连接状态、工具清单、逐个标注副作用等级并保存）、重新探测、修改、删除
+- [ ] 能力·自定义工具：说明页（声明方式、命名规则、示例请求）
+- [ ] 凭据：列表（名称、范围、版本、创建与最后使用时间、引用方）、写入、轮换、删除（写明引用方）；明文不进查询缓存与存储
+- [ ] 模型：供应商账号（类型、端点、凭据、限流、连通性测试）、模型目录（上下文窗口、能力、默认参数、测试一次最小请求并显示延迟与用量）、价格表（版本化、生效时间、发布新版本）
+- [ ] Playwright：A01 技能、A02 MCP、A03 真实供应商（live）、A04 凭据明文、A05 价格表版本与历史成本
+- [ ] A06 截图评审（`tmp/evidence/T23/`）与截图基线；A07 ego-browser 走查
+- [ ] 收尾：模块 CLAUDE.md、frontend-design.md、console-api-map.md、验收记录、A08 全部检查与 verify.sh
 
 ## 控制台设计轨道
 
