@@ -17,8 +17,9 @@ const EMOJI = /(?![©®™])\p{Extended_Pictographic}/u;
 const ARROWS = /[→⟶➔➜➝➞➡⇒]/;
 
 const CLASS_FUNCTIONS = new Set(['cn', 'cva', 'clsx', 'cx', 'twMerge']);
+// 较长的名字在前：否则 `gap-x-2` 会被当成 `gap` 加值 `x-2`。
 const SPACING_PROPERTY =
-  /^-?(?:p|px|py|ps|pe|pt|pr|pb|pl|m|mx|my|ms|me|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y)-(.+)$/;
+  /^-?(?:gap-x|gap-y|space-x|space-y|px|py|ps|pe|pt|pr|pb|pl|mx|my|ms|me|mt|mr|mb|ml|gap|p|m)-(.+)$/;
 const SPACING_ALLOWED = new Set(['0', 'px', '1', '2', '3', '4', '6', '8', '12', 'auto']);
 
 /** 去掉变体前缀（`hover:`、`md:`、`[&>svg]:`）与重要性标记，得到工具类本身。 */

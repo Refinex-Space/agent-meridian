@@ -131,6 +131,17 @@
   }
 
   /* 浮层出现：不透明度加 2% 的缩放；减少动效时只用 fade-in */
+  /* 时间轴：新事件沿子午线落位（向下 8px 落定），减少动效时只用 fade-in */
+  --animate-arrive: arrive var(--duration-base) var(--ease-out) both;
+  --animate-fade-in-slow: fade-in var(--duration-base) var(--ease-out) both;
+
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+  }
+
   --animate-overlay-in: overlay-in var(--duration-fast) var(--ease-out);
   --animate-fade-in: fade-in var(--duration-fast) var(--ease-out);
   --animate-spin: spin 0.8s linear infinite;
