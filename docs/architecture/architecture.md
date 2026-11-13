@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.25 |
+| 版本 | v1.26 |
 | 日期 | 2026-11-12 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -388,7 +388,7 @@ erDiagram
 
 两张表的分区由迁移角色拥有的 `SECURITY DEFINER` 函数 `ensure_ledger_partitions(month)`、`drop_expired_ledger_partitions()` 创建与删除，应用角色在两张表与全部分区上只有 `INSERT`、`SELECT`（ADR-0048）。
 
-**knowledge（schema `kb`）**：`knowledge_bases`（`embedding_model` 创建后不可改）、`documents`（`acl_tags`、`status`、`parser`、`file_bytes`、`index_bytes`、`chunk_count`）、`chunks`（`embedding vector(n)`，n 由迁移占位符取配置，默认 1024；`tsv tsvector`、`acl_tags text[]`、`source_locator jsonb`、`kind`（正文或表格）、`token_count`；HNSW、`tsv` 与 `acl_tags` 的 GIN 索引）、`ingestion_jobs`（`status`、`attempts`、`not_before`、`lease_expires_at`、`stage` 与进度、错误码）、`storage_reports`（每个知识库每天一行，存储计量的去重）（ADR-0051）。
+**knowledge（schema `kb`）**：`knowledge_bases`（`embedding_model` 创建后不可改，`rerank_model` 可选，ADR-0052）、`documents`（`acl_tags`、`status`、`parser`、`file_bytes`、`index_bytes`、`chunk_count`）、`chunks`（`embedding vector(n)`，n 由迁移占位符取配置，默认 1024；`tsv tsvector`、`acl_tags text[]`、`source_locator jsonb`、`kind`（正文或表格）、`token_count`；HNSW、`tsv` 与 `acl_tags` 的 GIN 索引）、`ingestion_jobs`（`status`、`attempts`、`not_before`、`lease_expires_at`、`stage` 与进度、错误码）、`storage_reports`（每个知识库每天一行，存储计量的去重）（ADR-0051）。
 
 ### 跨服务数据流
 
@@ -514,7 +514,7 @@ AgentScope 的状态键是 `(userId, sessionId, key)`，没有智能体维度。
 | `SteerMiddleware` | `onReasoning` | 读取本线程 `delivery=steer` 的待投递消息，追加到本次推理输入和 `AgentState` 上下文，记录 `consumed_turn_id` 和 `consumed_epoch`，同一事务写 `session.message_consumed`。只挂在主智能体上，排在 `BatchCheckpointMiddleware` 之外 |
 | `CompactionGuardMiddleware` | `onReasoning`，分内外两层（外层 order 20、内层 0），夹住 harness 的 `CompactionMiddleware`（1） | 外层在本次推理会触发压缩时预检预算、限流、租约（只检查不占用），不满足就抛出平台异常；内层检查压缩结果，摘要以 `(Summarization failed` 开头或为 `(Summary unavailable)` 时把上下文恢复为压缩前的副本并抛 `CompactionFailedException`（原因链决定本轮如何结束），防止失败文本替换历史；新出现 `__compaction_summary__` 消息时发出压缩事件（ADR-0032） |
 | `ContextCompositionMiddleware` | `onModelCall` | 统计本次模型请求的上下文构成（系统提示词、技能清单、历史、工具结果、平台注入内容的条数与 token 估算），放进 `span.model_request_start`，不含正文（ADR-0032） |
-| `KnowledgePrefetchMiddleware` | `onAgent` | 智能体配置为"前置检索"时，用最后一条用户消息检索并注入 |
+| `KnowledgePrefetchMiddleware` | `onAgent` | 智能体配置为"前置检索"时，用最后一条用户消息检索，把带来源标签的切片作为一条用户消息插在它之前并随上下文保存；检索失败或没有命中时不注入。顺序 150，只挂在主智能体上（ADR-0052） |
 | `ToolSpanMiddleware` | `onActing` | 每个工具调用单独建 span（AgentScope 一批工具只建一个 span） |
 | `OtelTracingMiddleware` | AgentScope 自带，由平台的 `PlatformTracingMiddleware` 委托装配 | GenAI 语义约定的 span；平台补上公共属性 |
 
@@ -996,18 +996,21 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 
 ### 检索流程
 
-1. 可选的查询改写，用小模型完成。
-2. 并行召回：向量检索（HNSW，取前 50）和全文检索（zhparser，取前 50）。过滤条件 `tenant_id`、`knowledge_base_id IN (...)`、`acl_tags && :caller_tags` 都在 SQL 中下推。
-3. 用 RRF 融合两路结果。
-4. 调用 runtime 的 `/internal/v1/rerank`，取前 k 个，k 默认 8。
-5. 返回切片内容、分数、来源定位（文档、页码、标题路径），供引用标注。
+1. 可选的查询改写，用小模型完成：模型是智能体配置的 `knowledge.query_rewrite_model`，knowledge 经 runtime 的 `/internal/v1/chat/completions` 调用，取输出的第一个非空行；改写失败时用原查询（ADR-0052）。
+2. 并行召回：向量检索（HNSW，取前 50）和全文检索（zhparser，取前 50）。过滤条件 `tenant_id`、`knowledge_base_id IN (...)`、`acl_tags && :caller_tags` 都在 SQL 中下推，不先取再筛；不限标签的切片（`acl_tags = '{}'`）对所有调用方可见。每个 Embedding 模型一路向量召回（不同模型的距离不可比）。所有租户共用一个 HNSW 索引，knowledge 的连接开启 pgvector 的迭代扫描（`hnsw.iterative_scan = strict_order`），过滤后不足 50 条时继续扫描；全文召回把查询的词项以"或"连接，按 `ts_rank_cd` 排序（ADR-0052）。
+3. 用 RRF 融合两路结果（k = 60）。
+4. 知识库设置了 `rerank_model` 时，前 20 个融合候选调用 runtime 的 `/internal/v1/rerank`，取前 k 个，k 默认 8；没有设置时按 RRF 排名取前 k（ADR-0052）。
+5. 返回切片内容、分数、来源定位（文档、页码、标题路径），供引用标注。每次检索记一条 `knowledge_search_calls` 用量。
+
+检索参数在 `meridian.knowledge.search`，默认值与检索评测（`docs/engineering/retrieval-evaluation.md`）一致。
 
 ### 对外形态
 
 - 平台工具 `knowledge_search`：智能体自主决定何时检索。
 - 前置检索：由 `KnowledgePrefetchMiddleware` 实现。
-- REST：`/v1/knowledge-bases/{id}/search`。
-- MCP Server：`/mcp/knowledge`，用 MCP Java SDK 的 `HttpServletStreamableServerTransportProvider` 注册为 Servlet。
+- 前两种经 runtime 的 `KnowledgeSearchPort` 实现调用 knowledge 的内部接口 `POST /internal/v1/knowledge-bases:search`（只接受 runtime），调用方标签取会话的 `end_user_attributes.acl_tags`，工具与模型给不出别的标签。
+- REST：`POST /v1/knowledge-bases/{id}/search`，读权限即可；调用方标签在请求体的 `acl_tags` 中声明。
+- MCP Server：`/mcp/knowledge`，用 MCP Java SDK 的 `HttpServletStreamableServerTransportProvider` 注册为 Servlet，工具 `knowledge_search`。认证与公开 API 相同（要求 `knowledge:read`），调用方标签取请求头 `Meridian-Acl-Tags`，不放在工具入参中（P8，ADR-0052）。
 - 内部接口：`GET /internal/v1/knowledge-bases/{id}`（调用方 control-plane、runtime）返回知识库的租户、项目与 Embedding 模型；control-plane 发布智能体版本时据此校验知识库存在且属于同一项目，出站服务 JWT 由它自己的签发用例在进程内签发（ADR-0051）。
 
 调用方的 `acl_tags` 来自会话创建时声明的 `end_user_attributes.acl_tags`。平台信任 API Key 所属项目声明的这些属性。
@@ -1122,7 +1125,7 @@ Webhook 配置与 API Key 同属业务系统的接入配置，同用 `API_KEY_RE
 | 工作区 | `GET/PUT /v1/sessions/{id}/workspace/files/{path}`、`GET /v1/sessions/{id}/workspace:list`。`none` 档读写平台存储中的工作区，受保护路径只读；沙箱档只读 `outputs/` 副本、不能写入；路径整体 URL 编码（ADR-0050） | 是 |
 | 文件 | `POST /v1/files`（`files:write`，大小上限可配置，默认 32 MB）、`GET /v1/files/{id}`、`GET /v1/files/{id}/content`。媒体类型由服务端检测，文件名规范化；在 `user.message` 中按 `file_id` 引用，轮次开始时放进工作区（ADR-0050） | 是 |
 | 智能体（只读） | `GET /v1/agents`、`GET /v1/agents/{id}`：本项目已发布的智能体与当前版本，由 control-plane 提供（ADR-0047） | 是 |
-| 知识库 | `POST/GET /v1/knowledge-bases`、`GET /v1/knowledge-bases/{id}`；文档 `POST/GET /v1/knowledge-bases/{id}/documents`（multipart 上传，带 `acl_tags`）、`GET/DELETE /v1/knowledge-bases/{id}/documents/{doc_id}`（进度与删除，删除时切片与原文件一并删除）、`POST /v1/knowledge-bases/{id}/documents/{doc_id}:reprocess`（T18，ADR-0051）；`/search`（T19）。读要 `knowledge:read`，写要 `knowledge:write` | 是 |
+| 知识库 | `POST/GET /v1/knowledge-bases`、`GET /v1/knowledge-bases/{id}`；文档 `POST/GET /v1/knowledge-bases/{id}/documents`（multipart 上传，带 `acl_tags`）、`GET/DELETE /v1/knowledge-bases/{id}/documents/{doc_id}`（进度与删除，删除时切片与原文件一并删除）、`POST /v1/knowledge-bases/{id}/documents/{doc_id}:reprocess`（T18，ADR-0051）；`POST /v1/knowledge-bases/{id}/search`（T19，读权限即可，ADR-0052）。读要 `knowledge:read`，写要 `knowledge:write` | 是 |
 | 模型直通 | `POST /v1/chat/completions`、`POST /v1/responses`、`POST /v1/embeddings`（OpenAI 兼容）。服务之间的内部接口（`/internal/v1/embeddings`、`/internal/v1/rerank` 等）另写 `meridian-internal-v1.yaml`，不随公开 API 发布（ADR-0033） | 是 |
 | 用量 | `GET /v1/usage`：本项目的用量按天、模型、智能体、API Key 聚合，由 control-plane 提供（ADR-0048） | 是 |
 | Webhook 投递记录 | `GET /v1/webhook-deliveries`、`GET /v1/webhook-deliveries/{id}`、`POST /v1/webhook-deliveries/{id}:redeliver`（手动重投，202）；Webhook 的配置在管理 API（ADR-0049） | 是 |
@@ -1217,7 +1220,7 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 
 ## 计量与预算
 
-- **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天。知识库存储每天（UTC）为每个有内容的知识库记一条 `knowledge_storage_gb_days`：原文件加切片正文与向量的字节数除以 10^9，由 knowledge 的 outbox 上报，`kb.storage_reports` 防止同一天重复上报（ADR-0051）。沙箱 vCPU 秒是沙箱存活时间乘以规格的 vCPU 数，在每轮结束、回收与删除会话时分段记录，用量种类 `sandbox_vcpu_seconds`（ADR-0037）。
+- **计量项**：模型 token（输入、输出、缓存读、缓存写、推理分别记）、沙箱 vCPU 秒、搜索次数、Embedding token、知识库存储 GB 天、知识检索次数（`knowledge_search_calls`，每次检索一条，带入口 `rest`、`mcp`、`agent`，只进账本，ADR-0052）。知识库存储每天（UTC）为每个有内容的知识库记一条 `knowledge_storage_gb_days`：原文件加切片正文与向量的字节数除以 10^9，由 knowledge 的 outbox 上报，`kb.storage_reports` 防止同一天重复上报（ADR-0051）。沙箱 vCPU 秒是沙箱存活时间乘以规格的 vCPU 数，在每轮结束、回收与删除会话时分段记录，用量种类 `sandbox_vcpu_seconds`（ADR-0037）。
 - **账本**：每条记录带租户、项目、API Key、智能体版本、会话、线程、轮次、模型、价格表版本。价格表有版本，调价不影响历史记录：版本发布即生效、不可修改，runtime 的用量消息在结算时带上模型当前的 `price_book_id` 与 `price_book_version`，计价按记录中的版本（ADR-0045）。
 - **预算**：分租户、项目、API Key、会话四级，每级有软阈值（告警）和硬阈值（停止），单位是 token（模型调用的输入加输出；沙箱与搜索只进账本）。租户、项目、API Key 按自然月（UTC）计，会话不分周期。每级可以设置"该级所有范围的默认值"，具体范围的设置优先；没有设置的级别硬阈值为 0，新租户在管理员设置之前不能调用模型。会话中的调用计入创建会话的 API Key。账本汇总越过软阈值时写一条告警（`budget_alerts`）与审计 `budget.soft_limit_reached`（ADR-0048）。
 - **实时扣减**：在 `RoutedModel` 中完成，见"模型调用"。预扣失败抛 `BudgetExceededException`，本轮以 `budget_exceeded` 结束。Redis 计数以 token（输入加输出）计，四级计数都记（没有限额的级别也记，供对账），键带租户哈希标签；用量记录经 outbox 的 `usage` 主题投递，输入、输出、缓存读、缓存写、推理 token 分别记，带调用用途（推理、压缩、Embedding、rerank）；Embedding 与 rerank 的记录种类分别为 `embedding_tokens`、`rerank_tokens`（ADR-0033）。限额由 control-plane 在提交后写进每租户一个 Redis 哈希 `budget:{租户}:limits`、每 5 分钟全量重写，runtime 每次预扣用一次 `HMGET` 读四级；计数键带周期，预扣记录带上占用的计数键并记进租户的预扣集合（ADR-0048）。
@@ -1508,6 +1511,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.19 | 2026-11-09 | T14b：服务 JWT 的换取（客户端凭据模式）、JWKS、密钥与轮换、按调用方限定内部接口；控制台用户经 `Meridian-Project` 调用公开 API 的作用域来源与限流；`PlatformContext` 增加控制台用户；出网代理的回调凭据；技术基线补 Nimbus；本地开发的 `auth` profile（ADR-0044） |
 | v1.18 | 2026-11-09 | Q2 已决：身份只认标准 OIDC，声明映射可配置，SAML、LDAP 经 Keycloak 转接，Keycloak 作为参考实现与可选组件（ADR-0043） |
 | v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
+| v1.26 | 2026-11-12 | T19：检索的模型来源（知识库的 `rerank_model`、智能体配置的 `knowledge.query_rewrite_model` 与 runtime 的内部对话接口）、不限标签的切片可见、HNSW 迭代扫描与全文"或"查询、多 Embedding 模型分路召回、REST 与 MCP 的调用方标签、`KnowledgePrefetchMiddleware` 的顺序与注入方式、`knowledge_search_calls` 计量（ADR-0052） |
 | v1.25 | 2026-11-12 | T18：知识库写入的解析器路由与中间表示、作业的租约与重试分类、切分与 token 估算、向量维度的配置、`kb` 表的列与 `storage_reports`、知识库存储的计量种类、操作类别 `KNOWLEDGE_READ`、`KNOWLEDGE_WRITE`、知识库的公开端点与内部接口、ID 前缀 `chk`、`ijb`（ADR-0051） |
 | v1.24 | 2026-11-12 | T17b：文件资源（`rt.files`、服务端检测媒体类型、文件名规范化）、引用的校验与轮次开始时放进工作区（`SandboxDriver.writeFiles`、`TurnContext.workspaceFiles`）、工作区 API 的两档、`session.usage` 的口径与 `rt.turn_usage`、`/v1/responses` 子集（ADR-0050） |
 | v1.23 | 2026-11-12 | T17a：Webhook 的配置、签名密钥、outbox、投递器、重试计划与投递记录接口，只推送主线程的事件；会话删除的清理作业与审计、等待 Webhook 投递、按标签清除残留沙箱；事件归档的格式与透明读取；事件保留的下发与执行；删除与归档撤销出网授权；ID 前缀 `whk`、`whd`（ADR-0049） |
