@@ -58,7 +58,7 @@ package cn.refinex.meridian.runtime.dispatch;
 | 带前缀的 ULID（生成、解析、校验） | `common.id` | `Ids.newId(IdPrefix.SESSION)` |
 | 错误码与平台异常 | `common.error` | `MeridianException`、`ErrorCode` |
 | problem+json 映射、请求 ID、`traceparent` | `security.web` | MVC 和 WebFlux 各一个适配器，共用同一套映射逻辑 |
-| 游标分页 | `common.page` | `Cursor`、`PageResult` |
+| 游标分页 | `common.page` | `Cursor`、`PageResult`；读游标的键用 `key`、`instantKey`、`intKey`（外部游标的键不对是 400，R2） |
 | JSON 序列化配置（snake_case、时间格式） | `common.json` | 平台 API 用 Jackson 3 |
 | SHA-256 摘要的十六进制 | `common.crypto` | `Sha256.hex(bytes / text / Path)`；要原始字节、截断或分段更新时直接用 `MessageDigest`（R1 Q-L1） |
 | 按字符数估算 token | `common.text` | `TextTokens.estimate`：内核的 `TokenEstimator` 与 runtime 的 Embedding、rerank 共用（R1 Q-M1）；`TextTokens.approximate` 贴近 Qwen 分词，只给知识库切分（ADR-0051） |
@@ -69,6 +69,7 @@ package cn.refinex.meridian.runtime.dispatch;
 | 租户作用域仓储、跨租户系统仓储 | `persistence.tenant` | `TenantScopedRepository`（项目级或租户级）、`SystemRepository` 加 `@CrossTenant` |
 | outbox 写入与投递 | `persistence.outbox` | — |
 | Redis Stream 发布与消费、Pub/Sub | `persistence.redis` | `StreamConsumer`：消费组循环、认领重投、死信回调、确认后裁剪（ADR-0048） |
+| 瞬时错误的判定（数据库、Redis 不可用与超时） | `persistence.outbox` | `TransientFailures.isTransient`：outbox 投递与 Stream 消费者共用（ADR-0054） |
 | 四级预算的级别、周期与 Redis 键 | `common.budget` | `BudgetLevel`、`BudgetKeys`：control-plane 写限额与对账、runtime 预扣与结算共用（ADR-0048） |
 | 审计消息的操作者 | `common.audit` | `AuditActor`：control-plane 与 runtime 的审计消息共用（ADR-0048） |
 | 对象存储客户端 | `persistence.objectstore` | S3 兼容 |
