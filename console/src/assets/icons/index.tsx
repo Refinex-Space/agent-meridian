@@ -58,7 +58,10 @@ export interface IllustrationProps {
  * 空态插画：1024×768 的画布是 4×3 个 256 网格单元，线宽 16，与图标同一套网格与线宽；显示为 128×96 时线宽 2px。
  * 线条用 currentColor（由 EmptyState 给出刻线色），强调部分固定为海图蓝（`--palette-accent`，随 data-theme 解析）。
  */
-function illustration(Svg: ComponentType<SVGProps<SVGSVGElement>>, name: string): ComponentType<IllustrationProps> {
+function illustration(
+  Svg: ComponentType<SVGProps<SVGSVGElement>>,
+  name: string,
+): ComponentType<IllustrationProps> {
   function Illustration({ className }: IllustrationProps) {
     return <Svg width={128} height={96} className={className} aria-hidden focusable={false} />;
   }
