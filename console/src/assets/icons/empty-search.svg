@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 768" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 筛选后为空：图幅上的准星没有对准任何标记。1024×768 是 4×3 个 256 网格单元，线宽 16 与图标相同 -->
+  <rect x="160" y="112" width="704" height="544" rx="24"/>
+  <!-- 子午线与点线纬线 -->
+  <path d="M352 112v544"/>
+  <path d="M208 560h608" stroke-dasharray="0 48"/>
+  <!-- 准星：海图蓝（唯一的强调色） -->
+  <circle cx="608" cy="352" r="104" stroke="var(--palette-accent)"/>
+  <path d="M608 216v64M608 424v64M472 352h64M680 352h64" stroke="var(--palette-accent)"/>
+</svg>

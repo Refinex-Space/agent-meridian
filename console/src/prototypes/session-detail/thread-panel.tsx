@@ -1,4 +1,5 @@
-import { STOP_REASON_LABEL, StatusGlyph, type TimelineModel } from '@/components/domain/session-timeline';
+import type { TimelineModel } from '@/components/domain/session-timeline';
+import { STOP_REASON_LABEL, StatusGlyph } from '@/components/domain/status-badge';
 import { Badge } from '@/components/ui/badge';
 import type { SessionStatus } from '@/lib/api/types';
 import { cn } from '@/lib/cn';

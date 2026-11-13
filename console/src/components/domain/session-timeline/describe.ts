@@ -2,8 +2,10 @@
  * 每一行显示的文字：标题、主体（工具名、模型名等）、一行预览，以及右侧对齐的度量（每项自带单位，不用中点拼接）。
  * 文案按 frontend-design.md「文案」：按用户理解的概念命名，术语与架构设计一致（会话、线程、轮次、待处理动作）。
  */
-import type { ContentBlock, EventOf, SessionEvent, StopReason } from '@/lib/api/types';
+import type { ContentBlock, EventOf, SessionEvent } from '@/lib/api/types';
 import { between, formatBytes, formatDuration, formatInteger, formatTokens } from '@/lib/format';
+
+import { STOP_REASON_LABEL } from '../status-badge/labels';
 
 import type { NodeTone, TimelineModel, TimelineRow } from './model';
 
@@ -22,15 +24,6 @@ export interface RowText {
   state: { text: string; tone: NodeTone } | null;
   metrics: Metric[];
 }
-
-export const STOP_REASON_LABEL: Record<StopReason, string> = {
-  end_turn: '正常结束',
-  interrupted: '被中断',
-  max_turns: '达到推理次数上限',
-  budget_exceeded: '预算耗尽',
-  tools_denied: '工具调用全部被拒绝',
-  error: '出错',
-};
 
 const RESCHEDULE_LABEL = {
   lease_expired: '租约过期',

@@ -3,7 +3,7 @@ import { memo } from 'react';
 import { cn } from '@/lib/cn';
 
 import type { NodeShape, NodeTone, TimelineRow } from './model';
-import { StatusShape } from './status-glyph';
+import { StatusShape } from '../status-badge/status-glyph';
 
 /** 时间栏宽度（px）。 */
 export const TIME_COLUMN = 64;

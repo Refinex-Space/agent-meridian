@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { SESSION_STATUS_LABEL, StatusGlyph, type StatusKind } from '@/components/domain/session-timeline';
+import { SESSION_STATUS_LABEL, StatusGlyph, type StatusKind } from '@/components/domain/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CheckIcon, CopyIcon } from '@/components/ui/glyphs';

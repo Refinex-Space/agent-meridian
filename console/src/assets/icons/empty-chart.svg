@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 768" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 首次使用：一张空白的海图。1024×768 是 4×3 个 256 网格单元，线宽 16 与图标相同 -->
+  <rect x="160" y="112" width="704" height="544" rx="24"/>
+  <!-- 子午线与分划 -->
+  <path d="M512 112v544"/>
+  <path d="M512 208h-32M512 304h-56M512 400h-32M512 496h-56M512 592h-32"/>
+  <!-- 一条平缓的纬线 -->
+  <path d="M160 448c120-48 584-48 704 0"/>
+  <!-- 待落笔的位置：纬线上一个海图蓝的菱形（唯一的强调色） -->
+  <path d="M640 376l40 40-40 40-40-40z" stroke="var(--palette-accent)"/>
+</svg>

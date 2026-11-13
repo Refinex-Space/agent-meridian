@@ -2,6 +2,9 @@ import type { ComponentType, SVGProps } from 'react';
 
 import AgentSvg from './agent.svg?react';
 import BrandSvg from './brand.svg?react';
+import EmptyChartSvg from './empty-chart.svg?react';
+import EmptyClearSvg from './empty-clear.svg?react';
+import EmptySearchSvg from './empty-search.svg?react';
 import KnowledgeSvg from './knowledge.svg?react';
 import PendingActionSvg from './pending-action.svg?react';
 import SandboxSvg from './sandbox.svg?react';
@@ -45,3 +48,27 @@ export const PendingActionGlyph = domainGlyph(PendingActionSvg, 'PendingActionGl
 export const SkillGlyph = domainGlyph(SkillSvg, 'SkillGlyph');
 /** 知识库。 */
 export const KnowledgeGlyph = domainGlyph(KnowledgeSvg, 'KnowledgeGlyph');
+
+/** 空态插画的属性：只有一种尺寸（128×96），对读屏隐藏（空态的含义由文字表达）。 */
+export interface IllustrationProps {
+  className?: string;
+}
+
+/**
+ * 空态插画：1024×768 的画布是 4×3 个 256 网格单元，线宽 16，与图标同一套网格与线宽；显示为 128×96 时线宽 2px。
+ * 线条用 currentColor（由 EmptyState 给出刻线色），强调部分固定为海图蓝（`--palette-accent`，随 data-theme 解析）。
+ */
+function illustration(Svg: ComponentType<SVGProps<SVGSVGElement>>, name: string): ComponentType<IllustrationProps> {
+  function Illustration({ className }: IllustrationProps) {
+    return <Svg width={128} height={96} className={className} aria-hidden focusable={false} />;
+  }
+  Illustration.displayName = name;
+  return Illustration;
+}
+
+/** 首次使用：一张空白的海图，纬线上一个待落笔的菱形。 */
+export const EmptyChartIllustration = illustration(EmptyChartSvg, 'EmptyChartIllustration');
+/** 筛选后为空：准星没有对准任何标记。 */
+export const EmptySearchIllustration = illustration(EmptySearchSvg, 'EmptySearchIllustration');
+/** 全部处理完：子午线走到终点，节点上一个对勾（例如没有待处理动作）。 */
+export const EmptyClearIllustration = illustration(EmptyClearSvg, 'EmptyClearIllustration');

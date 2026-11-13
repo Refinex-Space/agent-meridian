@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/glyphs';
 import { Icon, type Glyph, type IconSize } from '@/components/ui/icon';
 
+import { EmptyChartIllustration, EmptyClearIllustration, EmptySearchIllustration } from '.';
+
 /** 每个自研图标与一个结构相近的 Phosphor 图标成对展示，比较线宽与视觉重量。 */
 const PAIRS: { name: string; custom: Glyph; phosphor: Glyph; phosphorName: string }[] = [
   { name: '品牌标识', custom: BrandMark, phosphor: GlobeIcon, phosphorName: 'Globe' },
@@ -87,6 +89,26 @@ function IconsPage() {
               <span className="flex gap-2 rounded-panel border border-rule bg-surface p-3">
                 <Custom size={96} aria-hidden />
                 <Phosphor size={96} aria-hidden />
+              </span>
+              <span className="text-12 text-ink-2">{name}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <h2 className="text-18 leading-heading font-semibold">空态插画（128×96，与图标同一套网格与线宽）</h2>
+        <div className="flex flex-wrap gap-6">
+          {(
+            [
+              ['首次使用', EmptyChartIllustration],
+              ['筛选后为空', EmptySearchIllustration],
+              ['全部处理完', EmptyClearIllustration],
+            ] as const
+          ).map(([name, Illustration]) => (
+            <div key={name} className="flex flex-col items-center gap-2">
+              <span className="flex rounded-panel border border-rule bg-surface p-4 text-rule-strong">
+                <Illustration />
               </span>
               <span className="text-12 text-ink-2">{name}</span>
             </div>

@@ -35,6 +35,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'mocks/**/*.test.ts', 'eslint-rules/**/*.test.js'],
+    // 时间的显示按本地时区：测试固定为东八区（与 Playwright 的 timezoneId 一致），结果不随运行机器变化。
+    env: { TZ: 'Asia/Shanghai' },
     restoreMocks: true,
   },
 });

@@ -74,3 +74,51 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${trimZero((bytes / 1024).toFixed(1))} KB`;
   return `${trimZero((bytes / 1024 / 1024).toFixed(1))} MB`;
 }
+
+/** 中间省略的 ID：保留前缀与末尾（ses_01JC8Z4V…X3M9N2），完整值在复制与提示中。不超过 `head + tail + 2` 个字符时原样返回。 */
+export function middleEllipsis(id: string, head = 10, tail = 6): string {
+  return id.length > head + tail + 2 ? `${id.slice(0, head)}…${id.slice(-tail)}` : id;
+}
+
+const monthDayTime = new Intl.DateTimeFormat('zh-CN', {
+  month: 'numeric',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/**
+ * 列表中的相对时间：刚刚、5 分钟前、3 小时前、2 天前；一周以上显示日期（同一年省略年份）。未来的时间写"后"。
+ */
+export function formatRelative(iso: string, now: number): string {
+  const time = Date.parse(iso);
+  const diff = now - time;
+  const past = diff >= 0;
+  const abs = Math.abs(diff);
+  const suffix = past ? '前' : '后';
+  if (abs < 45_000) return past ? '刚刚' : '即将';
+  if (abs < 3_600_000) return `${Math.max(1, Math.round(abs / 60_000))} 分钟${suffix}`;
+  if (abs < 86_400_000) return `${Math.round(abs / 3_600_000)} 小时${suffix}`;
+  if (abs < 7 * 86_400_000) return `${Math.round(abs / 86_400_000)} 天${suffix}`;
+  const date = new Date(time);
+  if (date.getFullYear() === new Date(now).getFullYear()) {
+    const parts = Object.fromEntries(monthDayTime.formatToParts(date).map((p) => [p.type, p.value]));
+    return `${parts['month']} 月 ${parts['day']} 日 ${parts['hour']}:${parts['minute']}`;
+  }
+  return `${date.getFullYear()} 年 ${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+}
+
+/**
+ * 金额：保留两位小数并标明币种（¥1.24、US$0.38）；大于 0 但不足一分时写"不足 ¥0.01"，不显示成 0。
+ */
+export function formatMoney(amount: number, currency: string): string {
+  const format = new Intl.NumberFormat('zh-CN', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  if (amount > 0 && amount < 0.005) return `不足 ${format.format(0.01)}`;
+  return format.format(amount);
+}

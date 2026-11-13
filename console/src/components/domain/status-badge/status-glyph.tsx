@@ -3,17 +3,9 @@ import { cn } from '@/lib/cn';
 
 /**
  * 状态符号（frontend-design.md「设计定稿·状态符号」）：形状加颜色，形状本身就能区分状态。
- * 时间轴节点、线程列表、会话头部用同一套形状。
+ * 时间轴节点、线程树、状态徽标用同一套形状；七种形状对应语义映射表的七种语义。
  */
 export type StatusKind = SessionStatus | 'success' | 'failure';
-
-export const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
-  idle: '空闲',
-  running: '运行中',
-  requires_action: '等待处理',
-  rescheduled: '重新调度',
-  terminated: '已终止',
-};
 
 const TONE: Record<StatusKind, string> = {
   running: 'text-accent',

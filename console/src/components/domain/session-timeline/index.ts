@@ -7,5 +7,4 @@ export {
   type TimelineModel,
   type TimelineRow,
 } from './model';
-export { describeRow, STOP_REASON_LABEL, type RowText } from './describe';
-export { StatusGlyph, SESSION_STATUS_LABEL, type StatusKind } from './status-glyph';
+export { describeRow, type RowText } from './describe';

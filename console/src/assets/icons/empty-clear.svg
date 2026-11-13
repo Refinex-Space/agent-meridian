@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 768" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 全部处理完：子午线走到终点，节点上一个对勾。1024×768 是 4×3 个 256 网格单元，线宽 16 与图标相同 -->
+  <path d="M512 96v352"/>
+  <path d="M512 144h-40M512 208h-64M512 272h-40M512 336h-64M512 400h-40"/>
+  <!-- 终点：海图蓝的圆与对勾（唯一的强调色） -->
+  <circle cx="512" cy="536" r="88" stroke="var(--palette-accent)"/>
+  <path d="M472 538l28 28 56-60" stroke="var(--palette-accent)"/>
+  <!-- 地平线 -->
+  <path d="M288 688h448"/>
+</svg>
