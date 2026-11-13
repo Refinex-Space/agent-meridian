@@ -241,6 +241,7 @@ export function McpServerDialog({ open, onOpenChange, server }: McpServerDialogP
                           />
                         </div>
                         <Button
+                          type="button"
                           size="icon-md"
                           variant="ghost"
                           aria-label={`移除第 ${i + 1} 个请求头`}
@@ -259,6 +260,7 @@ export function McpServerDialog({ open, onOpenChange, server }: McpServerDialogP
                 })}
                 {form.headers.length < 8 && (
                   <Button
+                    type="button"
                     size="sm"
                     variant="ghost"
                     className="-ml-2 self-start"

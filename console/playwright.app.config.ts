@@ -13,6 +13,8 @@ export default defineConfig({
   timeout: 60_000,
   workers: 1,
   reporter: [['list']],
+  // 带 @live 标签的用例调用真实模型（DASHSCOPE_API_KEY，产生少量费用），只在 E2E_LIVE=1 时运行（T23-A03）。
+  ...(process.env['E2E_LIVE'] ? { grep: /@live/ } : { grepInvert: /@live/ }),
   globalSetup: './e2e/app/global-setup.ts',
   use: {
     ...devices['Desktop Chrome'],

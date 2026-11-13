@@ -198,7 +198,8 @@ function Loaded({ skillId }: SkillDetailPageProps) {
               </div>
             }
           >
-            <Versions skill={skill} me={me} />
+            {/* 上传新版本后默认选中新的最新版本。 */}
+            <Versions key={skill.latest_version} skill={skill} me={me} />
           </DataRegion>
         </Section>
       </div>

@@ -71,7 +71,7 @@ const McpServerDetailPage = lazy(() =>
 const modelsFeature = () => import('@/features/models');
 const ModelsPage = lazy(() => modelsFeature().then((m) => ({ default: m.ModelsPage })));
 const PriceBookDetailPage = lazy(() => modelsFeature().then((m) => ({ default: m.PriceBookDetailPage })));
-const SecretsPage = lazy(() => settingsFeature().then((m) => ({ default: m.SecretsPage })));
+const SettingsPage = lazy(() => settingsFeature().then((m) => ({ default: m.SettingsPage })));
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -265,21 +265,10 @@ const priceBookRoute = createRoute({
   },
 });
 
-/** 设置（T25b 补全其余页面）：T23 起有凭据；设置的首页暂时就是凭据。 */
-const settingsRoute = navRoute('settings', 'settings', '设置', () => <Outlet />);
-const settingsHomeRoute = createRoute({
-  getParentRoute: () => settingsRoute,
-  path: '/',
-  beforeLoad: ({ params }) => {
-    throw redirect({ to: '/projects/$projectId/settings/secrets', params, replace: true });
-  },
-});
-const secretsRoute = createRoute({
-  getParentRoute: () => settingsRoute,
-  path: 'secrets',
-  staticData: { crumb: '凭据' },
-  component: () => <SecretsPage />,
-});
+/** 设置（T25b 补全其余标签页）：T23 起有凭据一个标签页。 */
+const settingsRoute = navRoute('settings', 'settings', '设置', () => (
+  <SettingsPage tab="secrets" onTabChange={() => undefined} />
+));
 
 /** 智能体（T22）：列表、单个智能体的详情、编辑草稿与版本对比；单个智能体这一级在面包屑中显示它的名字。 */
 const agentsRoute = navRoute('agents', 'agents', '智能体', () => <Outlet />);
@@ -402,7 +391,7 @@ export const routeTree = rootRoute.addChildren([
     modelsRoute.addChildren([modelListRoute, priceBookRoute]),
     pendingRoute,
     usageRoute,
-    settingsRoute.addChildren([settingsHomeRoute, secretsRoute]),
+    settingsRoute,
     projectNotFoundRoute,
   ]),
 ]);

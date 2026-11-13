@@ -99,7 +99,14 @@ export function SecretSelect({
         />
       </div>
       {write.allowed && !disabled && (
-        <Button size="md" variant="ghost" icon={<Icon glyph={PlusIcon} />} onClick={() => setCreating(true)}>
+        // 选择器常在别的表单里（供应商账号、MCP 服务）：不能是提交按钮。
+        <Button
+          type="button"
+          size="md"
+          variant="ghost"
+          icon={<Icon glyph={PlusIcon} />}
+          onClick={() => setCreating(true)}
+        >
           写入凭据
         </Button>
       )}

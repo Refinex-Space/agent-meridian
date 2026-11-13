@@ -1,5 +1,5 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 
 import { DangerConfirmDialog } from '@/components/domain/danger-confirm-dialog';
 import { DataTable, dataTableColumns } from '@/components/domain/data-table';
@@ -9,7 +9,6 @@ import { FilterBar, emptyValues, useSearchFilters, type FilterDef } from '@/comp
 import { PermissionGate } from '@/components/domain/permission-gate';
 import { InUseDialog, summarizeReferences } from '@/components/domain/reference-list';
 import { RelativeTime } from '@/components/domain/relative-time';
-import { ListPage } from '@/components/templates';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -18,33 +17,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { DotsThreeIcon, PlusIcon } from '@/components/ui/glyphs';
+import { DotsThreeIcon } from '@/components/ui/glyphs';
 import { Icon } from '@/components/ui/icon';
 import { meQuery, projectsQuery, usePermission, useProject } from '@/lib/access';
 import type { Secret } from '@/lib/api/types';
 
 import { secretsQuery, useDeleteSecret } from '../api/secrets';
-import { CreateSecretDialog, RotateSecretDialog } from '../components/secret-dialogs';
+import { RotateSecretDialog } from './secret-dialogs';
 
 const NO_FILTERS: readonly FilterDef[] = [];
 const col = dataTableColumns<Secret>();
 
-/**
- * 凭据（设置，列表页模板，ADR-0056）：名称、范围、版本、引用方、最后使用与创建时间。凭据只写不读：写入、轮换之后任何地方
- * 都看不到明文；仍被引用的凭据不能删除，删除时列出引用方。
- */
-export function SecretsPage() {
-  const read = usePermission('secret_read', '查看凭据');
-  if (!read.allowed)
-    return (
-      <ListPage title="凭据">
-        <PermissionGate mode="explain" title="没有权限查看凭据" allowed={false} reason={read.reason} />
-      </ListPage>
-    );
-  return <SecretList />;
+export interface SecretTableProps {
+  /** 页头的主操作（"写入凭据"），也放在首次使用的空态里。 */
+  createButton: ReactNode;
 }
 
-function SecretList() {
+/**
+ * 凭据列表（设置的"凭据"标签页，ADR-0056）：名称、范围、版本、引用方、最后使用与创建时间；行操作是轮换与删除。凭据只写不读：
+ * 写入、轮换之后任何地方都看不到明文；仍被引用的凭据不能删除，删除时直接列出引用方。没有查看权限时说明原因。
+ */
+export function SecretTable({ createButton }: SecretTableProps) {
+  const read = usePermission('secret_read', '查看凭据');
+  if (!read.allowed)
+    return <PermissionGate mode="explain" title="没有权限查看凭据" allowed={false} reason={read.reason} />;
+  return <SecretList createButton={createButton} />;
+}
+
+function SecretList({ createButton }: SecretTableProps) {
   const { tenantId, projectId } = useProject();
   const write = usePermission('secret_write', '写入、轮换或删除凭据');
   const me = useSuspenseQuery(meQuery()).data;
@@ -52,7 +52,6 @@ function SecretList() {
   const secrets = useQuery(secretsQuery(tenantId));
   const remove = useDeleteSecret();
   const [filters, setFilters] = useSearchFilters(NO_FILTERS);
-  const [creating, setCreating] = useState(false);
   const [rotating, setRotating] = useState<Secret | null>(null);
   const [deleting, setDeleting] = useState<Secret | null>(null);
 
@@ -161,17 +160,9 @@ function SecretList() {
     [write.allowed, scopeText],
   );
 
-  const newButton = (
-    <PermissionGate mode="disable" allowed={write.allowed} reason={write.reason}>
-      <Button variant="primary" icon={<Icon glyph={PlusIcon} />} onClick={() => setCreating(true)}>
-        写入凭据
-      </Button>
-    </PermissionGate>
-  );
-
   const inUse = deleting !== null && deleting.references.length > 0;
   return (
-    <ListPage title="凭据" actions={newButton}>
+    <>
       <DataTable
         label="凭据列表"
         columns={columns}
@@ -195,7 +186,7 @@ function SecretList() {
             <EmptyState
               variant="first-use"
               title="还没有凭据：写入供应商的 API Key 或 MCP 服务的令牌，之后只能轮换或删除"
-              action={newButton}
+              action={createButton}
             />
           )
         }
@@ -209,7 +200,6 @@ function SecretList() {
           />
         }
       />
-      <CreateSecretDialog open={creating} onOpenChange={setCreating} />
       <RotateSecretDialog secret={rotating} onOpenChange={(open) => !open && setRotating(null)} />
       <InUseDialog
         name={inUse ? deleting.name : null}
@@ -228,6 +218,6 @@ function SecretList() {
           if (deleting) await remove.mutateAsync(deleting.id);
         }}
       />
-    </ListPage>
+    </>
   );
 }
