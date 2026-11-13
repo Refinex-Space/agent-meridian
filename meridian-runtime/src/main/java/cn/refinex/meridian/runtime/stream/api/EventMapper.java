@@ -46,6 +46,18 @@ final class EventMapper {
         return events;
     }
 
+    /**
+     * 是否为回应待处理动作的事件：只有 {@code actions:respond} 的主体只能发送这三种（ADR-0053）。
+     *
+     * @param input 用户事件
+     * @return 回应事件时为 true
+     */
+    static boolean isResponse(UserEventInput input) {
+        return input instanceof UserToolConfirmationInput
+                || input instanceof UserCustomToolResultInput
+                || input instanceof UserRecoveryConfirmationInput;
+    }
+
     static SendEventsResponse toResponse(List<StoredEvent> events) {
         return new SendEventsResponse()
                 .data(events.stream().map(EventMapper::toDto).toList());

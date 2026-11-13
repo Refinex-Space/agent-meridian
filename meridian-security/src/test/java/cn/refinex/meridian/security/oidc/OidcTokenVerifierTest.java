@@ -30,7 +30,8 @@ class OidcTokenVerifierTest {
     }
 
     private OidcProperties properties(String userIdClaim, String jwksUri) {
-        return new OidcProperties(idp.url(), "meridian", jwksUri, userIdClaim, "groups", Duration.ofMinutes(5), 600);
+        return new OidcProperties(
+                idp.url(), "meridian", jwksUri, userIdClaim, "groups", Duration.ofMinutes(5), 600, "email", true);
     }
 
     private JWTClaimsSet.Builder claims() {
@@ -62,6 +63,38 @@ class OidcTokenVerifierTest {
                 .contains(new ConsoleUser("alice", Set.of("ops")));
         assertThat(verifier.resolve(idp.sign(claims().claim("groups", 42).build())))
                 .contains(new ConsoleUser("alice", Set.of()));
+    }
+
+    @Test
+    void onlyAVerifiedEmailIsTakenUnlessConfiguredOtherwise() {
+        OidcTokenVerifier verifier = new OidcTokenVerifier(properties("preferred_username", null));
+
+        assertThat(verifier.resolve(idp.sign(claims().claim("email", "alice@example.com")
+                                .claim("email_verified", true)
+                                .build()))
+                        .orElseThrow()
+                        .verifiedEmail())
+                .isEqualTo("alice@example.com");
+        assertThat(verifier.resolve(idp.sign(claims().claim("email", "alice@example.com")
+                                .claim("email_verified", false)
+                                .build()))
+                        .orElseThrow()
+                        .verifiedEmail())
+                .as("未验证的邮箱不用于绑定")
+                .isNull();
+        assertThat(verifier.resolve(idp.sign(
+                                claims().claim("email", "alice@example.com").build()))
+                        .orElseThrow()
+                        .verifiedEmail())
+                .isNull();
+
+        OidcTokenVerifier trusting = new OidcTokenVerifier(new OidcProperties(
+                idp.url(), "meridian", null, "sub", "groups", Duration.ofMinutes(5), 600, "upn", false));
+        assertThat(trusting.resolve(idp.sign(
+                                claims().claim("upn", "bob@corp.example").build()))
+                        .orElseThrow()
+                        .verifiedEmail())
+                .isEqualTo("bob@corp.example");
     }
 
     @Test

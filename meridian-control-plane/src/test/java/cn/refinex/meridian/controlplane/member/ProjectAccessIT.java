@@ -46,8 +46,10 @@ class ProjectAccessIT extends ControlPlaneTestBase {
                         "models:invoke",
                         "sessions:read",
                         "sessions:write");
+        // 所有者另有审批（ADR-0053）
         assertThat(scopes(resolve("owner", project, token)))
                 .containsExactly(
+                        "actions:respond",
                         "files:write",
                         "knowledge:read",
                         "knowledge:write",
@@ -55,7 +57,7 @@ class ProjectAccessIT extends ControlPlaneTestBase {
                         "sessions:read",
                         "sessions:write");
         assertThat(scopes(resolve("viewer", project, token))).containsExactly("knowledge:read", "sessions:read");
-        assertThat(scopes(resolve("approver", project, token))).containsExactly("sessions:read");
+        assertThat(scopes(resolve("approver", project, token))).containsExactly("actions:respond", "sessions:read");
         // 项目级角色只作用于绑定的项目；不是成员没有作用域
         assertThat(scopes(resolve("developer", fixture.get("other_project"), token)))
                 .isEmpty();

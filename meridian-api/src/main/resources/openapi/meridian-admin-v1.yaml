@@ -3915,9 +3915,10 @@ components:
     ApiKeyScope:
       description: |
         API Key 的作用域（架构设计「授权」）：`sessions:write`、`sessions:read`、`knowledge:read`、`knowledge:write`、
-        `files:write`、`models:invoke`。
+        `files:write`、`models:invoke`、`actions:respond`（只能回应待处理动作，供审批系统使用，ADR-0053）。
       type: string
-      enum: ['sessions:write', 'sessions:read', 'knowledge:read', 'knowledge:write', 'files:write', 'models:invoke']
+      enum: ['sessions:write', 'sessions:read', 'knowledge:read', 'knowledge:write', 'files:write', 'models:invoke',
+             'actions:respond']
     ApiKey:
       description: API Key 的元数据，不含明文与哈希。
       type: object

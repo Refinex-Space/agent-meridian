@@ -14,6 +14,7 @@ import cn.refinex.meridian.runtime.stream.domain.StreamFilter;
 import cn.refinex.meridian.runtime.web.IdempotentRequests;
 import cn.refinex.meridian.security.apikey.ApiKeyAuthorization;
 import cn.refinex.meridian.security.apikey.ApiKeyScope;
+import cn.refinex.meridian.security.apikey.PublicApiPrincipal;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -68,14 +69,21 @@ public class EventsApiController implements EventsApi {
             Mono<SendEventsRequest> sendEventsRequest,
             String idempotencyKey,
             ServerWebExchange exchange) {
-        ApiKeyAuthorization.require(exchange, ApiKeyScope.SESSIONS_WRITE);
-        return sendEventsRequest.flatMap(request -> idempotent.execute(
-                exchange,
-                idempotencyKey,
-                request,
-                HttpStatus.ACCEPTED,
-                SendEventsResponse.class,
-                () -> EventMapper.toResponse(intake.send(sessionId, EventMapper.toEvents(request.getEvents())))));
+        // sessions:write 可以发送全部事件；只有 actions:respond（审批人）时只能发送回应事件（ADR-0053）
+        PublicApiPrincipal principal =
+                ApiKeyAuthorization.requireAny(exchange, ApiKeyScope.SESSIONS_WRITE, ApiKeyScope.ACTIONS_RESPOND);
+        return sendEventsRequest.flatMap(request -> {
+            if (!request.getEvents().stream().allMatch(EventMapper::isResponse)) {
+                ApiKeyAuthorization.require(principal, ApiKeyScope.SESSIONS_WRITE);
+            }
+            return idempotent.execute(
+                    exchange,
+                    idempotencyKey,
+                    request,
+                    HttpStatus.ACCEPTED,
+                    SendEventsResponse.class,
+                    () -> EventMapper.toResponse(intake.send(sessionId, EventMapper.toEvents(request.getEvents()))));
+        });
     }
 
     @Override

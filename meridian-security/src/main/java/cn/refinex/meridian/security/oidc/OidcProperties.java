@@ -17,6 +17,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param groupsClaim 组取哪个声明，默认 {@code groups}；取值可以是字符串或字符串数组，取不到时为空（按组判定平台管理员）
  * @param jwksCacheTtl 公钥的缓存时长，默认 5 分钟；遇到未知 {@code kid} 时立即刷新一次
  * @param rateLimitPerMinute 控制台用户调用公开 API 的每分钟上限（按用户计），默认 600，与 API Key 的默认值相同
+ * @param emailClaim 邮箱取哪个声明，默认 {@code email}；只用于首次登录时绑定按邮箱邀请的成员（ADR-0053）
+ * @param requireVerifiedEmail 是否只接受 {@code email_verified} 为 {@code true} 的邮箱，默认是。IdP 不发这个声明而邮箱由企业目录
+ *     保证时（例如 Entra ID 的工作账号）才关闭：未验证的邮箱可被用户自己改成别人的，会绑定到别人的邀请
  */
 @ConfigurationProperties("meridian.security.oidc")
 public record OidcProperties(
@@ -26,7 +29,9 @@ public record OidcProperties(
         @DefaultValue("sub") String userIdClaim,
         @DefaultValue("groups") String groupsClaim,
         @DefaultValue("5m") Duration jwksCacheTtl,
-        @DefaultValue("600") int rateLimitPerMinute) {
+        @DefaultValue("600") int rateLimitPerMinute,
+        @DefaultValue("email") String emailClaim,
+        @DefaultValue("true") boolean requireVerifiedEmail) {
 
     /**
      * 是否配置了签发方。

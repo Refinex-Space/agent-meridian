@@ -29,6 +29,9 @@ public final class ApiTestKeys {
     /** 项目 A 的只读 Key。 */
     public static final String KEY_A_READ_ONLY = "mk_test_project_a_read";
 
+    /** 项目 A 的审批 Key：只能读会话与回应待处理动作（{@code actions:respond}，ADR-0053）。 */
+    public static final String KEY_A_APPROVER = "mk_test_project_a_approver";
+
     /** 服务 JWT 的签发方：测试夹具，runtime 经它的 JWKS 校验内部接口的令牌（ADR-0044）。 */
     public static final TestTokenIssuer SERVICE_TOKENS = TestTokenIssuer.start();
 
@@ -53,7 +56,7 @@ public final class ApiTestKeys {
     }
 
     /**
-     * 注册三个 Key、内部接口的服务 JWT 公钥与开发配置目录。项目 A 的读写 Key 另有 {@code models:invoke} 与 {@code files:write}。
+     * 注册四个 Key、内部接口的服务 JWT 公钥与开发配置目录。项目 A 的读写 Key 另有 {@code models:invoke} 与 {@code files:write}。
      *
      * @param registry Spring 的动态属性注册表
      */
@@ -72,6 +75,7 @@ public final class ApiTestKeys {
                 "files:write");
         key(registry, 1, KEY_B, "key_test_b", PROJECT_B, "sessions:read", "sessions:write");
         key(registry, 2, KEY_A_READ_ONLY, "key_test_a_read", PROJECT_A, "sessions:read");
+        key(registry, 3, KEY_A_APPROVER, "key_test_a_approver", PROJECT_A, "sessions:read", "actions:respond");
         registry.add("meridian.security.service-jwt.jwks-url", SERVICE_TOKENS::jwksUrl);
         // 测试的工作目录是模块目录，仓库根目录的 dev-config 在上一级
         registry.add("meridian.runtime.dev-agent-config.directory", () -> "../dev-config/agents");

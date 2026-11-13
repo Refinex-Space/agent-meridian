@@ -20,7 +20,9 @@ class StatsWindowTest {
 
     @Test
     void failureRateIsAbsentWithoutTurns() {
-        assertThat(new SessionStats.AgentStats("agt_1", 3, 1, 0, 0).failureRate()).isNull();
-        assertThat(new SessionStats.AgentStats("agt_1", 3, 1, 4, 1).failureRate()).isEqualTo(0.25);
+        assertThat(new SessionStats.AgentStats("agt_1", 3, 1, 0, 0).failureRate())
+                .isNull();
+        assertThat(new SessionStats.AgentStats("agt_1", 3, 1, 4, 1).failureRate())
+                .isEqualTo(0.25);
     }
 }

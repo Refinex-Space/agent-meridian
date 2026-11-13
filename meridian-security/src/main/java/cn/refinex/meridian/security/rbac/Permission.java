@@ -58,7 +58,7 @@ public enum Permission {
     AUDIT_READ(Level.TENANT),
     /** 查看本项目的用量报表（ADR-0048）。 */
     USAGE_READ(Level.PROJECT),
-    /** 处理待处理动作（审批）。 */
+    /** 处理待处理动作（审批）：公开 API 的作用域 {@code actions:respond}，只能发送回应事件（ADR-0053）。 */
     PENDING_ACTION_DECIDE(Level.PROJECT),
     /** 公开 API：读取会话、事件与事件流（作用域 {@code sessions:read}，ADR-0044）。 */
     SESSION_READ(Level.PROJECT),

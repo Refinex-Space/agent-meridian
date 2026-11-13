@@ -107,7 +107,18 @@ public final class OidcTokenVerifier implements ConsoleUserResolver {
             log.debug("OIDC 令牌缺少用户标识声明 {}", properties.userIdClaim());
             return Optional.empty();
         }
-        return Optional.of(new ConsoleUser(id, groups(claims.getClaim(properties.groupsClaim()))));
+        return Optional.of(new ConsoleUser(id, groups(claims.getClaim(properties.groupsClaim())), email(claims)));
+    }
+
+    /** 经过验证的邮箱：按配置要求 {@code email_verified} 为真，声明不是字符串时视为没有。 */
+    private String email(JWTClaimsSet claims) {
+        if (!(claims.getClaim(properties.emailClaim()) instanceof String email) || email.isBlank()) {
+            return null;
+        }
+        if (properties.requireVerifiedEmail() && !Boolean.TRUE.equals(claims.getClaim("email_verified"))) {
+            return null;
+        }
+        return email;
     }
 
     /** 组声明容忍字符串与字符串数组两种形状（各家 IdP 不同，ADR-0043），其他形状视为没有组。 */

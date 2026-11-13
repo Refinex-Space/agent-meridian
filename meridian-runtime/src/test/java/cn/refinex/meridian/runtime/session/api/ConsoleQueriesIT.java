@@ -248,6 +248,34 @@ class ConsoleQueriesIT extends ApiTestBase {
                 .containsExactly(first);
     }
 
+    @Test
+    void anApproverKeyCanOnlySendResponseEvents() {
+        ApiTestClient approver = api(ApiTestKeys.KEY_A_APPROVER);
+        String session = createSession("u_approver");
+        assertThat(api(ApiTestKeys.KEY_A).sendMessage(session, "写个文件").status()).isEqualTo(202);
+        String turn = turnOf(session);
+        DbAssertions.update("UPDATE rt.turns SET status = 'awaiting_action', finished_at = now() WHERE id = ?", turn);
+        DbAssertions.update("UPDATE rt.sessions SET status = 'requires_action' WHERE id = ?", session);
+        String action = insertAction(session, turn, "tool_confirmation", null, null);
+
+        // 审批人不能发消息，也不能把消息混在回应里
+        ApiResponse message = approver.sendMessage(session, "顺便再写一个");
+        assertThat(message.status()).isEqualTo(403);
+        assertThat(message.text("code")).isEqualTo("auth.insufficient_scope");
+        String confirmation = """
+                {"events": [{"type": "user.tool_confirmation", "action_id": "%s", "approved": true}]}
+                """.formatted(action);
+        ApiResponse readOnly = api(ApiTestKeys.KEY_A_READ_ONLY).sendEvents(session, confirmation, null);
+        assertThat(readOnly.status()).isEqualTo(403);
+        assertThat(readOnly.text("code")).isEqualTo("auth.insufficient_scope");
+
+        // 只有回应事件时可以发送；结论记下审批 Key
+        assertThat(approver.sendEvents(session, confirmation, null).status()).isEqualTo(202);
+        JsonNode resolved = find(api(ApiTestKeys.KEY_A), "status=resolved&session_id=" + session, action);
+        assertThat(resolved.get("decided_by").asString()).isEqualTo("key_test_a_approver");
+        assertThat(resolved.get("conclusion").get("approved").asBoolean()).isTrue();
+    }
+
     private static String insertDelivery(String webhookId, String sessionId, Instant createdAt) {
         String id = Ids.newId(IdPrefix.WEBHOOK_DELIVERY);
         DbAssertions.update(

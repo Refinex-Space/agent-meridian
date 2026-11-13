@@ -15,7 +15,9 @@ public enum ApiKeyScope {
     /** 上传文件。 */
     FILES_WRITE("files:write"),
     /** 调用模型直通接口。 */
-    MODELS_INVOKE("models:invoke");
+    MODELS_INVOKE("models:invoke"),
+    /** 回应待处理动作：只能发送回应事件，审批人用它（ADR-0053）。 */
+    ACTIONS_RESPOND("actions:respond");
 
     private final String value;
 

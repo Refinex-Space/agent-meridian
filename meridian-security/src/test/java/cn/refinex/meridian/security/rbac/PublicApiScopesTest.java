@@ -24,14 +24,20 @@ class PublicApiScopesTest {
                 ApiKeyScope.KNOWLEDGE_READ,
                 ApiKeyScope.KNOWLEDGE_WRITE);
 
-        assertThat(scopes(new Grant(Role.TENANT_OWNER, null), "prj_a")).isEqualTo(all);
+        // 所有者另有审批（actions:respond），开发者用 sessions:write 回应（ADR-0053）
+        assertThat(scopes(new Grant(Role.TENANT_OWNER, null), "prj_a"))
+                .containsAll(all)
+                .contains(ApiKeyScope.ACTIONS_RESPOND)
+                .hasSize(all.size() + 1);
         assertThat(scopes(new Grant(Role.PROJECT_DEVELOPER, "prj_a"), "prj_a")).isEqualTo(all);
         // 知识库只读（ADR-0051）
         assertThat(scopes(new Grant(Role.TENANT_ADMIN, null), "prj_a"))
                 .containsExactlyInAnyOrder(ApiKeyScope.SESSIONS_READ, ApiKeyScope.KNOWLEDGE_READ);
         assertThat(scopes(new Grant(Role.PROJECT_VIEWER, "prj_a"), "prj_a"))
                 .containsExactlyInAnyOrder(ApiKeyScope.SESSIONS_READ, ApiKeyScope.KNOWLEDGE_READ);
-        assertThat(scopes(new Grant(Role.APPROVER, "prj_a"), "prj_a")).containsExactly(ApiKeyScope.SESSIONS_READ);
+        // 审批人读会话并回应待处理动作（ADR-0053）
+        assertThat(scopes(new Grant(Role.APPROVER, "prj_a"), "prj_a"))
+                .containsExactlyInAnyOrder(ApiKeyScope.SESSIONS_READ, ApiKeyScope.ACTIONS_RESPOND);
     }
 
     @Test
