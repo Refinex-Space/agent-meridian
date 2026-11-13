@@ -1,21 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { userEvent, within } from 'storybook/test';
 
-import { EmptyState } from '@/components/domain/empty-state';
+import { PENDING_ACTION_COUNT } from '@mocks/fixtures/pending-actions';
 
+import { AgentList } from '../agents/agent-list';
+import { AGENT_ROWS } from '../fixtures/agent-definition';
 import { BUDGET_SOFT_EXCEEDED } from '../fixtures/identity';
 
 import { AppShell } from './app-shell';
 import { BudgetBanner } from './budget-banner';
-
-/** 外壳的内容区放一个与页面无关的空态，只看外壳本身。 */
-function Content() {
-  return (
-    <div className="flex h-full items-center justify-center bg-surface">
-      <EmptyState variant="clear" title="外壳之内是页面模板，见「原型/页面模板」" size="inline" />
-    </div>
-  );
-}
 
 /**
  * 应用外壳：左侧导航（232px，可收起为 56px 图标栏，状态记在本地）、项目切换、顶栏面包屑、⌘K 命令面板、账号菜单，
@@ -27,10 +20,10 @@ const meta = {
   parameters: { layout: 'fullscreen' },
   args: {
     active: 'agents',
-    pendingCount: 4,
-    breadcrumb: [{ label: '智能体', href: '/agents' }, { label: '经营分析助手' }],
+    pendingCount: PENDING_ACTION_COUNT,
+    breadcrumb: [{ label: '智能体' }],
     defaultCollapsed: false,
-    children: <Content />,
+    children: <AgentList agents={AGENT_ROWS} />,
   },
 } satisfies Meta<typeof AppShell>;
 

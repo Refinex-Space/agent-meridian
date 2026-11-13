@@ -308,3 +308,59 @@ export const AGENT_ROWS: readonly AgentRow[] = PROJECT_AGENTS.map((a) => {
     modelName: run.model,
   };
 });
+
+/** 一个版本（`GET P:/agents/{id}/versions` 的一项，加上发布人的显示名）。 */
+export interface AgentVersionRow {
+  version: number;
+  state: 'draft' | 'current' | 'previous';
+  /** 发布时间；草稿为最近保存的时间。 */
+  at: string;
+  author: string;
+  /** 发布说明。 */
+  note: string;
+}
+
+export const Q3_VERSIONS: readonly AgentVersionRow[] = [
+  {
+    version: 13,
+    state: 'draft',
+    at: '2026-11-13T02:42:00.000Z',
+    author: '林晓雯',
+    note: '温度从 0.5 降到 0.3；子智能体改用 qwen3.7-flash',
+  },
+  {
+    version: 12,
+    state: 'current',
+    at: '2026-11-10T08:40:00.000Z',
+    author: '林晓雯',
+    note: '导出改用 scripts/export_decline.py，放行 reports/ 下的写入',
+  },
+  {
+    version: 11,
+    state: 'previous',
+    at: '2026-11-04T06:12:00.000Z',
+    author: '周启航',
+    note: '绑定华东区促销政策知识库，开启前置检索',
+  },
+  {
+    version: 10,
+    state: 'previous',
+    at: '2026-10-28T09:55:00.000Z',
+    author: '林晓雯',
+    note: '新增 policy-reader 子智能体',
+  },
+  {
+    version: 9,
+    state: 'previous',
+    at: '2026-10-21T03:30:00.000Z',
+    author: '林晓雯',
+    note: '系统提示词补充口径确认与金额单位',
+  },
+  {
+    version: 8,
+    state: 'previous',
+    at: '2026-10-15T07:02:00.000Z',
+    author: '周启航',
+    note: '挂载 ERP 的 MCP 服务，只启用查询类工具',
+  },
+];
