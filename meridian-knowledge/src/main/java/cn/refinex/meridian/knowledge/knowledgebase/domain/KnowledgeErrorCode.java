@@ -13,7 +13,9 @@ public enum KnowledgeErrorCode implements ErrorCode {
     /** 文档超过大小上限。 */
     TOO_LARGE("document.too_large", 413, "文档超过大小上限"),
     /** 文档的写入正在排队或进行，不能重新处理。 */
-    PROCESSING("document.processing", 409, "文档正在写入");
+    PROCESSING("document.processing", 409, "文档正在写入"),
+    /** 检索时知识库的 Embedding 或 rerank 模型不存在、种类不符（T19）。 */
+    MODEL_UNAVAILABLE("knowledge_base.model_unavailable", 409, "知识库的模型不可用");
 
     private final String code;
     private final int status;

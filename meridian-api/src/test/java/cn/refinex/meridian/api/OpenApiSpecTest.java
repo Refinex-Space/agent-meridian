@@ -69,7 +69,8 @@ class OpenApiSpecTest {
             "GET /v1/knowledge-bases/{knowledge_base_id}/documents",
             "GET /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}",
             "DELETE /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}",
-            "POST /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}:reprocess");
+            "POST /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}:reprocess",
+            "POST /v1/knowledge-bases/{knowledge_base_id}/search");
 
     /** 架构设计「事件」的事件类型清单中，持久化的 agent、session、span 与 user 四个域。 */
     private static final Set<String> EXPECTED_SESSION_EVENTS = Set.of(
@@ -154,7 +155,9 @@ class OpenApiSpecTest {
                     : key.equals("POST /v1/files")
                             ? "files:write"
                             : key.contains(" /v1/knowledge-bases")
-                                    ? key.startsWith("GET ") ? "knowledge:read" : "knowledge:write"
+                                    ? key.startsWith("GET ") || key.endsWith("/search")
+                                            ? "knowledge:read"
+                                            : "knowledge:write"
                                     : key.startsWith("GET ") ? "sessions:read" : "sessions:write";
             assertThat(operation.getSecurity()).as(key).hasSize(1);
             assertThat(operation.getSecurity().getFirst()).as(key).containsEntry("ApiKeyAuth", List.of(expectedScope));

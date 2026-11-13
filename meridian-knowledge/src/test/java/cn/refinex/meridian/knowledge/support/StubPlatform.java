@@ -38,6 +38,9 @@ import tools.jackson.databind.node.ObjectNode;
  *       签发 Key、{@link #revoke} 吊销。
  *   <li>runtime：{@code POST /internal/v1/embeddings}（只认 {@code aud=runtime} 的 knowledge 令牌），按文本哈希给出确定的向量
  *       （{@link ScriptedVectors}），记下每次调用；{@link #failNext} 让接下来的调用返回指定的状态码，模拟依赖暂时不可用。
+ *   <li>runtime（T19）：{@code POST /internal/v1/rerank} 默认按关键词重叠打分（{@link ScriptedVectors#overlap}），
+ *       {@link #reranker} 可换；{@code POST /internal/v1/chat/completions} 的输出由 {@link #chat} 给出，没有设置时 404
+ *       {@code model.not_found}。两者都记下调用。
  * </ul>
  */
 public final class StubPlatform implements AutoCloseable {
@@ -48,6 +51,26 @@ public final class StubPlatform implements AutoCloseable {
     /** runtime 收到的一次 Embedding 调用。 */
     public record EmbeddingCall(String caller, String tenantId, String projectId, String model, int inputs) {}
 
+    /** runtime 收到的一次 rerank 调用。 */
+    public record RerankCall(String tenantId, String projectId, String model, String query, List<String> documents) {}
+
+    /** runtime 收到的一次对话补全调用。 */
+    public record ChatCall(String tenantId, String projectId, String model, List<String> messages) {}
+
+    /** 给一次 rerank 打分：查询与候选 → 与候选同序的得分。 */
+    @FunctionalInterface
+    public interface Reranker {
+
+        /**
+         * 打分。
+         *
+         * @param query 查询
+         * @param documents 候选
+         * @return 得分
+         */
+        List<Double> score(String query, List<String> documents);
+    }
+
     private final TestTokenIssuer issuer;
     private final ServiceJwtVerifier controlPlaneVerifier;
     private final ServiceJwtVerifier runtimeVerifier;
@@ -57,6 +80,10 @@ public final class StubPlatform implements AutoCloseable {
     private final List<EmbeddingCall> embeddingCalls = new CopyOnWriteArrayList<>();
     private final AtomicInteger verifyCalls = new AtomicInteger();
     private volatile Function<List<String>, Embedded> embedder;
+    private final List<RerankCall> rerankCalls = new CopyOnWriteArrayList<>();
+    private final List<ChatCall> chatCalls = new CopyOnWriteArrayList<>();
+    private volatile Reranker reranker;
+    private volatile Function<String, String> chat;
 
     /**
      * 一批 Embedding 的结果。
@@ -80,7 +107,10 @@ public final class StubPlatform implements AutoCloseable {
     public static StubPlatform start() {
         TestTokenIssuer issuer = TestTokenIssuer.start().client(ServiceJwts.KNOWLEDGE, KNOWLEDGE_SECRET);
         StubPlatform stub = new StubPlatform(issuer);
-        issuer.route("/internal/v1/api-keys:verify", stub::verify).route("/internal/v1/embeddings", stub::embed);
+        issuer.route("/internal/v1/api-keys:verify", stub::verify)
+                .route("/internal/v1/embeddings", stub::embed)
+                .route("/internal/v1/rerank", stub::rerank)
+                .route("/internal/v1/chat/completions", stub::chat);
         return stub;
     }
 
@@ -180,6 +210,112 @@ public final class StubPlatform implements AutoCloseable {
      */
     public List<EmbeddingCall> embeddingCalls() {
         return List.copyOf(embeddingCalls);
+    }
+
+    /**
+     * 换掉 rerank 的打分（录制回放、真实模型测试）。
+     *
+     * @param function 打分；为空时恢复为关键词重叠
+     */
+    public void reranker(Reranker function) {
+        this.reranker = function;
+    }
+
+    /**
+     * 设置对话补全的输出（查询改写）。
+     *
+     * @param function 用户消息 → 输出；为空时接口返回 404 {@code model.not_found}，函数返回空时 503
+     */
+    public void chat(Function<String, String> function) {
+        this.chat = function;
+    }
+
+    /**
+     * 收到的 rerank 调用。
+     *
+     * @return 调用
+     */
+    public List<RerankCall> rerankCalls() {
+        return List.copyOf(rerankCalls);
+    }
+
+    /**
+     * 收到的对话补全调用。
+     *
+     * @return 调用
+     */
+    public List<ChatCall> chatCalls() {
+        return List.copyOf(chatCalls);
+    }
+
+    private void rerank(HttpExchange exchange) throws IOException {
+        if (authorized(exchange, runtimeVerifier).isEmpty()) {
+            return;
+        }
+        JsonNode request =
+                JsonMappers.lenient().readTree(exchange.getRequestBody().readAllBytes());
+        String query = request.path("query").asString();
+        List<String> documents = new ArrayList<>();
+        request.path("documents").forEach(text -> documents.add(text.asString()));
+        rerankCalls.add(new RerankCall(
+                request.path("tenant_id").asString(null),
+                request.path("project_id").asString(null),
+                request.path("model").asString(null),
+                query,
+                List.copyOf(documents)));
+        Reranker custom = reranker;
+        List<Double> scores = custom != null
+                ? custom.score(query, documents)
+                : documents.stream()
+                        .map(document -> ScriptedVectors.overlap(query, document))
+                        .toList();
+        List<Integer> order = new ArrayList<>();
+        for (int i = 0; i < documents.size(); i++) {
+            order.add(i);
+        }
+        order.sort((a, b) -> Double.compare(scores.get(b), scores.get(a)));
+        ObjectNode response = JsonMappers.lenient().createObjectNode();
+        ArrayNode results = response.putArray("results");
+        for (int index : order) {
+            results.addObject().put("index", index).put("relevance_score", scores.get(index));
+        }
+        long tokens = documents.stream().mapToLong(ScriptedVectors::tokens).sum() + ScriptedVectors.tokens(query);
+        response.put("model", request.path("model").asString());
+        response.putObject("usage").put("prompt_tokens", tokens).put("total_tokens", tokens);
+        respond(exchange, 200, JsonMappers.lenient().writeValueAsString(response));
+    }
+
+    private void chat(HttpExchange exchange) throws IOException {
+        if (authorized(exchange, runtimeVerifier).isEmpty()) {
+            return;
+        }
+        JsonNode request =
+                JsonMappers.lenient().readTree(exchange.getRequestBody().readAllBytes());
+        List<String> messages = new ArrayList<>();
+        request.path("messages")
+                .forEach(message -> messages.add(message.path("content").asString()));
+        chatCalls.add(new ChatCall(
+                request.path("tenant_id").asString(null),
+                request.path("project_id").asString(null),
+                request.path("model").asString(null),
+                List.copyOf(messages)));
+        Function<String, String> custom = chat;
+        if (custom == null) {
+            respond(exchange, 404, problem("model.not_found", 404));
+            return;
+        }
+        String content = custom.apply(messages.getLast());
+        if (content == null) {
+            respond(exchange, 503, problem("model.provider_unavailable", 503));
+            return;
+        }
+        ObjectNode response = JsonMappers.lenient().createObjectNode();
+        response.put("content", content).put("model", request.path("model").asString());
+        response.putObject("usage")
+                .put("prompt_tokens", 10)
+                .put("completion_tokens", 5)
+                .put("total_tokens", 15);
+        respond(exchange, 200, JsonMappers.lenient().writeValueAsString(response));
     }
 
     private void verify(HttpExchange exchange) throws IOException {

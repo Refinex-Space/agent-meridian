@@ -9,8 +9,11 @@ import java.util.List;
  * @param knowledgeBaseIds 绑定的知识库 ID（{@code kb_…}），{@code knowledge_search} 只能检索这些知识库；可为空列表
  * @param prefetch 是否在每轮开始时用最后一条用户消息检索并注入结果
  * @param prefetchTopK 前置检索注入的切片数，取值 [1, 50]；{@code prefetch} 为 false 时不使用
+ * @param queryRewriteModel 检索前改写查询用的对话模型 ID（{@code mdl_…}，架构设计「检索流程」第 1 步）；为空表示不改写。
+ *     {@code knowledge_search} 与前置检索都生效
  */
-public record KnowledgeSpec(List<String> knowledgeBaseIds, boolean prefetch, int prefetchTopK) {
+public record KnowledgeSpec(
+        List<String> knowledgeBaseIds, boolean prefetch, int prefetchTopK, String queryRewriteModel) {
 
     /** 前置检索默认注入的切片数。 */
     public static final int DEFAULT_PREFETCH_TOP_K = 5;
@@ -31,6 +34,20 @@ public record KnowledgeSpec(List<String> knowledgeBaseIds, boolean prefetch, int
         if (prefetch && knowledgeBaseIds.isEmpty()) {
             throw new IllegalArgumentException("开启前置检索时必须绑定至少一个知识库");
         }
+        if (queryRewriteModel != null && queryRewriteModel.isBlank()) {
+            queryRewriteModel = null;
+        }
+    }
+
+    /**
+     * 创建不改写查询的知识库配置。
+     *
+     * @param knowledgeBaseIds 绑定的知识库 ID
+     * @param prefetch 是否前置检索
+     * @param prefetchTopK 前置检索注入的切片数
+     */
+    public KnowledgeSpec(List<String> knowledgeBaseIds, boolean prefetch, int prefetchTopK) {
+        this(knowledgeBaseIds, prefetch, prefetchTopK, null);
     }
 
     /**
@@ -39,6 +56,6 @@ public record KnowledgeSpec(List<String> knowledgeBaseIds, boolean prefetch, int
      * @return 空配置
      */
     public static KnowledgeSpec none() {
-        return new KnowledgeSpec(List.of(), false, DEFAULT_PREFETCH_TOP_K);
+        return new KnowledgeSpec(List.of(), false, DEFAULT_PREFETCH_TOP_K, null);
     }
 }

@@ -148,13 +148,36 @@ public final class ApiClient {
      * @return 响应
      */
     public Reply internal(String method, String path, String credential) {
+        return internal(method, path, credential, null);
+    }
+
+    /**
+     * 调用内部接口（JSON 请求体）。
+     *
+     * @param method 方法
+     * @param path 路径
+     * @param credential 服务 JWT；可为空
+     * @param body JSON 请求体；可为空
+     * @return 响应
+     */
+    public Reply internal(String method, String path, String credential, String body) {
         Map<String, String> headers = new LinkedHashMap<>();
         if (credential != null) {
             headers.put("Authorization", "Bearer " + credential);
         }
-        HttpResponse<String> response = send(method, path, HttpRequest.BodyPublishers.noBody(), headers);
+        if (body != null) {
+            headers.put("Content-Type", "application/json");
+        }
+        HttpResponse<String> response = send(
+                method,
+                path,
+                body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body),
+                headers);
         SimpleRequest.Builder request = new SimpleRequest.Builder(Request.Method.valueOf(method), rawPath(path));
         headers.forEach(request::withHeader);
+        if (body != null) {
+            request.withBody(body);
+        }
         ValidationReport report = INTERNAL.validate(request.build(), toValidated(response));
         if (report.hasErrors()) {
             throw new AssertionError("内部接口不符合规范：" + report.getMessages() + "\n" + response.body());

@@ -50,6 +50,8 @@ class InternalOpenApiSpecTest {
             "GET /internal/v1/tenants/{tenant_id}/settings",
             "GET /internal/v1/projects/{project_id}/webhooks",
             "GET /internal/v1/knowledge-bases/{knowledge_base_id}",
+            "POST /internal/v1/knowledge-bases:search",
+            "POST /internal/v1/chat/completions",
             "POST /oauth2/token",
             "GET /oauth2/jwks");
 

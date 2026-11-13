@@ -42,6 +42,7 @@ public record SpecReference(Type type, String id) {
         for (JsonNode kb : spec.path("knowledge").path("knowledge_base_ids")) {
             add(refs, Type.KNOWLEDGE_BASE, kb);
         }
+        add(refs, Type.MODEL, spec.path("knowledge").path("query_rewrite_model"));
         for (JsonNode subagent : spec.path("subagents")) {
             models(subagent.path("model"), refs);
             skills(subagent.path("skills"), refs);

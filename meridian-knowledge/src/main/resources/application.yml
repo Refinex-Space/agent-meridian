@@ -10,6 +10,11 @@ spring:
     deserialization:
       # 请求体中未声明的字段返回 400，不静默忽略（与 runtime、control-plane 相同）
       fail-on-unknown-properties: true
+  datasource:
+    hikari:
+      # 检索的向量召回（T19）：pgvector 0.8 的迭代扫描。所有租户共用一个 HNSW 索引，按租户、知识库与访问标签过滤后剩下的太少时，
+      # 不开它只能拿到 ef_search 个近邻再过滤，结果可能远少于 50 条；strict_order 继续扫描直到取满，且保持距离顺序。
+      connection-init-sql: SET hnsw.iterative_scan = strict_order; SET hnsw.ef_search = 100
   flyway:
     # 迁移以 meridian_migrator 执行（spring.flyway.user/password），脚本位置与 schema 由 meridian-persistence 的迁移约定设置
     enabled: true

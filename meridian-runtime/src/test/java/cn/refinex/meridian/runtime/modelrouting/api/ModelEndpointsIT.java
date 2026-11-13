@@ -615,6 +615,34 @@ class ModelEndpointsIT extends ApiTestBase {
                 .isEqualTo(401);
     }
 
+    @Test
+    void internalChatCompletionReturnsTextAndChargesTheDeclaredTenant() {
+        String tenant = "ten_internal_" + System.nanoTime();
+        String body = "{\"tenant_id\": \"" + tenant + "\", \"project_id\": \"prj_internal\", \"model\": \"" + CHAT
+                + "\", \"max_tokens\": 64, \"temperature\": 0, \"messages\": [{\"role\": \"system\", \"content\": \"改写\"},"
+                + " {\"role\": \"user\", \"content\": \"那上海呢？\"}]}";
+
+        InternalResponse response = internal("/internal/v1/chat/completions", body, ApiTestKeys.knowledgeToken());
+
+        assertThat(response.status()).isEqualTo(200);
+        assertThat(response.body().get("content").asString()).isEqualTo("echo: 那上海呢？");
+        JsonNode usage = response.body().get("usage");
+        assertThat(usage.get("total_tokens").asInt())
+                .isPositive()
+                .isEqualTo(usage.get("prompt_tokens").asInt()
+                        + usage.get("completion_tokens").asInt());
+        assertThat(usage(tenant))
+                .singleElement()
+                .satisfies(record -> assertThat(record)
+                        .containsEntry("kind", "model_tokens")
+                        .containsEntry("project_id", "prj_internal")
+                        .containsEntry("model_id", CHAT));
+        assertThat(internal("/internal/v1/chat/completions", body, ApiTestKeys.egressProxyToken())
+                        .status())
+                .as("只接受 knowledge")
+                .isEqualTo(403);
+    }
+
     // ---- 辅助 ----
 
     private Stream stream(String apiKey, String body) {

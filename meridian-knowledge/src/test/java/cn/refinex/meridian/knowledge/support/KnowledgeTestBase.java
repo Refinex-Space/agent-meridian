@@ -89,12 +89,24 @@ public abstract class KnowledgeTestBase {
      * @return 知识库 ID
      */
     protected String createKnowledgeBase(Tenant tenant) {
+        return createKnowledgeBase(tenant, null);
+    }
+
+    /**
+     * 创建知识库。
+     *
+     * @param tenant 租户
+     * @param rerankModel rerank 模型；可为空，表示检索时不重排
+     * @return 知识库 ID
+     */
+    protected String createKnowledgeBase(Tenant tenant, String rerankModel) {
+        String rerank = rerankModel == null ? "" : ",\"rerank_model\":\"" + rerankModel + "\"";
         ApiClient.Reply reply = client().api(
                         "POST /v1/knowledge-bases",
                         "POST",
                         "/v1/knowledge-bases",
                         tenant.key(),
-                        "{\"name\":\"公司制度\",\"embedding_model\":\"mdl_test_embedding\"}",
+                        "{\"name\":\"公司制度\",\"embedding_model\":\"mdl_test_embedding\"" + rerank + "}",
                         Map.of());
         if (reply.status() != 201) {
             throw new AssertionError(reply.raw());
@@ -117,6 +129,29 @@ public abstract class KnowledgeTestBase {
             throw new AssertionError(reply.raw());
         }
         return reply.text("id");
+    }
+
+    /**
+     * 上传一份文档并等它写入完成。
+     *
+     * @param tenant 租户
+     * @param knowledgeBaseId 知识库 ID
+     * @param filename 文件名
+     * @param content 内容
+     * @param aclTags 标签；可为空
+     * @return 文档 ID
+     */
+    protected String ingest(Tenant tenant, String knowledgeBaseId, String filename, byte[] content, String aclTags) {
+        ApiClient.Reply reply = client().upload(knowledgeBaseId, filename, content, aclTags, tenant.key(), null);
+        if (reply.status() != 202) {
+            throw new AssertionError(reply.raw());
+        }
+        String documentId = reply.text("id");
+        JsonNode finished = awaitFinished(tenant, knowledgeBaseId, documentId);
+        if (!finished.get("status").asString().equals("ready")) {
+            throw new AssertionError("写入失败：" + finished);
+        }
+        return documentId;
     }
 
     /**

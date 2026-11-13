@@ -15,7 +15,9 @@ public enum UsageKind {
     /** 联网搜索次数。 */
     SEARCH_CALLS,
     /** 知识库存储 GB 天：knowledge 每天为每个知识库上报一条（ADR-0051）。 */
-    KNOWLEDGE_STORAGE_GB_DAYS;
+    KNOWLEDGE_STORAGE_GB_DAYS,
+    /** 知识检索次数：knowledge 每次检索上报一条，只进账本、不占预算（T19，登记事项 D70）。 */
+    KNOWLEDGE_SEARCH_CALLS;
 
     /**
      * 消息、数据库与接口中的取值。

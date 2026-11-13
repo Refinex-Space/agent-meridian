@@ -448,6 +448,12 @@
           "minimum": 1,
           "maximum": 50,
           "examples": [5]
+        },
+        "query_rewrite_model": {
+          "description": "检索前改写查询用的对话模型 ID（mdl_…，宜用小模型）；为 null 或不写时不改写。knowledge_search 与前置检索都生效。",
+          "type": ["string", "null"],
+          "pattern": "^mdl_[A-Za-z0-9_]{1,64}$",
+          "examples": ["mdl_01JC8Z4E7G9J1L3N5Q7S9U1W5A"]
         }
       }
     }

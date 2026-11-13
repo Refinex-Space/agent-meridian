@@ -31,7 +31,7 @@ public class KnowledgeBaseLookupRepository extends SystemRepository {
     public Optional<KnowledgeBase> find(String id) {
         return jdbc().sql("""
                         SELECT kb.id, kb.tenant_id, kb.project_id, kb.name, kb.description, kb.embedding_model,
-                               kb.created_by, kb.created_at, kb.updated_at, 0 AS document_count
+                               kb.rerank_model, kb.created_by, kb.created_at, kb.updated_at, 0 AS document_count
                           FROM kb.knowledge_bases kb
                          WHERE kb.id = :id
                         """)

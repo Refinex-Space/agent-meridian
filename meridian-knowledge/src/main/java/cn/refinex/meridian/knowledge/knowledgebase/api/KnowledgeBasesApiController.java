@@ -9,6 +9,9 @@ import cn.refinex.meridian.api.model.KnowledgeBase;
 import cn.refinex.meridian.api.model.KnowledgeBasePage;
 import cn.refinex.meridian.api.model.KnowledgeDocument;
 import cn.refinex.meridian.api.model.KnowledgeDocumentPage;
+import cn.refinex.meridian.api.model.KnowledgeSearchRequest;
+import cn.refinex.meridian.api.model.KnowledgeSearchResult;
+import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.crypto.Sha256;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.common.page.PageResult;
@@ -19,6 +22,9 @@ import cn.refinex.meridian.knowledge.document.domain.Document;
 import cn.refinex.meridian.knowledge.ingestion.domain.IngestionProgress;
 import cn.refinex.meridian.knowledge.knowledgebase.app.KnowledgeBaseService;
 import cn.refinex.meridian.knowledge.openapi.pub.KnowledgeBasesApi;
+import cn.refinex.meridian.knowledge.search.api.SearchDtos;
+import cn.refinex.meridian.knowledge.search.app.KnowledgeSearchService;
+import cn.refinex.meridian.knowledge.search.app.SearchRequest;
 import cn.refinex.meridian.knowledge.web.ApiTimes;
 import cn.refinex.meridian.knowledge.web.PublicRequests;
 import cn.refinex.meridian.security.apikey.ApiKeyScope;
@@ -29,6 +35,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,13 +45,15 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * 公开 API 的 {@code KnowledgeBases} 标签（ADR-0051）：API Key 或控制台用户（带 {@code Meridian-Project}）经 {@code ApiKeyFilter} 认证，
  * {@code PlatformContext} 已绑定为它的项目。读要 {@code knowledge:read}，写要 {@code knowledge:write}；POST 经 {@link PublicRequests}
- * 支持 {@code Idempotency-Key}，上传的指纹是文件名、内容摘要与标签。
+ * 支持 {@code Idempotency-Key}，上传的指纹是文件名、内容摘要与标签。检索（T19）交给 {@code search.app.KnowledgeSearchService}，读权限即可，
+ * 访问标签由调用方在请求体中声明（平台信任 API Key 所属项目声明的标签，架构设计「对外形态」）。
  */
 @RestController
 public class KnowledgeBasesApiController implements KnowledgeBasesApi {
 
     private final KnowledgeBaseService bases;
     private final DocumentService documents;
+    private final KnowledgeSearchService search;
     private final PublicRequests idempotent;
     private final HttpServletRequest request;
     private final int dimensions;
@@ -54,6 +63,7 @@ public class KnowledgeBasesApiController implements KnowledgeBasesApi {
      *
      * @param bases 知识库用例
      * @param documents 文档用例
+     * @param search 检索用例
      * @param idempotent POST 的幂等执行
      * @param request 当前请求（Spring 注入的代理）
      * @param properties knowledge 配置，取向量维度
@@ -61,11 +71,13 @@ public class KnowledgeBasesApiController implements KnowledgeBasesApi {
     public KnowledgeBasesApiController(
             KnowledgeBaseService bases,
             DocumentService documents,
+            KnowledgeSearchService search,
             PublicRequests idempotent,
             HttpServletRequest request,
             KnowledgeProperties properties) {
         this.bases = bases;
         this.documents = documents;
+        this.search = search;
         this.idempotent = idempotent;
         this.request = request;
         this.dimensions = properties.embedding().dimensions();
@@ -80,7 +92,8 @@ public class KnowledgeBasesApiController implements KnowledgeBasesApi {
                 body,
                 HttpStatus.CREATED,
                 KnowledgeBase.class,
-                () -> toDto(bases.create(body.getName(), body.getDescription(), body.getEmbeddingModel())));
+                () -> toDto(bases.create(
+                        body.getName(), body.getDescription(), body.getEmbeddingModel(), body.getRerankModel())));
     }
 
     @Override
@@ -169,12 +182,37 @@ public class KnowledgeBasesApiController implements KnowledgeBasesApi {
         return ResponseEntity.noContent().build();
     }
 
+    @Override
+    public ResponseEntity<KnowledgeSearchResult> searchKnowledgeBase(
+            String knowledgeBaseId, KnowledgeSearchRequest body, String idempotencyKey) {
+        PublicApiRequests.require(request, ApiKeyScope.KNOWLEDGE_READ);
+        SearchDtos.requireQuery(body.getQuery());
+        return idempotent.execute(
+                request,
+                idempotencyKey,
+                body,
+                HttpStatus.OK,
+                KnowledgeSearchResult.class,
+                () -> SearchDtos.toPublic(search.search(new SearchRequest(
+                        List.of(knowledgeBaseId),
+                        body.getQuery(),
+                        body.getTopK() == null ? search.defaultTopK() : body.getTopK(),
+                        body.getAclTags(),
+                        null,
+                        new SearchRequest.Attribution(
+                                SearchRequest.Attribution.REST,
+                                PlatformContexts.current().apiKeyId(),
+                                null,
+                                null)))));
+    }
+
     private KnowledgeBase toDto(cn.refinex.meridian.knowledge.knowledgebase.domain.KnowledgeBase base) {
         return new KnowledgeBase()
                 .id(base.id())
                 .name(base.name())
                 .description(base.description())
                 .embeddingModel(base.embeddingModel())
+                .rerankModel(base.rerankModel())
                 .embeddingDimensions(dimensions)
                 .documentCount(base.documentCount())
                 .createdAt(ApiTimes.utc(base.createdAt()))

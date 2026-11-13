@@ -11,8 +11,12 @@ import cn.refinex.meridian.knowledge.ingestion.infra.RuntimeEmbeddings;
 import cn.refinex.meridian.knowledge.ingestion.infra.system.IngestionQueueRepository;
 import cn.refinex.meridian.knowledge.ingestion.infra.system.SchemaInspection;
 import cn.refinex.meridian.knowledge.metering.app.StorageMetering;
+import cn.refinex.meridian.knowledge.search.app.QueryModels;
+import cn.refinex.meridian.knowledge.search.infra.RuntimeQueryModels;
 import cn.refinex.meridian.knowledge.web.ApiKeyRevocationListener;
+import cn.refinex.meridian.modelclient.ChatClient;
 import cn.refinex.meridian.modelclient.EmbeddingClient;
+import cn.refinex.meridian.modelclient.RerankClient;
 import cn.refinex.meridian.persistence.jdbc.PeriodicJob;
 import cn.refinex.meridian.persistence.redis.RedisMessaging;
 import cn.refinex.meridian.security.apikey.ApiKeyResolver;
@@ -31,9 +35,10 @@ import org.springframework.boot.flyway.autoconfigure.FlywayConfigurationCustomiz
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.client.RestClient;
 
 /**
- * knowledge 的装配（ADR-0051）：切分与重试参数、doc-parser 与 runtime 的客户端、写入作业的 Worker 与后台任务、存储计量的后台任务、
+ * knowledge 的装配（ADR-0051）：切分与重试参数、doc-parser 与 runtime 的客户端（写入的 Embedding，T19 起另有检索的模型调用）、写入作业的 Worker 与后台任务、存储计量的后台任务、
  * 迁移的向量维度占位符与启动时的维度核对、{@code key.revoked} 的订阅。
  */
 @Configuration(proxyBeanMethods = false)
@@ -146,6 +151,23 @@ public class KnowledgeConfiguration {
             return new RuntimeEmbeddings(null);
         }
         return new RuntimeEmbeddings(new EmbeddingClient(clients.create(url, ServiceJwts.RUNTIME)));
+    }
+
+    /**
+     * 检索用的模型调用（Embedding、rerank、查询改写）：经 runtime 的内部接口，带 knowledge 的服务 JWT（T19）。
+     *
+     * @param properties knowledge 配置
+     * @param clients 服务间调用客户端的构造入口
+     * @return 模型调用；没有配置 runtime 地址时每次调用都以 503 失败
+     */
+    @Bean
+    public QueryModels queryModels(KnowledgeProperties properties, ServiceRestClients clients) {
+        String url = properties.runtime().url();
+        if (url == null || url.isBlank()) {
+            return new RuntimeQueryModels(null, null, null);
+        }
+        RestClient runtime = clients.create(url, ServiceJwts.RUNTIME);
+        return new RuntimeQueryModels(new EmbeddingClient(runtime), new RerankClient(runtime), new ChatClient(runtime));
     }
 
     /**

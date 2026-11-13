@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: AgentMeridian Internal API
   version: 1.0.0
-  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank 与沙箱出网授权，knowledge 提供知识库的查询，control-plane 提供服务令牌、API Key 校验、租户配额与设置、控制台用户的项目权限、凭据解析、模型目录、智能体配置与权限策略。
+  summary: 平台服务之间的内部接口：runtime 提供 Embedding、rerank、查询改写用的对话补全与沙箱出网授权，knowledge 提供知识库的查询与检索，control-plane 提供服务令牌、API Key 校验、租户配额与设置、控制台用户的项目权限、凭据解析、模型目录、智能体配置与权限策略。
   description: |
     只供平台内部服务调用（knowledge 经 `meridian-model-client`，沙箱出网代理经 Envoy 的 Lua 过滤器，runtime 与 knowledge
     经 `meridian-security` 的服务间调用客户端访问 control-plane），不对业务系统开放，不随公开 API 发布。
@@ -27,7 +27,7 @@ security:
   - ServiceAuth: []
 tags:
   - name: InternalModels
-    description: 知识库使用的 Embedding 与 rerank，与智能体共用平台的限流、预算与计量。
+    description: 知识库使用的 Embedding、rerank 与查询改写的对话补全，与智能体共用平台的限流、预算与计量。
   - name: InternalEgress
     description: 沙箱出网代理的授权回调（架构设计「沙箱出网」，ADR-0038）。
   - name: InternalApiKeys
@@ -49,7 +49,7 @@ tags:
   - name: InternalWebhooks
     description: control-plane 提供：项目的 Webhook 订阅与签名密钥，runtime 据此投递（架构设计「Webhook」，ADR-0049）。
   - name: InternalKnowledge
-    description: knowledge 提供：按 ID 查询知识库的归属与 Embedding 模型（架构设计「对外形态」，ADR-0051）。
+    description: knowledge 提供：按 ID 查询知识库的归属与 Embedding 模型（架构设计「对外形态」，ADR-0051）；智能体的知识检索（T19）。
 
 paths:
   /internal/v1/embeddings:
@@ -127,6 +127,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InternalRerankResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/ModelNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/ProviderError'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /internal/v1/chat/completions:
+    post:
+      operationId: createInternalChatCompletion
+      tags: [InternalModels]
+      summary: 对话补全（非流式）
+      description: |
+        调用方：`knowledge`。检索前的查询改写（架构设计「检索流程」第 1 步）：用租户目录中的对话模型把用户的问题改写为检索用的
+        查询。与公开的 `/v1/chat/completions` 共用 `RoutedModel` 的限流、预算与计量，不带工具，只返回文本。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalChatRequest'
+            example:
+              tenant_id: ten_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
+              project_id: prj_01JC8Z2B5D3F7H9K1M4P6R8T0V
+              model: mdl_01JC8Z4D7F5H9K1M3P6R8T0V2X
+              messages:
+                - {role: system, content: 把用户的问题改写为一条检索查询，只输出查询。}
+                - {role: user, content: 那上海呢？}
+              max_tokens: 128
+              temperature: 0
+      responses:
+        '200':
+          description: 模型输出的文本。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalChatResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -696,6 +744,53 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /internal/v1/knowledge-bases:search:
+    post:
+      operationId: searchInternalKnowledge
+      tags: [InternalKnowledge]
+      summary: 检索知识库
+      description: |
+        调用方：`runtime`。智能体的 `knowledge_search` 与前置检索经它检索（架构设计「检索流程」「对外形态」）。知识库必须都属于
+        请求的租户与项目，否则 404 `knowledge_base.not_found`；`acl_tags` 是会话的 `end_user_attributes.acl_tags`，过滤规则与公开的
+        `POST /v1/knowledge-bases/{id}/search` 相同。给了 `rewrite_model` 时先经 runtime 的 `/internal/v1/chat/completions` 改写查询，
+        改写失败时用原查询。每次检索记一条用量 `knowledge_search_calls`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalKnowledgeSearchRequest'
+            example:
+              tenant_id: ten_01JC8Z1K9W0V6Q3M2N5P7R4T8Y
+              project_id: prj_01JC8Z2B5D3F7H9K1M4P6R8T0V
+              knowledge_base_ids: [kb_01JC8Z6D7Q9X3M2N6P0R5T8W1Y]
+              query: 去上海出差住宿每晚的标准是多少？
+              top_k: 5
+              acl_tags: ['dept:finance']
+              session_id: ses_01JC8Z7E8Q9X3M2N6P0R5T8W1Y
+      responses:
+        '200':
+          description: 命中的切片，按相关度从高到低。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalKnowledgeSearchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CallerForbidden'
+        '404':
+          $ref: '#/components/responses/KnowledgeBaseNotFound'
+        '409':
+          $ref: '#/components/responses/KnowledgeModelUnavailable'
+        default:
+          $ref: '#/components/responses/InternalError'
+
   /internal/v1/tenants/{tenant_id}/settings:
     get:
       operationId: getInternalTenantSettings
@@ -880,6 +975,15 @@ components:
             $ref: '#/components/schemas/Problem'
     KnowledgeBaseNotFound:
       description: '`knowledge_base.not_found`：知识库不存在。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    KnowledgeModelUnavailable:
+      description: '`knowledge_base.model_unavailable`：知识库的 Embedding 或 rerank 模型不存在、种类不符。'
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -1431,6 +1535,191 @@ components:
           description: 会话事件的保留天数，至少 1（架构设计「数据保留」）。
           type: integer
           minimum: 1
+    InternalKnowledgeSearchRequest:
+      description: 检索请求。
+      type: object
+      additionalProperties: false
+      required: [tenant_id, project_id, knowledge_base_ids, query]
+      properties:
+        tenant_id:
+          description: 会话的租户 ID（ten_…）。
+          type: string
+          minLength: 1
+        project_id:
+          description: 会话的项目 ID（prj_…），知识库必须属于它。
+          type: string
+          minLength: 1
+        knowledge_base_ids:
+          description: 要检索的知识库（kb_…），1 至 32 个。
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        query:
+          description: 查询文本，1 至 2000 个字符。
+          type: string
+          minLength: 1
+          maxLength: 2000
+        top_k:
+          description: 返回的切片数，1 至 50，默认 8。
+          type: integer
+          minimum: 1
+          maximum: 50
+        acl_tags:
+          description: 终端用户的访问标签（会话的 `end_user_attributes.acl_tags`）；不传时只返回不限标签的切片。至多 64 个。
+          type: array
+          maxItems: 64
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        rewrite_model:
+          description: 查询改写用的对话模型（mdl_…，智能体配置的 `knowledge.query_rewrite_model`）；不传时不改写。
+          type: string
+          minLength: 1
+        api_key_id:
+          description: 会话的 API Key（key_…），用量归属；控制台用户创建的会话不传。
+          type: string
+          minLength: 1
+        session_id:
+          description: 发起检索的会话（ses_…），用量归属。
+          type: string
+          minLength: 1
+        turn_id:
+          description: 发起检索的轮次（trn_…），用量归属。
+          type: string
+          minLength: 1
+    InternalKnowledgeSearchResult:
+      description: 检索结果。
+      type: object
+      required: [data, query]
+      properties:
+        data:
+          description: 命中的切片，按 `score` 从高到低；没有命中时为空数组。
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalKnowledgeSearchHit'
+        query:
+          description: 实际用于检索的查询：改写成功时是改写后的查询，否则是原查询。
+          type: string
+    InternalKnowledgeSearchHit:
+      description: 一个命中的切片，字段与公开 API 的 `KnowledgeSearchHit` 相同。
+      type: object
+      required: [chunk_id, knowledge_base_id, document_id, filename, kind, content, score, page_start, page_end, heading_path]
+      properties:
+        chunk_id:
+          description: 切片 ID（chk_…）。
+          type: string
+        knowledge_base_id:
+          description: 知识库 ID（kb_…）。
+          type: string
+        document_id:
+          description: 文档 ID（doc_…）。
+          type: string
+        filename:
+          description: 文档的文件名。
+          type: string
+        kind:
+          description: '`text` 或 `table`。'
+          type: string
+        content:
+          description: 切片正文。
+          type: string
+        score:
+          description: 相关度，越大越相关。
+          type: number
+          format: double
+        page_start:
+          description: 起始页；没有分页时为 null。
+          type: [integer, 'null']
+        page_end:
+          description: 结束页；没有分页时为 null。
+          type: [integer, 'null']
+        heading_path:
+          description: 标题路径。
+          type: array
+          items:
+            type: string
+    InternalChatRequest:
+      description: 非流式的对话补全请求。
+      type: object
+      additionalProperties: false
+      required: [tenant_id, model, messages]
+      properties:
+        tenant_id:
+          description: 调用代表的租户 ID（ten_…），用量与预算计入它。
+          type: string
+          minLength: 1
+        project_id:
+          description: 调用代表的项目 ID（prj_…）；租户级的调用不传。
+          type: string
+          minLength: 1
+        model:
+          description: 平台模型目录中的对话模型 ID（mdl_…）。
+          type: string
+          minLength: 1
+        messages:
+          description: 消息，1 至 32 条。
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/InternalChatMessage'
+        max_tokens:
+          description: 输出 token 上限，1 至 4096。
+          type: integer
+          minimum: 1
+          maximum: 4096
+        temperature:
+          description: 采样温度，0 至 2。
+          type: number
+          format: double
+          minimum: 0
+          maximum: 2
+    InternalChatMessage:
+      description: 一条文本消息。
+      type: object
+      additionalProperties: false
+      required: [role, content]
+      properties:
+        role:
+          description: 角色。
+          type: string
+          enum: [system, user, assistant]
+        content:
+          description: 文本。
+          type: string
+          minLength: 1
+    InternalChatResponse:
+      description: 对话补全的结果。
+      type: object
+      required: [content, model, usage]
+      properties:
+        content:
+          description: 模型输出的文本（不含思考内容）；没有输出时为空串。
+          type: string
+        model:
+          description: 请求中的模型 ID。
+          type: string
+        usage:
+          $ref: '#/components/schemas/InternalChatUsage'
+    InternalChatUsage:
+      description: 用量。
+      type: object
+      required: [prompt_tokens, completion_tokens, total_tokens]
+      properties:
+        prompt_tokens:
+          description: 输入 token。
+          type: integer
+        completion_tokens:
+          description: 输出 token。
+          type: integer
+        total_tokens:
+          description: 输入加输出。
+          type: integer
     InternalKnowledgeBase:
       description: 知识库的归属与 Embedding 模型。
       type: object

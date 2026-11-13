@@ -4,7 +4,9 @@ import cn.refinex.meridian.common.json.JsonMappers;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -107,6 +109,15 @@ public final class UsageMessages {
                 attributes.put("file_bytes", count(node, "file_bytes"));
                 attributes.put("index_bytes", count(node, "index_bytes"));
                 yield simple(messageId, occurredAt, kind, tenantId, node, decimal(node, "gb_days"), attributes);
+            }
+            case KNOWLEDGE_SEARCH_CALLS -> {
+                Map<String, Object> attributes = new LinkedHashMap<>();
+                attributes.put("source", required(node, "source"));
+                List<String> bases = new ArrayList<>();
+                node.path("knowledge_base_ids").forEach(id -> bases.add(id.asString()));
+                attributes.put("knowledge_base_ids", bases);
+                long calls = node.has("count") ? count(node, "count") : 1;
+                yield simple(messageId, occurredAt, kind, tenantId, node, BigDecimal.valueOf(calls), attributes);
             }
         };
     }

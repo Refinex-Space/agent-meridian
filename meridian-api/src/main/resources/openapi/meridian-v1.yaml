@@ -1269,7 +1269,8 @@ paths:
       description: |
         在 API Key 所在的项目中创建知识库。`embedding_model` 是本租户模型目录中的 Embedding 模型，写入与检索都用它，创建后
         不能修改；向量维度由平台配置决定（默认 1024），模型必须支持该维度。模型是否存在在写入第一份文档时校验，不存在时
-        文档的写入以 `model.not_found` 失败。
+        文档的写入以 `model.not_found` 失败。可选的 `rerank_model` 是本租户目录中的 rerank 模型，检索时用它对融合后的候选重排；
+        不设置时只按向量与全文的融合排名返回。
       security:
         - ApiKeyAuth: [knowledge:write]
       parameters:
@@ -1284,6 +1285,7 @@ paths:
               name: 公司制度
               description: 人事、财务与行政制度文件
               embedding_model: mdl_01JC8Z4D7F5H9K1M3P6R8T0V2X
+              rerank_model: mdl_01JC8Z5E8G6J0L2N4Q7S9U1W3Y
       responses:
         '201':
           description: 新建的知识库。
@@ -1546,6 +1548,61 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /v1/knowledge-bases/{knowledge_base_id}/search:
+    parameters:
+      - $ref: '#/components/parameters/KnowledgeBaseId'
+    post:
+      operationId: searchKnowledgeBase
+      tags: [KnowledgeBases]
+      summary: 检索知识库
+      description: |
+        混合检索（架构设计「检索流程」）：向量检索与全文检索各取前 50，按 RRF 融合；知识库设置了 `rerank_model` 时再经 rerank 取前
+        `top_k`。只返回不限标签的切片与带有 `acl_tags` 中任一标签的切片，过滤在数据库查询中完成。没有命中时 `data` 为空数组。
+        Embedding 或 rerank 模型不存在、种类不符时返回 409 `knowledge_base.model_unavailable`；模型调用暂时失败（限流、预算、供应商
+        不可用）时返回 503 `service.unavailable`。
+      security:
+        - ApiKeyAuth: [knowledge:read]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeSearchRequest'
+            example:
+              query: 去上海出差住宿每晚的标准是多少？
+              top_k: 5
+              acl_tags: ['dept:finance']
+      responses:
+        '200':
+          description: 命中的切片，按相关度从高到低。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeSearchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/KnowledgeBaseNotFound'
+        '409':
+          $ref: '#/components/responses/KnowledgeSearchConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -1689,6 +1746,24 @@ components:
             $ref: '#/components/schemas/Problem'
     DocumentTooLarge:
       description: '`document.too_large`：文档超过大小上限（默认 64 MB），`detail` 给出上限。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    KnowledgeSearchConflict:
+      description: '`knowledge_base.model_unavailable`：知识库的 Embedding 或 rerank 模型不存在、种类不符；`idempotency.key_reused`、`idempotency.in_progress`：见幂等约定。'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ServiceUnavailable:
+      description: '`service.unavailable`：依赖的服务或模型暂时不可用（限流、预算、供应商故障），稍后重试。'
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -1934,10 +2009,16 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+        rerank_model:
+          description: 本租户模型目录中的 rerank 模型 ID（mdl_…），检索时用它重排；不传时不重排。
+          type: string
+          minLength: 1
+          maxLength: 64
     KnowledgeBase:
       description: 知识库，属于一个项目。
       type: object
-      required: [id, name, description, embedding_model, embedding_dimensions, document_count, created_at, updated_at]
+      required: [id, name, description, embedding_model, rerank_model, embedding_dimensions, document_count, created_at,
+                 updated_at]
       properties:
         id:
           description: 知识库 ID（kb_…）。
@@ -1951,6 +2032,9 @@ components:
         embedding_model:
           description: Embedding 模型 ID（mdl_…）。
           type: string
+        rerank_model:
+          description: rerank 模型 ID（mdl_…）；不重排时为 null。
+          type: [string, 'null']
         embedding_dimensions:
           description: 向量维度，由平台配置决定。
           type: integer
@@ -1982,6 +2066,88 @@ components:
         next_cursor:
           description: 下一页的游标；没有下一页时为 null。
           type: [string, 'null']
+    KnowledgeSearchRequest:
+      description: 检索请求。
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query:
+          description: 查询文本，1 至 2000 个字符。
+          type: string
+          minLength: 1
+          maxLength: 2000
+        top_k:
+          description: 返回的切片数，1 至 50，默认 8。
+          type: integer
+          minimum: 1
+          maximum: 50
+        acl_tags:
+          description: |
+            调用方（终端用户）的访问标签，与会话的 `end_user_attributes.acl_tags` 含义相同：只返回不限标签的切片与带有其中任一标签的
+            切片。不传时只返回不限标签的切片。至多 64 个。
+          type: array
+          maxItems: 64
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+    KnowledgeSearchResult:
+      description: 检索结果。
+      type: object
+      required: [data]
+      properties:
+        data:
+          description: 命中的切片，按 `score` 从高到低；没有命中时为空数组。
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeSearchHit'
+    KnowledgeSearchHit:
+      description: 一个命中的切片。
+      type: object
+      required: [chunk_id, knowledge_base_id, document_id, filename, kind, content, score, source]
+      properties:
+        chunk_id:
+          description: 切片 ID（chk_…）。
+          type: string
+        knowledge_base_id:
+          description: 知识库 ID（kb_…）。
+          type: string
+        document_id:
+          description: 文档 ID（doc_…）。
+          type: string
+        filename:
+          description: 文档的文件名，用于引用标注。
+          type: string
+        kind:
+          description: '`text` 正文，`table` 表格（Markdown）。'
+          type: string
+          enum: [text, table]
+        content:
+          description: 切片正文，不含标题路径。
+          type: string
+        score:
+          description: 相关度，越大越相关：重排时是 rerank 模型的得分，否则是 RRF 融合分。只在同一次检索的结果之间可比。
+          type: number
+          format: double
+        source:
+          $ref: '#/components/schemas/KnowledgeSource'
+    KnowledgeSource:
+      description: 切片在原文中的位置。
+      type: object
+      required: [page_start, page_end, heading_path]
+      properties:
+        page_start:
+          description: 起始页；没有分页的格式（Markdown、Word 等）为 null。
+          type: [integer, 'null']
+        page_end:
+          description: 结束页；没有分页的格式为 null。
+          type: [integer, 'null']
+        heading_path:
+          description: 标题路径，从文档标题到最近的一级。
+          type: array
+          items:
+            type: string
     UploadDocumentRequest:
       description: 上传文档的表单。
       type: object
@@ -4887,9 +5053,10 @@ components:
             type: number
         - type: string
     UsageKind:
-      description: 计量种类：模型 token、Embedding token、rerank token、沙箱 vCPU 秒、搜索次数、知识库存储 GB 天（ADR-0051）。
+      description: 计量种类：模型 token、Embedding token、rerank token、沙箱 vCPU 秒、搜索次数、知识库存储 GB 天（ADR-0051）、知识检索次数（T19）。
       type: string
-      enum: [model_tokens, embedding_tokens, rerank_tokens, sandbox_vcpu_seconds, search_calls, knowledge_storage_gb_days]
+      enum: [model_tokens, embedding_tokens, rerank_tokens, sandbox_vcpu_seconds, search_calls, knowledge_storage_gb_days,
+             knowledge_search_calls]
     UsageReport:
       description: 按账本明细聚合的用量。
       type: object

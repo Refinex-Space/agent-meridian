@@ -105,6 +105,11 @@ class UsageLedgerIT extends ControlPlaneTestBase {
                 redis,
                 "usage",
                 sample("usage", "knowledge_storage_gb_days", fields("tenant_id", tenant, "project_id", project)));
+        // knowledge 的检索次数（T19）
+        String knowledgeSearch = publish(
+                redis,
+                "usage",
+                sample("usage", "knowledge_search_calls", fields("tenant_id", tenant, "project_id", project)));
         String embedding = publish(
                 redis,
                 "usage",
@@ -121,12 +126,13 @@ class UsageLedgerIT extends ControlPlaneTestBase {
                                 "price_book_id",
                                 fixture.get("price_book"))));
         await(
-                "四条入账",
+                "五条入账",
                 () -> count("usage_records", embedding)
                                 + count("usage_records", sandbox)
                                 + count("usage_records", search)
                                 + count("usage_records", storage)
-                        == 4);
+                                + count("usage_records", knowledgeSearch)
+                        == 5);
 
         assertThat(quantity(sandbox)).isEqualByComparingTo("12.5");
         assertThat(cost(sandbox)).as("沙箱没有单价").isNull();
@@ -143,6 +149,8 @@ class UsageLedgerIT extends ControlPlaneTestBase {
                         .query(String.class)
                         .single())
                 .isEqualTo("kb_sample");
+        assertThat(quantity(knowledgeSearch)).isEqualByComparingTo("1");
+        assertThat(cost(knowledgeSearch)).as("检索次数没有单价").isNull();
         // Embedding 只有输入：640 × 0.8 / 1e6
         assertThat(cost(embedding)).isEqualByComparingTo("0.000512");
         assertThat(budgetUsage(tenant, "project", project, "2026-11"))

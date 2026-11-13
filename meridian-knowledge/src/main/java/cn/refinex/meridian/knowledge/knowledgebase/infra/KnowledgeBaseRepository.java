@@ -17,7 +17,7 @@ import org.springframework.stereotype.Repository;
 public class KnowledgeBaseRepository extends TenantScopedRepository {
 
     private static final String COLUMNS = """
-            kb.id, kb.tenant_id, kb.project_id, kb.name, kb.description, kb.embedding_model, kb.created_by,
+            kb.id, kb.tenant_id, kb.project_id, kb.name, kb.description, kb.embedding_model, kb.rerank_model, kb.created_by,
             kb.created_at, kb.updated_at,
             (SELECT count(*) FROM kb.documents d WHERE d.knowledge_base_id = kb.id) AS document_count
             """;
@@ -39,14 +39,15 @@ public class KnowledgeBaseRepository extends TenantScopedRepository {
     public void insert(KnowledgeBase base) {
         sql("""
                         INSERT INTO kb.knowledge_bases (id, tenant_id, project_id, name, description, embedding_model,
-                                                        created_by, created_at, updated_at)
+                                                        rerank_model, created_by, created_at, updated_at)
                         VALUES (:id, :tenant_id, :project_id, :name, :description, :embedding_model,
-                                :created_by, :created_at, :updated_at)
+                                :rerank_model, :created_by, :created_at, :updated_at)
                         """)
                 .param("id", base.id())
                 .param("name", base.name())
                 .param("description", base.description())
                 .param("embedding_model", base.embeddingModel())
+                .param("rerank_model", base.rerankModel())
                 .param("created_by", base.createdBy())
                 .param("created_at", base.createdAt())
                 .param("updated_at", base.updatedAt())
@@ -104,6 +105,7 @@ public class KnowledgeBaseRepository extends TenantScopedRepository {
                 rs.getString("name"),
                 rs.getString("description"),
                 rs.getString("embedding_model"),
+                rs.getString("rerank_model"),
                 rs.getLong("document_count"),
                 rs.getString("created_by"),
                 JdbcValues.instant(rs, "created_at"),

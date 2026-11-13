@@ -14,6 +14,7 @@ import cn.refinex.meridian.controlplane.metering.domain.UsageRecord;
 import cn.refinex.meridian.testsupport.outbox.OutboxSamples;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** 用量消息的解析与成本计算（T16，ADR-0048 第 3 条）：消息取 runtime 的契约样本。 */
@@ -80,6 +81,17 @@ class MeteringDomainTest {
                 .containsEntry("day", "2026-11-11")
                 .containsEntry("file_bytes", 1500000000L)
                 .containsEntry("index_bytes", 250000000L);
+
+        UsageRecord knowledgeSearch =
+                UsageMessages.parse("msg_ks", OutboxSamples.read("usage", "knowledge_search_calls"));
+        assertThat(knowledgeSearch.kind()).isEqualTo(UsageKind.KNOWLEDGE_SEARCH_CALLS);
+        assertThat(knowledgeSearch.kind().tokens()).isFalse();
+        assertThat(knowledgeSearch.quantity()).isEqualByComparingTo("1");
+        assertThat(knowledgeSearch.billableTokens()).isZero();
+        assertThat(knowledgeSearch.sessionId()).isEqualTo("ses_sample");
+        assertThat(knowledgeSearch.attributes())
+                .containsEntry("source", "agent")
+                .containsEntry("knowledge_base_ids", List.of("kb_sample"));
 
         UsageRecord embedding = UsageMessages.parse("msg_e", OutboxSamples.read("usage", "embedding_tokens"));
         assertThat(embedding.kind()).isEqualTo(UsageKind.EMBEDDING_TOKENS);

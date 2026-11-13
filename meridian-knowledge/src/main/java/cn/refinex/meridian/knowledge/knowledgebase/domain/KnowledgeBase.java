@@ -11,6 +11,7 @@ import java.time.Instant;
  * @param name 名称
  * @param description 说明；可为空
  * @param embeddingModel Embedding 模型 ID（{@code mdl_…}），创建后不可改
+ * @param rerankModel 检索时重排用的 rerank 模型 ID；为空表示不重排
  * @param documentCount 文档数（含写入中与失败的）；只在查询时填写，插入时为 0
  * @param createdBy 创建者：API Key ID 或 {@code user:} 加控制台用户的主体标识
  * @param createdAt 创建时间
@@ -23,6 +24,7 @@ public record KnowledgeBase(
         String name,
         String description,
         String embeddingModel,
+        String rerankModel,
         long documentCount,
         String createdBy,
         Instant createdAt,

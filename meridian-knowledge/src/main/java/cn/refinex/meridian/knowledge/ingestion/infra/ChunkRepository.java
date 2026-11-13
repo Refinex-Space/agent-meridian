@@ -84,12 +84,12 @@ public class ChunkRepository extends TenantScopedRepository {
     }
 
     /**
-     * pgvector 的文本形式 {@code [x,y,…]}。
+     * pgvector 的文本形式 {@code [x,y,…]}，写入与检索共用。
      *
      * @param vector 向量
      * @return 文本
      */
-    static String vectorLiteral(float[] vector) {
+    public static String vectorLiteral(float[] vector) {
         StringBuilder text = new StringBuilder(vector.length * 10).append('[');
         for (int i = 0; i < vector.length; i++) {
             if (i > 0) {

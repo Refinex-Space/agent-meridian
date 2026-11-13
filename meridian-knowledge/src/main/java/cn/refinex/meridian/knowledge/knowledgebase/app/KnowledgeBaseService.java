@@ -55,14 +55,16 @@ public class KnowledgeBaseService {
     }
 
     /**
-     * 创建知识库，写审计 {@code knowledge_base.created}。Embedding 模型是否存在在写入第一份文档时由 runtime 校验。
+     * 创建知识库，写审计 {@code knowledge_base.created}。Embedding 模型是否存在在写入第一份文档时由 runtime 校验，rerank 模型在第一次
+     * 检索时校验。
      *
      * @param name 名称
      * @param description 说明；可为空
      * @param embeddingModel Embedding 模型 ID
+     * @param rerankModel rerank 模型 ID；可为空，表示检索时不重排
      * @return 新建的知识库
      */
-    public KnowledgeBase create(String name, String description, String embeddingModel) {
+    public KnowledgeBase create(String name, String description, String embeddingModel, String rerankModel) {
         PlatformContext context = PlatformContexts.current();
         Instant now = clock.instant();
         KnowledgeBase base = new KnowledgeBase(
@@ -72,6 +74,7 @@ public class KnowledgeBaseService {
                 name.strip(),
                 description == null || description.isBlank() ? null : description.strip(),
                 embeddingModel,
+                rerankModel == null || rerankModel.isBlank() ? null : rerankModel,
                 0,
                 context.actor(),
                 now,
@@ -81,6 +84,7 @@ public class KnowledgeBaseService {
             Map<String, Object> details = new LinkedHashMap<>();
             details.put("name", base.name());
             details.put("embedding_model", base.embeddingModel());
+            details.put("rerank_model", base.rerankModel());
             audit.record("knowledge_base.created", "knowledge_base", base.id(), details);
         });
         return base;

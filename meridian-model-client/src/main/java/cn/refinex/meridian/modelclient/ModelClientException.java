@@ -34,7 +34,7 @@ public final class ModelClientException extends RuntimeException {
     static ModelClientException fromResponse(HttpStatusCode status, String code, String detail) {
         String resolved = code != null ? code : status.is5xxServerError() ? UNAVAILABLE : "request.invalid";
         return new ModelClientException(
-                EmbeddingClient.retryable(status),
+                RuntimeCalls.retryable(status),
                 status.value(),
                 resolved,
                 "runtime 返回 " + status.value() + "：" + detail,

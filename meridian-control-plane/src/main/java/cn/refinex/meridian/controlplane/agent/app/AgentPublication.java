@@ -95,6 +95,8 @@ public class AgentPublication {
         for (int i = 0; i < subagents.size(); i++) {
             checkModel(subagents.get(i).path("model"), "spec.subagents." + i + ".model", violations);
         }
+        checkModelId(
+                spec.path("knowledge").path("query_rewrite_model"), "spec.knowledge.query_rewrite_model", violations);
         JsonNode knowledgeBases = spec.path("knowledge").path("knowledge_base_ids");
         for (int i = 0; i < knowledgeBases.size(); i++) {
             String id = knowledgeBases.get(i).asString();
@@ -161,7 +163,7 @@ public class AgentPublication {
         }
     }
 
-    /** 主模型与备用模型存在于本租户的目录，且是对话模型。 */
+    /** 主模型与备用模型存在于本租户的目录，且是对话模型；查询改写模型同样要求（T19）。 */
     private void checkModel(JsonNode model, String path, List<FieldViolation> violations) {
         checkModelId(model.path("model_id"), path + ".model_id", violations);
         checkModelId(model.path("fallback_model_id"), path + ".fallback_model_id", violations);

@@ -84,7 +84,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 已完成 | 9aa41da |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 已完成 | b7df25f |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 已完成 | 51dc16a |
-| T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 未开始 | — |
+| T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 进行中 | — |
 | T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 未开始 | — |
 | R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 未开始 | — |
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 见控制台设计轨道 | — |
@@ -175,7 +175,18 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T19 知识库检索与接入（2026-11-12 开工；基线 `verify.sh` 只有 D66 的 `SubagentSessionIT` 失败，单独重跑通过后从 runtime 续跑）：
+
+- [x] 1. 检索核心（knowledge）：知识库的 `rerank_model`、model-client 的 rerank 与对话、混合检索 SQL（向量与全文各前 50，过滤下推）、RRF、rerank、查询改写；`EXPLAIN` 测试（A01）
+- [x] 2. 接口：内部 `POST /internal/v1/knowledge-bases:search`、公开 `POST /v1/knowledge-bases/{id}/search`、检索次数计量（D70）
+- [ ] 3. MCP Server `/mcp/knowledge`（API Key 认证，工具 `knowledge_search`）
+- [ ] 4. runtime：~~内部对话接口（查询改写）~~（已完成，`ModelEndpointsIT`）、`KnowledgeSearchPort` 的 HTTP 实现（服务 JWT、会话的 `acl_tags`）、智能体配置 `knowledge.query_rewrite_model`
+- [ ] 5. engine：`KnowledgePrefetchMiddleware`（来源标签与注入标记，D33）与场景测试（A06）
+- [ ] 6. 权限隔离：REST、`knowledge_search`、MCP、前置检索四种形态（A02）
+- [ ] 7. 检索评测：语料与问题、`-Plive` 录制、离线回归、评测记录（A03）
+- [ ] 8. 端到端问答 `-Plive`（A04）
+- [ ] 9. P8 定稿：MCP Inspector 调通（A05）
+- [ ] 10. 收尾：`verify.sh`（A07）、文档、CLAUDE.md、验收记录
 
 ## 控制台设计轨道
 

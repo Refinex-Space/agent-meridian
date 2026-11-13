@@ -15,6 +15,7 @@ import org.springframework.util.unit.DataSize;
  * @param docParser doc-parser 服务
  * @param runtime runtime 服务
  * @param storageMetering 存储计量
+ * @param search 检索
  */
 @ConfigurationProperties("meridian.knowledge")
 public record KnowledgeProperties(
@@ -24,7 +25,8 @@ public record KnowledgeProperties(
         @DefaultValue Ingestion ingestion,
         @DefaultValue DocParser docParser,
         @DefaultValue Runtime runtime,
-        @DefaultValue StorageMetering storageMetering) {
+        @DefaultValue StorageMetering storageMetering,
+        @DefaultValue Search search) {
 
     /**
      * 文档上传。
@@ -102,4 +104,20 @@ public record KnowledgeProperties(
     public record StorageMetering(
             @DefaultValue("true") boolean enabled,
             @DefaultValue("1h") Duration interval) {}
+
+    /**
+     * 检索（架构设计「检索流程」，T19）。默认值即检索评测（{@code docs/engineering/retrieval-evaluation.md}）所用的配置。
+     *
+     * @param vectorCandidates 向量召回的条数，默认 50
+     * @param fullTextCandidates 全文召回的条数，默认 50
+     * @param rrfK RRF 的常数 k，默认 60（来源见 {@code ReciprocalRankFusion}）
+     * @param rerankCandidates 交给 rerank 的融合候选数，默认 20，不超过 100（内部接口的上限）
+     * @param defaultTopK 请求没有给出时返回的切片数，默认 8
+     */
+    public record Search(
+            @DefaultValue("50") int vectorCandidates,
+            @DefaultValue("50") int fullTextCandidates,
+            @DefaultValue("60") int rrfK,
+            @DefaultValue("20") int rerankCandidates,
+            @DefaultValue("8") int defaultTopK) {}
 }
