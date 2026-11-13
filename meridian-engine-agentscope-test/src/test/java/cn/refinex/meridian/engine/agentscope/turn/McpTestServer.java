@@ -49,10 +49,20 @@ class McpTestServer {
      * @return 应用上下文，测试结束时关闭
      */
     static ConfigurableApplicationContext start() {
+        return start(0);
+    }
+
+    /**
+     * 在指定端口启动（模拟服务重启：关掉后在原端口再启动，服务端的 MCP 会话全部丢失）。
+     *
+     * @param port 端口；0 表示随机
+     * @return 应用上下文，测试结束时关闭
+     */
+    static ConfigurableApplicationContext start(int port) {
         return new SpringApplicationBuilder(McpTestServer.class)
                 .web(WebApplicationType.SERVLET)
                 .properties(
-                        "server.port=0",
+                        "server.port=" + port,
                         "spring.main.banner-mode=off",
                         "spring.jmx.enabled=false",
                         "server.shutdown=immediate")

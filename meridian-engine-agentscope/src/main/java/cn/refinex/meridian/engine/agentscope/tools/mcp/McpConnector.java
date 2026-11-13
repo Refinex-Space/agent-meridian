@@ -123,13 +123,15 @@ public final class McpConnector {
             for (McpServerSpec server : servers) {
                 checkEndpoint(server);
                 McpClientWrapper client = build(server);
-                clients.add(client);
+                McpSession session =
+                        new McpSession(server, client, McpConnector::build, INITIALIZATION_TIMEOUT.plusSeconds(5));
+                clients.add(session);
                 for (McpSchema.Tool tool : discover(server, client, credentials(server, platform))) {
                     String name = toolName(server, tool.name());
                     if (!TOOL_NAME.matcher(name).matches()) {
                         log.warn("MCP 工具名不符合模型的工具名约束，未注册 mcpServerId={} tool={}", server.mcpServerId(), name);
                     } else if (enabled(profile, server, tool.name())) {
-                        tools.add(new McpPlatformTool(services, server, tool, client, this));
+                        tools.add(new McpPlatformTool(services, server, tool, session, this));
                     }
                 }
             }

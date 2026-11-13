@@ -8,7 +8,6 @@ import cn.refinex.meridian.engine.agentscope.tools.ToolOutput;
 import cn.refinex.meridian.engine.spi.port.SecretValue;
 import cn.refinex.meridian.engine.spi.spec.McpServerSpec;
 import cn.refinex.meridian.engine.spi.spec.SideEffect;
-import io.agentscope.core.tool.mcp.McpClientWrapper;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import java.io.IOException;
@@ -38,7 +37,7 @@ final class McpPlatformTool extends PlatformTool {
 
     private final McpServerSpec server;
     private final String remoteName;
-    private final McpClientWrapper client;
+    private final McpSession session;
     private final McpConnector connector;
 
     /**
@@ -47,14 +46,14 @@ final class McpPlatformTool extends PlatformTool {
      * @param services 平台服务
      * @param server MCP 服务配置
      * @param tool 服务端列出的工具
-     * @param client 该服务的客户端，随智能体实例关闭
+     * @param session 该服务的客户端（会话丢失时重建），随智能体实例关闭
      * @param connector 解析凭据用
      */
     McpPlatformTool(
             ToolServices services,
             McpServerSpec server,
             McpSchema.Tool tool,
-            McpClientWrapper client,
+            McpSession session,
             McpConnector connector) {
         super(
                 new Spec(
@@ -67,7 +66,7 @@ final class McpPlatformTool extends PlatformTool {
                 services);
         this.server = server;
         this.remoteName = tool.name();
-        this.client = Objects.requireNonNull(client, "client");
+        this.session = Objects.requireNonNull(session, "session");
         this.connector = Objects.requireNonNull(connector, "connector");
     }
 
@@ -83,9 +82,7 @@ final class McpPlatformTool extends PlatformTool {
                 sideEffect() == SideEffect.NON_IDEMPOTENT ? Map.of(IDEMPOTENCY_META_KEY, call.idempotencyKey()) : null;
         McpSchema.CallToolResult result;
         try {
-            result = client.callTool(remoteName, call.input(), meta)
-                    .contextWrite(credentials.write())
-                    .block(CALL_TIMEOUT);
+            result = session.callTool(remoteName, call.input(), meta, credentials, CALL_TIMEOUT);
         } catch (RuntimeException e) {
             String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             return ToolOutput.error("MCP server " + server.name() + " failed to run " + remoteName + ": "

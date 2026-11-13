@@ -117,6 +117,49 @@ class McpToolsIT {
         assertCredentialsOnlyInHeaders("/mcp/crm", events);
     }
 
+    /**
+     * 登记事项 D53 A-F8：服务重启后服务端的会话全部丢失。2.0.4 带的 SDK 只在后台重新初始化（没有凭据，失败），平台的
+     * {@code McpSession} 在调用失败时用本次的凭据重建客户端并重试一次。
+     */
+    @Test
+    void aRestartedServerIsReconnectedWithTheCallersCredentials() {
+        ScriptedModel model = ScriptedModel.builder()
+                .respond(r -> r.toolCall("call_before", "mcp__crm__lookup_order", Map.of("order_id", "o-1")))
+                .respond(r -> r.text("一"))
+                .respond(r -> r.toolCall("call_lost", "mcp__crm__lookup_order", Map.of("order_id", "o-2")))
+                .respond(r -> r.text("二"))
+                .respond(r -> r.toolCall("call_after", "mcp__crm__lookup_order", Map.of("order_id", "o-3")))
+                .respond(r -> r.text("三"))
+                .build();
+        EngineHarness harness = harness(model, server("/mcp/crm", McpTransport.STREAMABLE_HTTP, Set.of()), token());
+
+        List<EngineEvent> before = harness.run(harness.claim("thr_restart", "trn_1", 1, allow()), userText("查 o-1"));
+        restartServerOnTheSamePort();
+        McpTestServer.REQUESTS.clear();
+        List<EngineEvent> lost = harness.run(harness.claim("thr_restart", "trn_2", 1, allow()), userText("查 o-2"));
+        List<EngineEvent> after = harness.run(harness.claim("thr_restart", "trn_3", 1, allow()), userText("查 o-3"));
+
+        assertThat(result(before, "call_before").state()).isEqualTo(ToolResultState.SUCCESS);
+        assertThat(result(lost, "call_lost").state())
+                .as("重启后的第一次调用：会话丢失，平台用本次的凭据重建客户端并重试")
+                .isEqualTo(ToolResultState.SUCCESS);
+        assertThat(text(result(lost, "call_lost"))).contains("订单 o-2 已发货。");
+        assertThat(result(after, "call_after").state()).isEqualTo(ToolResultState.SUCCESS);
+        assertThat(McpTestServer.REQUESTS)
+                .as("重启后带凭据的请求里有一次新的初始化，工具调用都带凭据")
+                .filteredOn(request -> request[0].equals("POST"))
+                .anyMatch(request -> request[2] != null)
+                .allSatisfy(request -> assertThat(request[1]).isEqualTo("/mcp/crm"));
+        assertThat(lost.getLast()).isEqualTo(new SessionEvent.StatusIdle(StopReason.END_TURN));
+    }
+
+    /** 关掉 MCP 服务，在同一端口上重新启动：服务端的 MCP 会话全部丢失，与服务重启相同。 */
+    private static void restartServerOnTheSamePort() {
+        int port = McpTestServer.port(server);
+        server.close();
+        server = McpTestServer.start(port);
+    }
+
     @Test
     void sseTransportIsSelectedByConfigurationAndEnabledToolsAreFiltered() {
         ScriptedModel model = ScriptedModel.builder()

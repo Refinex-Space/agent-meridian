@@ -185,7 +185,7 @@ T19 知识库检索与接入（2026-11-12 开工；基线 `verify.sh` 只有 D66
 - [x] 6. 权限隔离：REST、`knowledge_search`、MCP、前置检索四种形态（A02）
 - [x] 7. 检索评测：语料与问题、`-Plive` 录制、离线回归、评测记录（A03）
 - [x] 8. 端到端问答 `-Plive`（A04）
-- [ ] 9. P8 定稿：MCP Inspector 调通（A05）
+- [x] 9. P8 定稿：MCP Inspector 调通（A05）
 - [ ] 10. 收尾：`verify.sh`（A07）、文档、CLAUDE.md、验收记录
 
 ## 控制台设计轨道
@@ -267,7 +267,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D35 | T11 | 快照对象（`rt/snapshots/{tenant}/{project}/{session}/`）没有清除：从快照恢复后旧快照仍留在对象存储，删除会话时也要按前缀清除；`SnapshotStorePort` 目前没有删除方法 | T12a 已落地回收部分；T17a 已落地删除部分：`SessionPurger` 调 `deleteSessionSandbox`（快照与产物前缀），`SessionPurgeIT` |
 | D36 | T11 | 2.0.4 的扩展把快照归档整个读进内存（`byte[]`），100 MB 工作区的快照或恢复在 runtime 侧占用约同等大小的堆；runtime 的堆与并发回收数要按工作区上限估算 | R1 已评估（回收器逐个处理，同一时刻一个快照在内存，6 GiB 堆下不构成约束，P7）；并发回收与更大工作区的配置给 T28 |
 | D37 | T12a | 无人管理的沙箱：获取沙箱的事务在认领之后失败时会删除新沙箱，但 runtime 进程在认领之后、提交之前崩溃时，带会话标签 `meridian.refinex.cn/session-id` 的 `SandboxClaim` 没有记进任何会话，一直占用资源；需要一个按标签比对 `rt.sessions.sandbox_state` 的清理作业（也覆盖已删除会话的残留） | T17a 已落地已删除会话的部分：`SandboxDriver.deleteSessionSandboxes` 按会话标签删除（`SessionPurgeKindIT`），已删除的会话不再获取沙箱；存活会话的无主 claim 需要按集群全量比对，留给 T28 |
-| D33 | T10b | `KnowledgePrefetchMiddleware` 前置检索注入的切片同样是外部内容，要用 `SourceTags`（`knowledge_search` 来源）包标签，并带 `ContextCompositionMiddleware` 的注入标记 | T19 |
+| D33 | T10b | `KnowledgePrefetchMiddleware` 前置检索注入的切片同样是外部内容，要用 `SourceTags`（`knowledge_search` 来源）包标签，并带 `ContextCompositionMiddleware` 的注入标记 | T19（已落地：`KnowledgePrefetchMiddleware` 用 `KnowledgeSearchTool.render` 包标签，标记 `meridian_knowledge_prefetch` 计入注入内容，`KnowledgePrefetchScenarioTest`） |
 | D38 | T12b | 出网代理（Envoy 的 Lua 过滤器）回调 runtime 的 `/internal/v1/egress:authorize` 用开发期静态服务凭据（Secret `meridian-egress-proxy-credential`，本机取 `MERIDIAN_DEV_SERVICE_CREDENTIAL`，`dev`、`test` 之外不被接受）；Envoy 不能签发服务 JWT，T14b 要为代理另定凭据方式（例如 control-plane 为 `egress-proxy` 签发的长期凭据，或由边车刷新 JWT 写入文件、Lua 每次读取），并决定是否按调用方服务限定内部接口 | T14b（已落地：代理是服务客户端 `egress-proxy`，Lua 用客户端密钥换取服务 JWT 并按 worker 缓存；内部接口按调用方限定，ADR-0044） |
 | D39 | T12b | 沙箱的网络策略放行集群 DNS（解析代理的服务名），CoreDNS 会把任意外部域名的查询转发出去，沙箱可以用 DNS 查询外带数据（DNS 隧道）；可选做法：CoreDNS 对沙箱网段只解析 `cluster.local`、沙箱改用固定 ClusterIP 的代理地址不放行 DNS，或 DNS 出口加策略（ADR-0039） | T37 |
 | D40 | T12b | 出网代理的可观测与运维：管理接口只绑定 127.0.0.1，`/stats/prometheus` 没有被采集；访问日志（JSON，含源 IP、目标、状态码）只在容器标准输出；下线时不排空（SIGTERM 即退出，进行中的隧道被切断）；生产的沙箱节点池污点（`meridian.io/sandbox=true:NoSchedule`）在沙箱模板与代理上都还没有容忍配置 | T27（指标与日志）、T28（排空与节点池） |
@@ -283,7 +283,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D50 | R1 | 沙箱与出网后续（审查）：C-10 回收先快照再删除再提交的失败代价、`sandbox_last_used_at` 取轮次开始时间、`findIdle` 不过滤已删除会话；C-11 `DatabaseSandboxStates.save`/`clear` 未接入出网撤销、删除与归档不淘汰出网缓存（最多 30 秒）；S-F4 产物在列出之后被后台进程继续写大、`readOutput` 整文件进堆（需要给 `SandboxDriver` 加带上限的读取） | T17a 已落地 C-11（删除、归档与 `DatabaseSandboxStates` 撤销出网授权）与 C-10 的 `findIdle` 过滤已删除会话；C-10 其余（回收的失败代价、`sandbox_last_used_at` 取轮次开始时间）给 R2；S-F4 给 T37 |
 | D51 | R1 | 安全加固（审查）：S-F5 自定义工具的 `input_schema` 不校验（灾难性回溯、远程 `$ref`）；S-F7 SSE 没有每 Key 连接上限、Key 吊销后连接保持；S-F8 `none` 档工作区没有配额、单文件上限按字符数；S-F13 来源标签的转义只覆盖 ASCII 空白；S-F14 批准时改写的入参是否重走规则；S-F15 审计与账本保存完整命令与入参、没有脱敏；S-F3 代理在 Envoy 层拒绝回环与未指定地址的上游 | T37 |
 | D52 | R1 | 供应商接入前的校验（审查）：S-F11 `user.message` 的 `image.url` 不限协议，Anthropic、Ollama 的转换器会读本机文件或下载；S-F10 `SecretResolver` 不校验密钥属于调用方租户，供应商与搜索的 `base_url` 没有 SSRF 校验 | T15a（已落地：`image.url` 只接受 http(s)；凭据解析校验租户；`common.net.EndpointPolicy` 在写入供应商账号、模型、联网搜索后端时与 runtime 读取目录时校验端点；Gemini 适配器拒绝 URL 媒体，ADR-0045、ADR-0046） |
-| D53 | R1 | AgentScope 集成后续（审查）：A-F5 装配自检失败不 `close` 智能体、MCP 资源在后续工具构造失败时不关；A-F6 `AgentEventDisposition` 与 `TurnEventMapper` 两张表各自独立；A-F7 `plan_write` 不经账本；A-F8 MCP 服务重启后的重连语义；A-F9 幂等键依赖供应商的 `tool_use_id`；A-F10 `HarnessAgent.close()` 在 commonPool 上等待 | T15b（A-F5 已落地：装配自检或后续工具构造失败时关闭已建的智能体与 MCP 客户端，提交 81510f7），T19（A-F8：MCP 连接仍在装配时建立、随实例缓存，服务重启后的重连语义未处理），T27（A-F10），其余 R2 复查 |
+| D53 | R1 | AgentScope 集成后续（审查）：A-F5 装配自检失败不 `close` 智能体、MCP 资源在后续工具构造失败时不关；A-F6 `AgentEventDisposition` 与 `TurnEventMapper` 两张表各自独立；A-F7 `plan_write` 不经账本；A-F8 MCP 服务重启后的重连语义；A-F9 幂等键依赖供应商的 `tool_use_id`；A-F10 `HarnessAgent.close()` 在 commonPool 上等待 | T15b（A-F5 已落地：装配自检或后续工具构造失败时关闭已建的智能体与 MCP 客户端，提交 81510f7），T19（A-F8 已落地：SDK 0.17.2 在服务重启后只在后台无凭据地重新初始化，客户端一直不可用；`tools.mcp.McpSession` 在会话丢失时用本次凭据重建客户端并重试一次，`McpToolsIT` 原端口重启实测），T27（A-F10），其余 R2 复查 |
 | D54 | R1 | 工程质量（审查）：Q-M1 token 估算在 runtime 与 engine 重复；Q-M2 重试退避重复且 `VectorModelService` 缺上限；Q-M3 `app` 依赖具体 `infra`、跨上下文依赖对方的 `infra`（修订规范或加 ArchUnit 规则）；Q-L1、L2、L3 摘要、Map 拷贝、输出上限常量重复；Q-L5 配置默认值双写；Q-L6 `application-test.yml` 在 `src/main`；Q-L8 三处无超时的 `.block()`；Q-L9 `Optional` 作参数；Q-L11 两处丢 cause；Q-L12 靠 `sleep` 的静默断言；Q-L13 `md_to_docx.py` 与执行服务符号链接的测试缺口；Q-L14 test-support 的 enforcer 多放行、`ScriptedOpenAiServer` 的 `Instant.now()` | R2（Q-M3 的规范决定），Q-L6 给 T28；T17b 已收口重复实现：Q-M1 `common.text.TextTokens`、Q-M2 engine-spi 的 `ProviderRetryPolicy`（`VectorModelService` 有了上限）、Q-L1 `common.crypto.Sha256`、Q-L3 `PlatformTool.MAX_OUTPUT_CHARS`；Q-L2 的不可变 Map 拷贝是一行惯用写法，不抽工具方法 |
 | D55 | T14a | MVC 服务的公开 API 还没有 API Key 过滤器与按 Key 限流：`meridian-security` 只有 WebFlux 版（`ApiKeyWebFilter`）；control-plane 的 `/v1/agents`（T15b）、knowledge 的 `/v1/knowledge-bases*`（T18）上线前要加 MVC 版，复用 `ApiKeyAuthenticator`、`ApiKeyRateLimiter`，并订阅 `key.revoked` 淘汰缓存 | T15b（control-plane 已落地：`meridian-security` 的 `PublicApiAdmission` 由 WebFlux `ApiKeyWebFilter` 与 MVC `ApiKeyFilter` 共用，control-plane 用进程内的 `ApiKeyResolver`，吊销立即生效，`ApiKeyFilterTest`），T18（knowledge 已落地：`ApiKeyFilter` 加 `ControlPlaneApiKeyResolver`，`web.ApiKeyRevocationListener` 订阅 `key.revoked`，`KnowledgeApiIT`） |
 | D56 | T14a | `config.invalidate`、`key.revoked` 走 Pub/Sub，不保证送达：吊销有 60 秒缓存过期兜底，但租户并发配额的变更丢失后，runtime 的 `max_running` 要等下一次变更才更新；需要一个定期对账（按 control-plane 的配额刷新已有计数行）或改用 Stream | T27 |
@@ -300,7 +300,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D67 | T16 | `rt.sessions.budget_limit`（会话级预算的金额）没有使用：会话级预算改在 control-plane 的 `budgets`（token，ADR-0048）。列保留在 V0001 中，是否删除或改作创建会话时的会话级硬阈值待定 | R2 |
 | D68 | T16 | 用量报表只有聚合，没有明细列表与 CSV 导出；T25b 的“明细表、导出 CSV”需要按游标列出 `usage_records` 的接口 | T19b |
 | D69 | T16 | `cp.stream_dead_letters` 只有写入：没有查看与重放的接口或脚本，坏消息只能人工查表后重新发布；outbox 中 `attempts` 达到上限的消息同样只能人工处理 | T27（告警）、R2 |
-| D70 | T16 | 知识检索的次数没有计量：`search_calls` 只记联网搜索；知识库存储量的用量种类由 T18 加入 `UsageKind`、`UsageMessages` 与 `usage_records.kind` 的检查约束 | T18（存储量已落地：`knowledge_storage_gb_days`，cp `V0006`，`StorageMeteringIT`、`UsageLedgerIT`），T19（检索次数） |
+| D70 | T16 | 知识检索的次数没有计量：`search_calls` 只记联网搜索；知识库存储量的用量种类由 T18 加入 `UsageKind`、`UsageMessages` 与 `usage_records.kind` 的检查约束 | T18（存储量已落地：`knowledge_storage_gb_days`，cp `V0006`，`StorageMeteringIT`、`UsageLedgerIT`），T19（检索次数已落地：`knowledge_search_calls`，cp `V0007`，每次检索一条、带入口 `rest`/`mcp`/`agent`，`KnowledgeSearchIT`、`UsageLedgerIT`） |
 | D71 | T17a | 事件归档把会话的全部现存事件读进内存再压缩上传（`EventArchiver.readAll`、`EventArchives.write`），保留清理重写文件同样整份读入；单个会话事件很多（数十万条）时内存占用大，应改为流式读写与分段上传 | T28（容量与运维） |
 | D72 | T17a | Webhook 的签名密钥不能轮换（只能删除后重建，Webhook ID 随之改变）；投递记录的列表只按 Webhook、会话、状态过滤，没有时间范围 | T19b（控制台的 Webhook 页面需要时补轮换接口与时间过滤） |
 | D73 | T17a | 删除通知的投递与会话清理的先后：清理等待该会话的 Webhook 投递至多 12 小时，之后未完成的投递随会话删除（外键级联），投递记录不再可查；接收方长时间不可用时业务系统收不到删除通知 | R2（评审是否把投递记录与会话解耦，单独按 30 天保留） |
@@ -308,10 +308,11 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D75 | T17b | 按文件 ID 引用的图片作为文件放进工作区，不作为图片输入交给模型（视觉）：内核要读出内容转成 Base64 图片块，涉及大小上限与预扣估算 | M2（按业务方需要） |
 | D76 | T17b | 同一事件的 `created_at` 在 SSE 帧（`Instant`，保留 6 位小数）与列表接口（`OffsetDateTime`，去掉末尾的 0）中的文本表示不同（同一时刻；开工基线 `EventArchiveIT` 偶发失败的原因） | T26（SDK 与接入文档时统一时间的序列化） |
 | D77 | T17b | 引用平台文件的 `user.message` 按 queue 投递，保存的事件中 `delivery` 仍是请求的值（与跟在中断后面的消息相同）；调用方要从事件判断实际投递方式时需要额外字段 | T26 |
-| D78 | T18 | knowledge 调 runtime 的内部模型接口只在请求体带租户与项目，知识库 ID 没有进入用量消息与账本（架构设计「跨服务数据流」写的是"请求头带上租户、项目、知识库"）；按知识库看 Embedding、rerank 的用量要改内部接口、runtime 的用量消息、样本与 control-plane 的解析 | T19（rerank 同一接口）或 R2 |
+| D78 | T18 | knowledge 调 runtime 的内部模型接口只在请求体带租户与项目，知识库 ID 没有进入用量消息与账本（架构设计「跨服务数据流」写的是"请求头带上租户、项目、知识库"）；按知识库看 Embedding、rerank 的用量要改内部接口、runtime 的用量消息、样本与 control-plane 的解析 | R2（T19 的 rerank、查询改写沿用同样的请求体，没有改） |
 | D79 | T18 | doc-parser 不校验服务 JWT，只靠集群内网与网络策略限定只有 knowledge 能访问（ADR-0051）；Helm 中的 NetworkPolicy、内存限额（至少 3 GB）与 CPU 还没有落地 | T28 |
-| D80 | T18 | PDF 的路由靠启发式：平均每页少于 50 个可见字符视为扫描件，横竖各至少 3 条线视为表格；没有框线的表格按正文切分，Word 文档没有页码。检索效果受切分影响，P8 定稿时按真实文档复核 | T19（P8） |
+| D80 | T18 | PDF 的路由靠启发式：平均每页少于 50 个可见字符视为扫描件，横竖各至少 3 条线视为表格；没有框线的表格按正文切分，Word 文档没有页码。检索效果受切分影响，P8 定稿时按真实文档复核 | R2（T19 的检索评测与 P8 定稿用的是 Markdown 语料，没有复核 PDF 的路由与页码） |
 | D81 | T18 | 知识库存储量取每日执行时的大小（不是当天的平均值）；知识库本身没有删除与修改接口，`storage_reports` 只随知识库删除 | T19b（控制台需要时补知识库的修改与删除） |
+| D82 | T19 | MCP SDK 0.17.2 的服务端会话保存在 knowledge 进程内，只在 DELETE 或推送失败时移除，没有空闲过期：多副本要按 `Mcp-Session-Id` 粘滞路由，不发 DELETE 的客户端会让会话累积（P8） | T28（Helm 的路由与副本），会话过期给 R2 |
 
 ## 技术债
 
