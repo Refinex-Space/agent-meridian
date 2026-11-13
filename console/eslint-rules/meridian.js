@@ -126,10 +126,7 @@ const noRawColor = {
   create(context) {
     function check(node, text) {
       const hex = HEX_COLOR.exec(text);
-      if (hex) {
-        context.report({ node, messageId: 'hex', data: { value: hex[0].trim() } });
-        return;
-      }
+      if (hex) context.report({ node, messageId: 'hex', data: { value: hex[0].slice(hex[0].indexOf('#')) } });
       const fn = COLOR_FUNCTION.exec(text);
       if (fn) context.report({ node, messageId: 'fn', data: { value: fn[0] } });
     }
