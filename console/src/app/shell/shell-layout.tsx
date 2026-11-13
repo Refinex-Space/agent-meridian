@@ -12,6 +12,7 @@ import {
 } from '@/lib/access';
 import { adminApi, unwrap, v1Api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
+import { CrumbProvider, useCrumbLabels } from '@/lib/crumbs';
 import { setThemePreference, useThemePreference } from '@/lib/theme';
 
 import { AppShell, type ShellCrumb } from './app-shell';
@@ -53,6 +54,14 @@ function useBudgetStatus(project: CurrentProject) {
  * 其内容区，并经 `ProjectProvider` 拿到当前项目与权限。
  */
 export function ShellLayout({ project }: { project: CurrentProject }) {
+  return (
+    <CrumbProvider>
+      <Shell project={project} />
+    </CrumbProvider>
+  );
+}
+
+function Shell({ project }: { project: CurrentProject }) {
   const { user, logout } = useAuth();
   const theme = useThemePreference();
   const navigate = useNavigate();
@@ -65,13 +74,15 @@ export function ShellLayout({ project }: { project: CurrentProject }) {
   const budget = useBudgetStatus(project);
 
   const active: NavKey | null = matches.findLast((m) => m.staticData.nav)?.staticData.nav ?? null;
+  const dynamic = useCrumbLabels();
   const breadcrumb = useMemo(() => {
-    const crumbs = matches.filter((m) => m.staticData.crumb);
+    // 动态名称（对象的名字）优先于路由的静态名称；两者都没有的路由不出现在面包屑里。
+    const crumbs = matches.filter((m) => dynamic[m.routeId] ?? m.staticData.crumb);
     return crumbs.map((m, i): ShellCrumb => ({
-      label: m.staticData.crumb ?? '',
+      label: dynamic[m.routeId] ?? m.staticData.crumb ?? '',
       ...(i < crumbs.length - 1 ? { href: m.pathname } : {}),
     }));
-  }, [matches]);
+  }, [matches, dynamic]);
 
   const activeItem = NAV.find((item) => item.key === active);
 

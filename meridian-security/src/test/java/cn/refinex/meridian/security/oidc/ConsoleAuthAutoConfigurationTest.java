@@ -63,4 +63,31 @@ class ConsoleAuthAutoConfigurationTest {
         reactive.withPropertyValues("meridian.security.service-client.control-plane-url=http://127.0.0.1:1")
                 .run(context -> assertThat(context).doesNotHaveBean(ConsoleTokenAuthenticator.class));
     }
+
+    /** knowledge（MVC）没有进程内的项目权限：配置了 control-plane 地址时经它查询，控制台用户才能调用知识库的公开 API（T22）。 */
+    @Test
+    void servletPublicApiAcceptsConsoleUsersThroughTheControlPlane() {
+        servlet.withPropertyValues(
+                        "meridian.security.oidc.issuer=http://127.0.0.1:1/realms/x",
+                        "meridian.security.oidc.audience=meridian",
+                        "meridian.security.service-client.control-plane-url=http://127.0.0.1:1")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(ConsoleTokenAuthenticator.class);
+                    assertThat(context.getBean(ProjectAccessResolver.class))
+                            .isInstanceOf(ControlPlaneProjectAccessResolver.class);
+                });
+        // 应用自己提供项目权限（control-plane 的进程内查询）时用它。
+        ProjectAccessResolver inProcess = (subject, projectId) -> java.util.Optional.empty();
+        servlet.withPropertyValues(
+                        "meridian.security.oidc.issuer=http://127.0.0.1:1/realms/x",
+                        "meridian.security.oidc.audience=meridian",
+                        "meridian.security.service-client.control-plane-url=http://127.0.0.1:1")
+                .withBean(ProjectAccessResolver.class, () -> inProcess)
+                .run(context ->
+                        assertThat(context.getBean(ProjectAccessResolver.class)).isSameAs(inProcess));
+        servlet.withPropertyValues(
+                        "meridian.security.oidc.issuer=http://127.0.0.1:1/realms/x",
+                        "meridian.security.oidc.audience=meridian")
+                .run(context -> assertThat(context).doesNotHaveBean(ConsoleTokenAuthenticator.class));
+    }
 }

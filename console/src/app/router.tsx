@@ -18,7 +18,14 @@ import {
   redirect,
 } from '@tanstack/react-router';
 
-import { AgentsPage } from '@/features/agents';
+import {
+  AgentComparePage,
+  AgentDetailPage,
+  AgentEditPage,
+  AgentLayout,
+  AgentListPage,
+  type AgentDetailTab,
+} from '@/features/agents';
 import { CapabilitiesPage } from '@/features/capabilities';
 import { EnvironmentsPage } from '@/features/environments';
 import { KnowledgePage } from '@/features/knowledge';
@@ -37,7 +44,7 @@ import {
   type CurrentProject,
   type TenantProjects,
 } from '@/lib/access';
-import { parseSearch, stringifySearch } from '@/lib/search';
+import { parseSearch, searchString, stringifySearch } from '@/lib/search';
 import type { ReactNode } from 'react';
 
 import { FullPage, NotFound } from './boot-screens';
@@ -161,7 +168,6 @@ function navRoute<P extends string>(path: P, nav: NavKey, crumb: string, compone
 const overviewRoute = navRoute('overview', 'overview', '概览', OverviewPage);
 const sessionsRoute = navRoute('sessions', 'sessions', '会话', SessionsPage);
 const playgroundRoute = navRoute('playground', 'playground', 'Playground', PlaygroundPage);
-const agentsRoute = navRoute('agents', 'agents', '智能体', AgentsPage);
 const environmentsRoute = navRoute('environments', 'environments', '环境', EnvironmentsPage);
 const capabilitiesRoute = navRoute('capabilities', 'capabilities', '能力', CapabilitiesPage);
 const knowledgeRoute = navRoute('knowledge', 'knowledge', '知识库', KnowledgePage);
@@ -169,6 +175,81 @@ const modelsRoute = navRoute('models', 'models', '模型', ModelsPage);
 const pendingRoute = navRoute('pending', 'pending', '待处理', PendingPage);
 const usageRoute = navRoute('usage', 'usage', '用量与预算', UsagePage);
 const settingsRoute = navRoute('settings', 'settings', '设置', SettingsPage);
+
+/** 智能体（T22）：列表、单个智能体的详情、编辑草稿与版本对比；单个智能体这一级在面包屑中显示它的名字。 */
+const agentsRoute = navRoute('agents', 'agents', '智能体', () => <Outlet />);
+const agentListRoute = createRoute({
+  getParentRoute: () => agentsRoute,
+  path: '/',
+  component: AgentListPage,
+});
+const agentRoute = createRoute({
+  getParentRoute: () => agentsRoute,
+  path: '$agentId',
+  component: function AgentRoute() {
+    return <AgentLayout agentId={agentRoute.useParams().agentId} />;
+  },
+});
+const AGENT_TABS: readonly AgentDetailTab[] = ['summary', 'versions', 'sessions', 'subagents'];
+const agentDetailRoute = createRoute({
+  getParentRoute: () => agentRoute,
+  path: '/',
+  validateSearch: (search: Record<string, unknown>): { tab?: AgentDetailTab } => {
+    const tab = searchString(search['tab']) as AgentDetailTab | undefined;
+    return tab && AGENT_TABS.includes(tab) ? { tab } : {};
+  },
+  component: function AgentDetailRoute() {
+    const { agentId } = agentDetailRoute.useParams();
+    const { tab } = agentDetailRoute.useSearch();
+    const navigate = agentDetailRoute.useNavigate();
+    return (
+      <AgentDetailPage
+        agentId={agentId}
+        tab={tab ?? 'summary'}
+        onTabChange={(next) =>
+          void navigate({ search: next === 'summary' ? {} : { tab: next }, replace: true })
+        }
+      />
+    );
+  },
+});
+const agentEditRoute = createRoute({
+  getParentRoute: () => agentRoute,
+  path: 'versions/$version/edit',
+  staticData: { crumb: '编辑' },
+  component: function AgentEditRoute() {
+    const { agentId, version } = agentEditRoute.useParams();
+    const number = Number(version);
+    if (!Number.isInteger(number) || number < 1) throw notFound();
+    return <AgentEditPage key={`${agentId}-${number}`} agentId={agentId} version={number} />;
+  },
+});
+const agentCompareRoute = createRoute({
+  getParentRoute: () => agentRoute,
+  path: 'compare',
+  staticData: { crumb: '版本对比' },
+  validateSearch: (search: Record<string, unknown>): { base?: string; target?: string } => {
+    const base = searchString(search['base']);
+    const target = searchString(search['target']);
+    return { ...(base ? { base } : {}), ...(target ? { target } : {}) };
+  },
+  component: function AgentCompareRoute() {
+    const { agentId } = agentCompareRoute.useParams();
+    const { base, target } = agentCompareRoute.useSearch();
+    const navigate = agentCompareRoute.useNavigate();
+    const number = (v: string | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
+    return (
+      <AgentComparePage
+        agentId={agentId}
+        base={number(base)}
+        target={number(target)}
+        onChange={(next) =>
+          void navigate({ search: { base: String(next.base), target: String(next.target) }, replace: true })
+        }
+      />
+    );
+  },
+});
 
 const projectNotFoundRoute = createRoute({
   getParentRoute: () => projectRoute,
@@ -184,7 +265,10 @@ export const routeTree = rootRoute.addChildren([
     overviewRoute,
     sessionsRoute,
     playgroundRoute,
-    agentsRoute,
+    agentsRoute.addChildren([
+      agentListRoute,
+      agentRoute.addChildren([agentDetailRoute, agentEditRoute, agentCompareRoute]),
+    ]),
     environmentsRoute,
     capabilitiesRoute,
     knowledgeRoute,

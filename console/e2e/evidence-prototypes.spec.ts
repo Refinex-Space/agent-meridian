@@ -33,7 +33,6 @@ const PAGES: Shot[] = [
   { name: 'sessions', story: '原型-会话列表--default', ready: '加载更多' },
   { name: 'pending', story: '原型-待处理--pending', ready: '由业务系统回传' },
   { name: 'pending-detail', story: '原型-待处理--detail', ready: '记住此决定' },
-  { name: 'agent-edit', story: '原型-智能体编辑--saved', ready: '已保存于' },
   { name: 'overview', story: '原型-概览--default', ready: '门店巡检报告' },
   { name: 'overview-full', story: '原型-概览--default', ready: '最近失败的轮次', fullPage: true },
   { name: 'session-awaiting', story: '原型-会话详情--awaiting-action', ready: '等待批准' },
@@ -61,23 +60,6 @@ const STATES: Shot[] = [
   { name: 'pending-loading', story: '原型-待处理--loading', prepare: (page) => page.waitForTimeout(500) },
   { name: 'pending-error', story: '原型-待处理--load-failed', ready: '无法加载待处理动作' },
   { name: 'pending-no-permission', story: '原型-待处理--no-permission', ready: '入参' },
-  { name: 'agent-edit-dirty', story: '原型-智能体编辑--dirty', ready: '有未保存的更改' },
-  {
-    name: 'agent-edit-invalid',
-    story: '原型-智能体编辑--invalid',
-    ready: '处需要修改',
-    prepare: async (page) => {
-      await page.getByRole('button', { name: '保存草稿' }).click();
-      await page.waitForTimeout(400);
-    },
-  },
-  { name: 'agent-edit-read-only', story: '原型-智能体编辑--read-only', ready: '系统提示词' },
-  {
-    name: 'agent-edit-loading',
-    story: '原型-智能体编辑--loading',
-    prepare: (page) => page.waitForTimeout(500),
-  },
-  { name: 'agent-edit-error', story: '原型-智能体编辑--load-failed', ready: '无法打开这个草稿' },
   { name: 'overview-new', story: '原型-概览--new-project', ready: '还没有用量' },
   { name: 'overview-loading', story: '原型-概览--loading', prepare: (page) => page.waitForTimeout(500) },
   { name: 'overview-partial-error', story: '原型-概览--usage-failed', ready: '无法加载用量与预算' },

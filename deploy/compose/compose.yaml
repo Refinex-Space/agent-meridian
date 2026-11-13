@@ -181,6 +181,10 @@ services:
       MERIDIAN_PERSISTENCE_OBJECTSTORE_ENDPOINT: http://minio:9000
       # 开发配置挂载在 /app/dev-config；供应商目录换成 Compose 网络中的脚本化模型服务
       MERIDIAN_RUNTIME_MODEL_ROUTING_PROVIDERS_DIRECTORY: /app/compose-providers
+      # 智能体配置与模型目录默认读上面的开发配置；控制台端到端（scripts/dev/console-e2e-env.sh）改为 control-plane，
+      # 只用经管理 API 发布的智能体与登记的模型（T22）
+      MERIDIAN_RUNTIME_AGENT_CONFIG_SOURCE: ${MERIDIAN_RUNTIME_AGENT_CONFIG_SOURCE:-file}
+      MERIDIAN_RUNTIME_CATALOG_SOURCE: ${MERIDIAN_RUNTIME_CATALOG_SOURCE:-file}
     volumes:
       - ../../dev-config:/app/dev-config:ro
       - ./app/providers:/app/compose-providers:ro

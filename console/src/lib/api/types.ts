@@ -42,3 +42,22 @@ export type PermissionName = AdminSchemas['PermissionName'];
 export type ApiKeyScope = AdminSchemas['ApiKeyScope'];
 export type Project = AdminSchemas['Project'];
 export type ProjectBudgetStatus = AdminSchemas['ProjectBudgetStatus'];
+export type Agent = AdminSchemas['Agent'];
+export type AgentVersion = AdminSchemas['AgentVersion'];
+export type AgentVersionComparison = AdminSchemas['AgentVersionComparison'];
+export type SpecChange = AdminSchemas['SpecChange'];
+export type Environment = AdminSchemas['Environment'];
+export type EnvironmentRequest = AdminSchemas['EnvironmentRequest'];
+export type EnvironmentRevision = AdminSchemas['EnvironmentRevision'];
+export type EnvironmentTier = AdminSchemas['EnvironmentTier'];
+export type SandboxSize = AdminSchemas['SandboxSize'];
+export type CatalogModel = AdminSchemas['Model'];
+export type Skill = AdminSchemas['Skill'];
+export type SkillVersion = AdminSchemas['SkillVersion'];
+export type McpServer = AdminSchemas['McpServer'];
+export type FieldViolation = AdminSchemas['FieldViolation'];
+
+/** 公开 API 中智能体页用到的别名。 */
+export type KnowledgeBase = Schemas['KnowledgeBase'];
+export type SessionStats = Schemas['SessionStats'];
+export type AgentSessionStats = Schemas['AgentSessionStats'];

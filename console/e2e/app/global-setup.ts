@@ -1,13 +1,14 @@
 import createClient from 'openapi-fetch';
 
 import type { paths } from '../../src/lib/api/admin';
+import type { paths as KnowledgePaths } from '../../src/lib/api/v1';
 
-import { CONTROL_PLANE, FIXTURE, passwordToken, USERS } from './support';
+import { CONTROL_PLANE, FIXTURE, KNOWLEDGE, passwordToken, SCRIPTED_MODEL_URL, USERS } from './support';
 
 /**
  * 端到端用例的数据（可重复执行，已存在的不重复创建）：平台管理员 dev-admin 建一个租户（自己是所有者），两个项目，
  * 把 dev-developer 设为两个项目的项目开发者、dev-viewer 设为第一个项目的项目观察者，四级预算设为不限（新租户默认零预算，
- * 否则外壳会显示预算用完的横幅）。租户与项目的 ID 经环境变量交给用例。
+ * 否则外壳会显示预算用完的横幅）；T22 起另建模型目录（脚本化模型服务）、技能与知识库。租户与项目的 ID 经环境变量交给用例。
  */
 export default async function globalSetup(): Promise<void> {
   const token = await passwordToken(USERS.admin.username);
@@ -103,6 +104,80 @@ export default async function globalSetup(): Promise<void> {
       body: { level, hard_limit_tokens: null },
     });
     if (!created.data) fail(`设置${level}预算`, created.response, created.error);
+  }
+
+  // T22：智能体页用到的模型目录、技能与知识库。runtime 读 control-plane 的目录（console-e2e-env.sh），模型指向
+  // Compose 网络中的脚本化模型服务；对话模型两个（主模型与备用、子智能体），Embedding 模型给知识库。
+  const accounts = await api.GET('/admin/v1/tenants/{tenant_id}/provider-accounts', {
+    params: { path, query: { limit: 100 } },
+  });
+  if (!accounts.data) return fail('列出供应商账号', accounts.response, accounts.error);
+  let account = accounts.data.data.find((a) => a.name === FIXTURE.providerAccount);
+  if (!account) {
+    const created = await api.POST('/admin/v1/tenants/{tenant_id}/provider-accounts', {
+      params: { path },
+      body: { name: FIXTURE.providerAccount, provider: 'openai_compatible', base_url: SCRIPTED_MODEL_URL },
+    });
+    if (!created.data) return fail('创建供应商账号', created.response, created.error);
+    account = created.data;
+  }
+  const models = await api.GET('/admin/v1/tenants/{tenant_id}/models', {
+    params: { path, query: { limit: 100 } },
+  });
+  if (!models.data) return fail('列出模型', models.response, models.error);
+  const modelIds: Record<string, string> = {};
+  for (const model of FIXTURE.models) {
+    const existing = models.data.data.find((m) => m.name === model.name);
+    if (existing) {
+      modelIds[model.name] = existing.id;
+      continue;
+    }
+    const created = await api.POST('/admin/v1/tenants/{tenant_id}/models', {
+      params: { path },
+      body: {
+        provider_account_id: account.id,
+        name: model.name,
+        kind: model.kind,
+        upstream_model: model.upstream,
+        context_window: model.kind === 'chat' ? 131_072 : 8192,
+        max_output_tokens: model.kind === 'chat' ? 2048 : 1,
+        capabilities: { tool_calls: model.kind === 'chat', vision: false, reasoning: false },
+        ...(model.kind === 'embedding' ? { max_batch_size: 20 } : {}),
+      },
+    });
+    if (!created.data) return fail(`创建模型 ${model.name}`, created.response, created.error);
+    modelIds[model.name] = created.data.id;
+  }
+  const projectPath = { tenant_id: tenantId, project_id: main };
+  const skills = await api.GET('/admin/v1/tenants/{tenant_id}/projects/{project_id}/skills', {
+    params: { path: projectPath, query: { limit: 100 } },
+  });
+  if (!skills.data) return fail('列出技能', skills.response, skills.error);
+  if (!skills.data.data.some((s) => s.name === FIXTURE.skill)) {
+    const created = await api.POST('/admin/v1/tenants/{tenant_id}/projects/{project_id}/skills', {
+      params: { path: projectPath },
+      body: {
+        files: [
+          {
+            path: 'SKILL.md',
+            content: `---\nname: ${FIXTURE.skill}\ndescription: 按经营分析的口径整理周报。\n---\n\n先汇总本周的销售额与毛利，再列出下滑的品类。\n`,
+          },
+        ],
+      },
+    });
+    if (!created.data) fail('上传技能', created.response, created.error);
+  }
+  const knowledge = createClient<KnowledgePaths>({
+    baseUrl: KNOWLEDGE,
+    headers: { Authorization: `Bearer ${token}`, 'Meridian-Project': main },
+  });
+  const bases = await knowledge.GET('/v1/knowledge-bases', { params: { query: { limit: 100 } } });
+  if (!bases.data) return fail('列出知识库', bases.response, bases.error);
+  if (!bases.data.data.some((k) => k.name === FIXTURE.knowledgeBase)) {
+    const created = await knowledge.POST('/v1/knowledge-bases', {
+      body: { name: FIXTURE.knowledgeBase, embedding_model: modelIds['scripted-embedding']! },
+    });
+    if (!created.data) fail('创建知识库', created.response, created.error);
   }
 
   process.env['E2E_TENANT_ID'] = tenantId;

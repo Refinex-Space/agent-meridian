@@ -59,8 +59,24 @@ public class ConsoleAuthAutoConfiguration {
         }
 
         /**
-         * MVC 服务的公开 API 接受控制台用户（D55）：配置了 OIDC，且应用提供了 {@link ProjectAccessResolver}（control-plane 进程内查询，
-         * knowledge 经 control-plane）时启用。
+         * 没有进程内项目权限的 MVC 服务（knowledge）经 control-plane 查询（{@code project-access:resolve} 接受 knowledge 的服务
+         * JWT）；control-plane 自己提供进程内的实现，这里不再创建（T22）。
+         *
+         * @param client 服务间调用的配置
+         * @param clients 服务间调用客户端
+         * @return 经 control-plane 的项目权限
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        @ConditionalOnProperty(prefix = "meridian.security.service-client", name = "control-plane-url")
+        ProjectAccessResolver servletProjectAccessResolver(ServiceClientProperties client, ServiceRestClients clients) {
+            return new ControlPlaneProjectAccessResolver(
+                    clients.create(client.controlPlaneUrl(), ServiceJwts.CONTROL_PLANE));
+        }
+
+        /**
+         * MVC 服务的公开 API 接受控制台用户（D55）：配置了 OIDC，且有项目权限的来源（control-plane 进程内查询，knowledge 经
+         * control-plane）时启用。
          */
         @Bean
         @ConditionalOnMissingBean

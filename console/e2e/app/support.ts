@@ -5,6 +5,10 @@ import { expect, type Page } from '@playwright/test';
 
 /** 本机后端（scripts/dev/console-e2e-env.sh）。 */
 export const CONTROL_PLANE = 'http://localhost:18081';
+export const RUNTIME = 'http://localhost:18080';
+export const KNOWLEDGE = 'http://localhost:18083';
+/** 模型目录中的端点：runtime 在 Compose 网络中访问脚本化模型服务。 */
+export const SCRIPTED_MODEL_URL = 'http://scripted-model:18090/v1';
 export const KEYCLOAK = 'http://localhost:18082';
 const REALM = `${KEYCLOAK}/realms/meridian-dev`;
 
@@ -36,6 +40,15 @@ const PASSWORD = 'meridian-dev';
 export const FIXTURE = {
   tenant: 'T21 控制台验收',
   projects: ['华东经营分析', '门店运营'],
+  providerAccount: '脚本化模型服务',
+  /** 对话模型的上游都是脚本化模型服务的 `scripted`；用户消息以 `#script:<名称>` 选脚本。 */
+  models: [
+    { name: 'scripted-chat', kind: 'chat', upstream: 'scripted' },
+    { name: 'scripted-mini', kind: 'chat', upstream: 'scripted' },
+    { name: 'scripted-embedding', kind: 'embedding', upstream: 'scripted-embedding' },
+  ],
+  skill: 'weekly-report',
+  knowledgeBase: '季度经营月报',
 } as const;
 
 /** 全局准备写入的项目 ID。 */

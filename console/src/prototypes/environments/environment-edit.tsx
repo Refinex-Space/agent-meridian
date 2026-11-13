@@ -18,7 +18,7 @@ import {
   type SandboxSize,
   type Tier,
 } from '../fixtures/environment';
-import { Field, fieldAria } from '../shared/field';
+import { FormField as Field, fieldAria } from '@/components/domain/form-field';
 import { EditPage, EditSection } from '@/components/templates';
 
 const DOMAIN = /^(\*\.)?([a-z0-9-]+\.)+[a-z]{2,}$/;
