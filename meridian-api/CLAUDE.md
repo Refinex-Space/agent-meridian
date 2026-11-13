@@ -14,7 +14,7 @@
 
 ## 包地图
 
-- 规范：`src/main/resources/openapi/meridian-v1.yaml`（随 jar 发布，契约测试从类路径读取；`Agents`、`Usage` 标签由 control-plane 提供，其余（含 T17a 的 `Webhooks` 投递记录、T17b 的 `Files`、`Workspace`）由 runtime 提供，各自只生成自己的标签；新增标签要在 runtime 的 `support.ContractValidator` 登记归属，否则契约测试失败）；智能体规格的 JSON Schema `src/main/resources/schema/agent-spec.schema.json`（与 engine-spi 的 `ResolvedAgentSpec` 一一对应，runtime 的 `AgentSpecSchemaTest` 守住，ADR-0047）；内部接口 `meridian-internal-v1.yaml`（服务之间调用，DTO 在 `cn.refinex.meridian.api.internal.model`，`InternalOpenApiSpecTest` 校验，不做兼容性检查，ADR-0033）。
+- 规范：`src/main/resources/openapi/meridian-v1.yaml`（随 jar 发布，契约测试从类路径读取；`Agents`、`Usage` 标签由 control-plane 提供，其余（含 T17a 的 `Webhooks` 投递记录、T17b 的 `Files`、`Workspace`）由 runtime 提供，各自只生成自己的标签；新增标签要在 runtime 的 `support.ContractValidator` 登记归属，否则契约测试失败；三个服务的 `ContractCoverageIT` 按标签核对覆盖，新增标签同时加进提供它的服务的清单，R2）；智能体规格的 JSON Schema `src/main/resources/schema/agent-spec.schema.json`（与 engine-spi 的 `ResolvedAgentSpec` 一一对应，runtime 的 `AgentSpecSchemaTest` 守住，ADR-0047）；内部接口 `meridian-internal-v1.yaml`（服务之间调用，DTO 在 `cn.refinex.meridian.api.internal.model`，`InternalOpenApiSpecTest` 校验，不做兼容性检查，ADR-0033）。
 - 生成的 DTO：`target/generated-sources/openapi` 下的 `cn.refinex.meridian.api.model`，不进源码树；判别器联合是 sealed 接口（`SessionEvent`、`StreamOnlyEvent`、`UserEventInput`、`ContentBlock`）。
 - 共用的生成选项在根 POM 的 `openapi-generator-maven-plugin` 的 `pluginManagement`；本模块的 execution 只生成模型，runtime 的 execution 只生成接口（`cn.refinex.meridian.runtime.openapi`）。
 

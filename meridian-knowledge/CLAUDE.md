@@ -7,6 +7,7 @@
 - 编译与单测：`./mvnw -pl meridian-knowledge -am test`（`ChunkerTest`、`IngestionDomainTest`、`DocumentDomainTest`、`ParsersTest` 用 `src/test/resources/corpus/` 的语料）
 - 集成测试：`./mvnw -pl meridian-knowledge -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`（Testcontainers 的 PostgreSQL、Redis、MinIO 与容器化的 doc-parser；首次构建 doc-parser 镜像约 10 分钟，表格 PDF 在 CPU 上要几分钟）；单个再加 `-Dit.test=<类名> -Dfailsafe.failIfNoSpecifiedTests=false`
 - 真实模型：`./mvnw -Plive -pl meridian-knowledge -am verify`（`IngestionLiveIT` 约 2 次调用；检索评测的录制 `RetrievalEvalEmbeddingsLiveIT` 约 7 次、`RetrievalEvalRerankLiveIT` 20 次，后者回放前者的录制，先后单独运行，见 `docs/engineering/retrieval-evaluation.md`）；runtime 替身经 `support.DashScopeModels` 转给 DashScope
+- 契约覆盖（R2）：`support.ApiClient` 的公开与内部接口调用都记进 `ContractCoverage`，最后运行的 `ContractCoverageIT` 核对公开 11 个、内部 2 个操作。
 - 检索（T19）：`search.KnowledgeSearchIT`（A01 的 `EXPLAIN`、REST 与内部接口的标签过滤、rerank、改写、计量）、`search.KnowledgeMcpIT`（MCP SDK 客户端）、`search.RetrievalEvalIT`（回放 `src/test/resources/retrieval-eval/recording/`，四种方式的指标不低于基线）；评测语料与问题在 `retrieval-eval/`，写定后不改
 - 本地启动：`scripts/dev/up.sh`、`run-control-plane.sh`、`run-runtime.sh --server.port=18080`、`run-doc-parser.sh` 后 `scripts/dev/run-knowledge.sh`；密钥取 env 文件的 `MERIDIAN_KNOWLEDGE_CLIENT_SECRET`
 - 迁移：`src/main/resources/db/migration/kb/`（`V0001` 知识库、文档、作业、切片、`storage_reports`、outbox、幂等键；`V0002` 知识库的 `rerank_model`）；向量维度是 Flyway 占位符 `embedding_dimensions`（`KnowledgeConfiguration` 按 `meridian.knowledge.embedding.dimensions` 注入）
@@ -25,12 +26,12 @@
 - 可重试（依赖不可用、429、5xx、租约过期）最多 4 次尝试，间隔 `backoff-base × 2^(n-1)`；不可重试（类型、损坏、`model.not_found`、维度不符）直接 `failed`。每份文档同时只有一个未结束的作业（部分唯一索引）。
 - 模型用量只在 runtime 记账：knowledge 的 outbox `usage` 只有存储计量；Embedding 每批至多 64 条，输入是"标题路径 + 正文"，带 `dimensions`。
 - 检索的过滤条件（租户与项目、知识库、标签）只在 SQL 中，不先取再筛；不限标签的切片（`acl_tags = '{}'`）对所有调用方可见。调用方标签：REST 取请求体 `acl_tags`，内部接口取 runtime 传来的会话标签，MCP 取请求头 `Meridian-Acl-Tags`（不放工具入参）。改写失败用原查询；rerank 模型取 ID 最小的、设置了模型的知识库的。
-- 公开 API 经 `ApiKeyFilter` 认证，读 `knowledge:read`、写 `knowledge:write`（检索是读）；所有 POST 经 `PublicRequests` 支持 `Idempotency-Key`（作用域是 `PlatformContext.actor()`）；写操作在业务事务内写审计。
+- 公开 API 经 `ApiKeyFilter` 认证，读 `knowledge:read`、写 `knowledge:write`（检索是读）；所有 POST 经 `PublicRequests` 支持 `Idempotency-Key`（作用域是 `PlatformContext.idempotencyPrincipal()`：API Key，或控制台用户加项目，ADR-0054）；写操作在业务事务内写审计。
 
 ## 易错点
 
 - 向量召回靠数据源初始化时的 `hnsw.iterative_scan = strict_order`（`application.yml` 的 Hikari `connection-init-sql`）：没有它，共用的 HNSW 索引过滤后可能远少于 50 条；`ORDER BY` 只能按距离，加次序键就用不上 HNSW。全文的 `tsquery` 写成标量子查询，GIN 才能当索引条件；Java 文本块会去掉行尾空格，SQL 片段用普通字符串拼接。
-- MCP 工具在哪个线程执行不确定：主体与标签经传输上下文（`contextExtractor`）取，工具里重新绑定 `PlatformContext`。SDK 0.17.2 的服务端会话在进程内、没有过期（D82）。
+- MCP 工具在哪个线程执行不确定：主体与标签经传输上下文（`contextExtractor`）取，工具里重新绑定 `PlatformContext`。SDK 0.17.2 的服务端会话在进程内、没有过期（D82，改无状态传输登记 D89）。
 
 - `kb.chunks.embedding` 的维度在迁移时定下，启动时与配置核对，改配置要新迁移。pgvector 类型、运算符类与 `chinese` 配置在 `public`：迁移写 `public.vector`，SQL 写 `'public.chinese'`。
 - 生成的上传接口把 `acl_tags` 当 `@RequestParam`：规范里它是逗号分隔的字符串（OpenAPI 的数组表单字段 Spring 解析不了）。

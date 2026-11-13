@@ -18,12 +18,13 @@
 - `auth.TestTokenIssuer`（ADR-0044）：JDK HTTP 服务上的 `/oauth2/jwks`、`/oauth2/token`（`client(服务, 密钥)` 登记）、OIDC 发现文档；`serviceToken`、`sign`（任意声明）、`signWithForeignKey`、`rotate()`、`route(路径, 处理器)` 挂替身接口；执行器是虚拟线程（替身接口会回头读本服务的 JWKS）。
 - `mcp.TestMcpServer`（ADR-0047）：嵌入式 Tomcat 在回环地址的随机端口上注册 MCP SDK 0.17.2 的 Streamable HTTP（`/mcp`）与 SSE（`/sse`）传输，校验 `Authorization: Bearer {令牌}`，工具 `lookup_order`、`create_ticket`；`requests()` 记下每个请求的 `Authorization`。control-plane 的登记探测与 runtime 的会话测试共用。
 - `outbox.OutboxSamples`（T16，ADR-0048）：runtime 与 knowledge（`knowledge_storage_gb_days`、T19 的 `knowledge_search_calls`）写出的用量（`usage/<kind>.json`）与审计（`audit/<action 的点换成下划线>.json`）消息的契约样本，在 `src/main/resources/cn/refinex/meridian/testsupport/outbox/`；runtime 的契约测试断言消息记录与样本一致，control-plane 的消费者测试替换租户等取值后把样本发布到 Stream。
+- `contract.ContractCoverage`（R2）：按规范的路径模板记录被校验过的交互（真实路径，不由调用方自报操作名），三个服务的 `ContractCoverageIT` 用它核对覆盖。
 - `model.ScriptedOpenAiServer`：`builder().script(yaml).scriptsDirectory(dir).start()`（默认回环地址的随机端口）；`baseUrl()` 作供应商账号的 `base_url`，`rerankBaseUrl()` 作 rerank 模型的 `base_url`；`calls()` 记录每次请求（路径、脚本、步骤、是否流式；对话补全另有请求体原文 `body`，T10b 比较请求前缀用），断言重试次数用。`ScriptLoader` 解析 YAML，`ScriptedVectors` 是 Embedding 与 rerank 的确定算法。
 
 ## 脚本化模型服务
 
 - 端点：`POST /v1/chat/completions`（流式 SSE 以 `[DONE]` 结束，`stream_options.include_usage` 时多一个用量块；非流式）、`POST /v1/embeddings`（文本 SHA-256 作种子的单位向量，默认 1024 维，支持 `dimensions`、`encoding_format=base64`）、`POST /compatible-api/v1/reranks`（DashScope 兼容格式，关键词重叠率打分）。不读密钥，不访问外网。
-- 选脚本：请求中最近一条以 `#script:<名称>` 开头的用户消息；没有标记时回显 `echo: <最后一条用户消息>`；未知脚本返回 400。服务无状态：步骤 = 该消息之后的 assistant 消息数，超出步数时回答"脚本 x 已执行完毕。"。工具调用 ID 由脚本名、标记消息的位置与步骤确定地生成：同一请求同一 ID，同一会话的不同轮次不重复。
+- 选脚本：请求中最近一条以 `#script:<名称>` 开头的用户消息；没有标记时回显 `echo: <最后一条用户消息>`；未知脚本先重新读 `--scripts` 目录（运行中写进去的脚本也能用，R2），仍没有返回 400。服务无状态：步骤 = 该消息之后的 assistant 消息数，超出步数时回答"脚本 x 已执行完毕。"。工具调用 ID 由脚本名、标记消息的位置与步骤确定地生成：同一请求同一 ID，同一会话的不同轮次不重复。
 - 脚本格式（`src/main/resources/cn/refinex/meridian/testsupport/model/scripts/<名称>.yaml`，未知的键让加载失败）：
 
   ```yaml
