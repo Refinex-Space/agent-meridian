@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Outlet, useMatches, useNavigate } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import {
   describeRoles,
@@ -10,6 +10,8 @@ import {
   ProjectProvider,
   type CurrentProject,
 } from '@/lib/access';
+import { AgentGlyph } from '@/components/ui/glyphs';
+import { agentsQuery } from '@/features/agents';
 import { adminApi, unwrap, v1Api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
 import { CrumbProvider, useCrumbLabels } from '@/lib/crumbs';
@@ -86,6 +88,32 @@ function Shell({ project }: { project: CurrentProject }) {
 
   const activeItem = NAV.find((item) => item.key === active);
 
+  // ⌘K 的智能体：第一次打开命令面板时才加载，没有查看智能体的权限时不加载（D97）。
+  const [commandUsed, setCommandUsed] = useState(false);
+  const agents = useQuery({
+    ...agentsQuery({ tenantId: project.tenantId, projectId: project.projectId }),
+    enabled: commandUsed && hasPermission(project, 'agent_read'),
+  }).data;
+  const commandGroups = useMemo(
+    () => [
+      {
+        heading: '智能体',
+        items: (agents ?? []).map((agent) => ({
+          key: agent.id,
+          label: agent.name,
+          detail: agent.current_version ? `v${agent.current_version.version}` : '未发布',
+          glyph: AgentGlyph,
+          onSelect: () =>
+            void navigate({
+              to: '/projects/$projectId/agents/$agentId',
+              params: { projectId: project.projectId, agentId: agent.id },
+            }),
+        })),
+      },
+    ],
+    [agents, navigate, project.projectId],
+  );
+
   return (
     <ProjectProvider project={project}>
       <AppShell
@@ -108,6 +136,8 @@ function Shell({ project }: { project: CurrentProject }) {
           </>
         }
         onNavigate={(item) => void navigate({ to: item.to, params: { projectId: project.projectId } })}
+        commandGroups={commandGroups}
+        onCommandOpen={() => setCommandUsed(true)}
       >
         <Outlet />
       </AppShell>

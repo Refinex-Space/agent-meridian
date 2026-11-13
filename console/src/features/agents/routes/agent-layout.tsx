@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Outlet } from '@tanstack/react-router';
 
-import { useProject } from '@/lib/access';
+import { PermissionGate } from '@/components/domain/permission-gate';
+import { DetailPage } from '@/components/templates';
+import { usePermission, useProject } from '@/lib/access';
 import { useCrumb } from '@/lib/crumbs';
 
 import { agentQuery } from '../api/queries';
@@ -12,7 +14,15 @@ import { agentQuery } from '../api/queries';
  */
 export function AgentLayout({ agentId }: { agentId: string }) {
   const { tenantId, projectId } = useProject();
-  const name = useQuery(agentQuery({ tenantId, projectId }, agentId)).data?.name;
+  const read = usePermission('agent_read', '查看智能体');
+  const name = useQuery({ ...agentQuery({ tenantId, projectId }, agentId), enabled: read.allowed }).data
+    ?.name;
   useCrumb(name);
+  if (!read.allowed)
+    return (
+      <DetailPage title="智能体">
+        <PermissionGate mode="explain" title="没有权限查看智能体" allowed={false} reason={read.reason} />
+      </DetailPage>
+    );
   return <Outlet />;
 }

@@ -27,7 +27,7 @@ import {
   type AgentDetailTab,
 } from '@/features/agents';
 import { CapabilitiesPage } from '@/features/capabilities';
-import { EnvironmentsPage } from '@/features/environments';
+import { EnvironmentEditPage, EnvironmentListPage } from '@/features/environments';
 import { KnowledgePage } from '@/features/knowledge';
 import { ModelsPage } from '@/features/models';
 import { OverviewPage } from '@/features/overview';
@@ -168,7 +168,6 @@ function navRoute<P extends string>(path: P, nav: NavKey, crumb: string, compone
 const overviewRoute = navRoute('overview', 'overview', '概览', OverviewPage);
 const sessionsRoute = navRoute('sessions', 'sessions', '会话', SessionsPage);
 const playgroundRoute = navRoute('playground', 'playground', 'Playground', PlaygroundPage);
-const environmentsRoute = navRoute('environments', 'environments', '环境', EnvironmentsPage);
 const capabilitiesRoute = navRoute('capabilities', 'capabilities', '能力', CapabilitiesPage);
 const knowledgeRoute = navRoute('knowledge', 'knowledge', '知识库', KnowledgePage);
 const modelsRoute = navRoute('models', 'models', '模型', ModelsPage);
@@ -251,6 +250,28 @@ const agentCompareRoute = createRoute({
   },
 });
 
+/** 环境（T22）：列表、新建与编辑（含修订历史）；编辑页在面包屑中显示环境的名字。 */
+const environmentsRoute = navRoute('environments', 'environments', '环境', () => <Outlet />);
+const environmentListRoute = createRoute({
+  getParentRoute: () => environmentsRoute,
+  path: '/',
+  component: EnvironmentListPage,
+});
+const environmentNewRoute = createRoute({
+  getParentRoute: () => environmentsRoute,
+  path: 'new',
+  staticData: { crumb: '新建' },
+  component: () => <EnvironmentEditPage />,
+});
+const environmentEditRoute = createRoute({
+  getParentRoute: () => environmentsRoute,
+  path: '$environmentId',
+  component: function EnvironmentEditRoute() {
+    const { environmentId } = environmentEditRoute.useParams();
+    return <EnvironmentEditPage key={environmentId} environmentId={environmentId} />;
+  },
+});
+
 const projectNotFoundRoute = createRoute({
   getParentRoute: () => projectRoute,
   path: '$',
@@ -269,7 +290,7 @@ export const routeTree = rootRoute.addChildren([
       agentListRoute,
       agentRoute.addChildren([agentDetailRoute, agentEditRoute, agentCompareRoute]),
     ]),
-    environmentsRoute,
+    environmentsRoute.addChildren([environmentListRoute, environmentNewRoute, environmentEditRoute]),
     capabilitiesRoute,
     knowledgeRoute,
     modelsRoute,

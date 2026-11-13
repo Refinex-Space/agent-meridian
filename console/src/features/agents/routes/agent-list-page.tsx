@@ -98,6 +98,17 @@ function RowActions({
  * 删除要求输入名称确认，并写明使用中的会话将无法继续。搜索在本页按名称、说明与 ID 过滤（项目内的智能体是几十个的量级）。
  */
 export function AgentListPage() {
+  const read = usePermission('agent_read', '查看智能体');
+  if (!read.allowed)
+    return (
+      <ListPage title="智能体">
+        <PermissionGate mode="explain" title="没有权限查看智能体" allowed={false} reason={read.reason} />
+      </ListPage>
+    );
+  return <AgentList />;
+}
+
+function AgentList() {
   const { tenantId, projectId } = useProject();
   const scope = { tenantId, projectId };
   const navigate = useNavigate();

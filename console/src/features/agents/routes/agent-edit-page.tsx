@@ -28,7 +28,7 @@ import {
   SubagentsSection,
   ToolsSection,
 } from '../components/editor/sections';
-import { useAgentEditor } from '../components/editor/use-agent-editor';
+import { focusField, useAgentEditor } from '../components/editor/use-agent-editor';
 import { useAgentResources } from '../components/editor/use-resources';
 import { AGENT_GROUPS } from '../model/fields';
 
@@ -56,12 +56,15 @@ function Editor({ agent, version }: { agent: Agent; version: AgentVersion }) {
   const publish = usePublish(agent.id, version.version);
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishError, setPublishError] = useState<unknown>(null);
+  /** 发布失败、错误已放到字段上时，对话框关闭后要聚焦的字段。 */
+  const [focusAfterClose, setFocusAfterClose] = useState<string | null>(null);
   const base = agent.current_version?.version ?? null;
 
   const openPublish = async () => {
     const ok = editor.dirty ? await editor.save() : editor.check();
     if (!ok) return;
     setPublishError(null);
+    setFocusAfterClose(null);
     publish.reset();
     setPublishOpen(true);
   };
@@ -80,8 +83,8 @@ function Editor({ agent, version }: { agent: Agent; version: AgentVersion }) {
       onError: (error) => {
         // 有字段明细的校验错误放回表单的字段上；其他错误留在对话框里。
         if (error instanceof ApiError && (error.problem?.errors?.length ?? 0) > 0) {
+          setFocusAfterClose(editor.applyServerError(error, { focus: false }) ?? null);
           setPublishOpen(false);
-          editor.applyServerError(error);
         } else setPublishError(error);
       },
     });
@@ -174,6 +177,7 @@ function Editor({ agent, version }: { agent: Agent; version: AgentVersion }) {
           onConfirm={confirmPublish}
           pending={publish.isPending}
           error={publishError}
+          onClosedFocus={focusAfterClose ? () => focusField(focusAfterClose) : null}
         />
       )}
     </FormProvider>

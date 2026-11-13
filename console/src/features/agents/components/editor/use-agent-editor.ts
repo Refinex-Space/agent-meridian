@@ -89,8 +89,11 @@ export interface AgentEditor {
   /** 只校验（没有改动时发布前用）：有错误时聚焦第一个，返回是否通过。 */
   check: () => boolean;
   discard: () => void;
-  /** 把服务端的校验错误（发布失败）放到字段上并聚焦第一个。 */
-  applyServerError: (error: unknown) => void;
+  /**
+   * 把服务端的校验错误（保存或发布失败）放到字段上，返回第一个出错的字段（锚点）。默认随后聚焦它；在对话框里发起的请求
+   * 传 `focus: false`，等对话框关闭、焦点陷阱释放后由调用方聚焦（`focusField`）。
+   */
+  applyServerError: (error: unknown, options?: { focus?: boolean }) => string | undefined;
   /** 挂在表单容器上：字段失焦后显示它的格式错误。 */
   onBlurCapture: (event: FocusEvent<HTMLElement>) => void;
 }
@@ -134,7 +137,7 @@ export function useAgentEditor(agent: Agent, version: AgentVersion, context: Spe
   );
 
   const applyServerError = useCallback(
-    (error: unknown) => {
+    (error: unknown, { focus = true }: { focus?: boolean } = {}) => {
       const current = form.getValues();
       const mapped: Record<string, ServerError> = {};
       const violations = error instanceof ApiError ? (error.problem?.errors ?? []) : [];
@@ -150,7 +153,8 @@ export function useAgentEditor(agent: Agent, version: AgentVersion, context: Spe
       const anchors = sortAnchors(Object.keys(mapped));
       // 有字段明细的错误就地显示；没有的（冲突、版本已发布、服务不可用）显示在保存栏上方。
       setRootError(anchors.length > 0 && entries.every((e) => e.anchor !== ROOT_ANCHOR) ? null : error);
-      if (anchors[0]) window.requestAnimationFrame(() => focusField(anchors[0]!));
+      if (focus && anchors[0]) window.requestAnimationFrame(() => focusField(anchors[0]!));
+      return anchors[0];
     },
     [form],
   );

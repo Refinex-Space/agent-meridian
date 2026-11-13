@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useState, type ReactNode } from 'react';
 
 import { StatusGlyph } from '@/components/domain/status-badge';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,7 @@ import type { TenantProjects } from '@/lib/access';
 import { cn } from '@/lib/cn';
 import type { ThemePreference } from '@/lib/theme';
 
-import { CommandMenu } from './command-menu';
+import { CommandMenu, type CommandObjectGroup } from './command-menu';
 import { NAV, type NavItem, type NavKey } from './nav';
 
 /** 顶栏面包屑的一项；`mono` 用于 ID。没有 `href` 的一项是当前页。 */
@@ -68,6 +68,10 @@ export interface AppShellProps {
   defaultCollapsed?: boolean;
   /** ⌘K 中选择了一个页面。 */
   onNavigate: (item: NavItem) => void;
+  /** ⌘K 中页面之外的对象（智能体）。 */
+  commandGroups?: readonly CommandObjectGroup[];
+  /** ⌘K 打开时（外层据此才加载对象）。 */
+  onCommandOpen?: () => void;
   children: ReactNode;
 }
 
@@ -284,10 +288,16 @@ export function AppShell({
   banner,
   defaultCollapsed,
   onNavigate,
+  commandGroups,
+  onCommandOpen,
   children,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(() => defaultCollapsed ?? readCollapsed());
   const [commandOpen, setCommandOpen] = useState(false);
+  const notifyCommandOpen = useEffectEvent(() => onCommandOpen?.());
+  useEffect(() => {
+    if (commandOpen) notifyCommandOpen();
+  }, [commandOpen]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -388,7 +398,12 @@ export function AppShell({
         {banner}
         <main className="min-h-0 flex-1 overflow-auto">{children}</main>
       </div>
-      <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} onNavigate={onNavigate} />
+      <CommandMenu
+        open={commandOpen}
+        onOpenChange={setCommandOpen}
+        onNavigate={onNavigate}
+        {...(commandGroups && { groups: commandGroups })}
+      />
     </div>
   );
 }

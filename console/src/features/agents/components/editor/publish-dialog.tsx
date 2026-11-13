@@ -31,6 +31,8 @@ export interface PublishDialogProps {
   pending: boolean;
   /** 发布失败且没有字段明细的错误（冲突、服务不可用）。 */
   error: unknown;
+  /** 关闭后焦点去哪里：给出时调用它，而不是把焦点还给"发布"按钮（校验错误已放到字段上时聚焦第一个出错的字段）。 */
+  onClosedFocus?: (() => void) | null;
 }
 
 function DiffSkeleton() {
@@ -60,6 +62,7 @@ export function PublishDialog({
   onConfirm,
   pending,
   error,
+  onClosedFocus = null,
 }: PublishDialogProps) {
   const { tenantId, projectId } = useProject();
   const scope = { tenantId, projectId };
@@ -103,7 +106,14 @@ export function PublishDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <DialogContent size="lg">
+      <DialogContent
+        size="lg"
+        onCloseAutoFocus={(e) => {
+          if (!onClosedFocus) return;
+          e.preventDefault();
+          onClosedFocus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             发布 {agent.name} v{version}
