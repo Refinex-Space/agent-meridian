@@ -103,7 +103,7 @@ describe('凭据的写入与轮换（明文只写不读，ADR-0056）', () => {
     await user.type(screen.getByRole('textbox', { name: '名称' }), 'DashScope 生产');
     const value = screen.getByLabelText('凭据值');
     expect(value).toHaveAttribute('type', 'password');
-    expect(value).toHaveAttribute('autocomplete', 'off');
+    expect(value).toHaveAttribute('autocomplete', 'new-password');
     await user.type(value, PLAINTEXT);
     await user.click(screen.getByRole('button', { name: '保存凭据' }));
 

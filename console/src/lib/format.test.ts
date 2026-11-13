@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  formatTokenLimit,
   formatDateTime,
   formatBytes,
   formatDuration,
@@ -19,6 +20,15 @@ describe('format', () => {
     expect(formatTokens(48_210)).toBe('48K');
     expect(formatTokens(1_250_000)).toBe('1.25M');
     expect(formatTokens(2_000_000)).toBe('2M');
+  });
+
+  it('上下文窗口与输出上限按 1024 进位，其余同 token 缩写', () => {
+    expect(formatTokenLimit(32768)).toBe('32K');
+    expect(formatTokenLimit(131072)).toBe('128K');
+    expect(formatTokenLimit(1048576)).toBe('1M');
+    expect(formatTokenLimit(1_000_000)).toBe('1M');
+    expect(formatTokenLimit(8000)).toBe('8K');
+    expect(formatTokenLimit(512)).toBe('512');
   });
 
   it('时长按量级换单位', () => {

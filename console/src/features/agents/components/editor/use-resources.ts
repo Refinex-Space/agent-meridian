@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 
 import { useProject } from '@/lib/access';
 import type { CatalogModel, KnowledgeBase, McpServer, Skill } from '@/lib/api/types';
-import { formatInteger, formatTokens } from '@/lib/format';
+import { formatInteger, formatTokenLimit } from '@/lib/format';
 
 import { knowledgeBasesQuery, mcpServersQuery, modelsQuery, skillsQuery } from '../../api/queries';
 import type { SpecContext } from '../../model/spec';
@@ -69,7 +69,7 @@ export function useAgentResources(): AgentResources {
         id: m.id,
         name: m.name,
         mono: true,
-        detail: `上下文 ${formatTokens(m.context_window)}`,
+        detail: `上下文 ${formatTokenLimit(m.context_window)}`,
       })),
       knowledgeBases: source(knowledgeBases, (k) => ({
         id: k.id,

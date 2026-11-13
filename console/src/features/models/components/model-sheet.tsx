@@ -21,7 +21,7 @@ import {
 import { useProject } from '@/lib/access';
 import { ApiError } from '@/lib/api/errors';
 import type { CatalogModel, ModelCapabilities, ModelKind } from '@/lib/api/types';
-import { formatTokens } from '@/lib/format';
+import { formatTokenLimit } from '@/lib/format';
 
 import {
   catalogModelsQuery,
@@ -217,7 +217,7 @@ export function ModelSheet({ open, onOpenChange, model }: ModelSheetProps) {
         id: m.id,
         name: m.name,
         mono: true,
-        detail: `上下文 ${formatTokens(m.context_window)}`,
+        detail: `上下文 ${formatTokenLimit(m.context_window)}`,
       })),
     loading: models.isPending,
     error: models.error,

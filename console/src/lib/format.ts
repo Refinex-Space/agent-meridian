@@ -21,6 +21,18 @@ function trimZero(text: string): string {
   return text.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 }
 
+/**
+ * 上下文窗口与输出上限：多是 1024 的整数倍（32768、131072），按 1024 进位写成 32K、128K，与模型文档的写法一致；其余按
+ * {@link formatTokens}。
+ */
+export function formatTokenLimit(tokens: number): string {
+  if (tokens >= 1024 && tokens % 1024 === 0) {
+    const k = tokens / 1024;
+    return k >= 1024 && k % 1024 === 0 ? `${k / 1024}M` : `${k}K`;
+  }
+  return formatTokens(tokens);
+}
+
 /** 时长：640 毫秒、1.6 秒、42 秒、4 分 12 秒、2 小时 5 分。 */
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${Math.max(0, Math.round(ms))} 毫秒`;

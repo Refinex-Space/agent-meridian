@@ -23,7 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { usePermission, useProject } from '@/lib/access';
 import { inUseReferences } from '@/lib/api/errors';
 import type { CatalogModel, ModelCapabilities, ResourceReference } from '@/lib/api/types';
-import { formatTokens } from '@/lib/format';
+import { formatTokenLimit } from '@/lib/format';
 
 import { catalogModelsQuery, priceBooksQuery, providerAccountsQuery, useDeleteModel } from '../api/queries';
 import { CAPABILITY_LABEL, MODEL_KIND_LABEL } from '../model/catalog';
@@ -124,13 +124,13 @@ export function CatalogTable({ createButton }: CatalogTableProps) {
           header: '上下文',
           sortFn: 'basic',
           meta: { width: 72, align: 'right' },
-          cell: (c) => <span className="tabular-nums">{formatTokens(c.getValue())}</span>,
+          cell: (c) => <span className="tabular-nums">{formatTokenLimit(c.getValue())}</span>,
         }),
         col.accessor('max_output_tokens', {
           header: '最大输出',
           sortFn: 'basic',
           meta: { width: 80, align: 'right' },
-          cell: (c) => <span className="tabular-nums">{formatTokens(c.getValue())}</span>,
+          cell: (c) => <span className="tabular-nums">{formatTokenLimit(c.getValue())}</span>,
         }),
         col.accessor('capabilities', {
           header: '能力',

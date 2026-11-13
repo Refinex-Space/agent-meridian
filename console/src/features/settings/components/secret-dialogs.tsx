@@ -23,8 +23,9 @@ import { useCreateSecret, useRotateSecret } from '../api/secrets';
 const MAX_VALUE = 16384;
 
 /**
- * 凭据值的输入框：密码框、非受控，值只在提交时读一次；提交后（成功或失败）立即清空。不提供显示明文的开关，也不让浏览器
- * 记住或自动填充（ADR-0056）。
+ * 凭据值的输入框：密码框、非受控，值只在提交时读一次；提交后（成功或失败）立即清空。不提供显示明文的开关（ADR-0056）。
+ * `autocomplete` 必须是 `new-password`：写 `off` 时浏览器仍把表单当成登录表单，把保存的登录名与密码自动填进名称与凭据值
+ * （T23 走查发现），提交就会把用户的登录密码存成凭据。
  */
 function SecretValueInput({ id, error }: { id: string; error: string | null }) {
   return (
@@ -32,7 +33,7 @@ function SecretValueInput({ id, error }: { id: string; error: string | null }) {
       id={id}
       name="secret-value"
       type="password"
-      autoComplete="off"
+      autoComplete="new-password"
       spellCheck={false}
       maxLength={MAX_VALUE}
       data-1p-ignore
