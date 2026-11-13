@@ -202,13 +202,26 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 
 | 编号 | 任务 | 阶段 | 依赖 | effort | 规模 | 验证项 | 状态 | 完成提交 |
 |---|---|---|---|---|---|---|---|---|
-| T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 未开始 | — |
+| T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 进行中 | — |
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 未开始 | — |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 未开始 | — |
 
 ### 轨道检查点
 
-（当前没有进行中的轨道任务）
+T20a（worktree `../agent-meridian-console`，分支 `console/T20`）：
+
+- [ ] 设计计划：`frontend-design.md`「设计定稿」（令牌草案、布局线框、自查与改掉的默认值）（A01）
+- [ ] ADR-0021 前端依赖选型与版本（A08）
+- [ ] `console/` 工程：Vite、React 19、TS 严格、pnpm、ESLint、Prettier、Vitest、Testing Library、Storybook（a11y）、MSW、Playwright、openapi-typescript
+- [ ] 守护规则：颜色、图标库、能机检的禁用条目（A03）
+- [ ] 令牌（OKLCH 亮暗两套、`@theme` 映射）、字体（Plex Sans/Mono、Plex Sans SC 切片）、令牌页（A02）
+- [ ] 图标：Phosphor 封装、品牌标识与七个领域图标、并排展示（A04）
+- [ ] 基元：按钮、徽标、标签页、提示、滚动区域、骨架
+- [ ] `SessionTimeline` 与会话详情原型（MSW 模拟 SSE、待处理动作、子线程）（A05）
+- [ ] 时间轴性能：Playwright 1 万条事件滚动 5 秒的帧时间（A06）
+- [ ] `pnpm -C console lint`、`typecheck`、`test`、`build-storybook` 接入 `scripts/dev/verify.sh`（A09）
+- [ ] 截图（亮暗、1280 与 1920）与评审表自查，`console/CLAUDE.md`、根 `CLAUDE.md` 命令
+- [ ] 视觉方向确认关口（A07）：等待用户确认
 
 ### 轨道会话日志
 
