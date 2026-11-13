@@ -64,7 +64,7 @@ async function seedShowcase(): Promise<Showcase> {
   const tenant = { tenant_id: path_.tenant_id };
   const ids = await fixtureIds();
 
-  const skillName = unique('weekly-report');
+  const skillName = unique('store-weekly');
   const files = (desc: string) => [
     { path: 'SKILL.md', content: SKILL_MD(skillName).replace(/^description: .*$/m, `description: ${desc}`) },
     { path: 'scripts/summarize.py', content: 'import csv\nimport sys\n\nprint(sys.argv)\n' },
