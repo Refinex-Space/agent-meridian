@@ -22,6 +22,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -75,10 +76,12 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
     private final HttpServer server;
     private final ExecutorService executor;
     private final Map<String, ModelScript> scripts;
+    private final List<Path> directories;
     private final List<Call> calls = new CopyOnWriteArrayList<>();
 
-    private ScriptedOpenAiServer(String host, int port, Map<String, ModelScript> scripts) {
-        this.scripts = Map.copyOf(scripts);
+    private ScriptedOpenAiServer(String host, int port, Map<String, ModelScript> scripts, List<Path> directories) {
+        this.scripts = new ConcurrentHashMap<>(scripts);
+        this.directories = List.copyOf(directories);
         try {
             this.server = HttpServer.create(new InetSocketAddress(host, port), 0);
         } catch (IOException e) {
@@ -88,6 +91,20 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
         server.setExecutor(executor);
         server.createContext("/", this::handle);
         server.start();
+    }
+
+    /**
+     * 遇到不认识的脚本时重新读一遍脚本目录：运行中的服务可以加载后来写进目录的脚本（R2 的验收预演按本次运行生成的知识库 ID
+     * 写脚本）。
+     *
+     * @param name 脚本名
+     * @return 脚本；目录中仍然没有时为空
+     */
+    private synchronized ModelScript reload(String name) {
+        for (Path directory : directories) {
+            scripts.putAll(ScriptLoader.directory(directory));
+        }
+        return scripts.get(name);
     }
 
     /**
@@ -220,6 +237,9 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
             script = new ModelScript("echo", null, List.of(Step.text(echo(selection.lastUserText()))));
         } else {
             script = scripts.get(selection.script());
+            if (script == null) {
+                script = reload(selection.script());
+            }
             if (script == null) {
                 error(exchange, 400, "未知的脚本：" + selection.script() + "，可用：" + scriptNames(), null);
                 return;
@@ -615,6 +635,7 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
         private String host = "127.0.0.1";
         private int port;
         private final Map<String, ModelScript> scripts = new LinkedHashMap<>(ScriptLoader.builtin());
+        private final List<Path> directories = new ArrayList<>();
 
         private Builder() {}
 
@@ -662,13 +683,14 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
         }
 
         /**
-         * 加入目录下的全部 {@code *.yaml} 脚本。
+         * 加入目录下的全部 {@code *.yaml} 脚本；运行中遇到不认识的脚本名时会重新读这个目录。
          *
          * @param directory 目录
          * @return 本构建器
          */
         public Builder scriptsDirectory(Path directory) {
             scripts.putAll(ScriptLoader.directory(directory));
+            directories.add(directory);
             return this;
         }
 
@@ -678,7 +700,7 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
          * @return 已在监听的服务
          */
         public ScriptedOpenAiServer start() {
-            return new ScriptedOpenAiServer(host, port, scripts);
+            return new ScriptedOpenAiServer(host, port, scripts, directories);
         }
     }
 }

@@ -1,5 +1,6 @@
 package cn.refinex.meridian.runtime.config;
 
+import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.engine.agentscope.assembly.AssembledAgent;
 import cn.refinex.meridian.engine.spi.engine.AgentEngine;
 import cn.refinex.meridian.engine.spi.port.AgentConfigPort;
@@ -23,6 +24,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import reactor.core.publisher.Mono;
 
 /**
  * 轮次执行所需、与内核实现无关的装配：执行配置、{@code AgentConfigPort}（配置来源在 {@link AgentConfigConfiguration}）、大对象存储
@@ -91,8 +93,13 @@ public class WorkerConfiguration {
             if (available == null) {
                 return STATIC_RESERVED_NAMES;
             }
-            Set<String> names = available
-                    .reservedToolNames(agent.agentVersionId(), environment.environmentId(), environment.revision())
+            Mono<Set<String>> reserved = available.reservedToolNames(
+                    agent.agentVersionId(), environment.environmentId(), environment.revision());
+            // 调用方（创建会话）的 PlatformContext 绑定在 ScopedValue 上，block 订阅时 Reactor Context 是空的：显式带进去，否则
+            // 实例还没缓存时装配读不到租户提示词（R2 的验收预演发现：新智能体第一次带自定义工具创建会话得到 500）
+            Set<String> names = PlatformContexts.find()
+                    .map(context -> reserved.contextWrite(PlatformContexts.write(context)))
+                    .orElse(reserved)
                     .block(RESERVED_NAMES_TIMEOUT);
             return names == null ? STATIC_RESERVED_NAMES : names;
         };

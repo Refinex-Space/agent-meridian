@@ -1,0 +1,7 @@
+name: e2e-mcp-ticket
+description: 场景 3：调用 MCP 服务 tickets 的 create_ticket（规则为 ask，需要审批），回应之后回答。
+steps:
+  - tool_calls:
+      - name: mcp__tickets__create_ticket
+        arguments: {title: 退款申请 o-1001}
+  - text: 工单已创建。

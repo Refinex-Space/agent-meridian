@@ -1,0 +1,7 @@
+name: e2e-query-order
+description: 场景 4：调用会话声明的自定义工具 query_order，业务方回传结果后回答。
+steps:
+  - tool_calls:
+      - name: query_order
+        arguments: {order_id: o-1001}
+  - text: 订单 o-1001 已发货。

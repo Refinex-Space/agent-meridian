@@ -1,0 +1,13 @@
+name: e2e-docx
+description: 场景 2：在会话沙箱里写 Markdown，用内置 docx 技能的脚本转成 outputs/report.docx。
+steps:
+  - tool_calls:
+      - name: write_file
+        arguments:
+          path: drafts/report.md
+          content: "# 季度报告\n\n本季度**收入**增长 12%。\n\n- 新客户 30 家\n- 续约率 95%\n\n| 指标 | 数值 |\n| --- | --- |\n| 收入 | 1200 |\n"
+  - tool_calls:
+      - name: bash
+        arguments:
+          command: python3 /workspace/.meridian/skills/docx/scripts/md_to_docx.py drafts/report.md outputs/report.docx --title 季度报告
+  - text: 已生成 outputs/report.docx。

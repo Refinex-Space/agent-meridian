@@ -10,12 +10,15 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -171,6 +174,35 @@ class ScriptedOpenAiServerTest {
 
         assertThat(response.statusCode()).isEqualTo(400);
         assertThat(json(response).path("error").path("message").asString()).contains("nope");
+    }
+
+    @Test
+    void scriptsWrittenToTheDirectoryWhileRunningAreLoadedOnFirstUse(@TempDir Path directory) throws Exception {
+        try (ScriptedOpenAiServer withDirectory =
+                ScriptedOpenAiServer.builder().scriptsDirectory(directory).start()) {
+            Files.writeString(directory.resolve("later.yaml"), """
+                    name: later
+                    steps:
+                      - text: 后来写进目录的脚本
+                    """);
+            HttpRequest request = HttpRequest.newBuilder(
+                            URI.create("http://127.0.0.1:" + withDirectory.port() + "/v1/chat/completions"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""
+                            {"model": "scripted", "messages": [{"role": "user", "content": "#script:later 开始"}]}
+                            """))
+                    .build();
+
+            JsonNode response = json(CLIENT.send(request, HttpResponse.BodyHandlers.ofString()));
+
+            assertThat(response.path("choices")
+                            .get(0)
+                            .path("message")
+                            .path("content")
+                            .asString())
+                    .isEqualTo("后来写进目录的脚本");
+            assertThat(withDirectory.scriptNames()).contains("later");
+        }
     }
 
     @Test

@@ -1,0 +1,10 @@
+name: e2e-steer
+description: 场景 5：先慢慢输出并调用一次 list_files（约 6 秒，留给调用方发 steer），steer 在下一次推理前注入。
+steps:
+  - text: 我先看一下工作区里有哪些文件，然后再回答你的问题。
+    chunk_size: 1
+    delay_ms: 250
+    tool_calls:
+      - name: list_files
+        arguments: {path: .}
+  - text: 已收到补充说明，继续处理。
