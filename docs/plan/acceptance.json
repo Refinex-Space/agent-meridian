@@ -1763,57 +1763,57 @@
       "id": "T22-A01",
       "task": "T22",
       "description": "从零创建一个智能体（含工具、技能、子智能体、权限规则、知识库）并发布，用它在 Playground 外通过 API 创建会话成功。验证：Playwright 用例加 API 调用。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright `console/e2e/app/agents.spec.ts`「从零创建、配置并发布，用 API 创建会话并跑通一轮」通过（本机，Compose 后端：console-e2e-env.sh，runtime 读 control-plane 的智能体与目录）：界面新建智能体、Monaco 写提示词、启用 read_file、knowledge_search、spawn_subagent，加权限规则 read_file(reports/**)、绑定知识库\"季度经营月报\"、技能 weekly-report、子智能体 reader，保存并发布 v1；随后用管理 API 建环境与 API Key，POST /v1/sessions 返回 201、agent_id 一致，发一条消息后事件中出现 agent.message 与 session.status_idle（脚本化模型回显）"
     },
     {
       "id": "T22-A02",
       "task": "T22",
       "description": "表单校验与 JSON Schema 一致：非法配置（例如子智能体工具超出父智能体）在本地被拦截，服务端校验错误也能定位到字段。验证：组件测试与 Playwright 用例。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "组件与单元测试：`features/agents/model/spec.test.ts`（Zod 转 JSON Schema 与 agent-spec.schema.json 逐字段比对，含能发现漂移的反例；跨字段规则同 AgentSpecRules）、`editor/use-agent-editor.test.ts`（本地与服务端字段名映射到同一锚点）、`editor/permission-rules.test.tsx`（规则内容按工具语法本地拦截）通过；Playwright「子智能体的工具超出父智能体时在本地拦截，不发出保存请求」（保存栏\"有 2 处需要修改\"、两组导航标错、聚焦温度、PUT 次数 0）与「服务端的校验错误定位到字段」（发布返回 spec.model.model_id 的\"模型不存在\"，显示在主模型下并聚焦，改掉后消失）通过"
     },
     {
       "id": "T22-A03",
       "task": "T22",
       "description": "发布前展示版本差异；版本对比页正确显示差异。验证：Playwright 用例与截图。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright「发布前展示与当前版本的差异，版本对比页一致，基于旧版本创建新草稿」通过：发布对话框的差异表只有温度 0.3 与\"新增 web_fetch\"两行（快照字段不显示），版本对比页 v1 与 v2 同样两行，基于 v1 创建的 v3 温度为空、web_fetch 未勾选；截图 tmp/evidence/T22/agent-publish-*.png、agent-compare-*.png（亮暗 × 1280、1920）"
     },
     {
       "id": "T22-A04",
       "task": "T22",
       "description": "子智能体拓扑图正确反映配置。验证：截图。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "截图 tmp/evidence/T22/agent-topology-{light,dark}-{1280,1920}.png：主智能体与 data-reader、policy-reader、web-researcher 三个子智能体，各自的模型与工具集与规格一致（evidence-agents.spec.ts 断言 4 个节点）；点子智能体节点跳到并高亮下方它的定义"
     },
     {
       "id": "T22-A05",
       "task": "T22",
       "description": "环境的出网白名单校验生效，修改后修订号递增。验证：Playwright 用例。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright `e2e/app/environments.spec.ts` 两例通过：白名单输入 https://pypi.org/simple、10.0.0.8、pypi.org:443 就地报错且不加入；粘贴\"PyPI.org, *.pythonhosted.org\"拆开、转小写后加入；创建后\"修订 1\"，加 files.example.com 后保存按钮写\"保存为修订 2\"、保存后\"修订 2\"、历史两行；只改名字时按钮为\"保存\"、修订仍为 2；修订 1 的抽屉写明到修订 2 的变化。另一例同名环境的服务端错误定位到名称；`allowlist-editor.test.tsx`、`environment.test.ts` 通过"
     },
     {
       "id": "T22-A06",
       "task": "T22",
       "description": "所有页面的加载骨架、空态、错误态、无权限状态都已实现，与 T20c 原型一致，内容区以外与 T21 的截图基线（`toHaveScreenshot`）一致。验证：亮暗主题与两种宽度的截图（`tmp/evidence/T22/`）与 `toHaveScreenshot` 结果，对照评审表与禁用清单。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "截图 tmp/evidence/T22/：11 个页面 × 亮暗 × 1280、1920（44 张）加 16 个状态（加载骨架、空态、筛选为空、错误、无权限、只读、校验错误）的亮色 1280，逐张对照评审表与禁用清单（记录在 frontend-design.md「T22 智能体与环境」）；外壳与模板的 toHaveScreenshot 基线（e2e/shell-baseline.spec.ts）与 Storybook a11y 共 82 passed，基线未改；真实页面的 axe（e2e/app/a11y-agents.spec.ts）亮暗零违规"
     },
     {
       "id": "T22-A07",
       "task": "T22",
       "description": "用 `ego-browser` 做一次完整走查：以开发者身份完成\"创建、发布、对比、回滚为新草稿\"流程，记录发现的问题并修正。验证：走查记录。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ego-browser 走查（dev-developer）：新建 walkthrough-analyst、配置、离开提示、保存、发布 v1，编辑为 v2 并发布（差异），对比 v1/v2，基于 v1 创建 v3（回滚为新草稿），⌘K 搜索智能体，新建沙箱环境并保存为修订 2。发现并修正 6 处（新建对话框焦点落在说明图标；发布失败后焦点回到按钮，查出 InertOutside 遗留 inert；对比读到草稿时的缓存；对比显示版本 ID；环境修订历史晚于页头更新；拓扑节点名被挤）；记录在 frontend-design.md「T22 智能体与环境」，截图 tmp/evidence/T22/walkthrough-*.png"
     },
     {
       "id": "T22-A08",
       "task": "T22",
       "description": "控制台全部检查与 `scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh 退出码 0（收尾，在 f7cf056 上运行）：Maven spotless、编译、单元与集成测试、架构测试、enforcer、覆盖率 BUILD SUCCESS；sandbox-runtime、doc-parser 通过；console 的 install、lint、typecheck、test（46 个文件 279 个用例）、build-storybook 通过；另跑 pnpm -C console build 通过（首屏 JavaScript gzip 约 219 KB）、pnpm e2e:app 21 passed（11 个截图用例在未设 EVIDENCE_DIR 时跳过，设了之后 14 passed）、Storybook 截图基线与 a11y 82 passed。开工基线的 Maven 部分通过，控制台 FilterBar 一例的时序问题已在 b53a602 修正"
     },
     {
       "id": "T23-A01",
