@@ -1,6 +1,6 @@
 # 控制台页面到接口的对照表
 
-控制台（T21 至 T25b）只消费这里列出的接口。按架构设计「控制台」的十一个一级导航逐页列出展示的数据、可执行的操作、实时性要求与对应接口；"状态"一列为"已有"的接口在 T14a 至 T19 交付，"T19b"是本任务补齐的。新页面需要的数据不在表中时，先补接口再写页面，不在前端临时拼凑。
+控制台（T21 至 T25b）只消费这里列出的接口。T23 起能力、模型与凭据页已接入（ADR-0056）。按架构设计「控制台」的十一个一级导航逐页列出展示的数据、可执行的操作、实时性要求与对应接口；"状态"一列为"已有"的接口在 T14a 至 T19 交付，"T19b"是本任务补齐的。新页面需要的数据不在表中时，先补接口再写页面，不在前端临时拼凑。
 
 ## 约定
 
@@ -78,7 +78,7 @@
 
 | 区域 | 展示的数据 | 操作 | 实时性 | 接口 | 状态 |
 |---|---|---|---|---|---|
-| 技能 | 技能、版本、frontmatter | 上传、发布新版本、删除 | 按需 | `GET/POST/DELETE P:/skills[/{id}]`、`GET/POST P:/skills/{id}/versions` | 已有 |
+| 技能 | 技能、版本、frontmatter、被哪些已发布的智能体版本引用（`references`） | 上传（浏览器端先解析并预览）、上传新版本、删除（被引用时直接列出引用方） | 按需 | `GET/POST/DELETE P:/skills[/{id}]`、`GET/POST P:/skills/{id}/versions` | 已有；引用方 T23 |
 | MCP 服务 | 端点、工具清单与副作用、连接状态（最近一次探测的结果、时间、错误） | 登记、修改、删除、重新探测 | 按需 | `GET/POST/PUT/DELETE P:/mcp-servers[/{id}]`、`POST P:/mcp-servers/{id}:probe`；连接状态是 `last_check`（`ok` 或 `error`，带说明与时间） | 已有；连接状态 T19b |
 | 自定义工具 | 声明方式、命名规则与保留名的说明 | — | — | 自定义工具由业务系统在创建会话时声明（`POST /v1/sessions` 的 `custom_tools`），平台不做项目级登记；具体会话声明的工具在会话详情查看（`GET /v1/sessions/{id}` 的 `custom_tools`） | 已有 |
 
@@ -95,8 +95,8 @@
 
 | 区域 | 展示的数据 | 操作 | 实时性 | 接口 | 状态 |
 |---|---|---|---|---|---|
-| 供应商账号 | 名称、类型、端点、凭据、限流、最近一次连通性测试（`last_check`：`ok`、`auth_failed`、`unreachable`、`error`） | 新建、修改、删除、测试连通性 | 按需 | `GET/POST/PUT/DELETE T:/provider-accounts[/{id}]`、`POST T:/provider-accounts/{id}:test` | 已有；测试 T19b |
-| 模型目录 | 模型、种类、上下文窗口、价格表 | 新建、修改、删除 | 按需 | `GET/POST/PUT/DELETE T:/models[/{id}]` | 已有 |
+| 供应商账号 | 名称、类型、端点、凭据、限流、最近一次连通性测试（`last_check`：`ok`、`auth_failed`、`unreachable`、`error`） | 新建（凭据可以就地写入）、修改、删除、测试连通性（列一次模型清单，不产生用量） | 按需 | `GET/POST/PUT/DELETE T:/provider-accounts[/{id}]`、`POST T:/provider-accounts/{id}:test`；凭据的选择与就地写入见「11 设置·凭据」 | 已有；测试 T19b |
+| 模型目录 | 模型、种类、上下文窗口、默认最大输出、能力、价格表、备用模型 | 新建、修改、删除；测试（一次最小请求，显示延迟、回复与用量，费用计入当前项目，需要 `models:invoke`；重排模型没有直通接口，不提供测试） | 按需 | `GET/POST/PUT/DELETE T:/models[/{id}]`；测试 `POST /v1/chat/completions`、`POST /v1/embeddings`（R，ADR-0056） | 已有 |
 | 价格表 | 价格表与各版本的单价 | 新建、发布新版本 | 按需 | `GET/POST T:/price-books[/{id}]`、`GET/POST T:/price-books/{id}/versions` | 已有 |
 
 ## 9 待处理
@@ -127,7 +127,7 @@
 | API Key | Key 的前缀、作用域、限流、状态、过期时间 | 创建（明文只显示一次）、改名、吊销 | 按需 | `GET/POST P:/api-keys`、`GET/PATCH P:/api-keys/{id}`、`POST P:/api-keys/{id}:revoke` | 已有；"最后使用时间"没有接口（R2 登记 D86） |
 | Webhook | 地址、订阅的事件、状态 | 新建（签名密钥只显示一次）、修改、删除、轮换签名密钥 | 按需 | `GET/POST/PUT/DELETE P:/webhooks[/{id}]`、`POST P:/webhooks/{id}:rotate-secret` | 已有；轮换 T19b |
 | 投递记录 | 每次投递的事件、状态、尝试次数、响应码 | 按 Webhook、会话、状态、时间范围筛选；重投 | 按需 | `GET /v1/webhook-deliveries?created_after=&created_before=`、`GET /v1/webhook-deliveries/{id}`、`POST …:redeliver`（R） | 已有；时间范围 T19b |
-| 凭据 | 名称、版本、最后使用时间、引用方 | 写入、轮换、删除 | 按需 | `GET/POST T:/secrets`、`GET/DELETE T:/secrets/{id}`、`POST T:/secrets/{id}:rotate` | 已有 |
+| 凭据 | 名称、范围（租户级或某个项目）、版本、创建与最后使用时间、引用方 | 写入、轮换（明文只写不读，不进查询缓存与浏览器存储）、删除（被引用时直接列出引用方） | 按需 | `GET/POST T:/secrets`、`GET/DELETE T:/secrets/{id}`、`POST T:/secrets/{id}:rotate`（T23：设置页的"凭据"标签页） | 已有 |
 | 策略 | 租户与项目的权限规则 | 新增、删除 | 按需 | `GET/POST/DELETE T:/permission-rules`、`P:/permission-rules` | 已有 |
 | 租户设置 | 租户提示词、联网搜索后端 | 修改 | 按需 | `GET/PUT T:/settings` | 已有 |
 | 审计日志 | 操作、操作者、资源、时间、详情 | 按时间、操作、操作者、资源、项目、会话筛选 | 按需 | `GET T:/audit-logs` | 已有 |

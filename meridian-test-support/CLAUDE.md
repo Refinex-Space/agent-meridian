@@ -6,7 +6,7 @@
 
 - 夹具自测：`./mvnw -pl meridian-test-support -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false`
 - 脚本化模型服务自测（不需要 Docker）：`./mvnw -pl meridian-test-support -am test -Dtest=ScriptedOpenAiServerTest -Dsurefire.failIfNoSpecifiedTests=false`
-- 独立启动脚本化模型服务：`scripts/dev/scripted-model.sh [--port=18090] [--host=127.0.0.1] [--scripts=<目录>]`，默认端口 **18090**（与 `dev-config/providers/scripted.yaml` 一致），前台运行，Ctrl-C 停止。`dev` profile 的 runtime 用模型 `mdl_dev_scripted`、`mdl_dev_scripted_embedding`、`mdl_dev_scripted_rerank` 调用它。
+- 独立启动脚本化模型服务：`scripts/dev/scripted-model.sh [--port=18090] [--host=127.0.0.1] [--scripts=<目录>]`，默认端口 **18090**（与 `dev-config/providers/scripted.yaml` 一致），前台运行，Ctrl-C 停止。`dev` profile 的 runtime 用模型 `mdl_dev_scripted`、`mdl_dev_scripted_embedding`、`mdl_dev_scripted_rerank` 调用它。T23 起它还回应 `GET /v1/models`（`scripted`、`scripted-embedding`），供应商账号的连通性测试可以连它。
 
 ## 包地图
 

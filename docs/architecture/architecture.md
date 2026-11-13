@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.29 |
+| 版本 | v1.30 |
 | 日期 | 2026-11-13 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -1336,6 +1336,8 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 - SSE 客户端基于 `fetch` 流式读取实现，封装成可订阅的 Hook，复用"SSE 协议"一节的去重和续传逻辑。浏览器的 `EventSource` 不能携带 `Authorization` 头，不使用。
 - API 类型从 OpenAPI 生成，禁止手写。
 - 路由和权限守卫用 TanStack Router。一级导航都在 `/projects/$projectId/` 之下，每项一个路由模块；筛选条件放搜索参数，格式是 `key=value` 与重复键（ADR-0055）。
+- 凭据只写不读：输入框是密码框（`autocomplete="new-password"`，不让浏览器填入保存的登录密码），提交后清空；写入与轮换不经查询库的变更缓存，明文只出现在那一次请求体中（ADR-0056）。
+- 模型的"测试"经公开的直通接口（`/v1/chat/completions`、`/v1/embeddings`）发一次最小请求，与业务调用同样经过路由、限流、预算与计量，费用计入当前项目；供应商账号的连通性测试只列模型清单、不产生用量（ADR-0053、ADR-0056）。
 - 控制台同源调用公开 API 与管理 API，由入口按路径转发（见"容器视图"）；公开 API 的请求带 `Meridian-Project`。
 
 ## 测试策略
@@ -1519,6 +1521,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.19 | 2026-11-09 | T14b：服务 JWT 的换取（客户端凭据模式）、JWKS、密钥与轮换、按调用方限定内部接口；控制台用户经 `Meridian-Project` 调用公开 API 的作用域来源与限流；`PlatformContext` 增加控制台用户；出网代理的回调凭据；技术基线补 Nimbus；本地开发的 `auth` profile（ADR-0044） |
 | v1.18 | 2026-11-09 | Q2 已决：身份只认标准 OIDC，声明映射可配置，SAML、LDAP 经 Keycloak 转接，Keycloak 作为参考实现与可选组件（ADR-0043） |
 | v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
+| v1.30 | 2026-11-13 | T23：控制台的能力、模型与凭据页——凭据输入的约定、模型测试经直通接口；管理 API 的技能带引用方（ADR-0056） |
 | v1.29 | 2026-11-13 | T21：控制台工程基座——刷新页面后的静默登录与运行时配置 `/config.json`、`/projects/$projectId/` 的地址结构与搜索参数格式、外部路由补上 runtime 提供的 `/v1/session-stats`、`/v1/pending-actions`、`/v1/webhook-deliveries`（ADR-0055） |
 | v1.28 | 2026-11-13 | R2：M1 后端评审的修正——所有者邀请的邮箱、MCP 请求头的租户级凭据与审批人的"记住此决定"收紧授权，敏感写操作的幂等记录加密，公开 API 幂等主体加项目，outbox 瞬时错误不计次数，会话清理的等待与按会话推迟（`purge_after`，删除 `budget_limit`），用量结算重试，JSON 请求体上限 10 MB（ADR-0054） |
 | v1.27 | 2026-11-13 | T19b：控制台所需的后端接口——会话的 `agent_id` 与筛选、`GET /v1/session-stats` 与失败率小时汇总、项目级待处理动作与结论、作用域 `actions:respond`、工具确认的建议规则与 `remember_rule`、按邮箱邀请成员与首次登录绑定、`/admin/v1/me`、项目预算消耗、用量明细与导出、连通性测试与 `last_check`、Webhook 密钥轮换、知识库的修改与删除（ADR-0053） |
