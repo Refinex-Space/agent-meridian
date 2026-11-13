@@ -203,7 +203,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | 编号 | 任务 | 阶段 | 依赖 | effort | 规模 | 验证项 | 状态 | 完成提交 |
 |---|---|---|---|---|---|---|---|---|
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 已完成 | 2d99b8f |
-| T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 已完成 | 待填 |
+| T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 已完成 | 3967cc5 |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 未开始 | — |
 
 ### 轨道检查点
@@ -224,7 +224,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 - 决策：应用户要求，T20a 完成后即把 `console/T20` 合并回 `main`（原计划在 T20c 之后合并）；T20b、T20c 可在主工作区继续，进度仍写在本节
 - 遗留：同上一条；全量 `verify.sh` 在 2d99b8f 上通过，本次只改文档
 
-### 2026-11-13 T20b 已完成（主工作区 `main`，用户要求不建 worktree）
+### 2026-11-13 T20b 已完成（提交 3967cc5；主工作区 `main`，用户要求不建 worktree）
 - 交付：shadcn CLI 4.23.0 在会话临时目录生成并按令牌重塑的 17 个基元（输入框、文本域、标签、选择器、复选框、单选、开关、对话框、警示对话框、抽屉、下拉菜单、弹出层、表格、分隔线、面包屑、命令面板 cmdk、通知 Sonner），T20a 的 6 个基元补上故事；「自研组件」表中其余 18 个领域组件（StatusBadge 与统一状态映射、EventCard、ToolCallView、ThreadTree、InspectorPanel、TokenUsage、CopyableId、RelativeTime、EmptyState、ErrorState、PermissionGate、DangerConfirmDialog、PageHeader、FilterBar 与 URL 同步、DataTable 与虚拟滚动、KeyValueList、CodeBlock 与 Shiki、StreamIndicator）；三张空态插画；新令牌 `scrim` 与四种语法色、浮层退出与抽屉滑入的关键帧、`unavailable:` 变体；`InertOutside`；每个状态一个故事（pseudo-states 插件）与基元、领域组件总览；a11y 用例改为读 `index.json` 检查全部故事；`evidence-components.spec.ts`；会话列表夹具；依赖追加到 ADR-0021
 - 验收：A01–A05 全部 passing（a11y 亮暗各 217 个故事零违规、领域组件 95 个用例、全量 164 个用例、`verify.sh` 通过，截图在 `tmp/evidence/T20b/`）
 - 决策：没有新 ADR（只追加 ADR-0021 的版本表与三点说明：TanStack Table 9、shadcn 在临时目录生成、语法色走令牌）；开关做成 4px 圆角的拨动开关；复选框与单选的记号是控件自身的形状；PermissionGate 用 aria-disabled 保持可聚焦；模态浮层外加 inert；命令面板的空结果放在 listbox 之外；可滚动区域可聚焦（jsx-a11y 放行 role=region 带 tabIndex）；给人读的工具结果用正文字体；Vitest 固定东八区
