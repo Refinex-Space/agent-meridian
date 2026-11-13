@@ -215,7 +215,7 @@ T20b（主工作区 `main`，用户要求不建 worktree）：
 - [x] 三张空态插画（256 网格、16 线宽）
 - [x] 领域组件一：StatusBadge、CopyableId、RelativeTime、TokenUsage、StreamIndicator、KeyValueList、CodeBlock（故事与 Vitest）
 - [x] 领域组件二：EmptyState、ErrorState、PermissionGate、DangerConfirmDialog、PageHeader（故事与 Vitest）
-- [ ] 领域组件三：FilterBar（URL 同步交互测试）、DataTable（虚拟滚动交互测试）
+- [x] 领域组件三：FilterBar（URL 同步交互测试）、DataTable（虚拟滚动交互测试）
 - [ ] 领域组件四：EventCard、ToolCallView、ThreadTree、InspectorPanel（故事与 Vitest）
 - [ ] a11y：新故事全部加入 `e2e/a11y.spec.ts`，亮暗两套零违规（A01）
 - [ ] 截图：`tmp/evidence/T20b/` 亮暗两套（A04）
