@@ -10,6 +10,7 @@
   - SSE：事件流推送，断线按 `Last-Event-ID` 补齐。
   - 轮询 N 秒：页面可见时按间隔刷新（TanStack Query 的 `refetchInterval`），隐藏时停止。
   - 按需：打开页面与操作之后刷新。
+- **knowledge 的控制台用户。** knowledge（MVC）没有进程内的项目权限，配置了 control-plane 地址时经 `project-access:resolve` 查询（`meridian-security` 的 `ConsoleAuthAutoConfiguration`，T22）；之前它的公开 API 不接受控制台用户。
 - **权限。** 管理 API 每个操作所需的操作类别由处理器的 `@RequiresPermission` 声明，逐角色的结果是 control-plane 的角色矩阵测试表 `src/test/resources/rbac/role-matrix.psv`；公开 API 的作用域写在规范的 `security` 中。页面用 `GET /admin/v1/me/access` 取当前用户在所选项目上的操作类别与作用域，决定操作按钮显示或禁用（`PermissionGate`），不在前端复刻角色矩阵。
 - **分页。** 列表一律游标分页 `?limit=&after=`，返回 `{data, has_more, next_cursor}`。
 
@@ -57,9 +58,11 @@
 
 | 区域 | 展示的数据 | 操作 | 实时性 | 接口 | 状态 |
 |---|---|---|---|---|---|
-| 智能体列表 | 名称、当前版本、更新时间 | 新建、删除（确认对话框写"该智能体的 N 个会话将无法继续"） | 按需 | `GET/POST P:/agents`、`DELETE P:/agents/{id}`；N 取 `GET /v1/session-stats?agent_id=`（R）的 `agents[].active_sessions` | 已有、T19b |
+| 智能体列表 | 名称、当前版本、更新时间 | 新建、删除（确认对话框写"不能再用它创建会话，使用中的 N 个会话继续使用已绑定的版本"：runtime 只对新会话检查智能体是否已删除，T22 核对） | 按需 | `GET/POST P:/agents`、`DELETE P:/agents/{id}`；N 取 `GET /v1/session-stats?agent_id=`（R）的 `agents[].active_sessions` | 已有、T19b |
 | 定义编辑 | 草稿规格（表单按 `agent-spec.schema.json` 校验） | 保存草稿、发布 | 按需 | `POST/GET/PUT/DELETE P:/agents/{id}/versions[/{v}]`、`POST …/versions/{v}:publish` | 已有 |
 | 版本与对比 | 版本列表、两版本差异 | 选择两个版本对比 | 按需 | `GET P:/agents/{id}/versions`、`GET …/versions:compare` | 已有 |
+| 使用中的会话 | 绑定该智能体的会话（状态、版本、终端用户、更新时间） | — | 按需 | `GET /v1/sessions?agent_id=`（R） | T19b |
+| 规格引用的资源 | 对话模型、技能、MCP 服务（连接状态）、知识库 | 在选择器中搜索并选择 | 按需 | `GET T:/models`（`MODEL_READ`）、`GET P:/skills`、`GET P:/mcp-servers`、`GET /v1/knowledge-bases`（K） | 已有；控制台用户调用 knowledge 的公开 API 在 T22 修复（之前一律 401） |
 | 子智能体拓扑 | 主智能体与子智能体的关系 | 点节点跳到对应定义 | 按需 | `GET P:/agents/{id}/versions/{v}` 的规格 `subagents` | 已有 |
 | 运行情况 | 使用中的会话数、运行中的会话数、时间窗内的失败率 | 跳到会话列表（按该智能体筛选） | 轮询 60 秒 | `GET /v1/session-stats?agent_id=`（R） | T19b |
 

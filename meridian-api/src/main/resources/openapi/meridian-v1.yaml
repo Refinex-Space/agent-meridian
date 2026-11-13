@@ -3057,7 +3057,7 @@ components:
           description: 智能体 ID（agt_…）。
           type: string
         active_sessions:
-          description: 使用中（未归档、未删除）的会话数：删除智能体后这些会话无法继续。
+          description: 使用中（未归档、未删除）的会话数：删除智能体后不能再用它创建会话，这些会话继续使用已绑定的版本。
           type: integer
           format: int64
           minimum: 0

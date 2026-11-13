@@ -1,16 +1,16 @@
 # console
 
-React 19 单页应用：管理与调试控制台。T20 做了设计系统、组件与原型；T21 做了工程基座：OIDC 登录、TanStack Router 路由与应用外壳、openapi-fetch 客户端、TanStack Query、SSE 续传、权限、主题与端到端测试，十一个一级导航目前是空态，页面由 T22 至 T25b 实现。完整规范见 `docs/engineering/frontend-design.md`，依赖与版本见 ADR-0021，基座的约定见 ADR-0055。
+React 19 单页应用：管理与调试控制台。T20 做了设计系统、组件与原型；T21 做了工程基座：OIDC 登录、TanStack Router 路由与应用外壳、openapi-fetch 客户端、TanStack Query、SSE 续传、权限、主题与端到端测试；T22 做了智能体与环境（列表、详情、编辑、版本对比、子智能体拓扑、修订历史），其余一级导航仍是空态，由 T23 至 T25b 实现。完整规范见 `docs/engineering/frontend-design.md`，依赖与版本见 ADR-0021，基座的约定见 ADR-0055。
 
 ## 命令
 
 在仓库根目录用 `pnpm -C console <脚本>`，或在 `console/` 内直接 `pnpm <脚本>`。pnpm 版本由 `packageManager` 锁定（10.34.9）。
 
 - 安装：`pnpm install --frozen-lockfile`
-- 开发：先起后端 `scripts/dev/console-e2e-env.sh up`（Compose 的 app 与 auth profile：control-plane、runtime、脚本化模型服务、Keycloak），再 `pnpm dev`，打开 `http://localhost:5173`（只能用 localhost:5173：Keycloak 只登记了它的回调地址），用 `dev-developer` / `meridian-dev` 登录；本机直接跑的服务也行（`run-control-plane.sh`、`run-runtime.sh --server.port=18080`），地址可用 `MERIDIAN_*_URL` 覆盖（`vite.config.ts` 的代理表）
+- 开发：先起后端 `scripts/dev/console-e2e-env.sh up`（Compose 的 app 与 auth profile：control-plane、runtime、knowledge、脚本化模型服务、Keycloak；runtime 的智能体配置与模型目录读 control-plane），再 `pnpm dev`，打开 `http://localhost:5173`（只能用 localhost:5173：Keycloak 只登记了它的回调地址），用 `dev-developer` / `meridian-dev` 登录；本机直接跑的服务也行（`run-control-plane.sh`、`run-runtime.sh --server.port=18080`），地址可用 `MERIDIAN_*_URL` 覆盖（`vite.config.ts` 的代理表）
 - lint：`pnpm lint` = ESLint（含 `eslint-rules/meridian.js`）+ `scripts/check-css.mjs` + Prettier 检查 + `gen:api --check`；类型检查 `pnpm typecheck`；单元测试 `pnpm test`，单个 `pnpm exec vitest run <路径>`
 - 构建：`pnpm build`（先 `gen:api`）；Storybook `pnpm storybook`（6006）、`pnpm build-storybook`；格式化 `pnpm format`
-- 端到端（控制台本身）：`pnpm e2e:app`（`playwright.app.config.ts`：构建后 `vite preview` 在 5173，全局准备建租户"T21 控制台验收"、两个项目与成员；要先起后端）。评审截图加 `EVIDENCE_DIR=../tmp/evidence/<任务>`
+- 端到端（控制台本身）：`pnpm e2e:app`（`playwright.app.config.ts`：构建后 `vite preview` 在 5173，已有 `pnpm dev` 时复用它；全局准备建租户"T21 控制台验收"、两个项目与成员、脚本化模型服务的模型、技能与知识库；`e2e/app/seed.ts` 经管理 API 建智能体；要先起后端）。评审截图加 `EVIDENCE_DIR=../tmp/evidence/<任务>`（智能体与环境：`evidence-agents.spec.ts`）
 - 端到端（Storybook 上）：`pnpm e2e`（截图基线、时间轴性能与动效、无障碍；评审截图 `evidence*.spec.ts` 只在设了 `EVIDENCE_DIR` 时运行）；首次先 `pnpm exec playwright install chromium`。截图基线 `pnpm e2e e2e/shell-baseline.spec.ts`；Linux 基线与 CI 一样在 Playwright 官方镜像中跑：`scripts/dev/console-playwright-linux.sh baseline [--update-snapshots]`
 - 改了 `meridian-api/…/meridian-v1.yaml` 或 `meridian-admin-v1.yaml` 后：`pnpm gen:api`（`redocly.yaml` 同时生成 `src/lib/api/v1.d.ts` 与 `admin.d.ts`），提交生成的文件
 - `scripts/dev/verify.sh` 运行 install、lint、typecheck、test、build-storybook；CI 的 `console` 作业另跑 build、截图基线与 `e2e:app`
@@ -18,7 +18,7 @@ React 19 单页应用：管理与调试控制台。T20 做了设计系统、组�
 ## 目录
 
 - `src/app/`：`main.tsx`（静默登录回调直接处理，其余按需加载 `bootstrap.tsx`：读 `/config.json`、登录、渲染）、`router.tsx`（路由树，`/projects/$projectId/<导航>`）、`query-client.ts`（Query 的统一配置）、`shell/`（`AppShell` 只负责呈现，`ShellLayout` 接入路由、身份、待处理计数与横幅；`nav.ts` 是一级导航）
-- `src/features/<领域>/`：一级导航的页面，`routes/` 放路由组件，`index.ts` 导出
+- `src/features/<领域>/`：一级导航的页面，`routes/` 放路由组件，`index.ts` 导出；`agents/model/`（规格的 Zod schema、跨字段规则、字段锚点 `fields.ts`、差异 `diff.ts`、工具与规则语法 `tools.ts`），`agents/components/editor/`（编辑页的状态 `use-agent-editor.ts`、分组、资源选择器、规则编辑器、Monaco）
 - `src/components/templates/`：四种页面模板 `ListPage`、`DetailPage`、`EditPage`（`EditSection`）、`Workbench`
 - `src/components/domain/<组件>/`：领域组件（`status-badge/labels.ts` 是唯一的状态文字映射，`data-region/` 是区域级加载，`error-state/notify-error.tsx` 是错误通知）；`src/components/ui/`：基元与 `glyphs.ts`
 - `src/lib/`：`api/`（`client.ts` 的 `adminApi()`、`v1Api(projectId)`、`unwrap`、`authorizedFetch`，`errors.ts` 的 `ApiError`，`connection.ts` 连接状态，生成类型与 `types.ts` 别名）、`auth/`（oidc-client-ts 的会话、`useAuth`）、`access/`（`meQuery`、`projectsQuery`、`accessQuery`、`useProject`、`usePermission`）、`sse/`（`runSessionStream`、`useSessionEvents`）、`search.ts`（搜索参数格式）、`theme.ts`、`tokens.ts`、`format.ts`
@@ -83,6 +83,12 @@ T22 至 T25b 的验收基准：页面成品与 Storybook「原型」组一致（
 - 用到 Link、搜索参数的组件要在路由中渲染：Vitest 用 `renderWithRouter`（异步），故事用 `withRouter`；路由首次渲染是异步的，故事的 play 用 `findBy…`
 - Playwright 认为 `aria-disabled` 的元素不可点击，验证"点了不生效"要 `click({ force: true })`
 - 截图基线固定页面时钟（夹具按"现在"生成相对时间与日期）；基线文件名带平台后缀，CI 只认 `-linux`
+- Radix 的选择器在关闭时也把内容渲染进文档片段：里面的 `InertOutside` 会一直挂载，它对其他浮层的 `data-aria-hidden` 也起作用（T22 修正为随标记撤销）
+- 对话框关闭时焦点陷阱还在，页面其余部分是 inert：要把焦点放到页面上的字段，用 `DialogContent` 的 `onCloseAutoFocus`（`preventDefault` 后再聚焦），不要在关闭前聚焦
+- 表单的错误统一经"锚点"（`features/agents/model/fields.ts`）：控件 id 是 `field-` 加路径（点号换成短横线），本地校验与服务端 `errors[].field` 映射到同一个控件；新增字段时给控件这个 id
+- Monaco 0.57 的 exports 只开放 `monaco-editor/<路径>`：核心 `editor/editor.api`、功能 `features/<名>/register`、worker `editor/editor.worker?worker`；深路径与 CSS 直接导入会被拒绝
+- 智能体与环境按路由懒加载（`app/router.tsx` 的 `lazy`）：外壳不要静态导入领域的 `index.ts`（模块顶层的 Zod 与 `lazy()` 让整个领域进首屏），需要时动态导入（命令面板的智能体）
+- 环境与智能体页的权限都是 `agent_read`、`agent_write`（ADR-0047）；删除智能体后使用中的会话继续用已绑定的版本，后果文字按这一点写
 
 ## 对外接口
 

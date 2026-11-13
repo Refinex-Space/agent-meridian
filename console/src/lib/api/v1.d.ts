@@ -1409,7 +1409,7 @@ export interface components {
             agent_id: string;
             /**
              * Format: int64
-             * @description 使用中（未归档、未删除）的会话数：删除智能体后这些会话无法继续。
+             * @description 使用中（未归档、未删除）的会话数：删除智能体后不能再用它创建会话，这些会话继续使用已绑定的版本。
              */
             active_sessions: number;
             /**
