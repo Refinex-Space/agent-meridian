@@ -65,9 +65,11 @@ describe('状态映射', () => {
       label: '已批准',
     });
     expect(actionStatus('resolved', conclusion({ approved: false })).label).toBe('已拒绝');
-    expect(actionStatus('resolved', conclusion({ approved: false, origin: 'timeout' })).label).toBe(
-      '超时视为拒绝',
-    );
+    // 超时：runtime 写 status=expired 并带 origin=timeout 的结论，按结论显示。
+    expect(actionStatus('expired', conclusion({ approved: false, origin: 'timeout' }))).toEqual({
+      kind: 'failure',
+      label: '超时视为拒绝',
+    });
     expect(actionStatus('resolved', conclusion({ approved: false, origin: 'unattended' })).label).toBe(
       '无人值守自动拒绝',
     );

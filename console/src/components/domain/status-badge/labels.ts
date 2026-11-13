@@ -65,13 +65,16 @@ export function toolStatus(status: ToolResultState | 'awaiting'): StatusMeaning 
   }
 }
 
-/** 待处理动作：等待回应、已失效（超时或随会话终止作废），或按结论写明回应结果。 */
+/**
+ * 待处理动作：等待回应、已失效（随会话终止作废，没有结论），或按结论写明结果。超时的动作状态是 `expired` 但带有
+ * `origin=timeout` 的结论（runtime 的 PendingActionRepository.conclude），按结论显示"超时视为拒绝"等。
+ */
 export function actionStatus(
   status: PendingActionStatus,
   conclusion: Schemas['PendingActionConclusion'] | null = null,
 ): StatusMeaning {
   if (status === 'pending') return { kind: 'requires_action', label: '等待回应' };
-  if (status === 'expired' || conclusion === null) return { kind: 'terminated', label: '已失效' };
+  if (conclusion === null) return { kind: 'terminated', label: '已失效' };
   if (conclusion.approved === true) return { kind: 'success', label: '已批准' };
   if (conclusion.approved === false) {
     const label =
