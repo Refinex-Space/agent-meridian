@@ -86,7 +86,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 已完成 | 51dc16a |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 已完成 | c87dc78 |
 | T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 已完成 | 695b7e3 |
-| R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 未开始 | — |
+| R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 进行中 | — |
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 见控制台设计轨道 | — |
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 见控制台设计轨道 | — |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
@@ -175,7 +175,17 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+R2 M1 后端评审（开工基线：`verify.sh` 在 runtime 的 `EventStreamIT` 失败一例，即登记事项 D66 的 BlockHound 误判，先修 D66 再从 runtime 续跑）：
+
+- [x] D66：BlockHound 放行 `UlidFactory.create`，基线重跑 `verify.sh` 通过
+- [ ] A01 完整性核对：资源表与一期能力清单逐项的实现位置，缺失项补齐或登记（`docs/plan/R2-后端评审.md`）
+- [ ] A02 三份规范与实现一致，契约测试覆盖全部端点（管理 API 经角色矩阵；内部接口与 control-plane 的公开操作补覆盖断言）
+- [ ] A03 对照表 `console-api-map.md` 与实现一致，新缺口登记
+- [ ] A04 四个维度的独立审查与逐条处理（租户隔离与授权、凭据与审计、API 契约与错误处理、并发与数据一致性）
+- [ ] 登记事项中分给 R2 的条目逐条给出结论（D48、D49、D50、D53、D54、D65、D67、D69、D73、D74、D78、D80、D81、D82、D83、D84）
+- [ ] A05 `e2e/backend/`：M1 验收场景 1–8 的后端部分跑通（脚本化模型；`--live` 跑需要真实模型的步骤）
+- [ ] A06 `verify.sh`、`-Plive`、`-Pkind` 全部通过
+- [ ] CLAUDE.md 与文档检查；阶段表"M1 后端"标为完成并写明控制台可依赖的接口清单位置
 
 ## 控制台设计轨道
 

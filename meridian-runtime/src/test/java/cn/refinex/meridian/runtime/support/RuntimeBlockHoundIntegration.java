@@ -6,7 +6,7 @@ import reactor.blockhound.integration.BlockHoundIntegration;
 /**
  * runtime 测试中 BlockHound 的放行规则，经 ServiceLoader 注册，{@code blockhound-junit-platform} 自动安装时加载。
  *
- * <p>放行四处，JDBC、日志、睡眠等真实的阻塞调用仍被拦截：
+ * <p>放行五处，JDBC、日志、睡眠等真实的阻塞调用仍被拦截：
  * <ul>
  *   <li>{@code SecureRandom#nextBytes}。{@code NativePRNG} 每隔约 100 毫秒从 {@code /dev/urandom} 补充缓冲，BlockHound 把这次
  *       {@code FileInputStream} 读取判为阻塞；而 {@code /dev/urandom} 从不阻塞，读取是微秒级的系统调用。生成 ULID（例如
@@ -20,6 +20,10 @@ import reactor.blockhound.integration.BlockHoundIntegration;
  *       把它的续体提交给调度器 {@code ForkJoinPool}；提交在竞争时由 {@code ForkJoinPool.spinLockRunState} 短暂
  *       {@code parkNanos}。BlockHound 若在这里抛错，虚拟线程的状态已置为 {@code UNPARKED} 却没有被提交，之后再也不会运行，
  *       超时唤醒也不再生效（T17a 的 Webhook 投递在两个请求几乎同时返回时遇到，{@code block(timeout)} 永久挂起）。
+ *   <li>ulid-creator 的 {@code UlidFactory#create}：单调 ULID 的工厂用一把 {@code ReentrantLock} 保护"上一个 ULID"，临界区只有
+ *       几条算术指令；请求 ID 过滤器在 Netty 事件循环上并发生成 ID 时偶尔短暂 park。BlockHound 在这里抛错会让请求 500，并可能
+ *       破坏锁的等待队列（同 Lettuce 一条）；登记事项 D66，T16 到 T19b 的全量检查中 {@code SubagentSessionIT}、{@code EventStreamIT}
+ *       多次因此偶发失败。
  * </ul>
  */
 public final class RuntimeBlockHoundIntegration implements BlockHoundIntegration {
@@ -32,5 +36,6 @@ public final class RuntimeBlockHoundIntegration implements BlockHoundIntegration
         builder.allowBlockingCallsInside(
                 "org.hibernate.validator.resourceloading.PlatformResourceBundleLocator", "loadBundle");
         builder.allowBlockingCallsInside("java.lang.VirtualThread", "submitRunContinuation");
+        builder.allowBlockingCallsInside("com.github.f4b6a3.ulid.UlidFactory", "create");
     }
 }
