@@ -179,13 +179,13 @@ T21 控制台工程基座（开工 2026-11-13）：
 
 - [x] 1 开工：基线 `verify.sh`（通过）；T20c 原型的参照截图（`tmp/evidence/T21/t20c/`，78 张）
 - [x] 2 依赖与类型生成：TanStack Router 与 Query、openapi-fetch、oidc-client-ts（追加 ADR-0021）；管理 API 类型生成并接入构建（A03）
-- [ ] 3 API 客户端与错误：openapi-fetch 客户端注入 `Authorization` 与 `Meridian-Project`，problem+json 映射为 `ErrorState` 或通知，`request_id` 可复制（A04）
-- [ ] 4 登录：OIDC 授权码加 PKCE、令牌只在内存、静默续期、未登录跳转、退出（A01）
-- [ ] 5 路由与外壳：TanStack Router、十一个一级导航的路由模块（空态）、可折叠导航、项目切换、面包屑、⌘K、用户菜单、筛选放 URL 搜索参数（A02）
-- [ ] 6 数据加载模式：TanStack Query 的统一配置、区域级 Suspense 与骨架（150ms 延迟、300ms 最短）
+- [x] 3 API 客户端与错误：openapi-fetch 客户端注入 `Authorization` 与 `Meridian-Project`，problem+json 映射为 `ErrorState` 或通知，`request_id` 可复制（A04）
+- [x] 4 登录：OIDC 授权码加 PKCE、令牌只在内存、静默续期、未登录跳转、退出（A01）
+- [x] 5 路由与外壳：TanStack Router、十一个一级导航的路由模块（空态）、可折叠导航、项目切换、面包屑、⌘K、用户菜单、筛选放 URL 搜索参数（A02）
+- [x] 6 数据加载模式：TanStack Query 的统一配置、区域级 Suspense 与骨架（150ms 延迟、300ms 最短）
 - [x] 7 SSE 客户端：去重、乱序、跳号、断线续传，Hook 与 `StreamIndicator`（A05）
-- [ ] 8 权限：`/admin/v1/me/access` 与 `PermissionGate`（A06）
-- [ ] 9 主题（亮、暗、跟随系统）与全局横幅（断开、预算告警）
+- [x] 8 权限：`/admin/v1/me/access` 与 `PermissionGate`（A06）
+- [x] 9 主题（亮、暗、跟随系统）与全局横幅（断开、预算告警）
 - [ ] 10 Playwright：登录、导航、主题、权限用例；外壳与四种模板的截图基线并与 T20c 对照（A01、A02、A06、A07）
 - [ ] 11 CI：控制台的 lint、typecheck、test、build、Storybook、Playwright（compose `app` 与 `auth`）（A08）
 - [ ] 12 收尾：`verify.sh`（A09）、文档与 `console/CLAUDE.md`、验收记录、会话日志

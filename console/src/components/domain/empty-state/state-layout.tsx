@@ -46,7 +46,7 @@ export function StateLayout({
     >
       {figure}
       <div className="flex max-w-120 flex-col items-center gap-2">
-        <p className="text-16 leading-heading font-medium text-ink">{title}</p>
+        <p className="text-16 leading-heading font-medium text-balance text-ink">{title}</p>
         {children && <div className="flex flex-col items-center gap-1 text-13 text-ink-2">{children}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center justify-center gap-2">{actions}</div>}

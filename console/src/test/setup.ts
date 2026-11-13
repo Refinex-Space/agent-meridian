@@ -28,3 +28,17 @@ if (typeof window.ResizeObserver === 'undefined') {
     disconnect(): void {}
   };
 }
+
+// jsdom 没有指针捕获（Sonner 的通知在按下时捕获指针，用于滑动关闭）。
+if (!('setPointerCapture' in Element.prototype)) {
+  Object.assign(Element.prototype, {
+    setPointerCapture: () => undefined,
+    releasePointerCapture: () => undefined,
+    hasPointerCapture: () => false,
+  });
+}
+
+// jsdom 没有 scrollIntoView（cmdk 把高亮的选项滚进视野）。
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => undefined;
+}
