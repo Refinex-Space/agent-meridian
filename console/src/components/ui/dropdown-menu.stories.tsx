@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { userEvent } from 'storybook/test';
 
 import { storyFrame } from '@/test/stories';
 
@@ -57,6 +58,15 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = { name: '默认', render: () => <RowMenu /> };
+
+export const Focus: Story = {
+  name: '聚焦',
+  render: () => <RowMenu />,
+  // 菜单打开后焦点在菜单里，方向键高亮第一项（菜单项的高亮就是它的焦点状态）。
+  play: async () => {
+    await userEvent.keyboard('{ArrowDown}');
+  },
+};
 
 export const Disabled: Story = { name: '禁用', render: () => <RowMenu disabled /> };
 

@@ -18,7 +18,7 @@ import { Icon } from './icon';
 import { Input } from './input';
 import { Label } from './label';
 import { RadioGroup, RadioGroupItem } from './radio-group';
-import { Select, SelectTrigger, SelectValue } from './select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 import { Separator } from './separator';
 import { Skeleton } from './skeleton';
 import { Switch } from './switch';
@@ -75,6 +75,10 @@ function Overview() {
               <SelectTrigger id="ov-model">
                 <SelectValue placeholder="选择模型" />
               </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="qwen-plus">qwen-plus</SelectItem>
+                <SelectItem value="qwen-max">qwen-max</SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1">

@@ -63,6 +63,9 @@ React 19 单页应用：管理与调试控制台。T20 阶段有工程、设计�
 - Vitest 固定 `TZ=Asia/Shanghai`（`vite.config.ts`），时间格式的断言按东八区写
 - jsx-a11y 不允许在 `ul`/`li` 上写 `tree`、`treeitem` 这类交互角色，用 `div`
 - 故事里的伪类强制要给选择器：全局 `:focus-visible` 规则对任何元素都画轮廓，强制到所有元素会让外框也出现焦点环
+- Radix 的选择器与模态菜单打开时只给外部加 aria-hidden，axe 判 aria-hidden-focus；`ui/inert-outside.tsx` 放在浮层内容里补上 inert。新写模态浮层（非 Dialog）照此处理
+- 命令面板的空结果用 `CommandList` 的 `empty`，不要把空态放进 listbox；listbox 里只能有选项与分组
+- 可滚动区域里没有可聚焦元素时要能用键盘聚焦：`ScrollArea` 给 `label`，`DialogBody`、`SheetBody` 已是 `role="region"` 加 `tabIndex={0}`
 
 ## 对外接口
 
