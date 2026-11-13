@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { SESSION_STATUS_LABEL, StatusGlyph, type StatusKind } from '@/components/domain/session-timeline';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckIcon, CopyIcon, InfoIcon } from '@/components/ui/glyphs';
+import { CheckIcon, CopyIcon } from '@/components/ui/glyphs';
 import { Icon } from '@/components/ui/icon';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Schemas, Session, SessionEvent, SessionStatus } from '@/lib/api/types';
@@ -112,18 +112,6 @@ export function SessionHeader({ session, agent, status, stream, events }: Sessio
         <Button size="sm" disabled={status === 'terminated'}>
           归档
         </Button>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="归档的后果"
-              className="flex size-7 items-center justify-center rounded-control text-ink-2 hover:bg-surface-hover hover:text-ink"
-            >
-              <Icon glyph={InfoIcon} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>归档后会话不再接受消息，事件与工作区按保留策略保存</TooltipContent>
-        </Tooltip>
       </div>
     </div>
   );
