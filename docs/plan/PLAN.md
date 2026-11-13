@@ -47,7 +47,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | 0 工程基座 | 脚手架、质量门禁、通用基础库、本地基础设施 | T01–T02 | — | 已完成 |
 | 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 已决（ADR-0043）；Q3 已决、D52 已落地（T15a，ADR-0045、ADR-0046）；T28 落实 D44–D46 并由 T29 复测 P7；P8 已由 T19 定稿（`docs/poc/M0-总结.md`） |
 | 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 进行中 |
-| 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 进行中 |
+| 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 已完成：M1 后端完整，进入控制台阶段。控制台可依赖的接口清单是 `docs/engineering/console-api-map.md`；评审结论与登记事项 D86–D94 见 `docs/plan/R2-后端评审.md`（D86 API Key 最后使用时间需要你决定是否插入补充任务） |
 | 4 M1 控制台 | 设计方向与组件、原型（并行轨道）、工程基座、五组页面 | T20a–T25b | R3 | 未开始 |
 | 5 M1 交付 | SDK 与接入文档、可观测性、部署、端到端验收 | T26–T29 | R4 | 未开始 |
 | 6 M2 扩展能力 | AgentScope 2.1 评估、长期记忆、后台子智能体与团队、分叉与回退、智能问数、Web 终端、A2A 与 AG-UI、安全加固 | T30–T37 | R5 | 未开始 |
@@ -86,7 +86,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 已完成 | 51dc16a |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 已完成 | c87dc78 |
 | T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 已完成 | 695b7e3 |
-| R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 进行中 | — |
+| R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 已完成 | a6a2c04 |
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 见控制台设计轨道 | — |
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 见控制台设计轨道 | — |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
@@ -175,17 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-R2 M1 后端评审（开工基线：`verify.sh` 在 runtime 的 `EventStreamIT` 失败一例，即登记事项 D66 的 BlockHound 误判，先修 D66 再从 runtime 续跑）：
-
-- [x] D66：BlockHound 放行 `UlidFactory.create`，基线重跑 `verify.sh` 通过
-- [x] A01 完整性核对：资源表与一期能力清单逐项的实现位置，缺失项补齐或登记（`docs/plan/R2-后端评审.md`）
-- [x] A02 三份规范与实现一致，契约测试覆盖全部端点（管理 API 经角色矩阵；内部接口与 control-plane 的公开操作补覆盖断言）
-- [x] A03 对照表 `console-api-map.md` 与实现一致，新缺口登记
-- [x] A04 四个维度的独立审查与逐条处理（租户隔离与授权、凭据与审计、API 契约与错误处理、并发与数据一致性）
-- [x] 登记事项中分给 R2 的条目逐条给出结论（D48、D49、D50、D53、D54、D65、D67、D69、D73、D74、D78、D80、D81、D82、D83、D84）
-- [x] A05 `e2e/backend/`：M1 验收场景 1–8 的后端部分跑通（脚本化模型；`--live` 跑需要真实模型的步骤）
-- [ ] A06 `verify.sh`、`-Plive`、`-Pkind` 全部通过
-- [ ] CLAUDE.md 与文档检查；阶段表"M1 后端"标为完成并写明控制台可依赖的接口清单位置
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -520,6 +510,14 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 收尾时修复：测试类自己的开发期 Key 与新增的审批 Key 下标冲突（`ApiTestKeys.FIRST_FREE_KEY_INDEX`）；`MeApiController` 依赖 `infra.system` 的记录（移到 `member.domain`，ArchUnit 规则 5）
 - 顺带修复：MVC 服务的枚举查询参数按 Java 常量名转换（`level=project`、`kind=model_tokens` 会 400）
 - 遗留：D83（删除知识库不检查引用，R2）、D84（Webhook 密钥轮换没有过渡期，T26）、D85（之前的会话没有 `agent_id`，T28）；D74 文件删除改给 R2
+
+### 2026-11-13 R2 已完成（提交 a6a2c04）
+
+- 交付：评审报告 `docs/plan/R2-后端评审.md`（资源表与一期能力清单的实现位置、契约覆盖、对照表核对、四个维度 72 条发现的逐条结论、分给 R2 的登记事项的结论）；契约覆盖 `meridian-test-support` 的 `contract.ContractCoverage` 与三个服务的 `ContractCoverageIT`（公开 40、管理 107、内部 21 个操作）；验收预演 `e2e/backend/`（`env.sh`、`m1_backend.py`、场景脚本）；修复：所有者邀请改邮箱需要 `OWNER_ROLE_MANAGE`、MCP 引用租户级凭据需要 `SECRET_WRITE`、敏感写操作的幂等记录加密与凭据值 HMAC 指纹、outbox 瞬时错误不计次数（`TransientFailures`）、审批人不能记到项目策略、公开 API 幂等主体加项目、bash 异常也写审计、会话清理的等待与按会话推迟（rt `V0013`，删除 `budget_limit`）、用量记录重试与照常结算、Webhook 截止时间、外部游标 400、探测说明只给分类、`/me/access` 校验项目、JSON 请求体 10 MB、上传超限 `file.too_large`、首次带自定义工具创建会话的 500、脚本化模型服务运行中加载新脚本；ADR-0054，架构设计 v1.28
+- 验收：A01–A06 全部 passing（`verify.sh` 收尾通过；`-Plive` 6 个 LiveIT、`-Pkind` 5 个 KindIT 通过；`e2e/backend` 八个场景与 `--live` 三个场景通过）
+- 决策：I-02、I-08、I-11、A-11、A-17、A-20、A-23、A-25、A-26、C-12、C-13 不同意（理由见报告）；D65、D73 维持原决定；D54 Q-M3 维持现有分层约定；`-Plive` 不运行两个会重写录制的检索评测类
+- 开工基线：`EventStreamIT` 失败一例，即 D66（BlockHound 把单调 ULID 工厂的锁判为阻塞），修复后重跑通过
+- 遗留：D86（API Key 最后使用时间，需要你决定是否插入补充任务或并入 T25b）、D87–D94（文件删除、知识库用量归属、MCP 无状态传输、知识库删除的引用检查、API 契约收尾 T26、安全加固 T37、部署 T28、作业健壮性 T27/T28/T29）
 
 ## 计划变更记录
 

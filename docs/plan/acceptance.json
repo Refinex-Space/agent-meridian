@@ -1532,43 +1532,43 @@
       "id": "R2-A01",
       "task": "R2",
       "description": "资源表与一期能力清单逐项有实现位置，缺失项已补齐或登记。验证：报告中的对照表。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/plan/R2-后端评审.md 第 1 节：资源表 13 行（一期 12 行有实现与契约测试，分叉与回退为二期 T33）与一期能力清单 13 项逐项给出实现位置；缺失项 API Key 最后使用时间登记 D86，其余缺口登记 D87–D94。"
     },
     {
       "id": "R2-A02",
       "task": "R2",
       "description": "三份 OpenAPI 规范与实现一致，契约测试覆盖全部端点。验证：测试报告。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh 收尾通过（BUILD SUCCESS，Java 测试 2362 个）：runtime、control-plane、knowledge 各自最后运行的 ContractCoverageIT 通过，按真实路径核对公开 API 40 个（runtime 26、control-plane 3、knowledge 11）、管理 API 107 个、内部接口 21 个（runtime 4、control-plane 15、knowledge 2）操作都经过规范校验；ContractCoverageTest 覆盖模板匹配。"
     },
     {
       "id": "R2-A03",
       "task": "R2",
       "description": "T19b 的页面到接口对照表与实现一致；新发现的缺口已登记。验证：对照表与登记事项。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/engineering/console-api-map.md 逐行核对：接口、查询参数与返回字段与规范、实现一致；两处不存在的字段已修正（API Key 最后使用时间登记 D86，文档页数改为写入进度），见 docs/plan/R2-后端评审.md 第 3 节。"
     },
     {
       "id": "R2-A04",
       "task": "R2",
       "description": "四个维度的审查完成，每条发现都有处理结论。验证：发现清单。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "四个只读审查子代理并行完成，72 条发现逐条核实并给出结论（已修复 19、部分修复 7、不同意 12、登记 34），发现清单与证据见 docs/plan/R2-后端评审.md 第 4 节；修正约定 ADR-0054，回归测试如 SensitiveIdempotencyIT、OutboxIT、MemberInvitationIT、AgentResourcesIT、ConsoleQueriesIT、SessionPurgeIT、WebhookDeliveryIT、UsageSettlementTest、AuditLogIT、ConnectivityIT、BashToolScenarioTest、SessionApiIT。"
     },
     {
       "id": "R2-A05",
       "task": "R2",
       "description": "`e2e/backend/` 中 M1 验收场景的后端部分全部跑通。验证：脚本输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "e2e/backend/env.sh up 后 python3 e2e/backend/m1_backend.py：场景 1–8 全部通过（\"全部通过\"；场景 6 另一节点在强杀后 27.8 秒接管、SSE 序号 1..11 连续不重复；场景 7 账本 713 token 与 Redis 四级计数相等；场景 8 安静租户排队 0.0 秒）；--live（DashScope）场景 1、2、3 全部通过。预演发现并修复首次带 custom_tools 创建会话的 500（ReservedToolNamesContextTest）。"
     },
     {
       "id": "R2-A06",
       "task": "R2",
       "description": "`scripts/dev/verify.sh`、`-Plive`、`-Pkind` 全部通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh：开工基线 EventStreamIT 失败一例（D66），放行 UlidFactory.create 后重跑通过，收尾 EXIT=0；./mvnw -Plive verify -Dit.test='*LiveIT,!RetrievalEval*LiveIT'：ModelLiveIT、ModelEndpointsLiveIT、ControlPlaneCatalogLiveIT、AgentConfigLiveIT、KnowledgeQaLiveIT、IngestionLiveIT 全部通过、无跳过（两个检索评测录制类会重写录制，按 retrieval-evaluation.md 只在语料变化时单独运行，未运行）；./mvnw -Pkind -pl meridian-engine-agentscope-test,meridian-runtime -am verify：5 个 KindIT 共 15 个用例通过。"
     },
     {
       "id": "T20a-A01",
