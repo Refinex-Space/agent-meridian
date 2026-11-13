@@ -1749,15 +1749,15 @@
       "id": "T21-A08",
       "task": "T21",
       "description": "CI 中控制台的全部检查通过。验证：CI 配置与本地等效命令的输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "CI 配置 .github/workflows/ci.yml：verify 作业装 Node 24 并启用 pnpm（verify.sh 跑控制台的 install、lint、typecheck、test、build-storybook）；新增 console 作业：pnpm -C console build、scripts/dev/console-playwright-linux.sh baseline（Playwright 官方镜像 v1.64.1-noble 中的截图基线）、scripts/dev/console-e2e-env.sh up（Jib 构建镜像，Compose 的 app 与 auth profile 起 control-plane、runtime、脚本化模型服务、Keycloak）、scripts/dev/console-playwright-linux.sh app（镜像中跑 pnpm e2e:app）。本机等效命令在最终代码上的输出：verify.sh 退出码 0（控制台 lint 含 gen:api --check 通过、typecheck 通过、Vitest 38 个文件 225 个用例通过、Storybook build completed successfully）；pnpm -C console build 通过（首屏 JS gzip 19.16 KB + 189.92 KB）；console-playwright-linux.sh baseline 24 passed；console-e2e-env.sh up --no-build 后 console-playwright-linux.sh app 12 passed、4 skipped（只在设了 EVIDENCE_DIR 时运行的截图）。另：Storybook 全部故事 a11y 亮暗各 227 个零违规（tmp/evidence/T21/a11y/）。CI 本身尚未在 GitHub 上运行，verify 作业缺 uv 登记为 D96"
     },
     {
       "id": "T21-A09",
       "task": "T21",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh 退出码 0（收尾，在 266fcd2 上运行；之后只改了 PLAN.md 与 acceptance.json）：Maven spotless、编译、单元与集成测试、架构测试、enforcer、覆盖率 BUILD SUCCESS，POM 版本检查通过；sandbox-runtime、doc-parser 的 ruff、mypy、pytest 通过；console 的 install、lint、typecheck、test（38 个文件 225 个用例）、build-storybook 通过。开工基线同样通过（1c7b2fe 之前的 e9e437c）"
     },
     {
       "id": "T22-A01",

@@ -90,7 +90,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 见控制台设计轨道 | — |
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 见控制台设计轨道 | — |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
-| T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 进行中 | — |
+| T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 已完成 | — |
 | T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 未开始 | — |
 | T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 未开始 | — |
 | T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 未开始 | — |
@@ -175,20 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T21 控制台工程基座（开工 2026-11-13）：
-
-- [x] 1 开工：基线 `verify.sh`（通过）；T20c 原型的参照截图（`tmp/evidence/T21/t20c/`，78 张）
-- [x] 2 依赖与类型生成：TanStack Router 与 Query、openapi-fetch、oidc-client-ts（追加 ADR-0021）；管理 API 类型生成并接入构建（A03）
-- [x] 3 API 客户端与错误：openapi-fetch 客户端注入 `Authorization` 与 `Meridian-Project`，problem+json 映射为 `ErrorState` 或通知，`request_id` 可复制（A04）
-- [x] 4 登录：OIDC 授权码加 PKCE、令牌只在内存、静默续期、未登录跳转、退出（A01）
-- [x] 5 路由与外壳：TanStack Router、十一个一级导航的路由模块（空态）、可折叠导航、项目切换、面包屑、⌘K、用户菜单、筛选放 URL 搜索参数（A02）
-- [x] 6 数据加载模式：TanStack Query 的统一配置、区域级 Suspense 与骨架（150ms 延迟、300ms 最短）
-- [x] 7 SSE 客户端：去重、乱序、跳号、断线续传，Hook 与 `StreamIndicator`（A05）
-- [x] 8 权限：`/admin/v1/me/access` 与 `PermissionGate`（A06）
-- [x] 9 主题（亮、暗、跟随系统）与全局横幅（断开、预算告警）
-- [x] 10 Playwright：登录、导航、主题、权限用例；外壳与四种模板的截图基线并与 T20c 对照（A01、A02、A06、A07）
-- [x] 11 CI：控制台的 lint、typecheck、test、build、Storybook、Playwright（compose `app` 与 `auth`）（A08）
-- [ ] 12 收尾：`verify.sh`（A09）、文档与 `console/CLAUDE.md`、验收记录、会话日志
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -350,6 +337,9 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D92 | R2 | 安全加固（审查 I-09、I-10、K-09 的决定人、K-13、K-14、K-15、K-19、A-15）：runtime 缺 `PlatformContext` 时配置归属校验失败关闭；控制台只读角色的知识库标签自报；`permission_rule.remembered` 带决定人；URL 查询串进审计与日志；凭据解析失败的审计与指标、内部 Webhook 订阅接口的审计；项目与租户删除后凭据、Webhook 的清理与解析拒绝；生成 DTO 的 `toString` 带敏感字段；上传在作用域检查之前落盘 | T37 |
 | D93 | R2 | 部署（审查 K-08、K-11、K-12、K-17、A-14、A-24）：每个服务一个数据库角色、只授权自己的 schema；本地主密钥文件按 0600 原子创建；Vault Transit 带租户上下文与令牌续期（与 D59 一起）；令牌端点只对集群内开放并限速、失败计数；网关统一容器层错误为 problem+json；knowledge 的 multipart 请求上限略大于文件上限 | T28 |
 | D94 | R2 | 作业与计量的健壮性（审查 K-10、K-16、K-18、C-02 的归档与保留、C-03、C-04 的告警、C-05、C-06、C-07、C-09、C-10、C-11、C-14、C-15）：保留清理的审计按会话同事务；单个 Webhook 解密失败不拖垮整个项目；消费者校验消息时间的范围；归档与保留作业的队头推迟；失败率汇总改为按"未计入"标记（不依赖水位延迟）；用量记录写失败的告警；对账读快照原子化；`budget_usage` 按键排序累加；Webhook 的认领期与批量；归档提交结果不确定时的文件删除；扇出前预取订阅；取消路径的 `session.usage`、上传与知识库删除竞争、邀请绑定竞争用并发测试确认 | T27（告警、审计、消费者、失败率）、T28（作业与配置）、T29（并发测试） |
+| D95 | T21 | 控制台的部署（ADR-0055）：静态资源服务对未知路径回退到 `index.html`（含 `/auth/callback`、`/auth/silent-callback`）；按环境提供 `/config.json`（身份提供方的地址与客户端，构建产物里的是开发默认值）；身份提供方的控制台客户端登记两个回调地址与退出后的回跳地址；入口按 ADR-0055 的路径表转发；控制台与身份提供方部署为同站，否则刷新页面后的 iframe 静默登录退化为整页跳转 | T28 |
+| D96 | T21 | CI 的 `verify` 作业没有安装 uv（`verify.sh` 的 sandbox-runtime、doc-parser 两步需要）；T21 补了 Node 24 与 pnpm，新增的 `console` 作业的每一步都在本机用等效命令跑过，但 CI 本身还没有在 GitHub 上运行过 | T28（发布流水线）或下一次改 CI 的任务 |
+| D97 | T21 | ⌘K 命令面板只有页面：智能体（跳到智能体详情）随 T22 加入，最近的会话与输入会话 ID 直接打开随 T24 加入（T20c 原型有这两组） | T22、T24 |
 
 ## 技术债
 
@@ -554,6 +544,13 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：I-02、I-08、I-11、A-11、A-17、A-20、A-23、A-25、A-26、C-12、C-13 不同意（理由见报告）；D65、D73 维持原决定；D54 Q-M3 维持现有分层约定；`-Plive` 不运行两个会重写录制的检索评测类
 - 开工基线：`EventStreamIT` 失败一例，即 D66（BlockHound 把单调 ULID 工厂的锁判为阻塞），修复后重跑通过
 - 遗留：D86（API Key 最后使用时间，需要你决定是否插入补充任务或并入 T25b）、D87–D94（文件删除、知识库用量归属、MCP 无状态传输、知识库删除的引用检查、API 契约收尾 T26、安全加固 T37、部署 T28、作业健壮性 T27/T28/T29）
+
+### 2026-11-13 T21 已完成（提交见看板）
+
+- 交付：console 的工程基座——OIDC 授权码加 PKCE（oidc-client-ts，令牌只在内存，refresh token 后台续期，刷新页面后 iframe 静默登录，运行时配置 `/config.json`）；TanStack Router 路由树（`/projects/$projectId/` 下十一个一级导航各一个路由模块，空态；搜索参数 `key=value` 与重复键；FilterBar 改用 `useSearchFilters`）；正式应用外壳（`app/shell`：导航收起记忆、项目切换、面包屑、⌘K、账号菜单与主题、与服务端断开与预算告警横幅）；openapi-fetch 客户端（`adminApi`、`v1Api(projectId)`、`unwrap`、`authorizedFetch`，管理 API 类型由 `redocly.yaml` 生成并接入构建）；TanStack Query 统一配置与变更失败的错误通知（`notifyError`，请求 ID 可复制）；`DataRegion`（区域级 Suspense，骨架 150ms 后出现、至少 300ms）；SSE 客户端的乱序暂存与跳号重连补发；`usePermission` 接 `/admin/v1/me/access`；页面模板移到 `components/templates`，原型外壳改为正式外壳的适配器；Playwright：`e2e/app/`（登录、导航、主题、权限，连接 Compose 后端与 Keycloak）与外壳、四种模板的截图基线（darwin 与 Linux 各 24 张）；`scripts/dev/console-e2e-env.sh`、`console-playwright-linux.sh`；CI 的 `console` 作业；ADR-0055，ADR-0021 追加四个依赖，架构设计 v1.29
+- 验收：A01–A09 全部 passing（`e2e:app` 本机 16 passed、Linux 镜像 12 passed；截图基线本机与镜像各 24 passed，换上正式外壳后与 T20c 截图逐像素比较外壳与模板 27/28 一致、差异只在命令面板内容；SSE 10 个用例含 300 事件的随机混合；a11y 亮暗各 227 个故事零违规；`verify.sh` 通过）
+- 决策：ADR-0055（刷新后用 iframe 静默登录而不把令牌写进存储；运行时配置；项目放在路径里；搜索参数格式；外部路由补上三个 runtime 接口；模板单独一层；截图基线按平台分开并在官方镜像中生成）；不用 TanStack Router 的文件路由；Zod 留给 T22；401 视为可重试（认证模块同时续期）；空态标题平衡换行
+- 遗留：D95（控制台的部署，T28）、D96（CI 的 verify 作业缺 uv，CI 尚未在 GitHub 上实跑）、D97（命令面板的智能体与最近会话，T22、T24）
 
 ## 计划变更记录
 
