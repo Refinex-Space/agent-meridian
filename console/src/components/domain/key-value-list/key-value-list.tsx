@@ -46,7 +46,7 @@ export function KeyValueList({
   labelWidth = 'regular',
   className,
 }: KeyValueListProps) {
-  const grid = cn('grid gap-x-12', columns === 2 && 'xl:grid-cols-2', className);
+  const grid = cn('grid content-start gap-x-12', columns === 2 && 'xl:grid-cols-2', className);
   const row = LABEL_COLUMN[labelWidth];
   if (loading) {
     return (
