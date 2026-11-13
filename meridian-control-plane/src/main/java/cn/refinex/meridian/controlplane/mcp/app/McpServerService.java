@@ -29,6 +29,8 @@ import cn.refinex.meridian.controlplane.secret.app.SecretService;
 import cn.refinex.meridian.controlplane.tenant.app.ConfigInvalidations;
 import cn.refinex.meridian.controlplane.web.Endpoints;
 import cn.refinex.meridian.controlplane.web.Scopes;
+import cn.refinex.meridian.security.rbac.AccessContext;
+import cn.refinex.meridian.security.rbac.Permission;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -112,14 +114,16 @@ public class McpServerService {
     /**
      * 登记：校验、探测并保存工具清单。
      *
-     * @param actor 操作者
+     * @param access 调用方的授权上下文：请求头引用租户级凭据时另需凭据管理权限（{@link #requireTenantSecretAccess}）
      * @param tenantId 租户 ID
      * @param projectId 项目 ID
      * @param draft 内容
      * @return 新的 MCP 服务
      */
-    public McpServer create(String actor, String tenantId, String projectId, Draft draft) {
+    public McpServer create(AccessContext access, String tenantId, String projectId, Draft draft) {
+        String actor = access.user().subject();
         projects.require(tenantId, projectId);
+        requireTenantSecretAccess(access, tenantId, draft);
         long begin = System.nanoTime();
         List<McpTool> tools = validateAndProbe(tenantId, projectId, draft);
         ConnectivityCheck check = succeeded(begin);
@@ -147,18 +151,22 @@ public class McpServerService {
     }
 
     /**
-     * 整体替换并重新探测。
+     * 整体替换并重新探测。地址或请求头有变化、且引用了租户级凭据时另需凭据管理权限。
      *
-     * @param actor 操作者
+     * @param access 调用方的授权上下文
      * @param tenantId 租户 ID
      * @param projectId 项目 ID
      * @param id MCP 服务 ID
      * @param draft 新内容
      * @return 修改后的 MCP 服务
      */
-    public McpServer update(String actor, String tenantId, String projectId, String id, Draft draft) {
+    public McpServer update(AccessContext access, String tenantId, String projectId, String id, Draft draft) {
+        String actor = access.user().subject();
         projects.require(tenantId, projectId);
-        PlatformContexts.call(Scopes.project(tenantId, projectId), () -> require(id, null));
+        McpServer existing = PlatformContexts.call(Scopes.project(tenantId, projectId), () -> require(id, null));
+        if (!existing.url().equals(draft.url()) || !existing.headerSecretIds().equals(draft.headerSecretIds())) {
+            requireTenantSecretAccess(access, tenantId, draft);
+        }
         long begin = System.nanoTime();
         List<McpTool> tools = validateAndProbe(tenantId, projectId, draft);
         ConnectivityCheck check = succeeded(begin);
@@ -288,6 +296,19 @@ public class McpServerService {
                     audit.record("mcp_server.deleted", actor, tenantId, projectId, "mcp_server", id, details(server));
                     invalidations.resourceChanged(ConfigInvalidations.MCP_SERVER, tenantId, id);
                 }));
+    }
+
+    /**
+     * 请求头引用租户级凭据时要求调用方有凭据管理权限（{@code SECRET_WRITE}，所有者与租户管理员）。探测与运行时都会把凭据明文发往
+     * 登记的地址，只有 {@code AGENT_WRITE} 的项目开发者若能任选租户级凭据并填自己的地址，就绕过了"凭据读不出明文"（R2 审查 K-01）。
+     * 项目开发者只能引用管理员授给本项目的项目级凭据。
+     */
+    private void requireTenantSecretAccess(AccessContext access, String tenantId, Draft draft) {
+        boolean referencesTenantSecret =
+                draft.headerSecretIds().values().stream().anyMatch(secretId -> secrets.tenantLevel(tenantId, secretId));
+        if (referencesTenantSecret) {
+            access.require(Permission.SECRET_WRITE, null);
+        }
     }
 
     /** 校验端点、请求头与凭据，探测后校验按工具标注的副作用等级都针对清单中的工具。 */

@@ -46,11 +46,12 @@ public class SecretsApiController implements SecretsApi {
     @Override
     @RequiresPermission(Permission.SECRET_WRITE)
     public ResponseEntity<Secret> createSecret(String tenantId, CreateSecretRequest body, String idempotencyKey) {
-        return requests.write(
+        return requests.writeSensitive(
                 request,
                 tenantId,
                 idempotencyKey,
                 new Fingerprint(body.getName(), body.getProjectId()),
+                body.getValue(),
                 HttpStatus.CREATED,
                 Secret.class,
                 () -> toDto(secrets.create(actor(), tenantId, body.getProjectId(), body.getName(), body.getValue())));
@@ -74,11 +75,12 @@ public class SecretsApiController implements SecretsApi {
     @RequiresPermission(Permission.SECRET_WRITE)
     public ResponseEntity<Secret> rotateSecret(
             String tenantId, String secretId, RotateSecretRequest body, String idempotencyKey) {
-        return requests.write(
+        return requests.writeSensitive(
                 request,
                 tenantId,
                 idempotencyKey,
                 null,
+                body.getValue(),
                 HttpStatus.OK,
                 Secret.class,
                 () -> toDto(secrets.rotate(actor(), tenantId, secretId, body.getValue())));
@@ -112,7 +114,7 @@ public class SecretsApiController implements SecretsApi {
     }
 
     /**
-     * 写入请求的幂等指纹：只有名称与项目，不含凭据值（ADR-0045 第 2 条）。
+     * 写入请求的幂等指纹中的明文部分：名称与项目；凭据值只以带密钥摘要进入指纹（ADR-0045 第 2 条，R2 审查 K-05）。
      *
      * @param name 名称
      * @param projectId 项目

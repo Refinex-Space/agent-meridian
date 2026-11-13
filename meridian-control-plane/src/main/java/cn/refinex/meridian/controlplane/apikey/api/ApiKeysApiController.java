@@ -54,30 +54,31 @@ public class ApiKeysApiController implements ApiKeysApi {
         body.getScopes()
                 .forEach(scope ->
                         scopes.add(ApiKeyScope.fromValue(scope.getValue()).orElseThrow()));
-        return requests.write(request, tenantId, idempotencyKey, body, HttpStatus.CREATED, CreatedApiKey.class, () -> {
-            ApiKeyService.Created created = keys.create(
-                    actor(),
-                    tenantId,
-                    projectId,
-                    body.getName(),
-                    scopes,
-                    Times.instant(body.getExpiresAt()),
-                    body.getRateLimitPerMinute());
-            ApiKey dto = toDto(created.key());
-            return new CreatedApiKey(
-                    dto.getId(),
-                    dto.getTenantId(),
-                    dto.getProjectId(),
-                    dto.getName(),
-                    dto.getDisplayPrefix(),
-                    dto.getScopes(),
-                    dto.getRateLimitPerMinute(),
-                    CreatedApiKey.StatusEnum.fromValue(dto.getStatus().getValue()),
-                    dto.getExpiresAt(),
-                    dto.getCreatedAt(),
-                    dto.getRevokedAt(),
-                    created.secret().plaintext());
-        });
+        return requests.writeSensitive(
+                request, tenantId, idempotencyKey, body, null, HttpStatus.CREATED, CreatedApiKey.class, () -> {
+                    ApiKeyService.Created created = keys.create(
+                            actor(),
+                            tenantId,
+                            projectId,
+                            body.getName(),
+                            scopes,
+                            Times.instant(body.getExpiresAt()),
+                            body.getRateLimitPerMinute());
+                    ApiKey dto = toDto(created.key());
+                    return new CreatedApiKey(
+                            dto.getId(),
+                            dto.getTenantId(),
+                            dto.getProjectId(),
+                            dto.getName(),
+                            dto.getDisplayPrefix(),
+                            dto.getScopes(),
+                            dto.getRateLimitPerMinute(),
+                            CreatedApiKey.StatusEnum.fromValue(dto.getStatus().getValue()),
+                            dto.getExpiresAt(),
+                            dto.getCreatedAt(),
+                            dto.getRevokedAt(),
+                            created.secret().plaintext());
+                });
     }
 
     @Override

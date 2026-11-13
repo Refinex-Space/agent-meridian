@@ -47,11 +47,12 @@ public class WebhooksApiController implements WebhooksApi {
     public ResponseEntity<CreatedWebhook> createWebhook(
             String tenantId, String projectId, WebhookRequest body, String idempotencyKey) {
         WebhookService.Draft draft = draft(body);
-        return requests.write(
+        return requests.writeSensitive(
                 request,
                 tenantId,
                 idempotencyKey,
                 body,
+                null,
                 HttpStatus.CREATED,
                 CreatedWebhook.class,
                 () -> created(webhooks.create(actor(), tenantId, projectId, draft)));
@@ -61,10 +62,11 @@ public class WebhooksApiController implements WebhooksApi {
     @RequiresPermission(Permission.API_KEY_WRITE)
     public ResponseEntity<CreatedWebhook> rotateWebhookSecret(
             String tenantId, String projectId, String webhookId, String idempotencyKey) {
-        return requests.write(
+        return requests.writeSensitive(
                 request,
                 tenantId,
                 idempotencyKey,
+                null,
                 null,
                 HttpStatus.OK,
                 CreatedWebhook.class,

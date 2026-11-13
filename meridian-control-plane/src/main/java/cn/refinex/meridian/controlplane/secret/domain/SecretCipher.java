@@ -4,7 +4,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.HexFormat;
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -99,5 +101,41 @@ public final class SecretCipher {
      */
     public static byte[] webhookAad(String tenantId, String webhookId) {
         return ("meridian:webhook:" + tenantId + ":" + webhookId).getBytes(StandardCharsets.UTF_8);
+    }
+    /**
+     * 管理 API 幂等记录中加密保存的响应体的附加认证数据（R2 审查 K-02）：绑定租户、调用方与幂等键，密文不能挪到别的记录上。
+     *
+     * @param tenantId 租户 ID
+     * @param principal 幂等作用域中的调用方
+     * @param idempotencyKey 幂等键
+     * @return UTF-8 字节
+     */
+    public static byte[] idempotencyAad(String tenantId, String principal, String idempotencyKey) {
+        return ("meridian:idempotency:" + tenantId + ":" + principal + ":" + idempotencyKey)
+                .getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 敏感取值（凭据值）的带密钥摘要，放进幂等指纹（R2 审查 K-05）：同一幂等键换了值时指纹不同。用租户数据密钥派生的 HMAC 密钥，
+     * 库中的指纹不能被离线穷举还原出低熵的凭据值；派生是为了不让同一把密钥既做 AES-GCM 又做 HMAC。
+     *
+     * @param dataKey 租户数据密钥
+     * @param value 敏感取值
+     * @return 64 位小写十六进制
+     */
+    public static String keyedDigest(byte[] dataKey, String value) {
+        byte[] derived = hmac(dataKey, "meridian:idempotency-fingerprint".getBytes(StandardCharsets.UTF_8));
+        return HexFormat.of().formatHex(hmac(derived, value.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static byte[] hmac(byte[] key, byte[] content) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(key, "HmacSHA256"));
+            return mac.doFinal(content);
+        } catch (GeneralSecurityException e) {
+            // HmacSHA256 是 JDK 规定必须提供的算法
+            throw new IllegalStateException(e);
+        }
     }
 }

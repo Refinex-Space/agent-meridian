@@ -233,6 +233,19 @@ public class SecretService {
         }
     }
 
+    /**
+     * 是否为租户级凭据（不属于任何项目）；不存在时为 false。
+     *
+     * @param tenantId 租户 ID
+     * @param secretId 凭据 ID
+     * @return 租户级时为 true
+     */
+    public boolean tenantLevel(String tenantId, String secretId) {
+        return PlatformContexts.call(Scopes.tenant(tenantId), () -> secrets.find(secretId, false))
+                .map(secret -> secret.projectId() == null)
+                .orElse(false);
+    }
+
     private SecretView view(Secret secret) {
         return new SecretView(
                 secret, references.referencesOf(List.of(secret.id())).getOrDefault(secret.id(), List.of()));

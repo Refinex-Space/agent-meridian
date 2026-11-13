@@ -80,7 +80,8 @@ public class MembersApiController implements MembersApi {
                 body,
                 HttpStatus.OK,
                 Member.class,
-                () -> toDto(members.update(actor(), tenantId, memberId, body.getEmail(), body.getDisplayName())));
+                () -> toDto(members.update(
+                        AccessContext.current(request), tenantId, memberId, body.getEmail(), body.getDisplayName())));
     }
 
     @Override

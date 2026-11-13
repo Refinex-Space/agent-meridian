@@ -164,6 +164,44 @@ class MemberInvitationIT extends ControlPlaneTestBase {
                 .isTrue();
     }
 
+    @Test
+    void onlyOwnersCanChangeTheEmailOfAnOwnerInvitation() {
+        // R2 审查 I-01：未绑定的邀请按邮箱绑定，租户管理员不能把所有者邀请的邮箱改成自己的而继承所有者角色
+        TenantFixture fixture = TenantFixture.create(client());
+        String tenant = fixture.get("tenant");
+        String base = "/admin/v1/tenants/" + tenant;
+        String owner = token("owner");
+        String admin = token("admin");
+        String email = "future-owner-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
+        String invitation = client().admin("POST", base + "/members", owner, "{\"email\":\"" + email + "\"}")
+                .text("id");
+        assertThat(client().admin(
+                                "POST",
+                                base + "/role-bindings",
+                                owner,
+                                "{\"member_id\":\"" + invitation + "\",\"role\":\"tenant_owner\"}")
+                        .status())
+                .isEqualTo(201);
+
+        Reply hijack = client().admin(
+                        "PATCH", base + "/members/" + invitation, admin, "{\"email\":\"admin@test.meridian.local\"}");
+        assertThat(hijack.status()).isEqualTo(403);
+        assertThat(hijack.text("code")).isEqualTo("access.forbidden");
+        assertThat(client().admin("GET", base + "/members/" + invitation, owner, null)
+                        .text("email"))
+                .isEqualTo(email);
+        // 显示名称与非所有者成员的邮箱，租户管理员照常可以改
+        assertThat(client().admin("PATCH", base + "/members/" + invitation, admin, "{\"display_name\":\"新所有者\"}")
+                        .status())
+                .isEqualTo(200);
+
+        String corrected = "corrected-" + email;
+        assertThat(client().admin("PATCH", base + "/members/" + invitation, owner, "{\"email\":\"" + corrected + "\"}")
+                        .text("email"))
+                .isEqualTo(corrected);
+        assertThat(auditActions(tenant, invitation)).contains("member.updated");
+    }
+
     private static JsonNode membership(Reply me, String tenantId) {
         for (JsonNode membership : me.json().get("memberships")) {
             if (membership.get("tenant_id").asString().equals(tenantId)) {

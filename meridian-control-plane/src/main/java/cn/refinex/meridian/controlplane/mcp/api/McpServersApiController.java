@@ -55,7 +55,7 @@ public class McpServersApiController implements McpServersApi {
                 body,
                 HttpStatus.CREATED,
                 McpServer.class,
-                () -> toDto(servers.create(actor(), tenantId, projectId, draft)));
+                () -> toDto(servers.create(AccessContext.current(request), tenantId, projectId, draft)));
     }
 
     @Override
@@ -85,7 +85,7 @@ public class McpServersApiController implements McpServersApi {
                 body,
                 HttpStatus.OK,
                 McpServer.class,
-                () -> toDto(servers.update(actor(), tenantId, projectId, mcpServerId, draft)));
+                () -> toDto(servers.update(AccessContext.current(request), tenantId, projectId, mcpServerId, draft)));
     }
 
     @Override

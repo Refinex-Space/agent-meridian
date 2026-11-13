@@ -73,6 +73,7 @@ class RoleMatrixIT extends ControlPlaneTestBase {
             "{spare_mcp}",
             "{mcp_url}",
             "{mcp_secret}",
+            "{mcp_project_secret}",
             "{environment}",
             "{skill}",
             "{spare_skill}",

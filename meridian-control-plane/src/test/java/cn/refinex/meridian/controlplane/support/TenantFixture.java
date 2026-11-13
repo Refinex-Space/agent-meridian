@@ -167,7 +167,8 @@ public record TenantFixture(Map<String, String> values) {
     }
 
     /**
-     * 加上智能体配置的资源（T15b，ADR-0047）：请求头凭据 {@code mcp_secret}（值为 {@code Bearer} 加进程内 MCP 服务的令牌）；登记的 MCP
+     * 加上智能体配置的资源（T15b，ADR-0047）：请求头凭据 {@code mcp_secret}（租户级，值为 {@code Bearer} 加进程内 MCP 服务的令牌）与同值的
+     * 项目级凭据 {@code mcp_project_secret}；登记的 MCP
      * 服务 {@code mcp}（Streamable HTTP，被已发布的版本引用）与 {@code spare_mcp}（SSE，没有引用方）；环境 {@code environment}；技能
      * {@code skill}（{@value #SKILL_NAME}，被引用）与 {@code spare_skill}；智能体 {@code agent}：版本 1 已发布（引用 {@code model}、
      * {@code mcp}、{@code skill}），版本 2 是草稿；租户策略规则 {@code tenant_rule} 与项目策略规则 {@code project_rule}；另有
@@ -189,6 +190,16 @@ public record TenantFixture(Map<String, String> values) {
                                 base + "/secrets",
                                 owner,
                                 "{\"name\":\"MCP 令牌\",\"value\":\"Bearer " + ControlPlaneTestBase.MCP_TOKEN + "\"}"))
+                        .text("id"));
+        // 项目开发者只能在 MCP 请求头里引用项目级凭据（R2 审查 K-01）：同一令牌另存一份授给本项目
+        v.put(
+                "mcp_project_secret",
+                ok(client.admin(
+                                "POST",
+                                base + "/secrets",
+                                owner,
+                                "{\"name\":\"MCP 令牌（项目）\",\"project_id\":\"" + v.get("project")
+                                        + "\",\"value\":\"Bearer " + ControlPlaneTestBase.MCP_TOKEN + "\"}"))
                         .text("id"));
         v.put(
                 "mcp",

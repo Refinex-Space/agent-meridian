@@ -140,20 +140,25 @@ public class MemberService {
     }
 
     /**
-     * 修改成员资料，只修改给出的字段。
+     * 修改成员资料，只修改给出的字段。修改所有者的邮箱另需所有者权限：未绑定的邀请在首次登录时按邮箱绑定，改邮箱就是改由谁继承
+     * 它的角色，不加这道检查时租户管理员可以把待绑定的所有者邀请改成自己的邮箱、登录后成为所有者（R2 审查 I-01）。
      *
-     * @param actor 操作者的主体标识
+     * @param access 调用方的授权上下文
      * @param tenantId 租户 ID
      * @param memberId 成员 ID
      * @param email 新邮箱；可为空，表示不变
      * @param displayName 新显示名称；可为空，表示不变
      * @return 修改后的成员
      */
-    public Member update(String actor, String tenantId, String memberId, String email, String displayName) {
+    public Member update(AccessContext access, String tenantId, String memberId, String email, String displayName) {
         return PlatformContexts.call(
                 Scopes.tenant(tenantId),
                 () -> transactions.execute(status -> {
                     Member current = requireMember(memberId);
+                    boolean emailChanged = email != null && !email.equalsIgnoreCase(nullToEmpty(current.email()));
+                    if (emailChanged && bindings.hasTenantOwner(memberId)) {
+                        access.require(Permission.OWNER_ROLE_MANAGE, null);
+                    }
                     Member updated = new Member(
                             current.id(),
                             tenantId,
@@ -163,7 +168,12 @@ public class MemberService {
                             current.createdAt(),
                             clock.instant());
                     members.update(updated);
-                    audit.record("member.updated", actor, tenantId, null, "member", memberId, Map.of());
+                    Map<String, Object> details = identity(updated);
+                    if (emailChanged) {
+                        details.put("previous_email", current.email());
+                    }
+                    audit.record(
+                            "member.updated", access.user().subject(), tenantId, null, "member", memberId, details);
                     return updated;
                 }));
     }
@@ -327,6 +337,10 @@ public class MemberService {
     }
 
     /** 审计中的成员身份：已绑定的记用户标识，邀请记邮箱。 */
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
     private static Map<String, Object> identity(Member member) {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("subject", member.subject());

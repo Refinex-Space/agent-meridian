@@ -181,7 +181,7 @@ class AgentResourcesIT extends ControlPlaneTestBase {
                 base,
                 token("developer"),
                 "{\"name\":\"tickets\",\"transport\":\"sse\",\"url\":\"" + MCP.sseUrl()
-                        + "\",\"header_secret_ids\":{\"Authorization\":\"" + fixture.get("mcp_secret")
+                        + "\",\"header_secret_ids\":{\"Authorization\":\"" + fixture.get("mcp_project_secret")
                         + "\"},\"side_effect\":\"non_idempotent\",\"tool_side_effects\":{\"lookup_order\":\"none\"}}");
         assertThat(created.status()).as(created.raw()).isEqualTo(201);
         List<String> tools = new ArrayList<>();
@@ -204,7 +204,8 @@ class AgentResourcesIT extends ControlPlaneTestBase {
                         "POST",
                         "/admin/v1/tenants/" + fixture.get("tenant") + "/secrets",
                         token("owner"),
-                        "{\"name\":\"错的令牌\",\"value\":\"Bearer wrong\"}")
+                        "{\"name\":\"错的令牌\",\"project_id\":\"" + fixture.get("project")
+                                + "\",\"value\":\"Bearer wrong\"}")
                 .text("id");
         Reply unauthorized = client.admin(
                 "POST",
@@ -220,16 +221,35 @@ class AgentResourcesIT extends ControlPlaneTestBase {
                 base,
                 token("developer"),
                 TenantFixture.mcpServer(
-                        "meta", "streamable_http", "http://169.254.169.254/mcp", fixture.get("mcp_secret")));
+                        "meta", "streamable_http", "http://169.254.169.254/mcp", fixture.get("mcp_project_secret")));
         assertThat(fields(metadata)).containsExactly("url");
         Reply unknownTool = client.admin(
                 "POST",
                 base,
                 token("developer"),
                 "{\"name\":\"crm2\",\"transport\":\"streamable_http\",\"url\":\"" + MCP.streamableUrl()
-                        + "\",\"header_secret_ids\":{\"Authorization\":\"" + fixture.get("mcp_secret")
+                        + "\",\"header_secret_ids\":{\"Authorization\":\"" + fixture.get("mcp_project_secret")
                         + "\"},\"tool_side_effects\":{\"drop_tables\":\"none\"}}");
         assertThat(fields(unknownTool)).containsExactly("tool_side_effects.drop_tables");
+
+        // R2 审查 K-01：项目开发者不能让租户级凭据随探测发往自己填的地址；所有者可以
+        int beforeTenantSecret = MCP.requests().size();
+        Reply tenantSecret = client.admin(
+                "POST",
+                base,
+                token("developer"),
+                TenantFixture.mcpServer("leak", "streamable_http", MCP.streamableUrl(), fixture.get("mcp_secret")));
+        assertThat(tenantSecret.status()).as(tenantSecret.raw()).isEqualTo(403);
+        assertThat(tenantSecret.text("code")).isEqualTo("access.forbidden");
+        assertThat(MCP.requests()).hasSize(beforeTenantSecret);
+        assertThat(client.admin(
+                                "POST",
+                                base,
+                                token("owner"),
+                                TenantFixture.mcpServer(
+                                        "owned", "streamable_http", MCP.streamableUrl(), fixture.get("mcp_secret")))
+                        .status())
+                .isEqualTo(201);
     }
 
     @Test
