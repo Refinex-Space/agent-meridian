@@ -30,3 +30,11 @@ scripts/ci/check-pom-versions.sh
   uv run --frozen mypy
   uv run --frozen pytest -q -W error
 )
+
+# console（T20a）：lint（ESLint 与守护规则、样式表检查、Prettier、OpenAPI 生成类型是否过期）、类型检查、单元测试、Storybook 构建。
+# Playwright（时间轴性能、动效、无障碍）不在这里：需要浏览器，单独用 pnpm -C console e2e 运行。
+pnpm -C console install --frozen-lockfile --silent
+pnpm -C console lint
+pnpm -C console typecheck
+pnpm -C console test
+pnpm -C console build-storybook
