@@ -85,7 +85,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 已完成 | b7df25f |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 已完成 | 51dc16a |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 已完成 | c87dc78 |
-| T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 未开始 | — |
+| T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 进行中 | — |
 | R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 未开始 | — |
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 见控制台设计轨道 | — |
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 见控制台设计轨道 | — |
@@ -175,7 +175,18 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T19b（开工基线 `scripts/dev/verify.sh` 通过）：
+
+- [ ] 1 对照表 `docs/engineering/console-api-map.md`（A01）
+- [ ] 2 runtime：会话列表筛选与 `agent_id`、项目级待处理动作列表与历史（结论、处理人）、`GET /v1/session-stats` 与失败率小时汇总作业、投递记录的时间范围（D72）
+- [ ] 3 security 与回应权限：作用域 `actions:respond`（审批人回应待处理动作）、OIDC 邮箱声明
+- [ ] 4 control-plane：`GET /admin/v1/me`、`/me/access`；按邮箱邀请成员与首次登录绑定（A04）
+- [ ] 5 control-plane：项目预算消耗 `budget-status`、用量明细与 CSV 导出（D68）
+- [ ] 6 control-plane：供应商账号连通性测试、MCP 连接状态、Webhook 签名密钥轮换（D72）
+- [ ] 7 knowledge：知识库的修改与删除（D81）
+- [ ] 8 建议规则（D21）：内核随 `tool_confirmation` 带出建议规则，回应时可按建议记住
+- [ ] 9 角色矩阵与契约测试（A02、A03、A05）
+- [ ] 10 ADR-0053、架构设计、模块 `CLAUDE.md`、登记事项；`verify.sh`（A06）；验收记录与收尾
 
 ## 控制台设计轨道
 
