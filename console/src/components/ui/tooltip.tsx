@@ -37,7 +37,7 @@ export function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          'z-50 max-w-72 origin-(--radix-tooltip-content-transform-origin) rounded-overlay border border-rule bg-surface-raised px-2 py-1 text-12 text-ink shadow-overlay',
+          'shadow-overlay z-50 max-w-72 origin-(--radix-tooltip-content-transform-origin) rounded-overlay border border-rule bg-surface-raised px-2 py-1 text-12 text-ink',
           'motion-safe:animate-overlay-in motion-reduce:animate-fade-in',
           className,
         )}

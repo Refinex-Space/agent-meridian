@@ -14,11 +14,12 @@ const SCHEMES: { scheme: Scheme; label: string }[] = [
   { scheme: 'dark', label: '暗色' },
 ];
 
-const tokenVar = (name: ColorToken) => `var(--color-${name})`;
+/** 令牌页按调色板变量取色：`--color-*` 在 :root 上已经解析，嵌套的 data-theme 只对 `--palette-*` 生效。 */
+const tokenVar = (name: ColorToken) => `var(--palette-${name})`;
 
 /**
- * 读出每个令牌在亮暗两套 color-scheme 下实际渲染的颜色：两个隐藏容器分别固定 color-scheme，
- * 里面每个探针的 color 取一个令牌，getComputedStyle 给出 light-dark() 解析后的值。
+ * 读出每个令牌在亮暗两套调色板下实际渲染的颜色：两个隐藏容器分别用 data-theme 固定主题，
+ * 里面每个探针的 color 取一个令牌，getComputedStyle 给出解析后的值。
  */
 function useRenderedColors() {
   const probes = useRef<HTMLDivElement>(null);
@@ -41,7 +42,7 @@ function useRenderedColors() {
   const probeElements = (
     <div ref={probes} aria-hidden className="hidden">
       {SCHEMES.map(({ scheme }) => (
-        <div key={scheme} style={{ colorScheme: scheme }}>
+        <div key={scheme} data-theme={scheme}>
           {COLOR_TOKENS.map(({ name }) => (
             <span key={name} data-token={name} data-scheme={scheme} style={{ color: tokenVar(name) }} />
           ))}
@@ -65,7 +66,8 @@ function Swatch({ token, scheme, className }: { token: ColorToken; scheme: Schem
   return (
     <span
       className={cn('block h-7 w-12 rounded-control border border-rule', className)}
-      style={{ colorScheme: scheme, background: tokenVar(token) }}
+      data-theme={scheme}
+      style={{ background: tokenVar(token) }}
     />
   );
 }
@@ -121,9 +123,13 @@ function ContrastSample({
   scheme: Scheme;
   kind: 'text' | 'graphic';
 }) {
-  const style: CSSProperties = { colorScheme: scheme, background: tokenVar(bg), color: tokenVar(fg) };
+  const style: CSSProperties = { background: tokenVar(bg), color: tokenVar(fg) };
   return (
-    <span className="flex h-8 w-28 items-center gap-2 rounded-control border border-rule px-2" style={style}>
+    <span
+      data-theme={scheme}
+      className="flex h-8 w-28 items-center gap-2 rounded-control border border-rule px-2"
+      style={style}
+    >
       {kind === 'text' ? (
         <span className="text-14">正文 Aa 12</span>
       ) : (
@@ -293,7 +299,7 @@ function Shapes() {
         </div>
       ))}
       <div className="flex flex-col gap-2">
-        <span className="block size-24 rounded-overlay border border-rule bg-surface-raised shadow-overlay" />
+        <span className="shadow-overlay block size-24 rounded-overlay border border-rule bg-surface-raised" />
         <code className="text-12">shadow-overlay</code>
         <span className="text-12 text-ink-2">唯一的阴影，只给浮层</span>
       </div>

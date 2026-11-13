@@ -141,6 +141,14 @@ export function SessionDetail({ sessionId, modelNames }: SessionDetailProps) {
       {respondError && <ProblemNotice error={respondError} title="回应没有发送成功" />}
       <div className="flex min-h-0 flex-1">
         <aside aria-label="线程与待处理动作" className="w-52 shrink-0 border-r border-rule bg-canvas">
+          {!session && showSkeleton && (
+            <div aria-hidden className="flex flex-col gap-3 px-3 py-4">
+              <Skeleton className="ml-2 h-3 w-10" />
+              <Skeleton className="ml-2 h-3 w-24" />
+              <Skeleton className="ml-6 h-3 w-28" />
+              <Skeleton className="ml-6 h-3 w-24" />
+            </div>
+          )}
           {session && status && (
             <ThreadPanel
               model={model}
@@ -170,7 +178,7 @@ export function SessionDetail({ sessionId, modelNames }: SessionDetailProps) {
           ) : (
             showSkeleton && <SessionTimelineSkeleton className="h-full" />
           )}
-          {!inspectorOpen && (
+          {session && !inspectorOpen && (
             <Button
               size="icon-sm"
               variant="secondary"

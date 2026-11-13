@@ -23,7 +23,7 @@ export function SessionTimelineSkeleton({ className }: { className?: string }) {
   const width = graphWidth(1);
   return (
     <div className={cn('relative overflow-hidden', className)} aria-busy="true" aria-label="正在加载事件">
-      {ROWS.map((row, i) => (
+      {[...ROWS, ...ROWS, ...ROWS].map((row, i) => (
         <div
           key={i}
           className="grid"

@@ -112,7 +112,9 @@ export function NowMarker({ status, lastEvent, live, lanes, graphWidth, now = de
           )}
         </span>
         {text && (
-          <span className="mt-1 line-clamp-3 text-13 leading-5 whitespace-pre-line text-ink-2">{text}</span>
+          <span className="mt-1 line-clamp-3 max-w-180 text-13 leading-5 whitespace-pre-line text-ink-2">
+            {text}
+          </span>
         )}
       </span>
     </div>

@@ -146,7 +146,7 @@ export const TimelineRowView = memo(function TimelineRowView({
             {text.detail && (
               <span
                 className={cn(
-                  'mt-1 text-ink-2',
+                  'mt-1 max-w-180 text-ink-2',
                   text.detail.mono
                     ? 'line-clamp-2 font-mono text-12 leading-5 break-all whitespace-pre-wrap'
                     : row.event?.type === 'agent.message'

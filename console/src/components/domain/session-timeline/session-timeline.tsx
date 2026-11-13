@@ -141,6 +141,12 @@ export function SessionTimeline({
     else setUnseen((n) => n + fresh.length);
   }, [model, count, virtualizer]);
 
+  // 正在生成的回复让"此刻"一行变高：在底部时继续跟随到底。
+  useEffect(() => {
+    if (live.length > 0 && atBottom.current && count > 0)
+      virtualizer.scrollToIndex(count - 1, { align: 'end' });
+  }, [live, count, virtualizer]);
+
   useEffect(() => {
     if (arrivals.size === 0) return undefined;
     const timer = window.setTimeout(() => setArrivals(new Map()), 1000);
@@ -277,7 +283,7 @@ export function SessionTimeline({
           <Button
             size="sm"
             variant="secondary"
-            className="pointer-events-auto shadow-overlay"
+            className="shadow-overlay pointer-events-auto"
             icon={<Icon glyph={ArrowLineDownIcon} />}
             onClick={jumpToNow}
           >

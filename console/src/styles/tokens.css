@@ -1,50 +1,153 @@
 /*
  * 设计令牌：控制台颜色、字体、字号、圆角、阴影、动效的唯一来源（frontend-design.md「设计定稿」）。
  *
- * 颜色用 OKLCH，每个令牌以 light-dark(亮色, 暗色) 写出两套值，主题由 color-scheme 决定（index.css）：
- * 默认跟随系统，<html data-theme="light|dark"> 强制指定。Tailwind 的默认色板、字号、圆角、阴影、字距全部移除，
- * 组件只能使用这里的令牌；`@theme static` 让全部变量都输出到 :root，令牌页与测试按名字读取。
+ * 颜色用 OKLCH，分亮暗两套调色板（`--palette-*`）：`:root` 与 `[data-theme='light']` 是亮色，`[data-theme='dark']` 是暗色。
+ * index.html 在首次绘制前按系统偏好写入 <html data-theme>，之后由主题设置改写；局部容器也可以用 data-theme 固定主题。
+ * Tailwind 的颜色与阴影以 `@theme inline` 映射到调色板变量，工具类在使用处取值，嵌套的 data-theme 才能生效。
+ * 不用 light-dark()：Tailwind 构建时 Lightning CSS 把它降级为在 :root 上解析的变量，嵌套的主题失效，开发与生产表现不一致。
+ *
+ * Tailwind 的默认色板、字号、圆角、阴影、字距全部移除，组件只能使用这里的令牌；`static` 让全部变量都输出，
+ * 令牌页与测试按名字读取。
  */
-@theme static {
+@theme inline static {
   --color-*: initial;
 
   /* 纸面与层次 */
-  --color-canvas: light-dark(oklch(0.974 0.003 165), oklch(0.212 0.015 236));
-  --color-surface: light-dark(oklch(1 0 0), oklch(0.254 0.019 239));
-  --color-surface-raised: light-dark(oklch(1 0 0), oklch(0.292 0.021 239));
-  --color-surface-inset: light-dark(oklch(0.962 0.004 165), oklch(0.228 0.016 237));
-  --color-surface-hover: light-dark(oklch(0.955 0.005 165), oklch(0.285 0.02 239));
-  --color-rule: light-dark(oklch(0.893 0.007 160), oklch(0.33 0.023 241));
-  --color-rule-strong: light-dark(oklch(0.64 0.012 165), oklch(0.545 0.02 238));
+  --color-canvas: var(--palette-canvas);
+  --color-surface: var(--palette-surface);
+  --color-surface-raised: var(--palette-surface-raised);
+  --color-surface-inset: var(--palette-surface-inset);
+  --color-surface-hover: var(--palette-surface-hover);
+  --color-rule: var(--palette-rule);
+  --color-rule-strong: var(--palette-rule-strong);
 
   /* 墨与石墨 */
-  --color-ink: light-dark(oklch(0.25 0.015 166), oklch(0.93 0.008 229));
-  --color-ink-2: light-dark(oklch(0.497 0.015 164), oklch(0.745 0.015 232));
-  --color-ink-disabled: light-dark(oklch(0.7 0.01 165), oklch(0.5 0.015 232));
+  --color-ink: var(--palette-ink);
+  --color-ink-2: var(--palette-ink-2);
+  --color-ink-disabled: var(--palette-ink-disabled);
 
   /* 海图蓝：主操作、链接、焦点、选中、运行中 */
-  --color-accent: light-dark(oklch(0.47 0.125 252), oklch(0.7 0.11 252));
-  --color-accent-hover: light-dark(oklch(0.41 0.12 252), oklch(0.76 0.1 252));
-  --color-accent-weak: light-dark(oklch(0.955 0.016 252), oklch(0.32 0.05 252));
-  --color-on-accent: light-dark(oklch(1 0 0), oklch(0.212 0.015 236));
+  --color-accent: var(--palette-accent);
+  --color-accent-hover: var(--palette-accent-hover);
+  --color-accent-weak: var(--palette-accent-weak);
+  --color-on-accent: var(--palette-on-accent);
 
   /* 黄铜：只用于"此刻"与等待处理 */
-  --color-brass: light-dark(oklch(0.63 0.117 81), oklch(0.751 0.118 81));
-  --color-brass-ink: light-dark(oklch(0.52 0.1 78), oklch(0.78 0.11 82));
-  --color-brass-weak: light-dark(oklch(0.968 0.022 88), oklch(0.31 0.045 80));
+  --color-brass: var(--palette-brass);
+  --color-brass-ink: var(--palette-brass-ink);
+  --color-brass-weak: var(--palette-brass-weak);
 
   /* 语义 */
-  --color-success: light-dark(oklch(0.522 0.093 161), oklch(0.72 0.11 160));
-  --color-danger: light-dark(oklch(0.542 0.17 28), oklch(0.7 0.14 28));
-  --color-danger-hover: light-dark(oklch(0.48 0.165 28), oklch(0.75 0.13 28));
-  --color-danger-weak: light-dark(oklch(0.962 0.018 28), oklch(0.31 0.06 28));
-  --color-reschedule: light-dark(oklch(0.62 0.085 252), oklch(0.62 0.07 252));
-  --color-terminated: light-dark(oklch(0.64 0.012 165), oklch(0.56 0.015 232));
+  --color-success: var(--palette-success);
+  --color-danger: var(--palette-danger);
+  --color-danger-hover: var(--palette-danger-hover);
+  --color-danger-weak: var(--palette-danger-weak);
+  --color-reschedule: var(--palette-reschedule);
+  --color-terminated: var(--palette-terminated);
 
   /* 时间轴：子午线与子线程 */
-  --color-meridian: light-dark(oklch(0.497 0.015 164), oklch(0.745 0.015 232));
-  --color-lane: light-dark(oklch(0.61 0.012 165), oklch(0.6 0.02 238));
+  --color-meridian: var(--palette-meridian);
+  --color-lane: var(--palette-lane);
 
+  --shadow-*: initial;
+  /* 阴影只有一种，只给浮层；颜色取墨色的色相 */
+  --shadow-overlay: 0 1px 2px var(--palette-shadow-near), 0 8px 24px -6px var(--palette-shadow-far);
+}
+
+/* 亮色调色板 */
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* 纸面与层次 */
+  --palette-canvas: oklch(0.974 0.003 165);
+  --palette-surface: oklch(1 0 0);
+  --palette-surface-raised: oklch(1 0 0);
+  --palette-surface-inset: oklch(0.962 0.004 165);
+  --palette-surface-hover: oklch(0.955 0.005 165);
+  --palette-rule: oklch(0.893 0.007 160);
+  --palette-rule-strong: oklch(0.64 0.012 165);
+
+  /* 墨与石墨 */
+  --palette-ink: oklch(0.25 0.015 166);
+  --palette-ink-2: oklch(0.497 0.015 164);
+  --palette-ink-disabled: oklch(0.7 0.01 165);
+
+  /* 海图蓝：主操作、链接、焦点、选中、运行中 */
+  --palette-accent: oklch(0.47 0.125 252);
+  --palette-accent-hover: oklch(0.41 0.12 252);
+  --palette-accent-weak: oklch(0.955 0.016 252);
+  --palette-on-accent: oklch(1 0 0);
+
+  /* 黄铜：只用于"此刻"与等待处理 */
+  --palette-brass: oklch(0.63 0.117 81);
+  --palette-brass-ink: oklch(0.52 0.1 78);
+  --palette-brass-weak: oklch(0.968 0.022 88);
+
+  /* 语义 */
+  --palette-success: oklch(0.522 0.093 161);
+  --palette-danger: oklch(0.542 0.17 28);
+  --palette-danger-hover: oklch(0.48 0.165 28);
+  --palette-danger-weak: oklch(0.962 0.018 28);
+  --palette-reschedule: oklch(0.62 0.085 252);
+  --palette-terminated: oklch(0.64 0.012 165);
+
+  /* 时间轴：子午线与子线程 */
+  --palette-meridian: oklch(0.497 0.015 164);
+  --palette-lane: oklch(0.61 0.012 165);
+
+  /* 浮层阴影 */
+  --palette-shadow-near: oklch(0.25 0.02 166 / 0.06);
+  --palette-shadow-far: oklch(0.25 0.02 166 / 0.12);
+}
+
+/* 暗色调色板 */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* 纸面与层次 */
+  --palette-canvas: oklch(0.212 0.015 236);
+  --palette-surface: oklch(0.254 0.019 239);
+  --palette-surface-raised: oklch(0.292 0.021 239);
+  --palette-surface-inset: oklch(0.228 0.016 237);
+  --palette-surface-hover: oklch(0.285 0.02 239);
+  --palette-rule: oklch(0.33 0.023 241);
+  --palette-rule-strong: oklch(0.545 0.02 238);
+
+  /* 墨与石墨 */
+  --palette-ink: oklch(0.93 0.008 229);
+  --palette-ink-2: oklch(0.745 0.015 232);
+  --palette-ink-disabled: oklch(0.5 0.015 232);
+
+  /* 海图蓝：主操作、链接、焦点、选中、运行中 */
+  --palette-accent: oklch(0.7 0.11 252);
+  --palette-accent-hover: oklch(0.76 0.1 252);
+  --palette-accent-weak: oklch(0.32 0.05 252);
+  --palette-on-accent: oklch(0.212 0.015 236);
+
+  /* 黄铜：只用于"此刻"与等待处理 */
+  --palette-brass: oklch(0.751 0.118 81);
+  --palette-brass-ink: oklch(0.78 0.11 82);
+  --palette-brass-weak: oklch(0.31 0.045 80);
+
+  /* 语义 */
+  --palette-success: oklch(0.72 0.11 160);
+  --palette-danger: oklch(0.7 0.14 28);
+  --palette-danger-hover: oklch(0.75 0.13 28);
+  --palette-danger-weak: oklch(0.31 0.06 28);
+  --palette-reschedule: oklch(0.62 0.07 252);
+  --palette-terminated: oklch(0.56 0.015 232);
+
+  /* 时间轴：子午线与子线程 */
+  --palette-meridian: oklch(0.745 0.015 232);
+  --palette-lane: oklch(0.6 0.02 238);
+
+  /* 浮层阴影 */
+  --palette-shadow-near: oklch(0.1 0.02 236 / 0.4);
+  --palette-shadow-far: oklch(0.1 0.02 236 / 0.5);
+}
+
+@theme static {
   /* 字体 */
   --font-*: initial;
   --font-sans: 'IBM Plex Sans', 'IBM Plex Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
@@ -87,9 +190,6 @@
 
   /* 阴影只有一种，只给浮层；颜色取墨色的色相 */
   --shadow-*: initial;
-  --shadow-overlay:
-    0 1px 2px light-dark(oklch(0.25 0.02 166 / 0.06), oklch(0.1 0.02 236 / 0.4)),
-    0 8px 24px -6px light-dark(oklch(0.25 0.02 166 / 0.12), oklch(0.1 0.02 236 / 0.5));
   --inset-shadow-*: initial;
   --drop-shadow-*: initial;
   --text-shadow-*: initial;

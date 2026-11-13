@@ -2,22 +2,10 @@
 @import './fonts.css';
 @import './tokens.css';
 
-/* 主题：默认跟随系统；<html data-theme="light|dark"> 强制指定。令牌里的 light-dark() 按 color-scheme 取值。 */
+/* 主题：<html data-theme="light|dark">（index.html 在首次绘制前按系统偏好写入）；暗色变体用于极少数需要按主题区分结构的地方。 */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 @layer base {
-  :root {
-    color-scheme: light dark;
-  }
-
-  :root[data-theme='light'] {
-    color-scheme: light;
-  }
-
-  :root[data-theme='dark'] {
-    color-scheme: dark;
-  }
-
   html {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -26,8 +14,8 @@
   }
 
   body {
-    background-color: var(--color-canvas);
-    color: var(--color-ink);
+    background-color: var(--palette-canvas);
+    color: var(--palette-ink);
     font-size: var(--text-14);
     line-height: var(--leading-body);
     font-variant-numeric: tabular-nums;
@@ -35,18 +23,18 @@
 
   /* 焦点环：2px 实线海图蓝，偏移 2px（frontend-design.md「交互规范」） */
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--palette-accent);
     outline-offset: 2px;
   }
 
   ::selection {
-    background-color: var(--color-accent-weak);
-    color: var(--color-ink);
+    background-color: var(--palette-accent-weak);
+    color: var(--palette-ink);
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-rule-strong) transparent;
+    scrollbar-color: var(--palette-rule-strong) transparent;
   }
 
   code,

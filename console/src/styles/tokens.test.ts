@@ -12,15 +12,29 @@ const css = readFileSync(path.join(import.meta.dirname, 'tokens.css'), 'utf8');
 
 type Theme = 'light' | 'dark';
 
-/** 从 tokens.css 读出 `--color-<名字>: light-dark(亮色, 暗色)` 的两套值。 */
+/** 一个调色板规则块（`:root, [data-theme='light']` 或 `[data-theme='dark']`）中的 `--palette-*` 值。 */
+function readPalette(source: string, selector: RegExp): Map<string, Rgb> {
+  const block = selector.exec(source)?.[1];
+  if (!block) throw new Error(`tokens.css 缺少调色板 ${selector.source}`);
+  const values = new Map<string, Rgb>();
+  for (const [, name, value] of block.matchAll(/--palette-([a-z0-9-]+):\s*(oklch\([^)]*\));/g)) {
+    const rgb = value ? toRgb(value) : null;
+    if (!name || !rgb) throw new Error(`无法解析 --palette-${name}`);
+    values.set(name, rgb);
+  }
+  return values;
+}
+
+/** 从 tokens.css 读出每个颜色令牌在亮暗两套调色板中的值；令牌必须以 `var(--palette-<同名>)` 映射。 */
 function readColorTokens(source: string): Map<string, Record<Theme, Rgb>> {
+  const light = readPalette(source, /:root,\s*\[data-theme='light'\]\s*\{([^}]*)\}/);
+  const dark = readPalette(source, /\[data-theme='dark'\]\s*\{([^}]*)\}/);
   const tokens = new Map<string, Record<Theme, Rgb>>();
-  const pattern = /--color-([a-z0-9-]+):\s*light-dark\(\s*(oklch\([^)]*\))\s*,\s*(oklch\([^)]*\))\s*\);/g;
-  for (const [, name, light, dark] of source.matchAll(pattern)) {
-    const lightRgb = toRgb(light!);
-    const darkRgb = toRgb(dark!);
-    if (!name || !lightRgb || !darkRgb) throw new Error(`无法解析令牌 --color-${name}`);
-    tokens.set(name, { light: lightRgb, dark: darkRgb });
+  for (const [, name, target] of source.matchAll(/--color-([a-z0-9-]+):\s*var\(--palette-([a-z0-9-]+)\);/g)) {
+    if (!name || name !== target) throw new Error(`--color-${name} 应映射到 --palette-${name}`);
+    const l = light.get(name);
+    const d = dark.get(name);
+    if (l && d) tokens.set(name, { light: l, dark: d });
   }
   return tokens;
 }
@@ -34,7 +48,7 @@ function color(name: ColorToken, theme: Theme): Rgb {
 }
 
 describe('颜色令牌', () => {
-  it('清单中的每个令牌都在 tokens.css 中以 light-dark(oklch, oklch) 定义了亮暗两套值', () => {
+  it('清单中的每个令牌都映射到调色板，并在亮暗两套调色板中都有 OKLCH 值', () => {
     const missing = COLOR_TOKENS.map((t) => t.name).filter((name) => !tokens.has(name));
     expect(missing).toEqual([]);
   });
