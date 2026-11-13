@@ -245,6 +245,18 @@ class ScriptedOpenAiServerTest {
     }
 
     @Test
+    void modelListAnswersTheConnectivityTest() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.port() + "/v1/models"))
+                .GET()
+                .build();
+        HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = json(response);
+        assertThat(body.get("object").asString()).isEqualTo("list");
+        assertThat(body.at("/data/0/id").asString()).isEqualTo("scripted");
+    }
+
+    @Test
     void callsAreRecordedWithScriptAndStep() throws Exception {
         server.clearCalls();
         post("/v1/chat/completions", """

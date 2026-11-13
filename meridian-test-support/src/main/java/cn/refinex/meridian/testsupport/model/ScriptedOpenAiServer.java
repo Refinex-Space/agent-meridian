@@ -45,6 +45,8 @@ import tools.jackson.databind.node.ObjectNode;
  *   <li>{@code POST /v1/embeddings}：按文本哈希生成确定的向量（{@link ScriptedVectors}），支持 {@code dimensions} 与
  *       {@code encoding_format=base64}。
  *   <li>{@code POST /compatible-api/v1/reranks}：DashScope 兼容格式的 rerank，按关键词重叠打分。
+ *   <li>{@code GET /v1/models}：OpenAI 兼容的模型清单（{@code scripted}、{@code scripted-embedding}），供应商账号的连通性测试列它
+ *       （T23）。
  * </ul>
  *
  * <p>不读取任何密钥（忽略 {@code Authorization}），不向外网发请求，只监听回环地址（独立启动时可用 {@code --host} 改）。为了断言重试
@@ -202,8 +204,12 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
             String path = exchange.getRequestURI().getPath();
+            if ("GET".equals(exchange.getRequestMethod()) && "/v1/models".equals(path)) {
+                models(exchange);
+                return;
+            }
             if (!"POST".equals(exchange.getRequestMethod())) {
-                error(exchange, 405, "只支持 POST", null);
+                error(exchange, 405, "只支持 POST 与 GET /v1/models", null);
                 return;
             }
             JsonNode body;
@@ -224,6 +230,18 @@ public final class ScriptedOpenAiServer implements AutoCloseable {
         } catch (IOException e) {
             // 客户端断开（例如中断时取消订阅），不再写响应
         }
+    }
+
+    // ---- 模型清单 ----
+
+    /** OpenAI 兼容的模型清单：连通性测试只看状态码，内容是这个服务能回应的两个模型名。 */
+    private static void models(HttpExchange exchange) throws IOException {
+        ObjectNode list = JSON.createObjectNode().put("object", "list");
+        ArrayNode data = list.putArray("data");
+        for (String id : List.of("scripted", "scripted-embedding")) {
+            data.addObject().put("id", id).put("object", "model").put("owned_by", "meridian");
+        }
+        json(exchange, 200, list);
     }
 
     // ---- 对话补全 ----
