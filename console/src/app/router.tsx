@@ -18,16 +18,8 @@ import {
   redirect,
 } from '@tanstack/react-router';
 
-import {
-  AgentComparePage,
-  AgentDetailPage,
-  AgentEditPage,
-  AgentLayout,
-  AgentListPage,
-  type AgentDetailTab,
-} from '@/features/agents';
+import type { AgentDetailTab } from '@/features/agents';
 import { CapabilitiesPage } from '@/features/capabilities';
-import { EnvironmentEditPage, EnvironmentListPage } from '@/features/environments';
 import { KnowledgePage } from '@/features/knowledge';
 import { ModelsPage } from '@/features/models';
 import { OverviewPage } from '@/features/overview';
@@ -45,12 +37,30 @@ import {
   type TenantProjects,
 } from '@/lib/access';
 import { parseSearch, searchString, stringifySearch } from '@/lib/search';
-import type { ReactNode } from 'react';
+import { lazy, type ReactNode } from 'react';
 
 import { FullPage, NotFound } from './boot-screens';
 import { HomeRedirectFailed, NoProjectsPage, ProjectErrorPage } from './route-states';
 import type { NavKey } from './shell/nav';
 import { ShellLayout } from './shell/shell-layout';
+
+/**
+ * 智能体与环境的页面按路由懒加载（frontend-design.md「性能预算」：首屏 JavaScript gzip 后不超过 300 KB）：表单、校验与差异
+ * 只在进入这两个导航时下载；Monaco 与 xyflow 在页面内再各自懒加载。
+ */
+const agentsFeature = () => import('@/features/agents');
+const environmentsFeature = () => import('@/features/environments');
+const AgentListPage = lazy(() => agentsFeature().then((m) => ({ default: m.AgentListPage })));
+const AgentLayout = lazy(() => agentsFeature().then((m) => ({ default: m.AgentLayout })));
+const AgentDetailPage = lazy(() => agentsFeature().then((m) => ({ default: m.AgentDetailPage })));
+const AgentEditPage = lazy(() => agentsFeature().then((m) => ({ default: m.AgentEditPage })));
+const AgentComparePage = lazy(() => agentsFeature().then((m) => ({ default: m.AgentComparePage })));
+const EnvironmentListPage = lazy(() =>
+  environmentsFeature().then((m) => ({ default: m.EnvironmentListPage })),
+);
+const EnvironmentEditPage = lazy(() =>
+  environmentsFeature().then((m) => ({ default: m.EnvironmentEditPage })),
+);
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -255,7 +265,7 @@ const environmentsRoute = navRoute('environments', 'environments', '环境', () 
 const environmentListRoute = createRoute({
   getParentRoute: () => environmentsRoute,
   path: '/',
-  component: EnvironmentListPage,
+  component: () => <EnvironmentListPage />,
 });
 const environmentNewRoute = createRoute({
   getParentRoute: () => environmentsRoute,

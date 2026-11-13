@@ -11,7 +11,6 @@ import {
   type CurrentProject,
 } from '@/lib/access';
 import { AgentGlyph } from '@/components/ui/glyphs';
-import { agentsQuery } from '@/features/agents';
 import { adminApi, unwrap, v1Api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
 import { CrumbProvider, useCrumbLabels } from '@/lib/crumbs';
@@ -88,10 +87,17 @@ function Shell({ project }: { project: CurrentProject }) {
 
   const activeItem = NAV.find((item) => item.key === active);
 
-  // ⌘K 的智能体：第一次打开命令面板时才加载，没有查看智能体的权限时不加载（D97）。
+  // ⌘K 的智能体：第一次打开命令面板时才加载，没有查看智能体的权限时不加载（D97）。智能体页的代码按路由懒加载，
+  // 这里同样在用到时才导入它（首屏不带表单与校验的代码），数据经它的查询读取、与智能体页共用缓存。
   const [commandUsed, setCommandUsed] = useState(false);
   const agents = useQuery({
-    ...agentsQuery({ tenantId: project.tenantId, projectId: project.projectId }),
+    queryKey: ['shell', 'command-agents', project.tenantId, project.projectId],
+    queryFn: async () => {
+      const { agentsQuery } = await import('@/features/agents');
+      return queryClient.fetchQuery(
+        agentsQuery({ tenantId: project.tenantId, projectId: project.projectId }),
+      );
+    },
     enabled: commandUsed && hasPermission(project, 'agent_read'),
   }).data;
   const commandGroups = useMemo(
