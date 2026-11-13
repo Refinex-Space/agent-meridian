@@ -61,9 +61,9 @@ function pick(next: () => number) {
 /** 越新的会话越可能还在进行；一天以前的会话都已结束或归档。等待处理的会话只来自待处理夹具。 */
 function statusOf(ageMs: number, next: () => number): SessionStatus {
   const r = next();
-  if (ageMs < 20 * 60_000) {
-    if (r < 0.4) return 'running';
-    if (r < 0.46) return 'rescheduled';
+  if (ageMs < 60 * 60_000) {
+    if (r < 0.45) return 'running';
+    if (r < 0.5) return 'rescheduled';
     return 'idle';
   }
   if (ageMs < 86_400_000) return r < 0.25 ? 'terminated' : 'idle';

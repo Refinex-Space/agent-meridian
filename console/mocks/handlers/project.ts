@@ -152,7 +152,11 @@ export function projectHandlers(options: ProjectOptions = {}): RequestHandler[] 
         await wait();
         if (mode === 'error') return failed('/v1/session-stats');
         const window = (new URL(request.url).searchParams.get('window') ?? '24h') as Schemas['StatsWindow'];
-        return HttpResponse.json(buildSessionStats(window, Date.now(), sessions));
+        const stats = buildSessionStats(window, Date.now(), sessions);
+        // 新项目：还没有任何轮次与待处理动作。
+        return HttpResponse.json(
+          mode === 'empty' ? { ...stats, agents: [], recent_errors: [], pending_actions: 0 } : stats,
+        );
       },
     ),
 

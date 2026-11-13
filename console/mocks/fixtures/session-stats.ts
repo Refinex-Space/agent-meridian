@@ -96,13 +96,14 @@ const ERRORS: ErrorSpec[] = [
   },
 ];
 
+/** 固定的带前缀 ID：同一个种子总是同一个值（线性同余，32 位整数运算）。 */
 function id(prefix: string, seed: number): string {
   const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-  let x = seed * 2654435761;
+  let x = (seed * 7919 + 104_729) >>> 0;
   let out = '';
   for (let i = 0; i < 22; i += 1) {
-    x = (x * 1103515245 + 12345) >>> 0;
-    out += CROCKFORD[x % 32];
+    x = (Math.imul(x, 1_103_515_245) + 12_345) >>> 0;
+    out += CROCKFORD[(x >>> 16) % 32];
   }
   return `${prefix}_01JC${out}`;
 }
