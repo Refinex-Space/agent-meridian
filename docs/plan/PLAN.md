@@ -91,7 +91,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 见控制台设计轨道 | — |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
 | T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 已完成 | 5220288 |
-| T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 未开始 | — |
+| T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 进行中 | — |
 | T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 未开始 | — |
 | T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 未开始 | — |
 | T25a | [控制台：知识库、待处理与概览](tasks/T25a-console-knowledge-pending-overview.md) | 4 | T24 | high | 大 | 无 | 未开始 | — |
@@ -175,7 +175,19 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+### T22 控制台：智能体与环境（2026-11-13 开工）
+
+- [ ] 开工基线：`verify.sh` 的 Maven 部分全绿；控制台 FilterBar 一例在高负载下失败（路由异步提交后才断言），修正为等待提交
+- [ ] 依赖（React Hook Form、Zod、resolvers、Monaco、xyflow）登记 ADR-0021；端到端后端：runtime 改读 control-plane 的智能体与目录、启动 knowledge，全局准备建模型与知识库
+- [ ] 数据层：智能体、版本、对比、环境、修订、模型、技能、MCP、知识库、会话统计的查询与变更 Hook；规格与表单的映射；Zod 校验（与 JSON Schema 及发布规则一致）与服务端字段错误的定位
+- [ ] 智能体列表页（新建、删除写明使用中的会话数）
+- [ ] 智能体详情页（概要、版本历史、使用中的会话、子智能体拓扑 xyflow）
+- [ ] 智能体编辑页（九个分组、Monaco 提示词、可搜索的资源选择器与状态、权限规则编辑器、未保存离开提示、固定保存栏、发布前差异）
+- [ ] 版本对比页、基于某版本创建新草稿
+- [ ] 环境列表与编辑页（档位、规格、出网白名单校验、修订历史）
+- [ ] 加载、空、错误、无权限状态；⌘K 加入智能体（D97）；删除智能体编辑原型
+- [ ] Vitest 组件测试；Playwright：A01–A05；截图评审 A06（`tmp/evidence/T22/`）；ego-browser 走查 A07
+- [ ] 收尾：质量门禁、文档（console/CLAUDE.md、frontend-design.md、console-api-map.md）、acceptance.json、PLAN.md
 
 ## 控制台设计轨道
 

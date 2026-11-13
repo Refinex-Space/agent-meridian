@@ -120,7 +120,8 @@ describe('FilterBar 与 URL 同步', () => {
     await renderWithRouter(<Harness />);
     await user.click(screen.getByRole('button', { name: '清除筛选' }));
     expect(window.location.search).toBe('?tab=all');
-    expect(screen.getByRole('searchbox', { name: '搜索会话' })).toHaveValue('');
+    // 地址栏同步更新，路由按新地址重新渲染是异步的：等它提交后再读控件。
+    await vi.waitFor(() => expect(screen.getByRole('searchbox', { name: '搜索会话' })).toHaveValue(''));
     expect(screen.queryByRole('button', { name: '清除筛选' })).toBeNull();
   });
 
