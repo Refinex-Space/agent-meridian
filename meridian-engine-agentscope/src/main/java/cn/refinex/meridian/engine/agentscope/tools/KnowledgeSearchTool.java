@@ -49,6 +49,18 @@ public final class KnowledgeSearchTool extends PlatformTool {
 
     private final KnowledgeSearchPort knowledge;
     private final Set<String> boundKnowledgeBases;
+    private final String rewriteModel;
+
+    /**
+     * 创建不改写查询的工具。
+     *
+     * @param services 平台服务
+     * @param knowledge 检索端口
+     * @param boundKnowledgeBases 智能体绑定的知识库 ID，取自智能体配置；可为空，此时每次调用都返回错误结果
+     */
+    public KnowledgeSearchTool(ToolServices services, KnowledgeSearchPort knowledge, List<String> boundKnowledgeBases) {
+        this(services, knowledge, boundKnowledgeBases, null);
+    }
 
     /**
      * 创建工具。
@@ -56,8 +68,13 @@ public final class KnowledgeSearchTool extends PlatformTool {
      * @param services 平台服务
      * @param knowledge 检索端口
      * @param boundKnowledgeBases 智能体绑定的知识库 ID，取自智能体配置；可为空，此时每次调用都返回错误结果
+     * @param rewriteModel 查询改写的对话模型（智能体配置的 {@code knowledge.query_rewrite_model}）；为空表示不改写
      */
-    public KnowledgeSearchTool(ToolServices services, KnowledgeSearchPort knowledge, List<String> boundKnowledgeBases) {
+    public KnowledgeSearchTool(
+            ToolServices services,
+            KnowledgeSearchPort knowledge,
+            List<String> boundKnowledgeBases,
+            String rewriteModel) {
         super(
                 new Spec(
                         PlatformToolNames.KNOWLEDGE_SEARCH,
@@ -69,6 +86,7 @@ public final class KnowledgeSearchTool extends PlatformTool {
                 services);
         this.knowledge = Objects.requireNonNull(knowledge, "knowledge");
         this.boundKnowledgeBases = Set.copyOf(boundKnowledgeBases);
+        this.rewriteModel = rewriteModel;
     }
 
     @Override
@@ -88,7 +106,7 @@ public final class KnowledgeSearchTool extends PlatformTool {
         List<KnowledgeSearchPort.Hit> hits;
         try {
             hits = knowledge
-                    .search(new KnowledgeSearchPort.Query(ids, query.strip(), topK))
+                    .search(new KnowledgeSearchPort.Query(ids, query.strip(), topK, rewriteModel))
                     .contextWrite(PlatformContexts.write(call.platform()))
                     .block(SEARCH_TIMEOUT);
         } catch (RuntimeException e) {
@@ -100,8 +118,13 @@ public final class KnowledgeSearchTool extends PlatformTool {
         return ToolOutput.ok(render(hits));
     }
 
-    /** 每个切片一个来源标签，按相关度顺序。 */
-    static String render(List<KnowledgeSearchPort.Hit> hits) {
+    /**
+     * 每个切片一个来源标签，按相关度顺序；前置检索注入的内容用同一格式。
+     *
+     * @param hits 命中的切片
+     * @return 文本
+     */
+    public static String render(List<KnowledgeSearchPort.Hit> hits) {
         List<String> blocks = new ArrayList<>(hits.size());
         for (KnowledgeSearchPort.Hit hit : hits) {
             Map<String, String> attributes = new LinkedHashMap<>();

@@ -38,9 +38,10 @@ meridian:
       # 服务 JWT 的签名密钥（ADR-0044）：本机运行写在仓库的 deploy/compose/data（已忽略），Compose 中是命名卷
       key-directory: ${MERIDIAN_SERVICE_TOKEN_KEY_DIR:deploy/compose/data/service-token-keys}
       clients:
+        # runtime：配置、凭据与 API Key 调 control-plane，知识检索（T19）调 knowledge
         - service: runtime
           secret: ${MERIDIAN_RUNTIME_CLIENT_SECRET}
-          audiences: [control-plane]
+          audiences: [control-plane, knowledge]
         # kind 中的沙箱出网代理：只能换取 runtime 的令牌，用于出网授权回调（D38）
         - service: egress-proxy
           secret: ${MERIDIAN_EGRESS_PROXY_CLIENT_SECRET}

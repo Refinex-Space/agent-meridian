@@ -25,14 +25,19 @@ import cn.refinex.meridian.engine.spi.spec.PlatformToolNames;
 import cn.refinex.meridian.persistence.outbox.OutboxWriter;
 import cn.refinex.meridian.runtime.sandbox.app.SandboxProperties;
 import cn.refinex.meridian.runtime.session.app.AgentConfigProvider;
+import cn.refinex.meridian.runtime.session.infra.SessionRepository;
 import cn.refinex.meridian.runtime.tooling.app.TenantWebSearch;
 import cn.refinex.meridian.runtime.tooling.app.UnconfiguredKnowledgeSearch;
 import cn.refinex.meridian.runtime.tooling.infra.BochaSearchAdapter;
 import cn.refinex.meridian.runtime.tooling.infra.GuardedWebFetcher;
+import cn.refinex.meridian.runtime.tooling.infra.HttpKnowledgeSearch;
 import cn.refinex.meridian.runtime.tooling.infra.SearxngSearchAdapter;
+import cn.refinex.meridian.security.servicejwt.ServiceJwts;
+import cn.refinex.meridian.security.servicejwt.ServiceRestClients;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -84,7 +89,10 @@ public class PlatformToolsAutoConfiguration {
                 .with(
                         PlatformToolNames.KNOWLEDGE_SEARCH,
                         (services, profile) -> new KnowledgeSearchTool(
-                                services, knowledge, profile.agent().knowledge().knowledgeBaseIds()))
+                                services,
+                                knowledge,
+                                profile.agent().knowledge().knowledgeBaseIds(),
+                                profile.agent().knowledge().queryRewriteModel()))
                 .withMcp(new McpConnector(secrets));
     }
 
@@ -128,14 +136,24 @@ public class PlatformToolsAutoConfiguration {
     }
 
     /**
-     * 知识库检索：T19 之前是"未配置"的实现，检索以错误结果交给模型。
+     * 知识库检索（T19）：配置了 {@code meridian.runtime.knowledge.url} 时经 knowledge 的内部接口检索（服务 JWT，访问标签取会话的
+     * {@code end_user_attributes.acl_tags}）；没有配置时是"未配置"的实现，检索以错误结果交给模型，前置检索跳过。
      *
+     * @param url knowledge 的基础 URL；为空表示没有部署 knowledge
+     * @param clients 服务间调用客户端的构造入口
+     * @param sessions 会话仓储
      * @return 检索端口
      */
     @Bean
     @ConditionalOnMissingBean(KnowledgeSearchPort.class)
-    public KnowledgeSearchPort knowledgeSearchPort() {
-        return new UnconfiguredKnowledgeSearch();
+    public KnowledgeSearchPort knowledgeSearchPort(
+            @Value("${meridian.runtime.knowledge.url:}") String url,
+            ObjectProvider<ServiceRestClients> clients,
+            SessionRepository sessions) {
+        if (url == null || url.isBlank()) {
+            return new UnconfiguredKnowledgeSearch();
+        }
+        return new HttpKnowledgeSearch(clients.getObject().create(url, ServiceJwts.KNOWLEDGE), sessions);
     }
 
     /**

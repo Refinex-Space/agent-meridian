@@ -32,8 +32,8 @@ import reactor.core.publisher.Flux;
  *
  * <p>分类：系统消息中 harness 追加的 {@code <available_skills>} 块算技能清单，其余算系统提示词；带平台注入标记
  * （{@link SteerMiddleware#METADATA_KEY}、{@link RecoveryNoteMiddleware#METADATA_KEY}、平台上下文消息的
- * {@link PlatformContextMessage#METADATA_KEY}）的消息算注入内容，前置检索
- * （T19 的 {@code KnowledgePrefetchMiddleware}）的标记届时加入 {@link #INJECTION_MARKERS}；工具消息与带工具结果的消息算工具结果；
+ * {@link PlatformContextMessage#METADATA_KEY}、前置检索的 {@link KnowledgePrefetchMiddleware#METADATA_KEY}）的消息算注入内容；工具消息与
+ * 带工具结果的消息算工具结果；
  * 其余（用户、助手消息与压缩摘要）算历史。
  *
  * <p>线程安全：无状态。
@@ -48,7 +48,10 @@ public final class ContextCompositionMiddleware implements MiddlewareBase {
 
     /** 平台注入消息的元数据标记。 */
     static final Set<String> INJECTION_MARKERS = Set.of(
-            SteerMiddleware.METADATA_KEY, RecoveryNoteMiddleware.METADATA_KEY, PlatformContextMessage.METADATA_KEY);
+            SteerMiddleware.METADATA_KEY,
+            RecoveryNoteMiddleware.METADATA_KEY,
+            PlatformContextMessage.METADATA_KEY,
+            KnowledgePrefetchMiddleware.METADATA_KEY);
 
     private static final String SKILLS_OPEN = "<available_skills>";
     private static final String SKILLS_CLOSE = "</available_skills>";

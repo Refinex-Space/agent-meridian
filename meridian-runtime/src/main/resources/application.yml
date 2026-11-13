@@ -52,6 +52,9 @@ meridian:
       ping-interval: 15s
       max-connection-duration: 60m
       poll-interval: 100ms
+    knowledge:
+      # knowledge 服务的基础 URL（T19）：knowledge_search 与前置检索经它的内部接口检索；留空时检索以错误结果交给模型
+      url:
     workspace:
       # 平台控制的本机工作区根目录（登记事项 D05）：harness 的本机回退读取落在这里，平台不在其中写入
       local-root: ${java.io.tmpdir}/meridian/agent-workspace

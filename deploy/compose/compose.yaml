@@ -172,6 +172,7 @@ services:
       MERIDIAN_MIGRATOR_PASSWORD: ${MERIDIAN_MIGRATOR_PASSWORD}
       MERIDIAN_RUNTIME_CLIENT_SECRET: ${MERIDIAN_RUNTIME_CLIENT_SECRET}
       MERIDIAN_CONTROL_PLANE_URL: http://control-plane:18081
+      MERIDIAN_KNOWLEDGE_URL: http://knowledge:18083
       MERIDIAN_OIDC_ISSUER: http://localhost:${MERIDIAN_KEYCLOAK_PORT:-18082}/realms/meridian-dev
       MERIDIAN_OIDC_JWKS_URI: http://keycloak:8080/realms/meridian-dev/protocol/openid-connect/certs
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}

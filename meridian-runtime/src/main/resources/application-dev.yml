@@ -27,6 +27,9 @@ meridian:
       allow-loopback-endpoints: true
       # 默认的私有网段，加上 fake-ip 透明代理把公网域名解析到的 198.18.0.0/15（本机开发常见）
       private-networks: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, "fc00::/7", 198.18.0.0/15]
+    knowledge:
+      # knowledge_search 与前置检索（T19）：scripts/dev/run-knowledge.sh 或 Compose app profile
+      url: ${MERIDIAN_KNOWLEDGE_URL:http://localhost:18083}
   security:
     service-client:
       # API Key 经 control-plane 校验、租户配额与控制台用户的项目权限从 control-plane 读取（ADR-0042、ADR-0044）：

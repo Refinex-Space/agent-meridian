@@ -5,8 +5,9 @@ import java.util.List;
 import reactor.core.publisher.Mono;
 
 /**
- * 知识库还没有接入时的 {@link KnowledgeSearchPort}：每次检索都以"未配置"的错误结束，{@code knowledge_search} 把它作为错误结果交给模型，
- * 不中断本轮（T10b-A04）。T19 换成经 HTTP 调用 knowledge 服务的实现。
+ * 没有配置 knowledge 地址（{@code meridian.runtime.knowledge.url}）时的 {@link KnowledgeSearchPort}：每次检索都以"未配置"的错误结束，
+ * {@code knowledge_search} 把它作为错误结果交给模型，不中断本轮（T10b-A04），前置检索跳过注入。配置了地址时用
+ * {@code tooling.infra.HttpKnowledgeSearch}（T19）。
  */
 public final class UnconfiguredKnowledgeSearch implements KnowledgeSearchPort {
 

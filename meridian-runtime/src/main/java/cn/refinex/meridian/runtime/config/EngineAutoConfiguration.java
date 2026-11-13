@@ -19,6 +19,7 @@ import cn.refinex.meridian.engine.spi.port.AgentStateRepository;
 import cn.refinex.meridian.engine.spi.port.BlobStorePort;
 import cn.refinex.meridian.engine.spi.port.EventSinkPort;
 import cn.refinex.meridian.engine.spi.port.InboxPort;
+import cn.refinex.meridian.engine.spi.port.KnowledgeSearchPort;
 import cn.refinex.meridian.engine.spi.port.LeaseRegistry;
 import cn.refinex.meridian.engine.spi.port.ThreadRegistryPort;
 import cn.refinex.meridian.runtime.approval.app.ApprovalAudit;
@@ -73,13 +74,21 @@ public class EngineAutoConfiguration {
      * @param leases 本节点持有的租约
      * @param inbox 收件箱，steer 中间件使用
      * @param properties 执行配置
+     * @param knowledge 知识库检索，前置检索使用（T19）；测试自己提供工具时可能没有，此时不挂前置检索
      * @return 中间件提供者
      */
     @Bean
     public PlatformMiddlewareProvider platformMiddlewareProvider(
-            LeaseRegistry leases, InboxPort inbox, WorkerProperties properties) {
+            LeaseRegistry leases,
+            InboxPort inbox,
+            WorkerProperties properties,
+            ObjectProvider<KnowledgeSearchPort> knowledge) {
         return new PlatformMiddlewareProvider(
-                leases, inbox, properties.batchCheckpoint(), properties.maxSubagentsPerTurn());
+                leases,
+                inbox,
+                properties.batchCheckpoint(),
+                properties.maxSubagentsPerTurn(),
+                knowledge.getIfAvailable());
     }
 
     /**
