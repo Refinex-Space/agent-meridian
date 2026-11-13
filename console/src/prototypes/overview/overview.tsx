@@ -156,15 +156,11 @@ function AgentQuality({
         <col />
         <col style={{ width: 96 }} />
         <col style={{ width: 96 }} />
-        <col style={{ width: 96 }} />
-        <col style={{ width: 96 }} />
         <col style={{ width: 112 }} />
       </colgroup>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           <TableHead>智能体</TableHead>
-          <TableHead className="text-right">使用中</TableHead>
-          <TableHead className="text-right">运行中</TableHead>
           <TableHead className="text-right">轮次</TableHead>
           <TableHead className="text-right">失败</TableHead>
           <TableHead className="text-right">失败率</TableHead>
@@ -174,8 +170,6 @@ function AgentQuality({
         {rows.map((a) => (
           <TableRow key={a.agent_id}>
             <TableCell className="truncate">{names.get(a.agent_id) ?? a.agent_id}</TableCell>
-            <TableCell className="text-right tabular-nums">{formatInteger(a.active_sessions)}</TableCell>
-            <TableCell className="text-right tabular-nums">{formatInteger(a.running_sessions)}</TableCell>
             <TableCell className="text-right tabular-nums">{formatInteger(a.turns)}</TableCell>
             <TableCell className="text-right tabular-nums">{formatInteger(a.failed_turns)}</TableCell>
             <TableCell className="text-right tabular-nums">{rateText(a.failure_rate)}</TableCell>
@@ -199,10 +193,10 @@ function RecentErrors({
     <Table aria-label="最近失败的轮次" className="table-fixed">
       <colgroup>
         <col style={{ width: 104 }} />
-        <col style={{ width: 128 }} />
-        <col style={{ width: 208 }} />
+        <col style={{ width: 120 }} />
+        <col style={{ width: 224 }} />
         <col />
-        <col style={{ width: 216 }} />
+        <col style={{ width: 208 }} />
       </colgroup>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
@@ -471,7 +465,7 @@ export function Overview({ usage = 'ready', canReadUsage = true, pollMs = 30_000
           ) : !shown ? (
             statsSkeleton && <Skeleton className="h-48 w-full" />
           ) : (
-            <div className="grid grid-cols-1 gap-8 2xl:grid-cols-2 2xl:gap-12">
+            <div className="grid grid-cols-1 gap-8 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] 2xl:gap-12">
               <div className="flex min-w-0 flex-col gap-2">
                 <h3 className="text-13 font-semibold">按智能体</h3>
                 <AgentQuality stats={shown} names={names} />

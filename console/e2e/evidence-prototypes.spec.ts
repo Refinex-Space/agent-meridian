@@ -60,7 +60,7 @@ const STATES: Shot[] = [
   { name: 'pending-clear', story: '原型-待处理--all-clear', ready: '没有等待回应的动作' },
   { name: 'pending-loading', story: '原型-待处理--loading', prepare: (page) => page.waitForTimeout(500) },
   { name: 'pending-error', story: '原型-待处理--load-failed', ready: '无法加载待处理动作' },
-  { name: 'pending-no-permission', story: '原型-待处理--no-permission', ready: '记住此决定' },
+  { name: 'pending-no-permission', story: '原型-待处理--no-permission', ready: '入参' },
   { name: 'agent-edit-dirty', story: '原型-智能体编辑--dirty', ready: '有未保存的更改' },
   {
     name: 'agent-edit-invalid',

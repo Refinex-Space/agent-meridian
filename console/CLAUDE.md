@@ -1,6 +1,6 @@
 # console
 
-React 19 单页应用：管理与调试控制台。T20 阶段有工程、设计令牌、全部基元与领域组件（T20b）、`SessionTimeline` 与会话详情原型（Storybook + MSW）；路由、认证与真实 API 客户端在 T21。完整规范见 `docs/engineering/frontend-design.md`（「设计定稿」是令牌与自查的依据），依赖与版本见 ADR-0021。
+React 19 单页应用：管理与调试控制台。T20 阶段有工程、设计令牌、全部基元与领域组件（T20b）、`SessionTimeline`，以及应用外壳、四种页面模板与关键页面的原型（T20c，Storybook「原型」组 + MSW）；路由、认证与真实 API 客户端在 T21。完整规范见 `docs/engineering/frontend-design.md`（「设计定稿」是令牌与自查的依据），依赖与版本见 ADR-0021。
 
 ## 命令
 
@@ -12,7 +12,7 @@ React 19 单页应用：管理与调试控制台。T20 阶段有工程、设计�
 - 类型检查：`pnpm typecheck`；单元测试：`pnpm test`（Vitest，含守护规则的 RuleTester 测试）；单个：`pnpm exec vitest run <路径>`
 - Storybook：`pnpm storybook`（6006），构建 `pnpm build-storybook`（输出 `storybook-static/`）
 - 端到端：`pnpm e2e`（Playwright，跑在构建后的 Storybook 上：时间轴性能、动效、无障碍）；首次先 `pnpm exec playwright install chromium`。`e2e/a11y.spec.ts` 从 `index.json` 读出全部故事逐个检查（亮暗各约 4 分钟），设了 `EVIDENCE_DIR` 时写出 `a11y-light.json`、`a11y-dark.json`
-- 评审截图与录屏：`EVIDENCE_DIR=../tmp/evidence/<任务编号> pnpm e2e e2e/evidence.spec.ts`
+- 评审截图与录屏：`EVIDENCE_DIR=../tmp/evidence/<任务编号> pnpm e2e e2e/evidence.spec.ts`；原型页面（亮暗 × 1280、1920，加各状态）用 `e2e/evidence-prototypes.spec.ts`
 - 改了 `meridian-api/…/meridian-v1.yaml` 后：`pnpm gen:api`，提交生成的 `src/lib/api/v1.d.ts`
 - 格式化：`pnpm format`
 - `scripts/dev/verify.sh` 运行 install、lint、typecheck、test、build-storybook；Playwright 不在其中
@@ -25,9 +25,18 @@ React 19 单页应用：管理与调试控制台。T20 阶段有工程、设计�
 - `src/components/domain/<组件>/`：领域组件，一个目录一个，经 `index.ts` 导出，旁边是故事与 Vitest 测试。`session-timeline/` 的 `model.ts` 是事件到行、线、分叉的纯函数，界面只读它；`status-badge/labels.ts` 是全控制台唯一的状态文字与语义映射；`data-table/features.ts` 登记 TanStack Table 9 的功能与列元数据；`filter-bar/use-url-filters.ts` 是筛选与 URL 的同步（T21 换成路由的搜索参数）
 - `src/test/`：Vitest 的 `setup.ts`、`clipboard.ts`（可断言的剪贴板），故事的公共外框与伪类参数 `stories.tsx`（`storyFrame`、`hover`、`focus`）
 - `src/assets/icons/`：自研 SVG（256 网格、16 线宽），经 SVGO、SVGR 生成组件，`index.tsx` 包成与 Phosphor 相同的接口
-- `src/prototypes/`：页面原型与应用外壳原型（T21 替换）；`mocks/`：MSW 处理器与夹具（`fixtures/q3-session.ts` 原型会话，`large-session.ts` 固定的 1 万条事件，`session-list.ts` 固定的会话列表）
+- `src/prototypes/`：原型（T21 起由正式页面替换，见下面的「原型」）；`mocks/`：MSW 处理器与夹具（`fixtures/q3-session.ts` 原型会话，`large-session.ts` 固定的 1 万条事件，`session-list.ts` 组件故事用的会话列表；`agents.ts`、`project-sessions.ts`、`pending-actions.ts`、`session-stats.ts` 是原型项目"华东经营分析"的数据，以"现在"为基准生成，`handlers/project.ts` 模拟项目级的公开 API）
 - `components.json`：shadcn CLI 的配置，只用于 `shadcn add --dry-run`、`--view` 比对上游；生成新基元见下面的「新增组件」
 - `eslint-rules/`：本地 ESLint 插件；`e2e/`：Playwright
+
+## 原型
+
+T21 至 T25b 的验收基准：页面成品与 Storybook「原型」组一致（布局、层级、状态、文案）。
+
+- 位置：`shell/`（外壳、命令面板、预算横幅）；`templates/`（`ListPage`、`DetailPage`、`EditPage` 与 `EditSection`、`Workbench`，四种模板的故事在 `templates.stories.tsx`）；页面 `session-list/`、`session-detail/`、`pending-actions/`、`agent-edit/`、`overview/`，模板的例子 `agents/`、`environments/`；`shared/`（`useResource`、`useInterval`、表单 `Field`）
+- 数据：运行时数据（会话、事件、待处理动作、运行概况）走 MSW 与 `v1.d.ts` 的类型；管理数据（智能体定义、环境、用量、预算、身份）是 `src/prototypes/fixtures/` 的视图模型，不冒充 API 类型，页面任务接入管理 API 时写映射
+- 原型里的筛选放组件状态（T21 换成路由的搜索参数）；表单是受控状态加 `agent-edit/validate.ts`（T22 换成 React Hook Form 与 Zod）；ECharts 在组件里动态导入
+- 原型故事要等 MSW 数据，a11y 用例在 `e2e/a11y.spec.ts` 的列表里逐个登记就绪文字
 
 ## 令牌与组件的使用规则
 
@@ -66,6 +75,9 @@ React 19 单页应用：管理与调试控制台。T20 阶段有工程、设计�
 - Radix 的选择器与模态菜单打开时只给外部加 aria-hidden，axe 判 aria-hidden-focus；`ui/inert-outside.tsx` 放在浮层内容里补上 inert。新写模态浮层（非 Dialog）照此处理
 - 命令面板的空结果用 `CommandList` 的 `empty`，不要把空态放进 listbox；listbox 里只能有选项与分组
 - 可滚动区域里没有可聚焦元素时要能用键盘聚焦：`ScrollArea` 给 `label`，`DialogBody`、`SheetBody` 已是 `role="region"` 加 `tabIndex={0}`
+- `:read-only` 也匹配 `<button>`：只读样式写 `[&:is(input,textarea):read-only]:`，否则选择器的触发器一直是只读外观
+- ECharts 不认 OKLCH：图表颜色在渲染时读 `--palette-*` 经 `lib/color.ts` 换成十六进制，主题切换时重绘（`overview/usage-chart.tsx`）
+- Playwright 的 `getByText(...).first()` 可能命中 `PermissionGate` 给读屏的隐藏原因（`<span hidden>`），就绪文字不要用无权限的原因
 
 ## 对外接口
 

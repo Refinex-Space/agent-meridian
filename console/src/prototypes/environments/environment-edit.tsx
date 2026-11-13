@@ -150,9 +150,7 @@ export function EnvironmentEdit({ environment, meta }: EnvironmentEditProps) {
                     <RadioGroupItem id={`size-${size.value}`} value={size.value} />
                   </span>
                   <span className="flex flex-col gap-1">
-                    <span className="font-medium">
-                      {size.label} <span className="font-mono text-12 text-ink-2">{size.value}</span>
-                    </span>
+                    <span className="font-medium">{size.label}</span>
                     <span className="text-12 text-ink-2 tabular-nums">
                       {size.cpu}，内存 {size.memory}，磁盘 {size.disk}
                     </span>

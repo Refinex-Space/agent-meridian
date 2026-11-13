@@ -111,7 +111,7 @@ export function AgentList({ agents, canWrite = true }: AgentListProps) {
           id: 'actions',
           header: () => <span className="sr-only">操作</span>,
           enableHiding: false,
-          meta: { width: 48, align: 'right', label: '操作' },
+          meta: { width: 56, align: 'right', label: '操作' },
           cell: (c) =>
             canWrite && (
               <DropdownMenu>
@@ -178,7 +178,7 @@ export function AgentList({ agents, canWrite = true }: AgentListProps) {
             value={filters}
             onChange={setFilters}
             search={{ label: '搜索智能体', placeholder: '名称或 ID' }}
-            resultCount={rows.length}
+            resultCount={filters.q ? rows.length : undefined}
           />
         }
       />

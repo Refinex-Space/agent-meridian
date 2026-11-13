@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 
-import { CopyableId } from '@/components/domain/copyable-id';
 import { ErrorState } from '@/components/domain/error-state';
 import { PermissionGate } from '@/components/domain/permission-gate';
 import {
@@ -121,7 +120,6 @@ export function AgentEdit({
           <>
             <Badge tone="accent">草稿 v{meta.draftVersion}</Badge>
             <span>基于已发布的 v{meta.baseVersion}</span>
-            <CopyableId id={meta.agentId} label="智能体 ID" />
           </>
         }
         actions={

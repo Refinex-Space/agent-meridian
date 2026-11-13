@@ -256,25 +256,20 @@ export function AppShell({
           ))}
         </ul>
         <div className={cn('mt-auto pb-3', collapsed ? 'flex justify-center' : 'px-2')}>
-          {collapsed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="icon-md" variant="ghost" aria-label="展开导航" onClick={toggle}>
-                  <Icon glyph={SidebarSimpleIcon} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">展开导航</TooltipContent>
-            </Tooltip>
-          ) : (
-            <button
-              type="button"
-              onClick={toggle}
-              className="flex h-8 w-full items-center gap-3 rounded-control px-2 text-13 text-ink-2 hover:bg-surface-hover hover:text-ink"
-            >
-              <Icon glyph={SidebarSimpleIcon} />
-              收起导航
-            </button>
-          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon-md"
+                variant="ghost"
+                aria-label={collapsed ? '展开导航' : '收起导航'}
+                aria-expanded={!collapsed}
+                onClick={toggle}
+              >
+                <Icon glyph={SidebarSimpleIcon} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{collapsed ? '展开导航' : '收起导航'}</TooltipContent>
+          </Tooltip>
         </div>
       </nav>
       <div className="flex min-w-0 flex-1 flex-col">

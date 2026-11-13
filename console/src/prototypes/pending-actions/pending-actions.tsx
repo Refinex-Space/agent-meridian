@@ -108,11 +108,6 @@ export function PendingActions({
       (a, b) => Date.parse(b.resolved_at ?? b.created_at) - Date.parse(a.resolved_at ?? a.created_at),
     );
   }, key);
-  const pendingCount = useResource(
-    async (signal) => (await listPendingActions({ status: 'pending', limit: 100 }, { signal })).data.length,
-    'pending-count',
-  );
-
   const [selected, setSelected] = useState<string | null>(initialSelected ?? null);
   const [busy, setBusy] = useState<Busy | null>(null);
   const [responded, setResponded] = useState<ReadonlyMap<string, Conclusion>>(new Map());
@@ -268,7 +263,6 @@ export function PendingActions({
   }, [tab, agentNames, deciders, responded, busy, canRespond]);
 
   const filtered = hasActiveFilters(filters);
-  const count = pendingCount.data;
 
   return (
     <ListPage
@@ -276,10 +270,7 @@ export function PendingActions({
       tabs={
         <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
           <TabsList>
-            <TabsTrigger value="pending">
-              待回应
-              {count !== null && count > 0 && <Badge tone="brass">{count}</Badge>}
-            </TabsTrigger>
+            <TabsTrigger value="pending">待回应</TabsTrigger>
             <TabsTrigger value="history">历史</TabsTrigger>
           </TabsList>
         </Tabs>

@@ -106,7 +106,9 @@ export function ActionSheet({
           <>
             <SheetHeader>
               <SheetTitle className="font-mono">{toolLabel(action.tool_name)}</SheetTitle>
-              <SheetDescription>{ACTION_TYPE_LABEL[action.type]}</SheetDescription>
+              {action.type !== 'tool_confirmation' && (
+                <SheetDescription>{ACTION_TYPE_LABEL[action.type]}</SheetDescription>
+              )}
             </SheetHeader>
             <SheetBody label="动作详情" className="flex flex-col gap-6">
               <KeyValueList

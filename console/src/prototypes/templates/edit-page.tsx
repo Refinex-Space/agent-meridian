@@ -61,7 +61,7 @@ export function EditSection({ id, title, children }: { id: string; title: string
   );
 }
 
-/** 滚动时高亮当前分组：标题已经滚过容器顶部往下 96px 的最后一个分组；滚到底时是最后一个。 */
+/** 滚动时高亮当前分组：标题已经进入容器上部 40% 的最后一个分组；滚到底时是最后一个。 */
 function useActiveGroup(container: RefObject<HTMLDivElement | null>, ids: readonly string[]) {
   const [active, setActive] = useState(ids[0] ?? '');
   const key = ids.join(' ');
@@ -69,7 +69,7 @@ function useActiveGroup(container: RefObject<HTMLDivElement | null>, ids: readon
     const root = container.current;
     if (!root) return undefined;
     const update = () => {
-      const top = root.getBoundingClientRect().top + 96;
+      const top = root.getBoundingClientRect().top + root.clientHeight * 0.4;
       const atBottom = root.scrollTop + root.clientHeight >= root.scrollHeight - 2;
       let current = ids[0] ?? '';
       for (const id of ids) {

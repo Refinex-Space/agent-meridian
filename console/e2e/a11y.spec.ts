@@ -34,7 +34,7 @@ const STORIES: { id: string; ready: string | null }[] = [
   { id: '原型-待处理--pending', ready: '由业务系统回传' },
   { id: '原型-待处理--detail', ready: '记住此决定' },
   { id: '原型-待处理--history', ready: '超时视为拒绝' },
-  { id: '原型-待处理--no-permission', ready: '记住此决定' },
+  { id: '原型-待处理--no-permission', ready: '入参' },
   { id: '原型-智能体编辑--saved', ready: '已保存于' },
   { id: '原型-智能体编辑--invalid', ready: '处需要修改' },
   { id: '原型-智能体编辑--read-only', ready: '系统提示词' },

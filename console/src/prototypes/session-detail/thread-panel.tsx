@@ -3,7 +3,6 @@ import { useMemo } from 'react';
 import type { TimelineModel } from '@/components/domain/session-timeline';
 import { StatusGlyph } from '@/components/domain/status-badge';
 import { MAIN_THREAD_KEY, ThreadTree, threadTreeItems } from '@/components/domain/thread-tree';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { SessionStatus } from '@/lib/api/types';
 import { formatDuration } from '@/lib/format';
@@ -57,10 +56,7 @@ export function ThreadPanel({ model, status, selectedId, onJump, now }: ThreadPa
         </section>
 
         <section className="flex flex-col gap-1">
-          <h2 className="flex items-center gap-2 px-2 pb-1 text-13 font-semibold">
-            待处理
-            {pending.length > 0 && <Badge tone="brass">{pending.length}</Badge>}
-          </h2>
+          <h2 className="px-2 pb-1 text-13 font-semibold">待处理</h2>
           {pending.length === 0 ? (
             <p className="px-2 text-13 text-ink-2">没有等待回应的动作</p>
           ) : (

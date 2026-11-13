@@ -2,7 +2,6 @@ import { CopyableId } from '@/components/domain/copyable-id';
 import { KeyValueList } from '@/components/domain/key-value-list';
 import { RelativeTime } from '@/components/domain/relative-time';
 import { StatusBadge } from '@/components/domain/status-badge';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FlaskIcon } from '@/components/ui/glyphs';
 import { Icon } from '@/components/ui/icon';
@@ -84,7 +83,6 @@ export function AgentDetail({ agent, definition: d, versions }: AgentDetailProps
       meta={
         <>
           <StatusBadge of="custom" kind="success" label={`已发布 v${agent.version}`} />
-          {draft && <Badge tone="accent">v{draft.version} 草稿未发布</Badge>}
           <CopyableId id={agent.id} label="智能体 ID" />
         </>
       }

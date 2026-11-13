@@ -176,12 +176,6 @@ export function SessionList({ canRead = true, initialFilters, pollMs = 15_000 }:
             return v ? <span className="truncate">{v}</span> : <span className="text-ink-2">无</span>;
           },
         }),
-        col.accessor('created_at', {
-          header: '创建',
-          enableSorting: false,
-          meta: { width: 136 },
-          cell: (c) => <RelativeTime value={c.getValue()} className="text-ink-2" />,
-        }),
         col.accessor('updated_at', {
           header: '更新',
           enableSorting: false,
