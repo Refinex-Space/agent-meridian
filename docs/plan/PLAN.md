@@ -92,7 +92,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
 | T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 已完成 | 5220288 |
 | T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 已完成 | 1cf2761 |
-| T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 已完成 | COMMIT_TBD |
+| T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 已完成 | 4b1fad4 |
 | T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 未开始 | — |
 | T25a | [控制台：知识库、待处理与概览](tasks/T25a-console-knowledge-pending-overview.md) | 4 | T24 | high | 大 | 无 | 未开始 | — |
 | T25b | [控制台：用量与预算、设置](tasks/T25b-console-usage-settings.md) | 4 | T25a | high | 大 | 无 | 未开始 | — |
@@ -564,7 +564,7 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：表单值就是规格本身（snake_case），快照字段读入时去掉；校验不走 resolver，自写锚点映射（没有引入 @hookform/resolvers）；草稿参与对比时不显示快照字段、版本 ID 一律不显示；删除后果按 runtime 的实际行为写；Monaco 只经 0.57 的公开入口装配；面包屑的对象名由路由组件登记
 - 遗留：D98（会话行跳转随 T24，修订人与发布人只有主体标识）、D99（编辑页模板的分组高亮阈值，R3）；D97 的会话部分随 T24；ego-browser 有新版本可升级（未升级）
 
-### 2026-11-13 T23 已完成（提交 COMMIT_TBD）
+### 2026-11-13 T23 已完成（提交 4b1fad4）
 
 - 交付：控制台的能力（技能列表、浏览器端解析与预览的技能包上传、技能详情的版本、文件与被引用；MCP 服务的登记、详情、连接状态、逐个工具的副作用标注与重新探测；自定义工具的说明）、模型（供应商账号与就地写入凭据、行内连通性测试；模型目录与经直通接口的模型测试；价格表与版本、发布新版本）、设置的"凭据"标签页（写入、轮换、删除，明文只写不读）；领域组件 `ReferenceList`/`InUseDialog`，`ResourceSelect` 移到领域组件；连通性的状态文字进 `labels.ts`；`formatDateTime`、`formatTokenLimit`；依赖 `yaml` 2.9.1；管理 API 的 `Skill.references`（control-plane `SkillView`、`AgentVersionRefRepository.referencingAll`）；脚本化模型服务回应 `GET /v1/models`；Playwright `capabilities`、`models`、`models-live`（@live，`E2E_LIVE=1`）、`secrets`、`a11y-capabilities`、`evidence-capabilities`
 - 修复：表单内的"写入凭据"按钮默认提交外层表单；上传新版本后文件清单停在旧版本；浏览器把保存的登录名与密码自动填进凭据对话框（`autocomplete="new-password"`，走查发现）；选择器的 `aria-label` 与可见文字不符、资源选择器加载状态的 `aria-label` 无角色（新故事暴露）
