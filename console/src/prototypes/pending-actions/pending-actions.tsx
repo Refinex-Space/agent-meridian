@@ -15,7 +15,7 @@ import { RelativeTime } from '@/components/domain/relative-time';
 import { StatusBadge } from '@/components/domain/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { listAgents, listPendingActions, sendEvents } from '@/lib/api/sessions';
 import type { PendingAction, Schemas } from '@/lib/api/types';
 import { useNow } from '@/lib/use-now';
@@ -264,18 +264,9 @@ export function PendingActions({
 
   const filtered = hasActiveFilters(filters);
 
-  return (
-    <ListPage
-      title="待处理"
-      tabs={
-        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-          <TabsList>
-            <TabsTrigger value="pending">待回应</TabsTrigger>
-            <TabsTrigger value="history">历史</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      }
-    >
+  // 表格放进当前标签页的面板：标签与面板经 aria-controls 关联（只挂载当前的一个）。
+  const body = (
+    <>
       {respondError !== null && (
         <ErrorState size="inline" title="回应没有发送成功" error={respondError} className="mt-3" />
       )}
@@ -326,6 +317,27 @@ export function PendingActions({
           />
         }
       />
+    </>
+  );
+
+  return (
+    <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="h-full">
+      <ListPage
+        title="待处理"
+        tabs={
+          <TabsList>
+            <TabsTrigger value="pending">待回应</TabsTrigger>
+            <TabsTrigger value="history">历史</TabsTrigger>
+          </TabsList>
+        }
+      >
+        <TabsContent value="pending" className="flex min-h-0 flex-1 flex-col">
+          {tab === 'pending' && body}
+        </TabsContent>
+        <TabsContent value="history" className="flex min-h-0 flex-1 flex-col">
+          {tab === 'history' && body}
+        </TabsContent>
+      </ListPage>
       <ActionSheet
         action={selectedAction}
         agentName={selectedAction?.agent_id ? (agentNames.get(selectedAction.agent_id) ?? '') : '未记录'}
@@ -347,6 +359,6 @@ export function PendingActions({
         }}
         onOpenChange={(open) => !open && setSelected(null)}
       />
-    </ListPage>
+    </Tabs>
   );
 }
