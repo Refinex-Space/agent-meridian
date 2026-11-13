@@ -1819,57 +1819,57 @@
       "id": "T23-A01",
       "task": "T23",
       "description": "上传一个技能包，预览正确，发布后能被智能体引用。验证：Playwright 用例。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright `console/e2e/app/capabilities.spec.ts`「上传技能包：浏览器端预览、上传新版本，发布后能被智能体引用」通过（本机，Compose 后端 console-e2e-env.sh，dev-developer）：选择缺 frontmatter 的文件夹时预览就地报错、上传按钮不可用；选择合法文件夹后预览显示 name、description、license、正文与文件清单（SKILL.md、scripts/summarize.py），写明忽略 1 个隐藏文件；上传后进入技能详情，再上传 v2（版本表与\"v2 的文件\"）；经管理 API 发布一个引用 v2 的智能体后，技能详情的\"被引用\"与技能列表都显示该智能体版本（管理 API 新增 `Skill.references`，`AgentVersionIT` 覆盖）"
     },
     {
       "id": "T23-A02",
       "task": "T23",
       "description": "注册一个 MCP 服务（测试环境中的进程内服务或本地 MCP 服务），工具清单出现，副作用等级可标注并保存。验证：Playwright 用例。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright `capabilities.spec.ts`「登记 MCP 服务：就地写入凭据，工具清单出现，逐个标注副作用等级并保存」通过：dev-admin 登记 knowledge 自带的 MCP 服务 http://knowledge:18083/mcp/knowledge，Authorization 请求头的凭据在嵌套对话框里就地写入（只给本项目）并自动选中；连接并登记后详情页工具清单出现 knowledge_search，info 提示说明三个等级与恢复的影响，把它标为\"无副作用\"后出现保存栏，保存并刷新后仍是\"无副作用\"，管理 API 读回 tool_side_effects={knowledge_search: none}、last_check.status=ok；重新探测后连接状态为\"连通\""
     },
     {
       "id": "T23-A03",
       "task": "T23",
       "description": "新建供应商账号与模型后，连通性测试成功（`DASHSCOPE_API_KEY`，作为凭据录入），显示延迟与用量。验证：Playwright 用例（`live` 标签）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright `console/e2e/app/models-live.spec.ts`（@live，`E2E_LIVE=1`，不录跟踪与截图）通过（9.4 秒）：dev-admin 新建供应商账号 DashScope 兼容模式端点，凭据在账号表单里就地写入（租户级，值取 DASHSCOPE_API_KEY），测试连通性显示\"连通\"与延迟；添加模型 qwen-plus 后\"测试\"显示调用成功、延迟、回复与\"输入 N、输出 N token\"（均大于 0）；用例最后经管理 API 删除模型、账号与凭据（204）。连通性测试本身列模型清单、不产生用量，用量来自模型测试（经 /v1/chat/completions，ADR-0056）"
     },
     {
       "id": "T23-A04",
       "task": "T23",
       "description": "凭据明文在提交后不出现在页面、网络响应、浏览器存储与查询缓存中。验证：Playwright 用例检查 DOM、网络响应与存储。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright `console/e2e/app/secrets.spec.ts`「写入与轮换后，明文不出现在页面、网络响应与浏览器存储中」通过：凭据值是密码框；写入、轮换（版本 2）、刷新之后，两个明文都不在 page.content()、任何输入框的值、localStorage、sessionStorage、IndexedDB 库名、Cache Storage、Cookie 与全部网络响应正文中，含明文的请求只有写入与轮换两个 POST；无权限成员看到原因。查询缓存由 Vitest `secret-dialogs.test.tsx` 断言（写入、写入失败、轮换后 QueryCache 与 MutationCache 序列化后不含明文，变更缓存为空，DOM 不含明文）；走查发现浏览器会把保存的登录密码自动填进凭据值，已改为 autocomplete=new-password 并在同一浏览器复查"
     },
     {
       "id": "T23-A05",
       "task": "T23",
       "description": "价格表新版本生效后，历史用量的成本不变。验证：Playwright 用例加 API 断言。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright `console/e2e/app/models.spec.ts`「价格表新版本生效后，历史用量的成本不变」通过：界面新建价格表 v1（输入 1、输出 2）与用它计价的模型（上游为脚本化模型服务），在界面测试模型产生第一条用量；API 断言账本记录 price_book_version=1、cost>0；界面发布 v2（单价 ×10），版本表 v2 当前、v1 在下；再测试一次后 API 断言第一条记录的 cost 与版本不变，第二条 price_book_version=2，单位 token 成本之比为 10"
     },
     {
       "id": "T23-A06",
       "task": "T23",
       "description": "所有页面的状态完整，与设计规范一致，内容区以外与 T21 的截图基线（`toHaveScreenshot`）一致。验证：截图（`tmp/evidence/T23/`）与 `toHaveScreenshot` 结果，对照评审表与禁用清单。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "评审截图 `tmp/evidence/T23/`：17 个页面与对话框 × 亮暗 × 1280、1920（68 张）加 18 个状态的亮色 1280（加载、空、筛选为空、错误、无权限、只读、连不上、凭据无效、被引用、校验错误、模型测试失败），前两轮在 round1/、round2/，修正记录在 frontend-design.md「T23 能力、模型与凭据」（评审表与禁用清单逐条对照）。外壳与模板的截图基线 `pnpm e2e e2e/shell-baseline.spec.ts` 24 passed（与 T21 基线一致，T23 未改外壳与模板）；Storybook a11y 亮暗全部故事零违规（新增 ResourceSelect、ReferenceList、InUseDialog 的故事，修正其中暴露的 label-content-name-mismatch 与加载状态的 aria-prohibited-attr）；真实页面 `e2e/app/a11y-capabilities.spec.ts` 亮暗两套 10 个页面与 6 个对话框、抽屉零违规"
     },
     {
       "id": "T23-A07",
       "task": "T23",
       "description": "用 `ego-browser` 以管理员身份走查\"接入一个新模型供应商并给智能体使用\"的全过程，记录并修正问题。验证：走查记录。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "ego-browser 以 dev-admin 走查（截图 tmp/evidence/T23/walkthrough-1..6）：新建 OpenAI 兼容的\"私有化推理服务\"并就地写入凭据 → 测试连通性\"连通 11 毫秒\" → 新建价格表 → 添加模型 private-chat 并选价格表 → 测试显示延迟 60 毫秒与\"输入 9、输出 7 token\" → 新建智能体 private-assistant 选用它并发布 v1 → 凭据列表显示引用方\"供应商账号 私有化推理服务\"与最后使用\"刚刚\" → 删除被引用的模型时列出\"智能体版本 private-assistant v1\"。发现并修正 2 处：浏览器把保存的登录名与密码自动填进凭据对话框（autocomplete 改 new-password，复查不再填充）；32768 显示为 33K（上下文与输出上限按 1024 进位）。记录未改：模型、供应商账号、MCP 服务没有引用方字段，删除被引用的对象要先输入名称、被拒后才看到引用方。记录写在 frontend-design.md「T23 能力、模型与凭据·走查」"
     },
     {
       "id": "T23-A08",
       "task": "T23",
       "description": "控制台全部检查与 `scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "`scripts/dev/verify.sh` 收尾运行 EXIT=0（Maven BUILD SUCCESS：格式、编译、单元与集成测试、架构测试、enforcer、覆盖率；sandbox-runtime 与 doc-parser 的 pytest；console 的 install、lint（ESLint、样式检查、Prettier、gen:api --check）、typecheck、298 个 Vitest、build-storybook）。第一次收尾运行时 Keycloak 测试容器启动超时（Compose 全套服务与 kind 集群同时占用 Docker 内存），停掉 Compose 服务后重跑通过。另外：`pnpm -C console build` 通过；`pnpm e2e:app` 全量 31 passed（live 与截图用例按条件跳过），live 用例 1 passed；Storybook 上 a11y 与外壳截图基线全部通过"
     },
     {
       "id": "T24-A01",

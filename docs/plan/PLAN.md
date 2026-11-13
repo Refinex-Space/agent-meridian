@@ -92,7 +92,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
 | T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 已完成 | 5220288 |
 | T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 已完成 | 1cf2761 |
-| T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 进行中 | — |
+| T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 已完成 | COMMIT_TBD |
 | T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 未开始 | — |
 | T25a | [控制台：知识库、待处理与概览](tasks/T25a-console-knowledge-pending-overview.md) | 4 | T24 | high | 大 | 无 | 未开始 | — |
 | T25b | [控制台：用量与预算、设置](tasks/T25b-console-usage-settings.md) | 4 | T25a | high | 大 | 无 | 未开始 | — |
@@ -175,17 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T23 控制台：能力、模型与凭据
-
-- [x] 后端补充：技能的引用方（`Skill.references`，已发布的智能体版本）；ADR-0056
-- [x] 能力·技能：列表、上传技能包（浏览器端解析并预览 frontmatter 与正文）、详情（版本、文件、引用方）、上传新版本、删除
-- [x] 能力·MCP 服务：登记（传输、地址、请求头凭据）、详情（连接状态、工具清单、逐个标注副作用等级并保存）、重新探测、修改、删除
-- [x] 能力·自定义工具：说明页（声明方式、命名规则、示例请求）
-- [x] 凭据：列表（名称、范围、版本、创建与最后使用时间、引用方）、写入、轮换、删除（写明引用方）；明文不进查询缓存与存储
-- [x] 模型：供应商账号（类型、端点、凭据、限流、连通性测试）、模型目录（上下文窗口、能力、默认参数、测试一次最小请求并显示延迟与用量）、价格表（版本化、生效时间、发布新版本）
-- [x] Playwright：A01 技能、A02 MCP、A03 真实供应商（live）、A04 凭据明文、A05 价格表版本与历史成本
-- [ ] A06 截图评审（`tmp/evidence/T23/`）与截图基线；A07 ego-browser 走查
-- [ ] 收尾：模块 CLAUDE.md、frontend-design.md、console-api-map.md、验收记录、A08 全部检查与 verify.sh
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -352,6 +342,8 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D97 | T21 | ⌘K 命令面板只有页面：智能体（跳到智能体详情）随 T22 加入（已完成：`CommandObjectGroup`，第一次打开时加载），最近的会话与输入会话 ID 直接打开随 T24 加入（T20c 原型有这两组） | T24 |
 | D98 | T22 | 智能体详情的"会话"标签页列出使用中的会话，行还不能打开会话详情（会话详情页在 T24）；版本表与修订历史的"发布或创建""修改人"只有主体标识（显示"你"或截断的 `sub`）：管理 API 没有按主体查成员显示名的接口 | T24（会话行跳转）；显示名按需要再补接口 |
 | D99 | T22 | 编辑页模板在顶部时，分组导航按"标题进入容器上部 40%"高亮第二组（表单较短时第二组标题也在上部 40% 内）：模板行为，T20c 定下的阈值 | R3 |
+| D100 | T23 | 模型、供应商账号、MCP 服务的管理 API 没有引用方字段（技能 T23 已加、凭据原有）：删除被引用的对象时要先输入名称、被拒（409）后控制台才列出引用方；按 `Skill.references` 的做法给三者加 `references` 即可在删除前直接说明 | R3（决定是否补接口） |
+| D101 | T23 | 端到端用例与截图用例在验收租户里留下的数据只增不减（价格表没有删除接口，模型、技能等用例不清理）：列表越来越长，按名称前缀选择的用例可能互相干扰（T23 曾因此改截图用例的技能前缀） | 下一次改端到端基座的任务（按运行建临时项目或在全局准备中清理） |
 
 ## 技术债
 
@@ -571,6 +563,14 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 验收：A01–A08 全部 passing（`e2e:app` 21 passed；评审截图 82 张在 `tmp/evidence/T22/`；Storybook 基线与 a11y 82 passed；真实页面 axe 零违规；ego-browser 走查发现并修正 6 处；`verify.sh` 通过）
 - 决策：表单值就是规格本身（snake_case），快照字段读入时去掉；校验不走 resolver，自写锚点映射（没有引入 @hookform/resolvers）；草稿参与对比时不显示快照字段、版本 ID 一律不显示；删除后果按 runtime 的实际行为写；Monaco 只经 0.57 的公开入口装配；面包屑的对象名由路由组件登记
 - 遗留：D98（会话行跳转随 T24，修订人与发布人只有主体标识）、D99（编辑页模板的分组高亮阈值，R3）；D97 的会话部分随 T24；ego-browser 有新版本可升级（未升级）
+
+### 2026-11-13 T23 已完成（提交 COMMIT_TBD）
+
+- 交付：控制台的能力（技能列表、浏览器端解析与预览的技能包上传、技能详情的版本、文件与被引用；MCP 服务的登记、详情、连接状态、逐个工具的副作用标注与重新探测；自定义工具的说明）、模型（供应商账号与就地写入凭据、行内连通性测试；模型目录与经直通接口的模型测试；价格表与版本、发布新版本）、设置的"凭据"标签页（写入、轮换、删除，明文只写不读）；领域组件 `ReferenceList`/`InUseDialog`，`ResourceSelect` 移到领域组件；连通性的状态文字进 `labels.ts`；`formatDateTime`、`formatTokenLimit`；依赖 `yaml` 2.9.1；管理 API 的 `Skill.references`（control-plane `SkillView`、`AgentVersionRefRepository.referencingAll`）；脚本化模型服务回应 `GET /v1/models`；Playwright `capabilities`、`models`、`models-live`（@live，`E2E_LIVE=1`）、`secrets`、`a11y-capabilities`、`evidence-capabilities`
+- 修复：表单内的"写入凭据"按钮默认提交外层表单；上传新版本后文件清单停在旧版本；浏览器把保存的登录名与密码自动填进凭据对话框（`autocomplete="new-password"`，走查发现）；选择器的 `aria-label` 与可见文字不符、资源选择器加载状态的 `aria-label` 无角色（新故事暴露）
+- 验收：A01–A08 全部 passing（`e2e:app` 31 passed、live 1 passed；截图 `tmp/evidence/T23/` 68 张页面加 18 张状态，三轮评审；外壳与模板截图基线 24 passed；Storybook a11y 与真实页面 axe 亮暗零违规；ego-browser 走查发现并修正 2 处；`verify.sh` 通过）
+- 决策：ADR-0056（技能带引用方；模型测试经直通接口、连通性测试不产生用量；凭据写入不经变更缓存；设置页改为标签页；页面的标签页在搜索参数）；架构设计 v1.30；ADR-0021 追加 `yaml`；没有手写 YAML 解析，不支持 zip 技能包
+- 遗留：D100（模型、供应商账号、MCP 服务没有引用方字段，R3 决定）、D101（端到端数据只增不减）；Linux 截图基线没有重新生成（T23 未改外壳与模板，darwin 基线 24 passed）；ego-browser 有新版本可升级（未升级）
 
 ## 计划变更记录
 
