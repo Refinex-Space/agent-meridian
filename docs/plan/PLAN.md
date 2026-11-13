@@ -90,7 +90,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 见控制台设计轨道 | — |
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 见控制台设计轨道 | — |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
-| T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 已完成 | — |
+| T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 已完成 | 5220288 |
 | T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 未开始 | — |
 | T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 未开始 | — |
 | T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 未开始 | — |
@@ -545,7 +545,7 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 开工基线：`EventStreamIT` 失败一例，即 D66（BlockHound 把单调 ULID 工厂的锁判为阻塞），修复后重跑通过
 - 遗留：D86（API Key 最后使用时间，需要你决定是否插入补充任务或并入 T25b）、D87–D94（文件删除、知识库用量归属、MCP 无状态传输、知识库删除的引用检查、API 契约收尾 T26、安全加固 T37、部署 T28、作业健壮性 T27/T28/T29）
 
-### 2026-11-13 T21 已完成（提交见看板）
+### 2026-11-13 T21 已完成（提交 5220288）
 
 - 交付：console 的工程基座——OIDC 授权码加 PKCE（oidc-client-ts，令牌只在内存，refresh token 后台续期，刷新页面后 iframe 静默登录，运行时配置 `/config.json`）；TanStack Router 路由树（`/projects/$projectId/` 下十一个一级导航各一个路由模块，空态；搜索参数 `key=value` 与重复键；FilterBar 改用 `useSearchFilters`）；正式应用外壳（`app/shell`：导航收起记忆、项目切换、面包屑、⌘K、账号菜单与主题、与服务端断开与预算告警横幅）；openapi-fetch 客户端（`adminApi`、`v1Api(projectId)`、`unwrap`、`authorizedFetch`，管理 API 类型由 `redocly.yaml` 生成并接入构建）；TanStack Query 统一配置与变更失败的错误通知（`notifyError`，请求 ID 可复制）；`DataRegion`（区域级 Suspense，骨架 150ms 后出现、至少 300ms）；SSE 客户端的乱序暂存与跳号重连补发；`usePermission` 接 `/admin/v1/me/access`；页面模板移到 `components/templates`，原型外壳改为正式外壳的适配器；Playwright：`e2e/app/`（登录、导航、主题、权限，连接 Compose 后端与 Keycloak）与外壳、四种模板的截图基线（darwin 与 Linux 各 24 张）；`scripts/dev/console-e2e-env.sh`、`console-playwright-linux.sh`；CI 的 `console` 作业；ADR-0055，ADR-0021 追加四个依赖，架构设计 v1.29
 - 验收：A01–A09 全部 passing（`e2e:app` 本机 16 passed、Linux 镜像 12 passed；截图基线本机与镜像各 24 passed，换上正式外壳后与 T20c 截图逐像素比较外壳与模板 27/28 一致、差异只在命令面板内容；SSE 10 个用例含 300 事件的随机混合；a11y 亮暗各 227 个故事零违规；`verify.sh` 通过）
