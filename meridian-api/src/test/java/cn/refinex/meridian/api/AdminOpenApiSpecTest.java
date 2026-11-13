@@ -32,6 +32,8 @@ class AdminOpenApiSpecTest {
 
     /** 管理接口：T14a 的租户与项目、成员与角色、API Key，T15a 的凭据、供应商账号、模型与价格表（ADR-0045），T15b 的智能体与版本、环境、技能、MCP 服务与权限规则（ADR-0047）。 */
     private static final Set<String> EXPECTED_OPERATIONS = Set.of(
+            "GET /admin/v1/me",
+            "GET /admin/v1/me/access",
             "POST /admin/v1/tenants",
             "GET /admin/v1/tenants",
             "GET /admin/v1/tenants/{tenant_id}",

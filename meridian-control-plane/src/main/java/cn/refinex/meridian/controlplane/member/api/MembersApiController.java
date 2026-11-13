@@ -140,6 +140,7 @@ public class MembersApiController implements MembersApi {
                 member.id(),
                 member.tenantId(),
                 member.subject(),
+                member.invited() ? Member.StatusEnum.INVITED : Member.StatusEnum.ACTIVE,
                 member.email(),
                 member.displayName(),
                 Times.utc(member.createdAt()),

@@ -8,6 +8,8 @@ public enum MemberErrorCode implements ErrorCode {
     NOT_FOUND("member.not_found", 404, "成员不存在"),
     /** 该主体已是租户成员。 */
     ALREADY_EXISTS("member.already_exists", 409, "成员已存在"),
+    /** 添加成员时既没有主体标识也没有邮箱。 */
+    IDENTITY_REQUIRED("member.identity_required", 400, "需要用户标识或邮箱"),
     /** 移除或撤销后租户将没有所有者。 */
     LAST_OWNER("member.last_owner", 409, "不能移除最后一位所有者"),
     /** 角色绑定不存在。 */

@@ -2,7 +2,9 @@ package cn.refinex.meridian.controlplane.member.app;
 
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.error.ConflictException;
+import cn.refinex.meridian.common.error.FieldViolation;
 import cn.refinex.meridian.common.error.NotFoundException;
+import cn.refinex.meridian.common.error.ValidationException;
 import cn.refinex.meridian.common.id.IdPrefix;
 import cn.refinex.meridian.common.id.Ids;
 import cn.refinex.meridian.common.page.Cursor;
@@ -23,6 +25,7 @@ import cn.refinex.meridian.security.rbac.Role;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -68,23 +71,24 @@ public class MemberService {
     }
 
     /**
-     * 添加成员。
+     * 添加成员：给出主体标识时直接生效；只给邮箱时是邀请，用户第一次登录时按经过验证的邮箱绑定（ADR-0053）。
      *
      * @param actor 操作者的主体标识
      * @param tenantId 租户 ID
-     * @param subject 新成员的主体标识
+     * @param subject 新成员的主体标识；可为空，此时邮箱必填
      * @param email 邮箱；可为空
      * @param displayName 显示名称；可为空
      * @return 新成员
-     * @throws ConflictException 该主体已是成员时（{@code member.already_exists}）
+     * @throws ValidationException 主体标识与邮箱都没有时（{@code member.identity_required}）
+     * @throws ConflictException 该主体已是成员、或该邮箱已被邀请时（{@code member.already_exists}）
      */
     public Member add(String actor, String tenantId, String subject, String email, String displayName) {
+        requireIdentity(subject, email, "subject");
         return PlatformContexts.call(
                 Scopes.tenant(tenantId),
                 () -> transactions.execute(status -> {
                     Member member = insertMember(tenantId, subject, email, displayName);
-                    audit.record(
-                            "member.added", actor, tenantId, null, "member", member.id(), Map.of("subject", subject));
+                    audit.record("member.added", actor, tenantId, null, "member", member.id(), identity(member));
                     return member;
                 }));
     }
@@ -100,11 +104,12 @@ public class MemberService {
      * @return 所有者成员
      */
     public Member addFirstOwner(String actor, String tenantId, String subject, String email, String displayName) {
+        requireIdentity(subject, email, "owner.subject");
         Member member = insertMember(tenantId, subject, email, displayName);
         RoleBinding binding = new RoleBinding(
                 Ids.newId(IdPrefix.ROLE_BINDING), tenantId, member.id(), Role.TENANT_OWNER, null, member.createdAt());
         bindings.insert(binding);
-        audit.record("member.added", actor, tenantId, null, "member", member.id(), Map.of("subject", subject));
+        audit.record("member.added", actor, tenantId, null, "member", member.id(), identity(member));
         audit.record(
                 "role_binding.created", actor, tenantId, null, "role_binding", binding.id(), bindingDetails(binding));
         return member;
@@ -187,7 +192,7 @@ public class MemberService {
                             null,
                             "member",
                             memberId,
-                            Map.of("subject", member.subject()));
+                            identity(member));
                 }));
     }
 
@@ -292,12 +297,12 @@ public class MemberService {
                 Ids.newId(IdPrefix.MEMBER),
                 tenantId,
                 subject,
-                email == null ? "" : email,
+                email == null ? "" : email.strip(),
                 displayName == null ? "" : displayName,
                 now,
                 now);
         if (!members.insert(member)) {
-            throw new ConflictException(MemberErrorCode.ALREADY_EXISTS, "该主体已是租户成员");
+            throw new ConflictException(MemberErrorCode.ALREADY_EXISTS, subject == null ? "该邮箱已有未绑定的邀请" : "该主体已是租户成员");
         }
         return member;
     }
@@ -312,6 +317,22 @@ public class MemberService {
         if (bindings.lockOwners() <= 1) {
             throw new ConflictException(MemberErrorCode.LAST_OWNER, "租户至少要保留一位所有者");
         }
+    }
+
+    private static void requireIdentity(String subject, String email, String field) {
+        if ((subject == null || subject.isBlank()) && (email == null || email.isBlank())) {
+            throw new ValidationException(
+                    MemberErrorCode.IDENTITY_REQUIRED, "需要用户标识或邮箱", List.of(new FieldViolation(field, "用户标识与邮箱至少给一个")));
+        }
+    }
+
+    /** 审计中的成员身份：已绑定的记用户标识，邀请记邮箱。 */
+    private static Map<String, Object> identity(Member member) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("subject", member.subject());
+        details.put("email", member.email());
+        details.put("status", member.invited() ? "invited" : "active");
+        return details;
     }
 
     private static Map<String, Object> bindingDetails(RoleBinding binding) {

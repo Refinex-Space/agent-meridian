@@ -73,7 +73,20 @@ public final class KeycloakRealm {
      * @return 用户 ID，即令牌的 {@code sub}
      */
     public static String user(String username, String... groups) {
-        return USER_IDS.computeIfAbsent(username, name -> create(name, List.of(groups)));
+        return USER_IDS.computeIfAbsent(
+                username, name -> create(name, name + "@test.meridian.local", true, List.of(groups)));
+    }
+
+    /**
+     * 创建带指定邮箱的测试用户（已存在时直接返回）：按邮箱邀请与首次登录绑定的测试用（T19b，ADR-0053）。
+     *
+     * @param username 用户名，同时是 {@code preferred_username}
+     * @param email 邮箱
+     * @param emailVerified 邮箱是否已验证（令牌的 {@code email_verified}）
+     * @return 用户 ID，即令牌的 {@code sub}
+     */
+    public static String userWithEmail(String username, String email, boolean emailVerified) {
+        return USER_IDS.computeIfAbsent(username, name -> create(name, email, emailVerified, List.of()));
     }
 
     /**
@@ -108,7 +121,7 @@ public final class KeycloakRealm {
         return body.get("access_token").asString();
     }
 
-    private static String create(String username, List<String> groups) {
+    private static String create(String username, String email, boolean emailVerified, List<String> groups) {
         String admin = post(
                         Holder.INSTANCE.getAuthServerUrl() + "/realms/master/protocol/openid-connect/token",
                         null,
@@ -133,9 +146,9 @@ public final class KeycloakRealm {
                 "enabled",
                 true,
                 "email",
-                username + "@test.meridian.local",
+                email,
                 "emailVerified",
-                true,
+                emailVerified,
                 "firstName",
                 "Test",
                 "lastName",

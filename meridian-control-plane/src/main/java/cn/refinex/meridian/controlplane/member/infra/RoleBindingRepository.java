@@ -150,6 +150,27 @@ public class RoleBindingRepository extends TenantScopedRepository {
                 .update();
     }
 
+    /**
+     * 把一个成员的角色绑定移到另一个成员（邀请合并到已有成员，ADR-0053）；目标已有的同一角色不重复移动，随源成员删除。
+     *
+     * @param fromMemberId 源成员
+     * @param toMemberId 目标成员
+     * @return 移动的绑定数
+     */
+    public int reassign(String fromMemberId, String toMemberId) {
+        return sql("""
+                        UPDATE cp.role_bindings b SET member_id = :to_member
+                         WHERE b.tenant_id = :tenant_id AND b.member_id = :from_member
+                           AND NOT EXISTS (SELECT 1 FROM cp.role_bindings t
+                                            WHERE t.tenant_id = :tenant_id AND t.member_id = :to_member
+                                              AND t.role = b.role
+                                              AND COALESCE(t.project_id, '') = COALESCE(b.project_id, ''))
+                        """)
+                .param("from_member", fromMemberId)
+                .param("to_member", toMemberId)
+                .update();
+    }
+
     private static RoleBinding map(ResultSet rs, int row) throws SQLException {
         return new RoleBinding(
                 rs.getString("id"),

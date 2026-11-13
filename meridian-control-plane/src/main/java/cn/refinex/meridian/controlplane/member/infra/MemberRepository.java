@@ -7,6 +7,7 @@ import cn.refinex.meridian.persistence.tenant.TenantScope;
 import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import javax.sql.DataSource;
@@ -26,16 +27,16 @@ public class MemberRepository extends TenantScopedRepository {
     }
 
     /**
-     * 插入成员；同一租户中主体已存在时什么都不做。
+     * 插入成员；同一租户中主体已存在、或同一邮箱已有未绑定的邀请时什么都不做。
      *
      * @param member 成员
-     * @return 插入时为 true；主体已是成员时为 false
+     * @return 插入时为 true；主体已是成员或邮箱已被邀请时为 false
      */
     public boolean insert(Member member) {
         return sql("""
                         INSERT INTO cp.members (id, tenant_id, subject, email, display_name, created_at, updated_at)
                         VALUES (:id, :tenant_id, :subject, :email, :display_name, :created_at, :updated_at)
-                        ON CONFLICT (tenant_id, subject) DO NOTHING
+                        ON CONFLICT DO NOTHING
                         """)
                         .param("id", member.id())
                         .param("subject", member.subject())
@@ -71,6 +72,38 @@ public class MemberRepository extends TenantScopedRepository {
                 .param("subject", subject)
                 .query(MemberRepository::map)
                 .optional();
+    }
+
+    /**
+     * 锁住一条尚未绑定的邀请。
+     *
+     * @param memberId 成员 ID
+     * @return 邀请；已被绑定或不存在时为空
+     */
+    public Optional<Member> lockInvitation(String memberId) {
+        return sql("""
+                        SELECT * FROM cp.members
+                         WHERE tenant_id = :tenant_id AND id = :id AND subject IS NULL
+                         FOR UPDATE
+                        """).param("id", memberId).query(MemberRepository::map).optional();
+    }
+
+    /**
+     * 把邀请绑定到用户：写入主体标识。
+     *
+     * @param memberId 成员 ID
+     * @param subject 主体标识
+     * @param now 当前时间
+     */
+    public void bind(String memberId, String subject, Instant now) {
+        sql("""
+                        UPDATE cp.members SET subject = :subject, updated_at = :now
+                         WHERE tenant_id = :tenant_id AND id = :id AND subject IS NULL
+                        """)
+                .param("id", memberId)
+                .param("subject", subject)
+                .param("now", now)
+                .update();
     }
 
     /**

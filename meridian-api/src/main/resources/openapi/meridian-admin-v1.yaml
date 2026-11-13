@@ -28,7 +28,9 @@ tags:
   - name: Projects
     description: 项目：隔离与授权的基本单位，API Key、智能体、会话都挂在项目下。
   - name: Members
-    description: 成员与角色绑定：谁能在租户与项目中做什么。
+    description: 成员与角色绑定：谁能在租户与项目中做什么。按用户标识添加，或按邮箱邀请、在用户首次登录时绑定（ADR-0053）。
+  - name: Me
+    description: 当前登录的控制台用户：身份、所在租户与角色、在某个项目上能做什么（ADR-0053）。
   - name: ApiKeys
     description: 项目下的 API Key：业务系统调用公开 API 的凭据，明文只在创建时返回一次。
   - name: Secrets
@@ -398,6 +400,70 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /admin/v1/me:
+    get:
+      operationId: getMe
+      tags: [Me]
+      summary: 当前用户
+      description: |
+        当前控制台用户的身份、是否平台管理员、所在的租户与在其中的角色绑定（不分页，按租户 ID 排序；已删除的租户不出现）。控制台
+        启动时先调用它：首次登录时按邮箱绑定邀请也在这时完成（任一管理接口都会触发）。任何已认证的用户都可以调用。
+      responses:
+        '200':
+          description: 当前用户。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/me/access:
+    get:
+      operationId: getMyAccess
+      tags: [Me]
+      summary: 当前用户在租户或项目上的权限
+      description: |
+        当前用户在某个租户（给出 `project_id` 时在该项目）上能执行的操作类别与公开 API 作用域，按同一套角色矩阵算出；控制台据此
+        显示或禁用操作，不在前端复刻角色矩阵。没有角色时两个列表都为空（不是 403）。任何已认证的用户都可以调用。
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          description: 租户 ID。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: project_id
+          in: query
+          description: 项目 ID；不给时只算租户级的操作类别，作用域为空。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+      responses:
+        '200':
+          description: 权限。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyAccess'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/InternalError'
+
   /admin/v1/tenants/{tenant_id}/members:
     parameters:
       - $ref: '#/components/parameters/TenantId'
@@ -405,7 +471,12 @@ paths:
       operationId: addMember
       tags: [Members]
       summary: 添加成员
-      description: 按身份提供方的主体标识（OIDC `sub`）把用户加入租户。成员加入后还没有任何角色，用角色绑定授权。
+      description: |
+        把用户加入租户：给出身份提供方中的用户标识（`subject`）时直接生效；只给邮箱时成员为 `invited`，用户第一次登录控制台时，
+        control-plane 按令牌中经过验证的邮箱（`email` 声明且 `email_verified` 为真）找到邀请并写入用户标识，状态变为 `active`，
+        写审计 `member.bound`；该用户在这个租户中已经是成员时，邀请的角色合并到已有成员上（ADR-0053）。成员加入后还没有任何角色，
+        用角色绑定授权（已邀请的成员同样可以授予）。同一租户中同一用户标识、或同一邮箱的未绑定邀请只能有一个（409
+        `member.already_exists`）。
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -3606,18 +3677,20 @@ components:
           description: 下一页的游标；没有下一页时为 null。
           type: [string, 'null']
     MemberIdentity:
-      description: 用户在身份提供方的标识与资料。
+      description: |
+        用户在身份提供方的标识与资料：`subject` 与 `email` 至少给一个（否则 400 `member.identity_required`）。只给邮箱时成员处于
+        已邀请状态，用户第一次登录控制台时按令牌中经过验证的邮箱绑定（ADR-0053）。
       type: object
-      required: [subject]
       properties:
         subject:
-          description: 主体标识（OIDC 的 `sub`），在身份提供方内唯一且不变。
+          description: 主体标识（默认是 OIDC 的 `sub`，与 control-plane 配置的用户标识声明一致），在身份提供方内唯一且不变。
           type: string
           minLength: 1
           maxLength: 255
         email:
-          description: 邮箱，只用于展示。
+          description: 邮箱：只给邮箱时用于首次登录绑定，比较时不区分大小写；同时给出用户标识时只用于展示。
           type: string
+          minLength: 3
           maxLength: 320
         display_name:
           description: 显示名称。
@@ -3775,10 +3848,90 @@ components:
           description: 新说明，最多 1000 个字符。
           type: string
           maxLength: 1000
+    Me:
+      description: 当前控制台用户。
+      type: object
+      required: [subject, email, platform_admin, memberships]
+      properties:
+        subject:
+          description: 用户标识（按 control-plane 配置的声明取得）。
+          type: string
+        email:
+          description: 令牌中经过验证的邮箱；没有时为 null。
+          type: [string, 'null']
+        platform_admin:
+          description: 是否平台管理员。
+          type: boolean
+        memberships:
+          description: 所在的租户与在其中的角色绑定。
+          type: array
+          items:
+            $ref: '#/components/schemas/Membership'
+    Membership:
+      description: 用户在一个租户中的成员身份。
+      type: object
+      required: [tenant_id, tenant_name, member_id, role_bindings]
+      properties:
+        tenant_id:
+          description: 租户 ID。
+          type: string
+        tenant_name:
+          description: 租户名称。
+          type: string
+        member_id:
+          description: 成员 ID。
+          type: string
+        role_bindings:
+          description: 角色绑定。
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipRole'
+    MembershipRole:
+      description: 成员身份中的一个角色。
+      type: object
+      required: [role_binding_id, role, project_id]
+      properties:
+        role_binding_id:
+          description: 角色绑定 ID。
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        project_id:
+          description: 项目级角色绑定的项目；租户级角色为 null。
+          type: [string, 'null']
+    MyAccess:
+      description: 当前用户在租户或项目上的权限。
+      type: object
+      required: [tenant_id, project_id, permissions, scopes]
+      properties:
+        tenant_id:
+          description: 租户 ID。
+          type: string
+        project_id:
+          description: 项目 ID；只看租户时为 null。
+          type: [string, 'null']
+        permissions:
+          description: 能执行的操作类别（角色矩阵的列，见 control-plane 的 `security.rbac.Permission`），按取值排序。
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionName'
+        scopes:
+          description: 在该项目上调用公开 API 的作用域（ADR-0044），按取值排序；没有给出项目时为空。
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKeyScope'
+    PermissionName:
+      description: 操作类别（角色矩阵的列），取值与 `security.rbac.Permission` 一一对应。
+      type: string
+      enum: [console_access, tenant_create, tenant_list_all, tenant_quota_update, tenant_read, tenant_update,
+             tenant_delete, member_read, member_write, owner_role_manage, project_create, model_read, model_write,
+             secret_read, secret_write, project_read, project_update, project_delete, api_key_read, api_key_write,
+             agent_read, agent_write, budget_read, budget_write, audit_read, usage_read, pending_action_decide,
+             session_read, session_write, model_invoke, knowledge_read, knowledge_write]
     Member:
       description: 租户成员。
       type: object
-      required: [id, tenant_id, subject, email, display_name, created_at, updated_at]
+      required: [id, tenant_id, subject, status, email, display_name, created_at, updated_at]
       properties:
         id:
           description: 成员 ID（mbr_…）。
@@ -3787,8 +3940,12 @@ components:
           description: 所属租户 ID。
           type: string
         subject:
-          description: 主体标识（OIDC 的 `sub`）。
+          description: 主体标识（OIDC 的 `sub`）；按邮箱邀请、尚未登录绑定时为 null。
+          type: [string, 'null']
+        status:
+          description: '`active` 已绑定用户标识；`invited` 按邮箱邀请、等待用户首次登录绑定。两种状态都可以授予角色。'
           type: string
+          enum: [active, invited]
         email:
           description: 邮箱；空字符串表示没有。
           type: string
@@ -3820,19 +3977,19 @@ components:
           description: 下一页的游标；没有下一页时为 null。
           type: [string, 'null']
     AddMemberRequest:
-      description: 添加成员的请求。
+      description: 添加成员的请求：`subject` 与 `email` 至少给一个（否则 400 `member.identity_required`）。
       type: object
-      required: [subject]
       additionalProperties: false
       properties:
         subject:
-          description: 主体标识（OIDC 的 `sub`）。
+          description: 主体标识（默认是 OIDC 的 `sub`）。
           type: string
           minLength: 1
           maxLength: 255
         email:
-          description: 邮箱。
+          description: 邮箱：只给邮箱时成员为 `invited`，用户首次登录时按令牌中经过验证的邮箱绑定（ADR-0053）。
           type: string
+          minLength: 3
           maxLength: 320
         display_name:
           description: 显示名称。
