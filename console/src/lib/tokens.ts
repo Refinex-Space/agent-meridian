@@ -29,6 +29,11 @@ export const COLOR_TOKENS = [
   { name: 'terminated', label: '已终止', usage: '已终止的符号' },
   { name: 'meridian', label: '子午线', usage: '时间轴主线与刻度' },
   { name: 'lane', label: '子线程线', usage: '时间轴的子线程' },
+  { name: 'scrim', label: '遮罩', usage: '对话框、抽屉下的压暗层' },
+  { name: 'code-key', label: '语法：键', usage: 'JSON 与 YAML 的键、关键字' },
+  { name: 'code-string', label: '语法：字符串', usage: '字符串' },
+  { name: 'code-number', label: '语法：常量', usage: '数字、布尔值、null' },
+  { name: 'code-function', label: '语法：函数', usage: '函数名、命令' },
 ] as const;
 
 export type ColorToken = (typeof COLOR_TOKENS)[number]['name'];
@@ -61,4 +66,8 @@ export const CONTRAST_REQUIREMENTS: readonly ContrastRequirement[] = [
   ...pairs('rule-strong', ['canvas', 'surface'], 3),
   ...pairs('meridian', ['canvas', 'surface', 'surface-inset', 'accent-weak', 'brass-weak'], 3),
   ...pairs('lane', ['surface', 'accent-weak'], 3),
+  ...pairs('code-key', ['surface', 'surface-inset'], 4.5),
+  ...pairs('code-string', ['surface', 'surface-inset'], 4.5),
+  ...pairs('code-number', ['surface', 'surface-inset'], 4.5),
+  ...pairs('code-function', ['surface', 'surface-inset'], 4.5),
 ];

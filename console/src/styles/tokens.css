@@ -49,6 +49,15 @@
   --color-meridian: var(--palette-meridian);
   --color-lane: var(--palette-lane);
 
+  /* 浮层下的遮罩（对话框、抽屉） */
+  --color-scrim: var(--palette-scrim);
+
+  /* 只读代码与 JSON 的语法色（CodeBlock 的 Shiki 主题），只用四种色相，注释与标点用石墨 */
+  --color-code-key: var(--palette-code-key);
+  --color-code-string: var(--palette-code-string);
+  --color-code-number: var(--palette-code-number);
+  --color-code-function: var(--palette-code-function);
+
   --shadow-*: initial;
   /* 阴影只有一种，只给浮层；颜色取墨色的色相 */
   --shadow-overlay: 0 1px 2px var(--palette-shadow-near), 0 8px 24px -6px var(--palette-shadow-far);
@@ -96,6 +105,15 @@
   --palette-meridian: oklch(0.497 0.015 164);
   --palette-lane: oklch(0.61 0.012 165);
 
+  /* 遮罩：墨色压暗，不模糊 */
+  --palette-scrim: oklch(0.25 0.015 166 / 0.32);
+
+  /* 语法色 */
+  --palette-code-key: oklch(0.45 0.11 252);
+  --palette-code-string: oklch(0.48 0.085 160);
+  --palette-code-number: oklch(0.5 0.1 65);
+  --palette-code-function: oklch(0.47 0.08 205);
+
   /* 浮层阴影 */
   --palette-shadow-near: oklch(0.25 0.02 166 / 0.06);
   --palette-shadow-far: oklch(0.25 0.02 166 / 0.12);
@@ -141,6 +159,15 @@
   /* 时间轴：子午线与子线程 */
   --palette-meridian: oklch(0.745 0.015 232);
   --palette-lane: oklch(0.6 0.02 238);
+
+  /* 遮罩：墨色压暗，不模糊 */
+  --palette-scrim: oklch(0.12 0.015 236 / 0.6);
+
+  /* 语法色 */
+  --palette-code-key: oklch(0.78 0.09 252);
+  --palette-code-string: oklch(0.78 0.1 158);
+  --palette-code-number: oklch(0.8 0.1 80);
+  --palette-code-function: oklch(0.8 0.07 205);
 
   /* 浮层阴影 */
   --palette-shadow-near: oklch(0.1 0.02 236 / 0.4);
@@ -246,8 +273,24 @@
   --animate-fade-in: fade-in var(--duration-fast) var(--ease-out);
   --animate-spin: spin 0.8s linear infinite;
 
+  /* 浮层退出用 ease-in；对话框出现用 200ms；抽屉从侧边滑入 250ms、滑出 200ms。减少动效时一律只用 fade-in、fade-out */
+  --animate-overlay-out: overlay-out var(--duration-fast) var(--ease-in) both;
+  --animate-fade-out: fade-out var(--duration-fast) var(--ease-in) both;
+  --animate-dialog-in: overlay-in var(--duration-base) var(--ease-out);
+  --animate-sheet-in-right: sheet-in-right var(--duration-slow) var(--ease-out);
+  --animate-sheet-out-right: sheet-in-right var(--duration-base) var(--ease-in) reverse both;
+  --animate-sheet-in-left: sheet-in-left var(--duration-slow) var(--ease-out);
+  --animate-sheet-out-left: sheet-in-left var(--duration-base) var(--ease-in) reverse both;
+
   @keyframes overlay-in {
     from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+  }
+
+  @keyframes overlay-out {
+    to {
       opacity: 0;
       transform: scale(0.98);
     }
@@ -256,6 +299,24 @@
   @keyframes fade-in {
     from {
       opacity: 0;
+    }
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes sheet-in-right {
+    from {
+      transform: translateX(100%);
+    }
+  }
+
+  @keyframes sheet-in-left {
+    from {
+      transform: translateX(-100%);
     }
   }
 
