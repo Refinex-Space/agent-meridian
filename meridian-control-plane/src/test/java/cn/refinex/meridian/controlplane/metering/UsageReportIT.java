@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -155,6 +156,78 @@ class UsageReportIT extends ControlPlaneTestBase {
         assertThat(projectReport.status()).isEqualTo(200);
         assertThat(actual(projectReport.json(), List.of("day", "api_key")))
                 .isEqualTo(expected(projectDetails, List.of("day", "api_key")));
+
+        // 明细（T19b，D68）：逐页读完与账本的行一一对应、新的在前；项目明细的合计等于项目报表；CSV 与明细同序同值
+        String tenantBase = "/admin/v1/tenants/" + tenant;
+        List<String> expectedIds = details.stream()
+                .sorted(Comparator.comparing(
+                                (Map<String, Object> row) -> ((Timestamp) row.get("occurred_at")).toInstant())
+                        .thenComparing(row -> (String) row.get("id"))
+                        .reversed())
+                .map(row -> (String) row.get("id"))
+                .toList();
+        assertThat(recordIds(tenantBase + "/usage-records?" + range, token("admin")))
+                .isEqualTo(expectedIds);
+        List<Map<String, Object>> projectRecords = new ArrayList<>();
+        for (JsonNode record : allRecords(
+                tenantBase + "/projects/" + project + "/usage-records?" + range + "&kind=model_tokens",
+                token("viewer"))) {
+            assertThat(record.get("project_id").asString()).isEqualTo(project);
+            assertThat(record.get("kind").asString()).isEqualTo("model_tokens");
+            projectRecords.add(Map.of("input", record.get("input_tokens").asLong()));
+        }
+        long expectedInput = projectDetails.stream()
+                .filter(row -> "model_tokens".equals(row.get("kind")))
+                .mapToLong(row -> ((Number) row.get("input_tokens")).longValue())
+                .sum();
+        assertThat(projectRecords.stream()
+                        .mapToLong(row -> (Long) row.get("input"))
+                        .sum())
+                .isEqualTo(expectedInput)
+                .isPositive();
+        assertThat(recordIds(
+                        tenantBase + "/usage-records?" + range + "&project_id=" + project + "&api_key_id="
+                                + fixture.get("key"),
+                        token("owner")))
+                .containsExactlyInAnyOrderElementsOf(projectDetails.stream()
+                        .filter(row -> fixture.get("key").equals(row.get("api_key_id")))
+                        .map(row -> (String) row.get("id"))
+                        .toList());
+
+        Reply csv = client().admin("GET", tenantBase + "/usage-records:export?" + range, token("admin"), null);
+        assertThat(csv.status()).isEqualTo(200);
+        assertThat(csv.header("Content-Type")).startsWith("text/csv");
+        assertThat(csv.header("Content-Disposition")).contains("attachment");
+        String[] lines = csv.raw().split("\r\n");
+        assertThat(lines[0]).startsWith("id,occurred_at,kind,project_id,").endsWith(",currency,cost,attributes");
+        assertThat(lines).hasSize(expectedIds.size() + 1);
+        for (int i = 0; i < expectedIds.size(); i++) {
+            assertThat(lines[i + 1]).startsWith(expectedIds.get(i) + ",");
+        }
+        Reply projectCsv = client().admin(
+                        "GET",
+                        tenantBase + "/projects/" + project + "/usage-records:export?" + range,
+                        token("viewer"),
+                        null);
+        assertThat(projectCsv.raw().split("\r\n")).hasSize(projectDetails.size() + 1);
+    }
+
+    /** 逐页读完明细（每页 2 条，验证游标）。 */
+    private List<JsonNode> allRecords(String path, String token) {
+        List<JsonNode> records = new ArrayList<>();
+        String after = null;
+        do {
+            Reply page =
+                    client().admin("GET", path + "&limit=2" + (after == null ? "" : "&after=" + after), token, null);
+            assertThat(page.status()).as(page.raw()).isEqualTo(200);
+            page.json().get("data").forEach(records::add);
+            after = page.json().get("has_more").asBoolean() ? page.text("next_cursor") : null;
+        } while (after != null);
+        return records;
+    }
+
+    private List<String> recordIds(String path, String token) {
+        return allRecords(path, token).stream().map(r -> r.get("id").asString()).toList();
     }
 
     @Test

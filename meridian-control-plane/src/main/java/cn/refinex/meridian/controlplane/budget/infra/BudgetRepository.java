@@ -105,6 +105,24 @@ public class BudgetRepository extends TenantScopedRepository {
     }
 
     /**
+     * 按级别与范围读取一条预算。
+     *
+     * @param level 级别
+     * @param scopeId 范围 ID；为空表示该级的默认值
+     * @return 预算；没有设置时为空
+     */
+    public Optional<Budget> findScoped(BudgetLevel level, String scopeId) {
+        return sql("""
+                        SELECT * FROM cp.budgets
+                         WHERE tenant_id = :tenant_id AND level = :level AND scope_id IS NOT DISTINCT FROM :scope
+                        """)
+                .param("level", level.value())
+                .param("scope", scopeId)
+                .query(BudgetRepository::map)
+                .optional();
+    }
+
+    /**
      * 按级别、范围、ID 列出。
      *
      * @param level 只列出这一级；为空表示全部

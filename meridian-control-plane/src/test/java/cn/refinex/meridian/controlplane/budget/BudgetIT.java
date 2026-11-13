@@ -193,6 +193,56 @@ class BudgetIT extends ControlPlaneTestBase {
     }
 
     @Test
+    void projectBudgetStatusFollowsTheEffectiveLimitAndTheLedger() {
+        TenantFixture fixture = TenantFixture.create(client());
+        String tenant = fixture.get("tenant");
+        String project = fixture.get("project");
+        String path = "/admin/v1/tenants/" + tenant + "/projects/" + project + "/budget-status";
+
+        // 没有项目级预算：硬阈值 0，调用会被拒绝（ADR-0048）；开发者与观察者也能看
+        Reply none = client().admin("GET", path, token("viewer"), null);
+        assertThat(none.status()).isEqualTo(200);
+        assertThat(none.text("limit_source")).isEqualTo("none");
+        assertThat(none.json().get("hard_limit_tokens").asLong()).isZero();
+        assertThat(none.text("state")).isEqualTo("hard_exceeded");
+        assertThat(none.text("period")).isEqualTo(BudgetKeys.month(Instant.now()));
+
+        // 项目级默认值
+        create(tenant, "{\"level\":\"project\",\"soft_limit_tokens\":1000,\"hard_limit_tokens\":100000}");
+        Reply byDefault = client().admin("GET", path, token("developer"), null);
+        assertThat(byDefault.text("limit_source")).isEqualTo("default");
+        assertThat(byDefault.json().get("soft_limit_tokens").asLong()).isEqualTo(1000);
+        assertThat(byDefault.text("state")).isEqualTo("ok");
+
+        // 本项目自己的预算优先；入账 1500 token 后越过软阈值，已用与账本汇总一致
+        create(
+                tenant,
+                "{\"level\":\"project\",\"scope_id\":\"" + project
+                        + "\",\"soft_limit_tokens\":1200,\"hard_limit_tokens\":null}");
+        String id = publish(
+                redis,
+                "usage",
+                usage(fixture, Instant.now().truncatedTo(ChronoUnit.MILLIS).toString()));
+        await("入账", () -> count("usage_records", id) == 1);
+        Reply own = client().admin("GET", path, token("owner"), null);
+        assertThat(own.text("limit_source")).isEqualTo("project");
+        assertThat(own.json().get("hard_limit_tokens").isNull()).as("不限").isTrue();
+        long ledger = db().sql("""
+                        SELECT COALESCE(sum(input_tokens + output_tokens), 0) FROM cp.usage_records
+                         WHERE tenant_id = :t AND project_id = :p AND kind = 'model_tokens' AND occurred_at >= :from
+                        """)
+                .param("t", tenant)
+                .param("p", project)
+                .param("from", java.sql.Timestamp.from(Instant.parse(own.text("period_start"))))
+                .query(Long.class)
+                .single();
+        assertThat(own.json().get("used_tokens").asLong()).isEqualTo(ledger).isEqualTo(1500);
+        assertThat(own.text("state")).isEqualTo("soft_exceeded");
+        assertThat(client().admin("GET", path, token("approver"), null).status())
+                .isEqualTo(403);
+    }
+
+    @Test
     void reconciliationCorrectsRedisToTheLedgerPlusLiveReservations() {
         TenantFixture fixture = TenantFixture.create(client());
         String tenant = fixture.get("tenant");

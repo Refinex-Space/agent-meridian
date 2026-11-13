@@ -6,6 +6,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.format.FormatterRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * Web 入口公共能力的自动配置：请求 ID、{@code traceparent}（WebFlux）与 problem+json，按应用的 Web 栈装配对应的适配器。
@@ -37,6 +39,17 @@ public class SecurityWebAutoConfiguration {
         @Bean
         MvcProblemHandler mvcProblemHandler(ProblemMapper mapper) {
             return new MvcProblemHandler(mapper);
+        }
+
+        /** 查询参数按规范取值转换为生成的 DTO 枚举（T19b；runtime 在自己的 WebFlux 配置中注册同一个转换器）。 */
+        @Bean
+        WebMvcConfigurer apiEnumConversion() {
+            return new WebMvcConfigurer() {
+                @Override
+                public void addFormatters(FormatterRegistry registry) {
+                    registry.addConverterFactory(new ApiEnumConverterFactory());
+                }
+            };
         }
     }
 

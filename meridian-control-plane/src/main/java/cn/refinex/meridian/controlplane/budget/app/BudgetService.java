@@ -24,9 +24,12 @@ import cn.refinex.meridian.controlplane.web.AfterCommit;
 import cn.refinex.meridian.controlplane.web.Scopes;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -196,6 +199,42 @@ public class BudgetService {
                 Scopes.tenant(tenantId), () -> PageResult.of(alerts.list(page), page, BudgetAlertRepository::cursorOf));
     }
 
+    /**
+     * 项目当前周期的预算消耗（{@code GET …/projects/{id}/budget-status}，ADR-0053）：项目自己的设置优先，其次项目级默认值，都没有时
+     * 硬阈值为 0（ADR-0048）。用量取 {@code cp.budget_usage} 的汇总。
+     *
+     * @param tenantId 租户 ID
+     * @param projectId 项目 ID
+     * @return 消耗
+     */
+    public ProjectBudgetStatus projectStatus(String tenantId, String projectId) {
+        projects.require(tenantId, projectId);
+        Instant now = clock.instant();
+        String period = BudgetKeys.period(BudgetLevel.PROJECT, now);
+        return PlatformContexts.call(Scopes.tenant(tenantId), () -> {
+            Optional<Budget> own = budgets.findScoped(BudgetLevel.PROJECT, projectId);
+            Optional<Budget> effective = own.isPresent() ? own : budgets.findScoped(BudgetLevel.PROJECT, null);
+            String source = own.isPresent() ? "project" : effective.isPresent() ? "default" : "none";
+            Long soft = effective.map(Budget::softLimitTokens).orElse(null);
+            Long hard = effective.isPresent() ? effective.get().hardLimitTokens() : Long.valueOf(0L);
+            long used = budgets.usedTokens(BudgetLevel.PROJECT, projectId, period);
+            String state = hard != null && used >= hard
+                    ? "hard_exceeded"
+                    : soft != null && used >= soft ? "soft_exceeded" : "ok";
+            YearMonth month = YearMonth.parse(period);
+            return new ProjectBudgetStatus(
+                    projectId,
+                    period,
+                    month.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant(),
+                    month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant(),
+                    used,
+                    soft,
+                    hard,
+                    source,
+                    state);
+        });
+    }
+
     /** 范围所在的项目，同时确认范围合法：项目与 API Key 必须存在于租户中，会话 ID 格式正确。 */
     private String scopeProject(String tenantId, BudgetLevel level, String scopeId) {
         if (level == BudgetLevel.TENANT) {
@@ -281,4 +320,28 @@ public class BudgetService {
      * @param usedTokens 当前周期的账本用量；默认值为空
      */
     public record BudgetView(Budget budget, String period, String currentPeriod, Long usedTokens) {}
+
+    /**
+     * 项目当前周期的预算消耗。
+     *
+     * @param projectId 项目 ID
+     * @param period 周期（{@code yyyy-MM}）
+     * @param periodStart 周期开始（含）
+     * @param periodEnd 周期结束（不含）
+     * @param usedTokens 已用 token
+     * @param softLimitTokens 软阈值；不告警时为空
+     * @param hardLimitTokens 硬阈值；不限时为空，没有任何设置时为 0
+     * @param limitSource 阈值来源：{@code project}、{@code default}、{@code none}
+     * @param state {@code ok}、{@code soft_exceeded}、{@code hard_exceeded}
+     */
+    public record ProjectBudgetStatus(
+            String projectId,
+            String period,
+            Instant periodStart,
+            Instant periodEnd,
+            long usedTokens,
+            Long softLimitTokens,
+            Long hardLimitTokens,
+            String limitSource,
+            String state) {}
 }

@@ -6,15 +6,13 @@ import cn.refinex.meridian.common.error.FieldViolation;
 import cn.refinex.meridian.common.error.ValidationException;
 import cn.refinex.meridian.controlplane.metering.domain.MeteringErrorCode;
 import cn.refinex.meridian.controlplane.metering.domain.UsageDimension;
+import cn.refinex.meridian.controlplane.metering.domain.UsageRange;
 import cn.refinex.meridian.controlplane.metering.domain.UsageReportRow;
 import cn.refinex.meridian.controlplane.metering.infra.UsageReportRepository;
 import cn.refinex.meridian.controlplane.project.app.ProjectService;
 import cn.refinex.meridian.controlplane.web.Scopes;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -22,13 +20,10 @@ import org.springframework.stereotype.Service;
 
 /**
  * 用量报表（ADR-0048 第 9 条）：管理接口的租户与项目报表、公开接口 {@code GET /v1/usage}，同一口径。时间范围左闭右开，默认本月（UTC）
- * 第一天到当前时间，最长 {@link #MAX_RANGE}。
+ * 第一天到当前时间，最长 {@link UsageRange#MAX_RANGE}。
  */
 @Service
 public class UsageReports {
-
-    /** 一次报表的最长时间范围。 */
-    static final Duration MAX_RANGE = Duration.ofDays(366);
 
     private final UsageReportRepository repository;
     private final ProjectService projects;
@@ -101,20 +96,7 @@ public class UsageReports {
     }
 
     private Query query(Instant from, Instant to, Collection<String> groupBy, boolean allowProject) {
-        Instant now = clock.instant();
-        Instant end = to == null ? now : to;
-        Instant start = from == null
-                ? LocalDate.ofInstant(now, ZoneOffset.UTC)
-                        .withDayOfMonth(1)
-                        .atStartOfDay(ZoneOffset.UTC)
-                        .toInstant()
-                : from;
-        if (!start.isBefore(end)) {
-            throw invalid("from", "起始时间必须早于结束时间");
-        }
-        if (Duration.between(start, end).compareTo(MAX_RANGE) > 0) {
-            throw invalid("to", "时间范围不能超过 366 天");
-        }
+        UsageRange range = UsageRange.resolve(from, to, clock.instant());
         List<UsageDimension> dimensions = new ArrayList<>();
         if (groupBy != null) {
             for (String value : groupBy) {
@@ -132,7 +114,7 @@ public class UsageReports {
                 }
             }
         }
-        return new Query(start, end, List.copyOf(dimensions));
+        return new Query(range.from(), range.to(), List.copyOf(dimensions));
     }
 
     private static ValidationException invalid(String field, String message) {

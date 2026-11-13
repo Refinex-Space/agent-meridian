@@ -116,3 +116,10 @@ deleteWebhook           | DELETE | /admin/v1/tenants/{tenant}/projects/{project}
 # T19b：当前用户（ADR-0053），任何已认证的用户都可以调用；没有角色时 /me/access 返回空列表
 getMe                   | GET    | /admin/v1/me | | A A A A A A A
 getMyAccess             | GET    | /admin/v1/me/access?tenant_id={tenant}&project_id={project} | | A A A A A A A
+# T19b：用量明细与导出（租户级 BUDGET_READ、项目级 USAGE_READ）、项目的预算消耗（USAGE_READ），ADR-0053
+listUsageRecords        | GET    | /admin/v1/tenants/{tenant}/usage-records | | D A A D D D D
+exportUsageRecords      | GET    | /admin/v1/tenants/{tenant}/usage-records:export | | D A A D D D D
+listProjectUsageRecords | GET    | /admin/v1/tenants/{tenant}/projects/{project}/usage-records | | D A A A A D D
+listProjectUsageRecords#other | GET | /admin/v1/tenants/{tenant}/projects/{other_project}/usage-records | | D A A D D D D
+exportProjectUsageRecords | GET  | /admin/v1/tenants/{tenant}/projects/{project}/usage-records:export | | D A A A A D D
+getProjectBudgetStatus  | GET    | /admin/v1/tenants/{tenant}/projects/{project}/budget-status | | D A A A A D D

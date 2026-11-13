@@ -34,6 +34,11 @@ class AdminOpenApiSpecTest {
     private static final Set<String> EXPECTED_OPERATIONS = Set.of(
             "GET /admin/v1/me",
             "GET /admin/v1/me/access",
+            "GET /admin/v1/tenants/{tenant_id}/usage-records",
+            "GET /admin/v1/tenants/{tenant_id}/usage-records:export",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/usage-records",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/usage-records:export",
+            "GET /admin/v1/tenants/{tenant_id}/projects/{project_id}/budget-status",
             "POST /admin/v1/tenants",
             "GET /admin/v1/tenants",
             "GET /admin/v1/tenants/{tenant_id}",

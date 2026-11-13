@@ -6,6 +6,7 @@ import cn.refinex.meridian.api.admin.model.BudgetAlertPage;
 import cn.refinex.meridian.api.admin.model.BudgetLevel;
 import cn.refinex.meridian.api.admin.model.BudgetPage;
 import cn.refinex.meridian.api.admin.model.CreateBudgetRequest;
+import cn.refinex.meridian.api.admin.model.ProjectBudgetStatus;
 import cn.refinex.meridian.api.admin.model.UpdateBudgetRequest;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.controlplane.budget.app.BudgetService;
@@ -136,6 +137,22 @@ public class BudgetsApiController implements BudgetsApi {
                 alert.thresholdTokens(),
                 alert.usedTokens(),
                 Times.utc(alert.occurredAt()));
+    }
+
+    @Override
+    @RequiresPermission(Permission.USAGE_READ)
+    public ResponseEntity<ProjectBudgetStatus> getProjectBudgetStatus(String tenantId, String projectId) {
+        BudgetService.ProjectBudgetStatus status = budgets.projectStatus(tenantId, projectId);
+        return ResponseEntity.ok(new ProjectBudgetStatus(
+                status.projectId(),
+                status.period(),
+                Times.utc(status.periodStart()),
+                Times.utc(status.periodEnd()),
+                status.usedTokens(),
+                status.softLimitTokens(),
+                status.hardLimitTokens(),
+                ProjectBudgetStatus.LimitSourceEnum.fromValue(status.limitSource()),
+                ProjectBudgetStatus.StateEnum.fromValue(status.state())));
     }
 
     private String actor() {

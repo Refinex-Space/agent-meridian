@@ -178,7 +178,12 @@ public final class AdminClient {
         if (report.hasErrors()) {
             throw new AssertionError(method + " " + path + " 不符合规范：" + report.getMessages() + "\n" + response.body());
         }
-        JsonNode json = response.body().isEmpty() ? null : JSON.readTree(response.body());
+        // CSV 导出（T19b）等非 JSON 的响应只给原文
+        boolean isJson = response.headers()
+                .firstValue("Content-Type")
+                .map(type -> type.contains("json"))
+                .orElse(true);
+        JsonNode json = response.body().isEmpty() || !isJson ? null : JSON.readTree(response.body());
         return new Reply(response.statusCode(), response.headers().map(), json, response.body());
     }
 

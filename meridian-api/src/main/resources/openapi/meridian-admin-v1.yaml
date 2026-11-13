@@ -2754,6 +2754,323 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /admin/v1/tenants/{tenant_id}/usage-records:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      operationId: listUsageRecords
+      tags: [Usage]
+      summary: 用量明细
+      description: |
+        账本明细（D68），按发生时间从新到旧，条件之间是"且"；时间范围默认当前 UTC 月份、至多 366 天。与用量报表同一份数据：
+        同样条件下明细的合计等于报表。需要租户级的预算查看权限。
+      parameters:
+        - $ref: '#/components/parameters/UsageFrom'
+        - $ref: '#/components/parameters/UsageTo'
+        - name: project_id
+          in: query
+          description: 只列出该项目的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: kind
+          in: query
+          description: 只列出该计量种类的记录。
+          schema:
+            $ref: '#/components/schemas/UsageKind'
+        - name: model_id
+          in: query
+          description: 只列出该模型的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: agent_id
+          in: query
+          description: 只列出该智能体的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: session_id
+          in: query
+          description: 只列出该会话的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: api_key_id
+          in: query
+          description: 只列出该 API Key 的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 一页用量记录。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageRecordPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/usage-records:export:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      operationId: exportUsageRecords
+      tags: [Usage]
+      summary: 导出用量明细
+      description: |
+        按与明细列表相同的条件导出 CSV，按发生时间从新到旧，至多 100000 行；超过时 400 `usage.export_too_large`，缩小时间范围或加条件
+        后重试。需要租户级的预算查看权限。
+      parameters:
+        - $ref: '#/components/parameters/UsageFrom'
+        - $ref: '#/components/parameters/UsageTo'
+        - name: project_id
+          in: query
+          description: 只列出该项目的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: kind
+          in: query
+          description: 只列出该计量种类的记录。
+          schema:
+            $ref: '#/components/schemas/UsageKind'
+        - name: model_id
+          in: query
+          description: 只列出该模型的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: agent_id
+          in: query
+          description: 只列出该智能体的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: session_id
+          in: query
+          description: 只列出该会话的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: api_key_id
+          in: query
+          description: 只列出该 API Key 的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+      responses:
+        '200':
+          description: 'CSV 文件（UTF-8，带表头，作为附件下载）。列与 `UsageRecord` 的字段同名、同序（`attributes` 为 JSON 文本）。'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/usage-records:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: listProjectUsageRecords
+      tags: [Usage]
+      summary: 项目用量明细
+      description: |
+        与租户的用量明细相同，只列出这个项目；项目开发者与项目观察者也可以查看。
+      parameters:
+        - $ref: '#/components/parameters/UsageFrom'
+        - $ref: '#/components/parameters/UsageTo'
+        - name: kind
+          in: query
+          description: 只列出该计量种类的记录。
+          schema:
+            $ref: '#/components/schemas/UsageKind'
+        - name: model_id
+          in: query
+          description: 只列出该模型的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: agent_id
+          in: query
+          description: 只列出该智能体的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: session_id
+          in: query
+          description: 只列出该会话的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: api_key_id
+          in: query
+          description: 只列出该 API Key 的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: 一页用量记录。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageRecordPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/usage-records:export:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: exportProjectUsageRecords
+      tags: [Usage]
+      summary: 导出项目用量明细
+      description: |
+        与租户的明细导出相同，只导出这个项目；项目开发者与项目观察者也可以导出。
+      parameters:
+        - $ref: '#/components/parameters/UsageFrom'
+        - $ref: '#/components/parameters/UsageTo'
+        - name: kind
+          in: query
+          description: 只列出该计量种类的记录。
+          schema:
+            $ref: '#/components/schemas/UsageKind'
+        - name: model_id
+          in: query
+          description: 只列出该模型的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: agent_id
+          in: query
+          description: 只列出该智能体的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: session_id
+          in: query
+          description: 只列出该会话的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: api_key_id
+          in: query
+          description: 只列出该 API Key 的记录。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+      responses:
+        '200':
+          description: 'CSV 文件（UTF-8，带表头，作为附件下载）。列与 `UsageRecord` 的字段同名、同序（`attributes` 为 JSON 文本）。'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/budget-status:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: getProjectBudgetStatus
+      tags: [Budgets]
+      summary: 项目的预算消耗
+      description: |
+        本项目当前自然月（UTC）的 token 用量与生效的项目级预算：项目自己的设置优先，其次是项目级默认值，都没有时硬阈值为 0（ADR-0048）。
+        概览与用量页用它，项目开发者与项目观察者也可以查看；租户级的预算与用量仍要租户级的预算查看权限。用量取自账本入账时累加的
+        汇总，与预算对账的口径相同（模型调用的输入加输出）。
+      responses:
+        '200':
+          description: 预算消耗。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectBudgetStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
   /admin/v1/tenants/{tenant_id}/audit-logs:
     parameters:
       - $ref: '#/components/parameters/TenantId'
@@ -5841,6 +6158,148 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UsageReportRow'
+    UsageRecord:
+      description: 账本中的一条用量记录（ADR-0048）。缓存读写是输入的子集，推理是输出的子集。
+      type: object
+      required: [id, occurred_at, kind, project_id, api_key_id, agent_id, agent_version_id, session_id, thread_id, turn_id,
+                 model_id, provider_account_id, purpose, input_tokens, output_tokens, cache_read_tokens,
+                 cache_write_tokens, reasoning_tokens, quantity, price_book_id, price_book_version, currency, cost,
+                 attributes]
+      properties:
+        id:
+          description: 记录 ID（产生它的用量消息 ID）。
+          type: string
+        occurred_at:
+          description: 用量发生的时间。
+          type: string
+          format: date-time
+        kind:
+          $ref: '#/components/schemas/UsageKind'
+        project_id:
+          description: 项目 ID。
+          type: [string, 'null']
+        api_key_id:
+          description: API Key ID；控制台用户与平台内部发起的调用为 null。
+          type: [string, 'null']
+        agent_id:
+          description: 智能体 ID。
+          type: [string, 'null']
+        agent_version_id:
+          description: 智能体版本 ID。
+          type: [string, 'null']
+        session_id:
+          description: 会话 ID。
+          type: [string, 'null']
+        thread_id:
+          description: 线程 ID。
+          type: [string, 'null']
+        turn_id:
+          description: 轮次 ID。
+          type: [string, 'null']
+        model_id:
+          description: 模型 ID；沙箱、搜索与存储没有模型。
+          type: [string, 'null']
+        provider_account_id:
+          description: 供应商账号 ID。
+          type: [string, 'null']
+        purpose:
+          description: 调用用途，例如 `inference`、`compaction`、`embedding`、`rerank`。
+          type: [string, 'null']
+        input_tokens:
+          description: 输入 token。
+          type: integer
+          format: int64
+        output_tokens:
+          description: 输出 token。
+          type: integer
+          format: int64
+        cache_read_tokens:
+          description: 命中提示词缓存的输入 token。
+          type: integer
+          format: int64
+        cache_write_tokens:
+          description: 写入提示词缓存的输入 token。
+          type: integer
+          format: int64
+        reasoning_tokens:
+          description: 推理用的输出 token。
+          type: integer
+          format: int64
+        quantity:
+          description: 计量数量（十进制字符串）：token 种类为输入加输出，沙箱为 vCPU 秒，搜索为次数。
+          type: string
+        price_book_id:
+          description: 计价用的价格表；没有定价时为 null。
+          type: [string, 'null']
+        price_book_version:
+          description: 价格表版本。
+          type: [integer, 'null']
+        currency:
+          description: 成本的币种；没有定价时为 null。
+          type: [string, 'null']
+        cost:
+          description: 成本（十进制字符串，12 位小数，不舍入）；没有定价时为 null。
+          type: [string, 'null']
+        attributes:
+          description: 种类特有的信息（例如知识库存储量的 `knowledge_base_id`、`day`）。
+          type: object
+          additionalProperties: true
+    UsageRecordPage:
+      description: 一页用量记录。
+      type: object
+      required: [data, has_more, next_cursor]
+      properties:
+        data:
+          description: 本页的记录。
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageRecord'
+        has_more:
+          description: 是否还有下一页。
+          type: boolean
+        next_cursor:
+          description: 下一页的游标；没有下一页时为 null。
+          type: [string, 'null']
+    ProjectBudgetStatus:
+      description: 项目当前周期的预算消耗。
+      type: object
+      required: [project_id, period, period_start, period_end, used_tokens, soft_limit_tokens, hard_limit_tokens,
+                 limit_source, state]
+      properties:
+        project_id:
+          description: 项目 ID。
+          type: string
+        period:
+          description: 周期（UTC 自然月），例如 `2026-11`。
+          type: string
+        period_start:
+          description: 周期的开始（含）。
+          type: string
+          format: date-time
+        period_end:
+          description: 周期的结束（不含）。
+          type: string
+          format: date-time
+        used_tokens:
+          description: 本周期已用的 token（模型调用的输入加输出，账本入账后累加）。
+          type: integer
+          format: int64
+        soft_limit_tokens:
+          description: 软阈值；不告警时为 null。
+          type: [integer, 'null']
+          format: int64
+        hard_limit_tokens:
+          description: 硬阈值；不限时为 null，没有设置任何预算时为 0。
+          type: [integer, 'null']
+          format: int64
+        limit_source:
+          description: 阈值从哪里来：`project` 本项目的预算，`default` 项目级默认值，`none` 都没有（硬阈值为 0）。
+          type: string
+          enum: [project, default, none]
+        state:
+          description: '`ok` 未到软阈值；`soft_exceeded` 越过软阈值；`hard_exceeded` 达到硬阈值，本项目的模型调用会被拒绝。'
+          type: string
+          enum: [ok, soft_exceeded, hard_exceeded]
     UsageReportRow:
       description: 一组用量的合计。没有按某个维度聚合时，该维度的字段为 null。
       type: object

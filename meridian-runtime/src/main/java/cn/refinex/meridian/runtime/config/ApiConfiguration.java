@@ -1,7 +1,7 @@
 package cn.refinex.meridian.runtime.config;
 
 import cn.refinex.meridian.runtime.stream.app.SseProperties;
-import cn.refinex.meridian.runtime.web.ApiEnumConverterFactory;
+import cn.refinex.meridian.security.web.ApiEnumConverterFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.format.FormatterRegistry;
