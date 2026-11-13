@@ -137,7 +137,7 @@ public class BudgetRepository extends TenantScopedRepository {
                         + ", id) > (:after_rank, :after_scope, :after_id))"
                         + " ORDER BY " + RANK + ", " + SCOPE_KEY + ", id LIMIT :limit")
                 .param("level", level == null ? null : level.value())
-                .param("after_rank", after == null ? null : Integer.valueOf(after.key(0)))
+                .param("after_rank", after == null ? null : after.intKey(0))
                 .param("after_scope", after == null ? null : after.key(1))
                 .param("after_id", after == null ? null : after.key(2))
                 .param("limit", page.fetchSize())

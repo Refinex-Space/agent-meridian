@@ -154,11 +154,7 @@ public class PriceBookRepository extends TenantScopedRepository {
                          ORDER BY version DESC LIMIT :limit
                         """)
                 .param("price_book", id)
-                .param(
-                        "before",
-                        page.after() == null
-                                ? null
-                                : Integer.valueOf(page.after().key(0)))
+                .param("before", page.after() == null ? null : page.after().intKey(0))
                 .param("limit", page.fetchSize())
                 .query(PriceBookRepository::mapVersion)
                 .list();

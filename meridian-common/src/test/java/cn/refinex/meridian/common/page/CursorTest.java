@@ -8,6 +8,7 @@ import cn.refinex.meridian.common.error.ValidationException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -65,6 +66,24 @@ class CursorTest {
                 .isInstanceOf(ValidationException.class)
                 .satisfies(e ->
                         assertThat(((ValidationException) e).errorCode()).isEqualTo(CommonErrorCode.INVALID_CURSOR));
+    }
+
+    @Test
+    void aCursorFromAnotherListIsInvalidInsteadOfAServerError() {
+        // R2 审查 A-02：别的列表发出的游标校验和正确，但键的个数、类型不对
+        Cursor foreign = Cursor.decode(Cursor.of("prj_A").encode());
+
+        for (org.assertj.core.api.ThrowableAssert.ThrowingCallable read :
+                List.<org.assertj.core.api.ThrowableAssert.ThrowingCallable>of(
+                        () -> foreign.key(1), () -> foreign.instantKey(0), () -> foreign.intKey(0))) {
+            assertThatThrownBy(read)
+                    .isInstanceOf(ValidationException.class)
+                    .satisfies(e -> assertThat(((ValidationException) e).errorCode())
+                            .isEqualTo(CommonErrorCode.INVALID_CURSOR));
+        }
+        Cursor typed = Cursor.decode(Cursor.of("2026-11-13T00:00:00Z", "12").encode());
+        assertThat(typed.instantKey(0)).isEqualTo(java.time.Instant.parse("2026-11-13T00:00:00Z"));
+        assertThat(typed.intKey(1)).isEqualTo(12);
     }
 
     @ParameterizedTest

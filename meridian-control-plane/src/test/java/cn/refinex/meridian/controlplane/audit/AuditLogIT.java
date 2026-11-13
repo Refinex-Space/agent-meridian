@@ -165,6 +165,22 @@ class AuditLogIT extends ControlPlaneTestBase {
     }
 
     @Test
+    void aCursorFromAnotherListIsABadRequest() {
+        // R2 审查 A-02：项目列表的游标校验和正确，但只有一个键；审计查询要两个键（时间、ID），此前得到 500
+        TenantFixture fixture = TenantFixture.create(client());
+        String base = "/admin/v1/tenants/" + fixture.get("tenant");
+        String owner = token("owner");
+        Reply projects = client().admin("GET", base + "/projects?limit=1", owner, null);
+        String foreign = projects.text("next_cursor");
+
+        for (String list : List.of("/audit-logs", "/budget-alerts", "/usage-records", "/budgets")) {
+            Reply reply = client().admin("GET", base + list + "?after=" + foreign, owner, null);
+            assertThat(reply.status()).as(list + "：" + reply.raw()).isEqualTo(400);
+            assertThat(reply.text("code")).isEqualTo("request.invalid_cursor");
+        }
+    }
+
+    @Test
     void theApplicationRoleCanOnlyInsertAndReadAuditLogs() {
         TenantFixture fixture = TenantFixture.create(client());
         String tenant = fixture.get("tenant");

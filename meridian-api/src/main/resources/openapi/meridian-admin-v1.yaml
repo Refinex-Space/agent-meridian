@@ -6,8 +6,8 @@ info:
   description: |
     只供控制台调用（ADR-0042），与控制台同版本发布，不对业务系统开放；业务系统使用公开 API（`meridian-v1.yaml`）。
 
-    **认证。** 每个请求带 `Authorization: Bearer <控制台用户令牌>`。正式实现是 OIDC access token（T14b）；在那之前只有
-    `dev`、`test` profile 接受开发期令牌，其他 profile 一律拒绝。API Key 不能调用管理 API。
+    **认证。** 每个请求带 `Authorization: Bearer <控制台用户令牌>`，令牌是 OIDC access token（ADR-0044），没有开发期令牌。
+    API Key 不能调用管理 API。
 
     **授权。** 角色来自 control-plane 的角色绑定（架构设计「授权」）：租户所有者、租户管理员作用于整个租户；项目开发者、
     项目观察者、审批人只作用于绑定的项目。创建租户、修改租户配额只有平台管理员可以执行。没有权限时返回 403 `access.forbidden`。
@@ -3377,7 +3377,7 @@ components:
     ConsoleAuth:
       type: http
       scheme: bearer
-      description: 控制台用户的令牌：OIDC access token（T14b）；T14a 只有 `dev`、`test` profile 的开发期令牌。
+      description: 控制台用户的令牌：OIDC access token（ADR-0044）。
 
   headers:
     XRequestId:

@@ -88,6 +88,8 @@ class ConnectivityIT extends ControlPlaneTestBase {
         assertThat(unreachable.status()).isEqualTo(200);
         assertThat(unreachable.text("status")).isEqualTo("unreachable");
         assertThat(unreachable.json().get("http_status").isNull()).isTrue();
+        // R2 审查 K-04：只给分类说明，不回显异常消息（其中有内网地址与端口）
+        assertThat(unreachable.text("message")).isIn("连接被拒绝", "连接或响应超时");
         assertThat(audits(fixture.get("tenant"), account)).contains("provider_account.tested");
     }
 
@@ -128,7 +130,11 @@ class ConnectivityIT extends ControlPlaneTestBase {
         assertThat(failed.text("code")).isEqualTo("mcp_server.probe_failed");
         Reply after = client().admin("GET", base + "/mcp-servers/" + id, token("viewer"), null);
         assertThat(after.json().get("last_check").get("status").asString()).isEqualTo("error");
-        assertThat(after.json().get("last_check").get("message").asString()).isNotBlank();
+        assertThat(after.json().get("last_check").get("message").asString())
+                .startsWith("连接 MCP 服务、握手或列出工具失败：")
+                .doesNotContain("127.0.0.1")
+                .doesNotContain("localhost");
+        assertThat(failed.text("detail")).doesNotContain("127.0.0.1").doesNotContain("localhost");
         assertThat(after.json().get("tools")).as("失败时清单不变").isNotEmpty();
     }
 

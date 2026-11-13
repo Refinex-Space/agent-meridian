@@ -8,10 +8,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.http.HttpTimeoutException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -30,6 +31,8 @@ public class HttpProviderProbe implements ProviderProbe {
 
     /** Anthropic 要求的 API 版本头。 */
     static final String ANTHROPIC_VERSION = "2023-06-01";
+
+    private static final Logger log = LoggerFactory.getLogger(HttpProviderProbe.class);
 
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
@@ -58,12 +61,11 @@ public class HttpProviderProbe implements ProviderProbe {
         try {
             HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
             return ConnectivityCheck.ofHttpStatus(response.statusCode(), elapsed(begin), started);
-        } catch (HttpTimeoutException e) {
-            return new ConnectivityCheck(ConnectivityCheck.UNREACHABLE, null, elapsed(begin), "连接或响应超时", started);
         } catch (IOException e) {
-            String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            // 只给分类说明，不回显异常消息（R2 审查 K-04）
+            log.info("供应商连通性测试连接失败 error={}", e.toString());
             return new ConnectivityCheck(
-                    ConnectivityCheck.UNREACHABLE, null, elapsed(begin), "连接失败：" + message, started);
+                    ConnectivityCheck.UNREACHABLE, null, elapsed(begin), ConnectivityCheck.failureReason(e), started);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new ConnectivityCheck(ConnectivityCheck.ERROR, null, elapsed(begin), "探测被中断", started);

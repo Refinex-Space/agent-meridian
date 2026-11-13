@@ -10,7 +10,6 @@ import cn.refinex.meridian.persistence.tenant.TenantScope;
 import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
@@ -58,7 +57,7 @@ public class AuditLogRepository extends TenantScopedRepository {
                 .param("resource_id", filter.resourceId())
                 .param("project_filter", filter.projectId())
                 .param("session", filter.sessionId())
-                .param("after_time", after == null ? null : Instant.parse(after.key(0)))
+                .param("after_time", after == null ? null : after.instantKey(0))
                 .param("after_id", after == null ? null : after.key(1))
                 .param("limit", page.fetchSize())
                 .query(AuditLogRepository::map)

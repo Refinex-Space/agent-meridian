@@ -9,7 +9,6 @@ import cn.refinex.meridian.persistence.tenant.TenantScope;
 import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
 import java.util.List;
 import javax.sql.DataSource;
 import org.springframework.stereotype.Repository;
@@ -41,7 +40,7 @@ public class BudgetAlertRepository extends TenantScopedRepository {
                            AND (CAST(:after_time AS timestamptz) IS NULL OR (occurred_at, id) < (:after_time, :after_id))
                          ORDER BY occurred_at DESC, id DESC LIMIT :limit
                         """)
-                .param("after_time", after == null ? null : Instant.parse(after.key(0)))
+                .param("after_time", after == null ? null : after.instantKey(0))
                 .param("after_id", after == null ? null : after.key(1))
                 .param("limit", page.fetchSize())
                 .query(BudgetAlertRepository::map)

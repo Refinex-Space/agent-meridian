@@ -1,7 +1,14 @@
 package cn.refinex.meridian.controlplane.catalog.domain;
 
+import java.net.ConnectException;
+import java.net.UnknownHostException;
+import java.net.http.HttpTimeoutException;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.concurrent.TimeoutException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import javax.net.ssl.SSLException;
 
 /**
  * 一次连通性检查的结果（ADR-0053）：供应商账号的连通性测试与 MCP 服务的探测共用，保存在各自的 {@code last_check} 中。
@@ -66,4 +73,43 @@ public record ConnectivityCheck(String status, Integer httpStatus, long latencyM
     public boolean ok() {
         return OK.equals(status);
     }
+
+    /**
+     * 连接失败的分类说明，供 {@code last_check.message} 与探测失败的 {@code detail}：只给分类与 HTTP 状态码，不给异常消息原文。原文
+     * 可能带内网地址、端口与对端返回的内容，管理员能借此探测内网（R2 审查 K-04、I-06）；原因链留在服务端日志。
+     *
+     * @param error 连接、握手或请求中的异常
+     * @return 分类说明
+     */
+    public static String failureReason(Throwable error) {
+        Throwable root = error;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        for (Throwable t = error; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof HttpTimeoutException || t instanceof TimeoutException) {
+                return "连接或响应超时";
+            }
+            if (t instanceof UnknownHostException) {
+                return "域名解析失败";
+            }
+            if (t instanceof ConnectException) {
+                return "连接被拒绝";
+            }
+            if (t instanceof SSLException) {
+                return "TLS 握手失败";
+            }
+            String message = t.getMessage();
+            if (message != null) {
+                Matcher status = HTTP_STATUS.matcher(message);
+                if (status.find()) {
+                    return "对端返回 HTTP " + status.group(1);
+                }
+            }
+        }
+        return "连接失败（" + root.getClass().getSimpleName() + "）";
+    }
+
+    /** 异常消息中的 HTTP 状态码：SDK 与 JDK 客户端的写法是 "status 401"、"status code: 401"、"HTTP 401"。 */
+    private static final Pattern HTTP_STATUS = Pattern.compile("(?i)(?:status(?: code)?:?|HTTP)\\s*([1-5]\\d\\d)\\b");
 }

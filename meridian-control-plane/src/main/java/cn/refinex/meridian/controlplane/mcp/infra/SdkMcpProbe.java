@@ -1,5 +1,6 @@
 package cn.refinex.meridian.controlplane.mcp.infra;
 
+import cn.refinex.meridian.controlplane.catalog.domain.ConnectivityCheck;
 import cn.refinex.meridian.controlplane.mcp.app.McpProbe;
 import cn.refinex.meridian.controlplane.mcp.domain.McpTool;
 import io.modelcontextprotocol.client.McpClient;
@@ -65,12 +66,9 @@ public class SdkMcpProbe implements McpProbe {
             tools.sort(Comparator.comparing(McpTool::name));
             return List.copyOf(tools);
         } catch (RuntimeException e) {
-            log.info(
-                    "MCP 服务探测失败 url={} transport={} error={}",
-                    url,
-                    transport,
-                    e.getClass().getSimpleName());
-            throw new McpProbeException("连接 MCP 服务、握手或列出工具失败：" + rootMessage(e), e);
+            log.info("MCP 服务探测失败 transport={} error={}", transport, rootMessage(e));
+            // 对外只给分类说明，不回显对端返回的内容与内网地址（R2 审查 K-04）；原因留在日志
+            throw new McpProbeException("连接 MCP 服务、握手或列出工具失败：" + ConnectivityCheck.failureReason(e), e);
         } finally {
             client.closeGracefully();
         }

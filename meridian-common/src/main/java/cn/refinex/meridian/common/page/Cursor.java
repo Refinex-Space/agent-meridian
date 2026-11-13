@@ -6,6 +6,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -64,13 +66,47 @@ public record Cursor(List<String> keys) {
     }
 
     /**
-     * 返回第 {@code index} 个排序键。
+     * 返回第 {@code index} 个排序键。游标来自外部：别的列表发出的游标校验和同样正确，但键的个数可能不够（R2 审查 A-02）。
      *
      * @param index 从 0 开始的位置
      * @return 排序键
+     * @throws ValidationException 游标没有这个位置的键时，错误码 {@link CommonErrorCode#INVALID_CURSOR}
      */
     public String key(int index) {
+        if (index < 0 || index >= keys.size()) {
+            throw invalid();
+        }
         return keys.get(index);
+    }
+
+    /**
+     * 第 {@code index} 个排序键按 RFC 3339 时间点解析。
+     *
+     * @param index 从 0 开始的位置
+     * @return 时间点
+     * @throws ValidationException 没有这个键或不是时间点时，错误码 {@link CommonErrorCode#INVALID_CURSOR}
+     */
+    public Instant instantKey(int index) {
+        try {
+            return Instant.parse(key(index));
+        } catch (DateTimeParseException e) {
+            throw invalid();
+        }
+    }
+
+    /**
+     * 第 {@code index} 个排序键按十进制整数解析。
+     *
+     * @param index 从 0 开始的位置
+     * @return 整数
+     * @throws ValidationException 没有这个键或不是 {@code int} 范围的整数时，错误码 {@link CommonErrorCode#INVALID_CURSOR}
+     */
+    public int intKey(int index) {
+        try {
+            return Integer.parseInt(key(index));
+        } catch (NumberFormatException e) {
+            throw invalid();
+        }
     }
 
     /**

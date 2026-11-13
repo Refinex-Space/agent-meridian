@@ -88,8 +88,8 @@ public class RuntimeQueryModels implements QueryModels {
 
     private static <T> T requireConfigured(T client) {
         if (client == null) {
-            throw new MeridianException(
-                    CommonErrorCode.SERVICE_UNAVAILABLE, "没有配置 runtime 地址（meridian.knowledge.runtime.url）");
+            // detail 原样返回调用方，不写配置项名（R2 审查 A-07）；配置缺失在启动日志与健康检查里看
+            throw new MeridianException(CommonErrorCode.SERVICE_UNAVAILABLE, "检索需要的模型服务没有配置");
         }
         return client;
     }
@@ -98,11 +98,11 @@ public class RuntimeQueryModels implements QueryModels {
         try {
             return operation.get();
         } catch (ModelClientException e) {
+            // 只带下游的错误码，不带下游的消息原文（可能含内部地址，R2 审查 A-07）；原因链留在服务端日志
             if (e.retryable()) {
-                throw new MeridianException(CommonErrorCode.SERVICE_UNAVAILABLE, "检索的模型调用暂时失败：" + e.getMessage(), e);
+                throw new MeridianException(CommonErrorCode.SERVICE_UNAVAILABLE, "检索的模型调用暂时失败（" + e.code() + "）", e);
             }
-            throw new MeridianException(
-                    KnowledgeErrorCode.MODEL_UNAVAILABLE, "检索的模型不可用（" + e.code() + "）：" + e.getMessage(), e);
+            throw new MeridianException(KnowledgeErrorCode.MODEL_UNAVAILABLE, "检索的模型不可用（" + e.code() + "）", e);
         }
     }
 }

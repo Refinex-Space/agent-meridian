@@ -85,7 +85,7 @@
 |---|---|---|---|---|---|
 | 知识库列表 | 名称、Embedding 与 rerank 模型、文档数 | 新建 | 按需 | `GET/POST /v1/knowledge-bases`（K） | 已有 |
 | 知识库设置 | 名称、说明、rerank 模型 | 修改、删除（确认对话框写明文档与切片一并删除） | 按需 | `PATCH /v1/knowledge-bases/{id}`、`DELETE /v1/knowledge-bases/{id}`（K） | T19b |
-| 文档管理 | 文档、状态、页数、切片数、错误 | 上传（带 `acl_tags`）、删除、重新处理 | 有未完成文档时轮询 5 秒，全部完成后停止；完成时 toast | `POST/GET /v1/knowledge-bases/{id}/documents`、`GET/DELETE …/documents/{doc_id}`、`POST …:reprocess`（K） | 已有 |
+| 文档管理 | 文档、状态、写入阶段与进度（`ingestion`）、切片数、错误 | 上传（带 `acl_tags`）、删除、重新处理 | 有未完成文档时轮询 5 秒，全部完成后停止；完成时 toast | `POST/GET /v1/knowledge-bases/{id}/documents`、`GET/DELETE …/documents/{doc_id}`、`POST …:reprocess`（K） | 已有 |
 | 检索测试 | 召回的切片、分数、来源 | 输入查询与过滤条件 | 按需 | `POST /v1/knowledge-bases/{id}/search`（K） | 已有 |
 
 ## 8 模型
@@ -121,7 +121,7 @@
 |---|---|---|---|---|---|
 | 成员与角色 | 成员（已加入、已邀请）、邮箱、角色绑定 | 按用户标识或邮箱添加成员、修改资料、移除；授予、撤销角色 | 按需 | `GET/POST T:/members`、`GET/PATCH/DELETE T:/members/{id}`、`GET/POST T:/role-bindings`、`DELETE T:/role-bindings/{id}` | 已有；邮箱邀请与 `status` T19b |
 | 项目 | 项目列表 | 新建、改名、删除 | 按需 | `GET/POST T:/projects`、`GET/PATCH/DELETE T:/projects/{id}` | 已有 |
-| API Key | Key 的前缀、作用域、限流、最后使用时间 | 创建（明文只显示一次）、改名、吊销 | 按需 | `GET/POST P:/api-keys`、`GET/PATCH P:/api-keys/{id}`、`POST P:/api-keys/{id}:revoke` | 已有 |
+| API Key | Key 的前缀、作用域、限流、状态、过期时间 | 创建（明文只显示一次）、改名、吊销 | 按需 | `GET/POST P:/api-keys`、`GET/PATCH P:/api-keys/{id}`、`POST P:/api-keys/{id}:revoke` | 已有；"最后使用时间"没有接口（R2 登记 D86） |
 | Webhook | 地址、订阅的事件、状态 | 新建（签名密钥只显示一次）、修改、删除、轮换签名密钥 | 按需 | `GET/POST/PUT/DELETE P:/webhooks[/{id}]`、`POST P:/webhooks/{id}:rotate-secret` | 已有；轮换 T19b |
 | 投递记录 | 每次投递的事件、状态、尝试次数、响应码 | 按 Webhook、会话、状态、时间范围筛选；重投 | 按需 | `GET /v1/webhook-deliveries?created_after=&created_before=`、`GET /v1/webhook-deliveries/{id}`、`POST …:redeliver`（R） | 已有；时间范围 T19b |
 | 凭据 | 名称、版本、最后使用时间、引用方 | 写入、轮换、删除 | 按需 | `GET/POST T:/secrets`、`GET/DELETE T:/secrets/{id}`、`POST T:/secrets/{id}:rotate` | 已有 |

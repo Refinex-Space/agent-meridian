@@ -61,8 +61,7 @@ public class UsageRecordRepository extends TenantScopedRepository {
      * @return 最多 {@code page.fetchSize()} 条
      */
     public List<UsageRecord> page(UsageRecordFilter filter, UsageRange range, PageRequest page) {
-        Instant afterTime =
-                page.after() == null ? null : Instant.parse(page.after().key(0));
+        Instant afterTime = page.after() == null ? null : page.after().instantKey(0);
         String afterId = page.after() == null ? null : page.after().key(1);
         return bind(sql(SELECT + """
                                    AND (CAST(:after_time AS timestamptz) IS NULL
