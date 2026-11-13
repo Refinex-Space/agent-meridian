@@ -1574,64 +1574,64 @@
       "id": "T20a-A01",
       "task": "T20a",
       "description": "\"设计定稿\"一节已写入，自查逐条完成，并写明修改过的默认值。验证：文档 diff。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/engineering/frontend-design.md 新增「设计定稿」（提交 a041e3e，实现中调整的值与评审表自查在收尾提交回写）：令牌草案（25 个颜色令牌亮暗两套 OKLCH 与十六进制、对比度、字号、间距、圆角、阴影、动效）、应用外壳与四种页面模板加工作台的线框、时间轴构成；自查逐条对照禁用清单 18 条与 frontend-design 技能的五类特征，写明改掉的 10 个默认值（状态胶囊、主色、活动流、时间戳、中点元信息、标签页、焦点环、暗色、代码块、阴影），另有截图评审后改掉的 9 处"
     },
     {
       "id": "T20a-A02",
       "task": "T20a",
       "description": "令牌亮暗两套齐全；正文对比度不低于 4.5:1，大字与图标不低于 3:1（令牌页显示数值）。验证：Storybook 令牌页截图。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "令牌页截图 tmp/evidence/T20a/tokens-light-1280.png、tokens-dark-1280.png（及 1920）：同页并排显示亮暗两套色板，对比度表按实际渲染的颜色计算，58 对前景与背景全部满足（文字 ≥ 4.5、图形与控件边界 ≥ 3，最低：文字 accent/accent-weak 暗色 4.76、danger/danger-weak 4.75；图形 brass/surface-inset 亮色 3.16、lane/accent-weak 暗色 3.22）；pnpm -C console test 的 src/styles/tokens.test.ts 从 tokens.css 读两套调色板逐对校验，5 passed"
     },
     {
       "id": "T20a-A03",
       "task": "T20a",
       "description": "lint 能拦截硬编码颜色、`lucide-react` 导入与能机检的禁用条目。验证：逐条临时写入违规代码时 lint 失败，撤销后通过。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "写入 src/components/ui/lint-probe.tsx 与 src/styles/lint-probe.css 后 eslint exit=1、check-css exit=1（tmp/evidence/T20a/lint-probe-eslint.txt、lint-probe-css.txt）：拦截 lucide-react、@radix-ui/react-icons、在封装外直接导入 @phosphor-icons/react、十六进制与 rgb() 颜色（含 Tailwind 任意色值）、bg-gradient/from-*、backdrop-blur 与 backdropFilter、uppercase 与 tracking-* 同用、按钮 rounded-full、emoji、\"→\"、阶梯外间距 p-5；样式表的颜色字面量、渐变、backdrop-filter、letter-spacing；删除后 pnpm -C console lint exit=0（tmp/evidence/T20a/lint-after-revert.txt）。eslint-rules/meridian.test.js 的 RuleTester 测试 47 passed；gen:api --check 在生成类型过期时 exit=1"
     },
     {
       "id": "T20a-A04",
       "task": "T20a",
       "description": "自研图标与 Phosphor 图标并排时线宽与视觉重量一致。验证：截图。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "tmp/evidence/T20a/icons-light-1280.png、icons-dark-1280.png（及 1920）：品牌标识与七个领域图标按 Phosphor 的 256 网格、16 线宽（bold 为 24）绘制，与结构相近的 Phosphor 图标（Globe、User、GitBranch、Ruler、Cube、Diamond、Triangle、Stack）同色并排于 16、20、24px 与 bold，另有 96px 放大对照，线宽与视觉重量一致"
     },
     {
       "id": "T20a-A05",
       "task": "T20a",
       "description": "`SessionTimeline` 实现子午线、子线程分叉、\"此刻\"标记、新事件落位动画；减少动效模式下只有不透明度变化。验证：截图或录屏。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "截图 tmp/evidence/T20a/timeline-subthreads-*.png（子午线、刻度、两个子线程从主线分叉与并回、黄铜\"此刻\"）、session-live-*.png（批准后第 3 轮、生成中的回复）、session-awaiting-*.png；录屏 tmp/evidence/T20a/timeline-motion.webm 与 timeline-reduced-motion.webm；pnpm -C console e2e e2e/timeline-motion.spec.ts 2 passed：常规动效下新行 animation-name=arrive（0.2s、cubic-bezier(0.2,0,0,1)，关键帧含 opacity 与 transform）、此刻 breath 呼吸并以 transform 过渡下移；减少动效下新行为 fade-in（关键帧只有 opacity），此刻 animation 与 transition 均为 none"
     },
     {
       "id": "T20a-A06",
       "task": "T20a",
       "description": "时间轴性能：Playwright 在固定的 1 万条事件数据上连续滚动 5 秒，帧时间 p95 不超过 16.7 ms，没有超过 50 ms 的长任务。验证：Playwright 输出的帧时间统计。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "pnpm -C console e2e e2e/timeline-performance.spec.ts passed（tmp/evidence/T20a/timeline-performance.txt）：固定的 1 万条事件连续滚动 5 秒约 30000px，Chrome 性能跟踪按帧求主线程忙碌时间 301 帧，p50 3.40 ms、p95 4.73 ms、p99 7.87 ms、最大 15.93 ms；超过 50 ms 的长任务 0 个（最长 4.45 ms）；requestAnimationFrame 301 次、刷新周期 16.70 ms、掉帧 0。测法说明见测试文件注释：60Hz 下相邻 rAF 间隔恒为刷新周期（读数 16.7 或 16.8），不能用来衡量帧时间"
     },
     {
       "id": "T20a-A07",
       "task": "T20a",
       "description": "用户已确认视觉方向。验证：确认日期与意见（只有用户在对话中明确确认后才能标 `passing`）。",
       "status": "not_started",
-      "evidence": ""
+      "evidence": "等待用户确认视觉方向：截图与录屏在 tmp/evidence/T20a/（亮暗、1280 与 1920），设计计划见 frontend-design.md「设计定稿」"
     },
     {
       "id": "T20a-A08",
       "task": "T20a",
       "description": "ADR-0021 已写，依赖版本均为最新稳定版且发布至少两周。验证：ADR 与 `package.json`。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/adr/0021-前端依赖选型与版本.md（已采纳（补充））：截止日期 2026-10-30，console/package.json 全部依赖为不带范围的锁定版本，均为截止日期前发布的最新稳定版；六处取舍写明理由：TypeScript 6.0.3（typescript-eslint 8.72 只支持 <6.1，未用 7.0.2）、ESLint 10.14.0（9 已停止支持，jsx-a11y peer 放行并实测规则生效）、pnpm 10.34.9（12.17.0 的原生垫片在 pnpm 10 自动切换时 ENOEXEC）、Plex Sans SC 用官方切片不用 cn-font-split、自写导入边界规则、六个基元取 shadcn 上游源码"
     },
     {
       "id": "T20a-A09",
       "task": "T20a",
       "description": "`pnpm -C console lint`、`typecheck`、`test`、`build-storybook` 全部通过，并已接入 `scripts/dev/verify.sh`。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh 追加控制台一段（install --frozen-lockfile、lint、typecheck、test、build-storybook，提交 37ed6eb）；2026-11-13 全量运行 EXIT=0：Maven BUILD SUCCESS（6 分 54 秒）、check-pom-versions OK、sandbox-runtime 23 passed、doc-parser 通过，控制台 pnpm -C console lint 通过（ESLint、check-css、Prettier、gen:api --check）、typecheck 通过、test 9 个文件 78 passed、build-storybook 完成"
     },
     {
       "id": "T20b-A01",

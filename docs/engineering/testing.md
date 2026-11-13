@@ -17,7 +17,7 @@
 | 前端单元与组件 | `*.test.ts(x)` | Vitest | 无 |
 | 前端端到端 | `console/e2e/*.spec.ts` | Playwright | 运行中的控制台与后端 |
 
-Maven 命令见根目录与各模块的 `CLAUDE.md`；pnpm 命令由 T21 落地后写入。
+Maven 命令见根目录与各模块的 `CLAUDE.md`；pnpm 命令见 `console/CLAUDE.md`（T20a）。
 
 ## 测试的写法
 
