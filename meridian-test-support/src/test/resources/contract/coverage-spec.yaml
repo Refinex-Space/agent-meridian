@@ -1,0 +1,12 @@
+openapi: 3.1.0
+info: {title: 覆盖记录的测试规范, version: '1'}
+paths:
+  /v1/sessions/{session_id}:
+    get: {tags: [Sessions], responses: {'200': {description: ok}}}
+    delete: {tags: [Sessions], responses: {'202': {description: ok}}}
+  /v1/sessions/{session_id}:archive:
+    post: {tags: [Sessions], responses: {'200': {description: ok}}}
+  /v1/sessions/{session_id}/workspace/files/{path}:
+    get: {tags: [Workspace], responses: {'200': {description: ok}}}
+  /v1/agents:
+    get: {tags: [Agents], responses: {'200': {description: ok}}}

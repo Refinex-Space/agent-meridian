@@ -1,5 +1,6 @@
 package cn.refinex.meridian.knowledge.support;
 
+import cn.refinex.meridian.testsupport.contract.ContractCoverage;
 import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.atlassian.oai.validator.model.Request;
 import com.atlassian.oai.validator.model.SimpleRequest;
@@ -86,6 +87,7 @@ public final class ApiClient {
         }
         query(path).forEach(request::withQueryParam);
         check(operation, PUBLIC.validate(request.build(), toValidated(response)), response);
+        ContractCoverage.record(ContractCoverage.PUBLIC, method, rawPath(path));
         return reply(response);
     }
 
@@ -136,6 +138,7 @@ public final class ApiClient {
                 "POST /v1/knowledge-bases/{knowledge_base_id}/documents",
                 PUBLIC.validateResponse(path, Request.Method.POST, toValidated(response)),
                 response);
+        ContractCoverage.record(ContractCoverage.PUBLIC, "POST", path);
         return reply(response);
     }
 
@@ -182,6 +185,7 @@ public final class ApiClient {
         if (report.hasErrors()) {
             throw new AssertionError("内部接口不符合规范：" + report.getMessages() + "\n" + response.body());
         }
+        ContractCoverage.record(ContractCoverage.INTERNAL, method, rawPath(path));
         return reply(response);
     }
 

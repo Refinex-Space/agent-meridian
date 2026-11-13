@@ -1,5 +1,6 @@
 package cn.refinex.meridian.runtime.support;
 
+import cn.refinex.meridian.testsupport.contract.ContractCoverage;
 import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.atlassian.oai.validator.model.Request;
 import com.atlassian.oai.validator.model.Response;
@@ -21,7 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 内部接口按 {@code openapi/meridian-internal-v1.yaml} 校验（T09b）。
  * 校验库默认严格：未声明的字段、缺少的必填字段、类型与枚举不符都是错误。
  *
- * <p>记录被校验过的操作（{@code METHOD 路径模板}），{@code SessionApiContractIT} 据此断言每个端点都经过了校验。
+ * <p>记录被校验过的操作（{@code METHOD 路径模板}），{@code SessionApiContractIT} 据此断言每个端点都经过了校验；另按真实路径记进
+ * {@link ContractCoverage}，排在最后的 {@code ContractCoverageIT} 核对公开与内部接口中由 runtime 提供的操作（R2）。
  */
 public final class ContractValidator {
 
@@ -71,6 +73,7 @@ public final class ContractValidator {
      */
     public static void validate(String operation, Request request, Response response) {
         report(operation, INTERACTIONS.validate(request, response));
+        ContractCoverage.record(ContractCoverage.PUBLIC, request.getMethod().name(), request.getPath());
     }
 
     /**
@@ -83,6 +86,7 @@ public final class ContractValidator {
      */
     public static void validateStream(String operation, Request request, Response response) {
         report(operation, STREAMS.validate(request, response));
+        ContractCoverage.record(ContractCoverage.PUBLIC, request.getMethod().name(), request.getPath());
     }
 
     /**
@@ -96,6 +100,7 @@ public final class ContractValidator {
      */
     public static void validateResponse(String operation, String path, Request.Method method, Response response) {
         report(operation, INTERACTIONS.validateResponse(path, method, response));
+        ContractCoverage.record(ContractCoverage.PUBLIC, method.name(), path);
     }
 
     /**
@@ -140,6 +145,7 @@ public final class ContractValidator {
         if (report.hasErrors()) {
             throw new AssertionError("内部接口不符合规范：" + report.getMessages());
         }
+        ContractCoverage.record(ContractCoverage.INTERNAL, request.getMethod().name(), request.getPath());
     }
 
     /**
@@ -155,6 +161,16 @@ public final class ContractValidator {
         if (report.hasErrors()) {
             throw new AssertionError("内部接口的响应不符合规范：" + report.getMessages());
         }
+        ContractCoverage.record(ContractCoverage.INTERNAL, method.name(), path);
+    }
+
+    /**
+     * runtime 提供的公开标签。
+     *
+     * @return 标签
+     */
+    public static Set<String> runtimeTags() {
+        return RUNTIME_TAGS;
     }
 
     /**

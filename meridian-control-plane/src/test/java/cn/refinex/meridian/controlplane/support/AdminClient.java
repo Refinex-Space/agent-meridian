@@ -1,5 +1,6 @@
 package cn.refinex.meridian.controlplane.support;
 
+import cn.refinex.meridian.testsupport.contract.ContractCoverage;
 import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.atlassian.oai.validator.model.Request;
 import com.atlassian.oai.validator.model.SimpleRequest;
@@ -16,7 +17,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 调用 control-plane 的测试客户端：管理 API 与内部接口的每次交互都按对应的规范校验请求与响应（ADR-0029、ADR-0042）。
+ * 调用 control-plane 的测试客户端：管理 API 与内部接口的每次交互都按对应的规范校验请求与响应（ADR-0029、ADR-0042），并记进
+ * {@link ContractCoverage}，由 {@code ContractCoverageIT} 核对覆盖（R2）。
  */
 public final class AdminClient {
 
@@ -178,6 +180,7 @@ public final class AdminClient {
         if (report.hasErrors()) {
             throw new AssertionError(method + " " + path + " 不符合规范：" + report.getMessages() + "\n" + response.body());
         }
+        ContractCoverage.record(specOf(validator), method, uri.getRawPath());
         // CSV 导出（T19b）等非 JSON 的响应只给原文
         boolean isJson = response.headers()
                 .firstValue("Content-Type")
@@ -185,6 +188,13 @@ public final class AdminClient {
                 .orElse(true);
         JsonNode json = response.body().isEmpty() || !isJson ? null : JSON.readTree(response.body());
         return new Reply(response.statusCode(), response.headers().map(), json, response.body());
+    }
+
+    private static String specOf(OpenApiInteractionValidator validator) {
+        if (validator == ADMIN) {
+            return ContractCoverage.ADMIN;
+        }
+        return validator == INTERNAL ? ContractCoverage.INTERNAL : ContractCoverage.PUBLIC;
     }
 
     /**
