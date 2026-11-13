@@ -47,6 +47,8 @@ class OpenApiSpecTest {
             "GET /v1/sessions/{session_id}/threads",
             "GET /v1/sessions/{session_id}/threads/{thread_id}/stream",
             "GET /v1/sessions/{session_id}/pending-actions",
+            "GET /v1/pending-actions",
+            "GET /v1/session-stats",
             "GET /v1/sessions/{session_id}/workspace/files/{path}",
             "PUT /v1/sessions/{session_id}/workspace/files/{path}",
             "GET /v1/sessions/{session_id}/workspace:list",
@@ -159,8 +161,15 @@ class OpenApiSpecTest {
                                             ? "knowledge:read"
                                             : "knowledge:write"
                                     : key.startsWith("GET ") ? "sessions:read" : "sessions:write";
-            assertThat(operation.getSecurity()).as(key).hasSize(1);
+            // 回应待处理动作另接受审批人的 actions:respond（ADR-0053），其余操作只有一个作用域
+            int alternatives = key.equals("POST /v1/sessions/{session_id}/events") ? 2 : 1;
+            assertThat(operation.getSecurity()).as(key).hasSize(alternatives);
             assertThat(operation.getSecurity().getFirst()).as(key).containsEntry("ApiKeyAuth", List.of(expectedScope));
+            if (alternatives == 2) {
+                assertThat(operation.getSecurity().get(1))
+                        .as(key)
+                        .containsEntry("ApiKeyAuth", List.of("actions:respond"));
+            }
         });
     }
 

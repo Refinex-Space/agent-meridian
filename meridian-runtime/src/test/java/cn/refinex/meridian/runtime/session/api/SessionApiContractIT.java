@@ -74,6 +74,21 @@ class SessionApiContractIT extends ApiTestBase {
                 .isTrue();
         assertThat(api.listThreads(sessionId, "limit=10").status()).isEqualTo(200);
         assertThat(api.listPendingActions(sessionId, "status=pending").status()).isEqualTo(200);
+        // 控制台的查询（T19b）：会话筛选、项目级待处理动作、会话运行概况
+        assertThat(api.listSessions("agent_id=agt_dev_assistant&status=idle&created_after=2026-01-01T00:00:00Z")
+                        .status())
+                .isEqualTo(200);
+        assertThat(api.call(
+                                "GET /v1/pending-actions",
+                                HttpMethod.GET,
+                                "/v1/pending-actions?status=resolved&type=tool_confirmation&agent_id=agt_dev_assistant",
+                                null,
+                                null)
+                        .status())
+                .isEqualTo(200);
+        assertThat(api.call("GET /v1/session-stats", HttpMethod.GET, "/v1/session-stats?window=7d", null, null)
+                        .status())
+                .isEqualTo(200);
 
         // 工作区（T17b）：none 档写入、读取与列表
         String workspacePath = "/v1/sessions/" + sessionId + "/workspace/files/notes%2Fplan.md";
@@ -206,7 +221,7 @@ class SessionApiContractIT extends ApiTestBase {
                 .isEqualTo("webhook_delivery.not_found");
 
         assertThat(ContractValidator.validatedOperations()).containsAll(ContractValidator.allOperations());
-        assertThat(ContractValidator.allOperations()).hasSize(24);
+        assertThat(ContractValidator.allOperations()).hasSize(26);
     }
 
     /** 1×1 的 PNG。 */

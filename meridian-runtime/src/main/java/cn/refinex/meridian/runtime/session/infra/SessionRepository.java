@@ -10,6 +10,7 @@ import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
 import cn.refinex.meridian.runtime.session.domain.EndUserAttributes;
 import cn.refinex.meridian.runtime.session.domain.NewSession;
 import cn.refinex.meridian.runtime.session.domain.Session;
+import cn.refinex.meridian.runtime.session.domain.SessionFilter;
 import cn.refinex.meridian.runtime.session.domain.SessionStatus;
 import cn.refinex.meridian.runtime.stream.infra.EngineJson;
 import java.sql.ResultSet;
@@ -36,7 +37,7 @@ public class SessionRepository extends TenantScopedRepository {
             id, tenant_id, project_id, agent_version_id, environment_id, environment_revision, end_user_id,
             interaction, status, last_seq, created_at, updated_at, custom_tools::text AS custom_tools,
             end_user_attributes::text AS end_user_attributes, metadata::text AS metadata, terminated_at, deleted_at,
-            api_key_id
+            api_key_id, agent_id
             """;
 
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {};
@@ -61,10 +62,10 @@ public class SessionRepository extends TenantScopedRepository {
                         INSERT INTO rt.sessions (id, tenant_id, project_id, agent_version_id, environment_id,
                                                  environment_revision, end_user_id, end_user_attributes, interaction,
                                                  status, metadata, custom_tools, last_seq, last_activity_at,
-                                                 created_at, updated_at, api_key_id)
+                                                 created_at, updated_at, api_key_id, agent_id)
                         VALUES (:id, :tenant_id, :project_id, :agent_version_id, :environment_id,
                                 :environment_revision, :end_user_id, :end_user_attributes, :interaction,
-                                'idle', :metadata, :custom_tools, 0, :now, :now, :now, :api_key)
+                                'idle', :metadata, :custom_tools, 0, :now, :now, :now, :api_key, :agent_id)
                         """)
                 .param("id", session.id())
                 .param("agent_version_id", session.agentVersionId())
@@ -77,6 +78,7 @@ public class SessionRepository extends TenantScopedRepository {
                 .param("custom_tools", JdbcValues.jsonb(EngineJson.writeCustomTools(session.customTools())))
                 .param("now", now)
                 .param("api_key", PlatformContexts.current().apiKeyId())
+                .param("agent_id", session.agentId())
                 .update();
     }
 
@@ -97,22 +99,33 @@ public class SessionRepository extends TenantScopedRepository {
     }
 
     /**
-     * 列出当前项目中未删除的会话，新创建的在前（ID 为 ULID，按时间有序）。
+     * 列出当前项目中未删除的会话，新创建的在前（ID 为 ULID，按时间有序）。按智能体、状态筛选时分别走 {@code sessions_agent_idx}、
+     * {@code sessions_live_status_idx}（执行中与等待回应的状态）。
      *
      * @param page 分页参数；游标的唯一键是上一页最后一个会话的 ID
-     * @param endUserId 只列出该终端用户的会话；可为空，表示不过滤
+     * @param filter 筛选条件
      * @return 最多 {@code page.fetchSize()} 个会话
      */
-    public List<Session> list(PageRequest page, String endUserId) {
+    public List<Session> list(PageRequest page, SessionFilter filter) {
         return sql("SELECT " + COLUMNS + """
                           FROM rt.sessions
                          WHERE tenant_id = :tenant_id AND project_id = :project_id AND deleted_at IS NULL
                            AND (CAST(:end_user_id AS text) IS NULL OR end_user_id = :end_user_id)
+                           AND (CAST(:agent_filter AS text) IS NULL OR agent_id = :agent_filter)
+                           AND (CAST(:status AS text) IS NULL OR status = :status)
+                           AND (CAST(:created_after AS timestamptz) IS NULL OR created_at >= :created_after)
+                           AND (CAST(:created_before AS timestamptz) IS NULL OR created_at < :created_before)
                            AND (CAST(:after_id AS text) IS NULL OR id < :after_id)
                          ORDER BY id DESC
                          LIMIT :limit
                         """)
-                .param("end_user_id", endUserId)
+                .param("end_user_id", filter.endUserId())
+                .param("agent_filter", filter.agentId())
+                .param(
+                        "status",
+                        filter.status() == null ? null : filter.status().value())
+                .param("created_after", filter.createdAfter())
+                .param("created_before", filter.createdBefore())
                 .param("after_id", page.after() == null ? null : page.after().key(0))
                 .param("limit", page.fetchSize())
                 .query(SessionRepository::map)
@@ -185,6 +198,7 @@ public class SessionRepository extends TenantScopedRepository {
                 JsonMappers.lenient().readValue(rs.getString("metadata"), STRING_MAP),
                 JdbcValues.instant(rs, "terminated_at"),
                 JdbcValues.instant(rs, "deleted_at"),
-                rs.getString("api_key_id"));
+                rs.getString("api_key_id"),
+                rs.getString("agent_id"));
     }
 }

@@ -1,13 +1,17 @@
 package cn.refinex.meridian.runtime.session.api;
 
+import cn.refinex.meridian.api.model.AgentSessionStats;
 import cn.refinex.meridian.api.model.CreateSessionRequest;
 import cn.refinex.meridian.api.model.CustomToolDeclaration;
 import cn.refinex.meridian.api.model.EndUserAttributes;
 import cn.refinex.meridian.api.model.Interaction;
+import cn.refinex.meridian.api.model.RecentTurnError;
 import cn.refinex.meridian.api.model.SessionPage;
+import cn.refinex.meridian.api.model.SessionStats;
 import cn.refinex.meridian.api.model.SessionStatus;
 import cn.refinex.meridian.api.model.SessionThread;
 import cn.refinex.meridian.api.model.SideEffect;
+import cn.refinex.meridian.api.model.StatsWindow;
 import cn.refinex.meridian.api.model.ThreadPage;
 import cn.refinex.meridian.common.page.PageResult;
 import cn.refinex.meridian.runtime.session.app.CreateSessionCommand;
@@ -44,6 +48,7 @@ final class SessionMapper {
     static cn.refinex.meridian.api.model.Session toDto(Session session) {
         return new cn.refinex.meridian.api.model.Session()
                 .id(session.id())
+                .agentId(session.agentId())
                 .agentVersionId(session.agentVersionId())
                 .environmentId(session.environmentId())
                 .environmentRevision(session.environmentRevision())
@@ -102,5 +107,35 @@ final class SessionMapper {
                 .description(tool.description())
                 .inputSchema(tool.inputSchema())
                 .sideEffect(SideEffect.fromValue(tool.sideEffect().value()));
+    }
+
+    static SessionStats toDto(cn.refinex.meridian.runtime.session.domain.SessionStats stats) {
+        return new SessionStats()
+                .window(StatsWindow.fromValue(stats.window().value()))
+                .windowStart(ApiTimes.utc(stats.windowStart()))
+                .generatedAt(ApiTimes.utc(stats.generatedAt()))
+                .statsUpdatedAt(ApiTimes.utc(stats.statsUpdatedAt()))
+                .runningSessions(stats.runningSessions())
+                .requiresActionSessions(stats.requiresActionSessions())
+                .pendingActions(stats.pendingActions())
+                .agents(stats.agents().stream()
+                        .map(agent -> new AgentSessionStats()
+                                .agentId(agent.agentId())
+                                .activeSessions(agent.activeSessions())
+                                .runningSessions(agent.runningSessions())
+                                .turns(agent.turns())
+                                .failedTurns(agent.failedTurns())
+                                .failureRate(agent.failureRate()))
+                        .toList())
+                .recentErrors(stats.recentErrors().stream()
+                        .map(error -> new RecentTurnError()
+                                .sessionId(error.sessionId())
+                                .threadId(error.threadId())
+                                .turnId(error.turnId())
+                                .agentId(error.agentId())
+                                .code(error.code())
+                                .message(error.message())
+                                .occurredAt(ApiTimes.utc(error.occurredAt())))
+                        .toList());
     }
 }

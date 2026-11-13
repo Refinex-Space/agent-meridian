@@ -160,7 +160,8 @@ public final class TestSessions {
                                     interaction,
                                     null,
                                     null,
-                                    customTools),
+                                    customTools,
+                                    null),
                             clock.instant());
             new ThreadRepository(RuntimeTestDatabase.dataSource())
                     .insert(NewThread.main(session.mainThreadId(), session.sessionId(), "assistant"), clock.instant());

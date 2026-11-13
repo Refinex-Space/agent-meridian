@@ -18,6 +18,7 @@ import java.util.Objects;
  * @param endUserAttributes 终端用户属性；可为空，表示没有
  * @param metadata 调用方附加的元数据；可为空，表示没有
  * @param customTools 自定义工具声明；可为空，表示没有
+ * @param agentId 智能体 ID（{@code agt_…}），取自解析出的版本；可为空（只有测试数据不带它）
  */
 public record NewSession(
         String id,
@@ -28,7 +29,8 @@ public record NewSession(
         Interaction interaction,
         EndUserAttributes endUserAttributes,
         Map<String, String> metadata,
-        List<CustomToolDeclaration> customTools) {
+        List<CustomToolDeclaration> customTools,
+        String agentId) {
 
     /**
      * 创建参数。
@@ -68,6 +70,6 @@ public record NewSession(
             String endUserId,
             Interaction interaction) {
         return new NewSession(
-                id, agentVersionId, environmentId, environmentRevision, endUserId, interaction, null, null, null);
+                id, agentVersionId, environmentId, environmentRevision, endUserId, interaction, null, null, null, null);
     }
 }

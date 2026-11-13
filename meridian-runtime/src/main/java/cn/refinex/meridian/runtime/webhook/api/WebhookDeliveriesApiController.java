@@ -14,6 +14,7 @@ import cn.refinex.meridian.runtime.webhook.domain.DeliveryStatus;
 import cn.refinex.meridian.runtime.webhook.domain.WebhookDelivery;
 import cn.refinex.meridian.security.apikey.ApiKeyAuthorization;
 import cn.refinex.meridian.security.apikey.ApiKeyScope;
+import java.time.OffsetDateTime;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,11 +46,17 @@ public class WebhookDeliveriesApiController implements WebhooksApi {
             String webhookId,
             String sessionId,
             WebhookDeliveryStatus status,
+            OffsetDateTime createdAfter,
+            OffsetDateTime createdBefore,
             ServerWebExchange exchange) {
         ApiKeyAuthorization.require(exchange, ApiKeyScope.SESSIONS_READ);
         PageRequest page = PageRequest.of(limit, after);
-        DeliveryFilter filter =
-                new DeliveryFilter(webhookId, sessionId, status == null ? null : DeliveryStatus.of(status.getValue()));
+        DeliveryFilter filter = new DeliveryFilter(
+                webhookId,
+                sessionId,
+                status == null ? null : DeliveryStatus.of(status.getValue()),
+                createdAfter == null ? null : createdAfter.toInstant(),
+                createdBefore == null ? null : createdBefore.toInstant());
         return Blocking.call(() -> toPage(deliveries.list(page, filter))).map(ResponseEntity::ok);
     }
 

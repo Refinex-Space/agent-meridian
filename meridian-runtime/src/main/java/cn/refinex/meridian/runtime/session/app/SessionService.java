@@ -28,6 +28,7 @@ import cn.refinex.meridian.runtime.session.domain.NewSession;
 import cn.refinex.meridian.runtime.session.domain.NewThread;
 import cn.refinex.meridian.runtime.session.domain.Session;
 import cn.refinex.meridian.runtime.session.domain.SessionErrorCode;
+import cn.refinex.meridian.runtime.session.domain.SessionFilter;
 import cn.refinex.meridian.runtime.session.domain.SessionStatus;
 import cn.refinex.meridian.runtime.session.domain.SessionThread;
 import cn.refinex.meridian.runtime.session.infra.SessionRepository;
@@ -152,7 +153,8 @@ public class SessionService {
                 command.interaction(),
                 command.endUserAttributes(),
                 command.metadata(),
-                command.customTools());
+                command.customTools(),
+                agent.agentId());
         transactions.executeWithoutResult(status -> {
             Instant now = clock.instant();
             sessions.insert(session, now);
@@ -182,11 +184,11 @@ public class SessionService {
      * 列出当前项目中未删除的会话，新创建的在前。
      *
      * @param page 分页参数
-     * @param endUserId 只列出该终端用户的会话；可为空
+     * @param filter 筛选条件
      * @return 一页会话
      */
-    public PageResult<Session> list(PageRequest page, String endUserId) {
-        return PageResult.of(sessions.list(page, endUserId), page, session -> Cursor.of(session.id()));
+    public PageResult<Session> list(PageRequest page, SessionFilter filter) {
+        return PageResult.of(sessions.list(page, filter), page, session -> Cursor.of(session.id()));
     }
 
     /**

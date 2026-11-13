@@ -10,7 +10,9 @@ import cn.refinex.meridian.persistence.jdbc.JdbcValues;
 import cn.refinex.meridian.persistence.tenant.TenantScope;
 import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
 import cn.refinex.meridian.runtime.approval.domain.ActionConclusion;
+import cn.refinex.meridian.runtime.approval.domain.PendingActionFilter;
 import cn.refinex.meridian.runtime.approval.domain.PendingActionStatus;
+import cn.refinex.meridian.runtime.approval.domain.PendingActionView;
 import cn.refinex.meridian.runtime.approval.domain.ResolvableAction;
 import cn.refinex.meridian.runtime.approval.domain.StoredPendingAction;
 import cn.refinex.meridian.runtime.stream.infra.EngineJson;
@@ -38,6 +40,12 @@ public class PendingActionRepository extends TenantScopedRepository {
     private static final String COLUMNS = """
             id, session_id, thread_id, turn_id, type, status, payload::text AS payload, expires_at, created_at,
             resolved_at
+            """;
+
+    /** 与会话连接查询时的列：动作的列加回应者、结论与会话的智能体。 */
+    private static final String VIEW_COLUMNS = """
+            a.id, a.session_id, a.thread_id, a.turn_id, a.type, a.status, a.payload::text AS payload, a.expires_at,
+            a.created_at, a.resolved_at, a.decided_by, a.response::text AS response, s.agent_id
             """;
 
     private static final TypeReference<Map<String, Object>> PAYLOAD = new TypeReference<>() {};
@@ -115,6 +123,64 @@ public class PendingActionRepository extends TenantScopedRepository {
                 .param("after_id", page.after() == null ? null : page.after().key(0))
                 .param("limit", page.fetchSize())
                 .query(PendingActionRepository::map)
+                .list();
+    }
+
+    /**
+     * 按创建顺序分页列出会话中某个状态的动作，带会话的智能体、回应者与结论（{@code GET /v1/sessions/{id}/pending-actions}）。
+     *
+     * @param sessionId 会话 ID
+     * @param status 状态
+     * @param page 分页参数；游标的唯一键是上一页最后一个动作的 ID
+     * @return 最多 {@code page.fetchSize()} 个动作
+     */
+    public List<PendingActionView> sessionViews(String sessionId, PendingActionStatus status, PageRequest page) {
+        return sql("SELECT " + VIEW_COLUMNS + """
+                          FROM rt.pending_actions a
+                          JOIN rt.sessions s ON s.id = a.session_id
+                         WHERE a.tenant_id = :tenant_id AND a.project_id = :project_id AND a.session_id = :session_id
+                           AND a.status = :status AND (CAST(:after_id AS text) IS NULL OR a.id > :after_id)
+                         ORDER BY a.id
+                         LIMIT :limit
+                        """)
+                .param("session_id", sessionId)
+                .param("status", status.value())
+                .param("after_id", page.after() == null ? null : page.after().key(0))
+                .param("limit", page.fetchSize())
+                .query(PendingActionRepository::mapView)
+                .list();
+    }
+
+    /**
+     * 分页列出当前项目全部未删除会话的动作，新创建的在前（{@code GET /v1/pending-actions}），走 {@code pending_actions_project_idx}
+     * 或只含等待回应的 {@code pending_actions_project_pending_idx}。
+     *
+     * @param filter 筛选条件
+     * @param page 分页参数；游标的唯一键是上一页最后一个动作的 ID
+     * @return 最多 {@code page.fetchSize()} 个动作
+     */
+    public List<PendingActionView> projectViews(PendingActionFilter filter, PageRequest page) {
+        return sql("SELECT " + VIEW_COLUMNS + """
+                          FROM rt.pending_actions a
+                          JOIN rt.sessions s ON s.id = a.session_id
+                         WHERE a.tenant_id = :tenant_id AND a.project_id = :project_id AND s.deleted_at IS NULL
+                           AND (CAST(:status AS text) IS NULL OR a.status = :status)
+                           AND (CAST(:type AS text) IS NULL OR a.type = :type)
+                           AND (CAST(:agent_filter AS text) IS NULL OR s.agent_id = :agent_filter)
+                           AND (CAST(:session_filter AS text) IS NULL OR a.session_id = :session_filter)
+                           AND (CAST(:after_id AS text) IS NULL OR a.id < :after_id)
+                         ORDER BY a.id DESC
+                         LIMIT :limit
+                        """)
+                .param(
+                        "status",
+                        filter.status() == null ? null : filter.status().value())
+                .param("type", filter.type() == null ? null : filter.type().value())
+                .param("agent_filter", filter.agentId())
+                .param("session_filter", filter.sessionId())
+                .param("after_id", page.after() == null ? null : page.after().key(0))
+                .param("limit", page.fetchSize())
+                .query(PendingActionRepository::mapView)
                 .list();
     }
 
@@ -317,6 +383,15 @@ public class PendingActionRepository extends TenantScopedRepository {
                 (String) payload.get("idempotency_key"),
                 note == null ? null : EngineJson.convert(note, RecoveryNote.class),
                 mode == null ? null : RecoveryOrigin.Mode.valueOf(((String) mode).toUpperCase(Locale.ROOT)));
+    }
+
+    private static PendingActionView mapView(ResultSet rs, int row) throws SQLException {
+        String response = rs.getString("response");
+        return new PendingActionView(
+                map(rs, row),
+                rs.getString("agent_id"),
+                rs.getString("decided_by"),
+                response == null ? null : EngineJson.read(response, ActionConclusion.class));
     }
 
     private static StoredPendingAction map(ResultSet rs, int row) throws SQLException {

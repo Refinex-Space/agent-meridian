@@ -21,6 +21,9 @@ meridian:
     retention:
       # 测试不运行会话清理、归档与保留清理的定期任务（跨租户扫描共用的库）；相关测试手动驱动（T17a）
       enabled: false
+    stats:
+      # 测试不运行失败率的小时汇总（共用的库、共用的水位）；相关测试手动驱动 TurnStatsRollup.rollUpTo（T19b）
+      enabled: false
 
 management:
   endpoint:

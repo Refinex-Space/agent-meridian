@@ -8,12 +8,12 @@ info:
 
     **认证。** 每个请求带 `Authorization: Bearer <API Key>`。API Key 属于一个项目，数据按"项目 + `end_user_id`"隔离：
     同一项目内按 `end_user_id` 区分终端用户，跨项目不可见，即使 `end_user_id` 相同。API Key 的作用域决定能调用哪些接口：
-    读接口需要 `sessions:read`，写接口需要 `sessions:write`，上传文件需要 `files:write`，模型直通需要 `models:invoke`，知识库的读写
+    读接口需要 `sessions:read`，写接口需要 `sessions:write`（回应待处理动作也可以用 `actions:respond`），上传文件需要 `files:write`，模型直通需要 `models:invoke`，知识库的读写
     分别需要 `knowledge:read`、`knowledge:write`，每个操作的 `security` 列出所需作用域。
 
     控制台（例如 Playground）以登录用户的 OIDC access token 代替 API Key 调用，同时用请求头 `Meridian-Project: <项目 ID>`
     指定项目；缺少该头返回 400 `auth.project_required`。用户的作用域由他在该项目中的角色决定（项目开发者与租户所有者有上面
-    全部作用域，租户管理员与项目观察者有 `sessions:read` 与 `knowledge:read`，审批人只有 `sessions:read`）；项目不存在或用户在其中没有角色时返回 403 `access.forbidden`。
+    全部作用域，租户管理员与项目观察者有 `sessions:read` 与 `knowledge:read`，审批人只有 `sessions:read` 与 `actions:respond`）；项目不存在或用户在其中没有角色时返回 403 `access.forbidden`。
 
     **约定。**
     - 字段名 snake_case；时间为 RFC 3339 UTC，例如 `2026-11-07T08:30:12.345Z`。
@@ -122,7 +122,8 @@ paths:
       operationId: listSessions
       tags: [Sessions]
       summary: 列出会话
-      description: 列出当前项目的会话，新创建的在前；已删除的会话不出现在列表中。
+      description: |
+        列出当前项目的会话，新创建的在前；已删除的会话不出现在列表中。筛选条件之间是"且"，创建时间的范围是左闭右开。
       security:
         - ApiKeyAuth: [sessions:read]
       parameters:
@@ -135,6 +136,19 @@ paths:
             type: string
             minLength: 1
             maxLength: 128
+        - name: agent_id
+          in: query
+          description: 只列出绑定该智能体（任一版本）的会话。T19b 之前创建的会话没有记录智能体，不会被这个条件选中。
+          schema:
+            type: string
+            pattern: '^agt_[A-Za-z0-9_]{1,64}$'
+        - name: status
+          in: query
+          description: 只列出该状态的会话。
+          schema:
+            $ref: '#/components/schemas/SessionStatus'
+        - $ref: '#/components/parameters/CreatedAfter'
+        - $ref: '#/components/parameters/CreatedBefore'
       responses:
         '200':
           description: 会话列表。
@@ -321,8 +335,12 @@ paths:
         | `user.recovery_confirmation` | 存在类型为 `recovery_confirmation` 的未回应动作 | 决定重试或跳过；同上 |
 
         同一批里不能既有 `user.interrupt` 又有回应事件（400 `request.validation_failed`）：中断会把全部待处理动作视为拒绝。
+
+        作用域：`sessions:write` 可以发送全部事件；只有 `actions:respond`（审批人）时只能发送回应事件（`user.tool_confirmation`、
+        `user.custom_tool_result`、`user.recovery_confirmation`），批中有其他事件时 403 `auth.insufficient_scope`（ADR-0053）。
       security:
         - ApiKeyAuth: [sessions:write]
+        - ApiKeyAuth: [actions:respond]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -567,6 +585,108 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/SessionNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/pending-actions:
+    get:
+      operationId: listProjectPendingActions
+      tags: [PendingActions]
+      summary: 列出本项目的待处理动作
+      description: |
+        列出当前项目全部会话的待处理动作，新创建的在前；不给 `status` 时列出全部状态（等待回应的与历史）。筛选条件之间是"且"。
+        已删除的会话的动作不出现。控制台的待处理页用它；回应仍经 `POST /v1/sessions/{session_id}/events`。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+        - name: status
+          in: query
+          description: 只列出该状态的动作；不给时列出全部状态。
+          schema:
+            $ref: '#/components/schemas/PendingActionStatus'
+        - name: type
+          in: query
+          description: 只列出该类型的动作。
+          schema:
+            $ref: '#/components/schemas/PendingActionType'
+        - name: agent_id
+          in: query
+          description: 只列出绑定该智能体的会话中的动作。
+          schema:
+            type: string
+            pattern: '^agt_[A-Za-z0-9_]{1,64}$'
+        - name: session_id
+          in: query
+          description: 只列出该会话的动作。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+      responses:
+        '200':
+          description: 待处理动作列表。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingActionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+
+  /v1/session-stats:
+    get:
+      operationId: getSessionStats
+      tags: [Sessions]
+      summary: 会话运行概况
+      description: |
+        当前项目的会话运行概况，供控制台的概览与智能体页使用：运行中与等待回应的会话数、待处理动作数、每个智能体使用中的会话数与
+        时间窗内的失败率、最近的失败轮次。计数在请求时读取；失败率来自每分钟汇总一次的小时表，`stats_updated_at` 是汇总到的时间，
+        时间窗按整点对齐（例如 `24h` 从 23 个整点之前开始，含当前小时）。失败率 = 失败轮次 ÷（完成 + 中断 + 失败的轮次），排队时被
+        取消的轮次不计。
+      security:
+        - ApiKeyAuth: [sessions:read]
+      parameters:
+        - name: window
+          in: query
+          description: 失败率与最近错误的时间窗，默认 `24h`。
+          schema:
+            $ref: '#/components/schemas/StatsWindow'
+        - name: agent_id
+          in: query
+          description: 只统计绑定该智能体的会话。
+          schema:
+            type: string
+            pattern: '^agt_[A-Za-z0-9_]{1,64}$'
+      responses:
+        '200':
+          description: 会话运行概况。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStats'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/RateLimited'
         default:
@@ -1171,6 +1291,8 @@ paths:
           description: 只列出该状态的记录。
           schema:
             $ref: '#/components/schemas/WebhookDeliveryStatus'
+        - $ref: '#/components/parameters/CreatedAfter'
+        - $ref: '#/components/parameters/CreatedBefore'
       responses:
         '200':
           description: 投递记录列表。
@@ -1609,7 +1731,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: API Key
-      description: 项目下的 API Key，带作用域（`sessions:read`、`sessions:write` 等）；控制台用户以 OIDC access token 加 `Meridian-Project` 头代替。
+      description: 项目下的 API Key，带作用域（`sessions:read`、`sessions:write`、`actions:respond` 等）；控制台用户以 OIDC access token 加 `Meridian-Project` 头代替。
 
   headers:
     XRequestId:
@@ -1681,6 +1803,20 @@ components:
       schema:
         type: string
         minLength: 1
+    CreatedAfter:
+      name: created_after
+      in: query
+      description: 只列出创建时间不早于它的记录（含）。
+      schema:
+        type: string
+        format: date-time
+    CreatedBefore:
+      name: created_before
+      in: query
+      description: 只列出创建时间早于它的记录（不含）。
+      schema:
+        type: string
+        format: date-time
     FileId:
       name: file_id
       in: path
@@ -2558,7 +2694,7 @@ components:
     Session:
       description: 会话。
       type: object
-      required: [id, agent_version_id, environment_id, environment_revision, end_user_id, end_user_attributes,
+      required: [id, agent_id, agent_version_id, environment_id, environment_revision, end_user_id, end_user_attributes,
                  interaction, status, metadata, custom_tools, last_seq, created_at, updated_at, terminated_at,
                  deleted_at]
       properties:
@@ -2566,6 +2702,9 @@ components:
           description: 会话 ID（ses_…）。
           type: string
           examples: ['ses_01JC8Z4V7Q9X3M2N6P0R5T8W1Y']
+        agent_id:
+          description: 绑定的智能体 ID（agt_…）；T19b 之前创建的会话没有记录，为 null。
+          type: [string, 'null']
         agent_version_id:
           description: 绑定的智能体版本 ID（agv_…），创建后不变。
           type: string
@@ -2686,8 +2825,8 @@ components:
     PendingAction:
       description: 一个待处理动作。
       type: object
-      required: [id, session_id, thread_id, turn_id, type, status, tool_use_id, tool_name, input, expires_at,
-                 created_at, resolved_at]
+      required: [id, session_id, agent_id, thread_id, turn_id, type, status, tool_use_id, tool_name, input, expires_at,
+                 created_at, resolved_at, decided_by, conclusion]
       properties:
         id:
           description: 动作 ID（act_…），回应事件的 `action_id`。
@@ -2695,6 +2834,9 @@ components:
         session_id:
           description: 所属会话。
           type: string
+        agent_id:
+          description: 会话绑定的智能体 ID（agt_…）；T19b 之前创建的会话没有记录，为 null。
+          type: [string, 'null']
         thread_id:
           description: 产生动作的线程。
           type: string
@@ -2726,6 +2868,155 @@ components:
         resolved_at:
           description: 回应或超时的时间；为 null 表示仍在等待。
           type: [string, 'null']
+          format: date-time
+        decided_by:
+          description: |
+            回应者：API Key 回应时为 Key ID（key_…），控制台用户回应时为用户标识；平台给出的结论（超时、中断、无人值守）与仍在等待时
+            为 null。
+          type: [string, 'null']
+        conclusion:
+          description: 结论；仍在等待、或随会话终止作废时为 null。
+          oneOf:
+            - $ref: '#/components/schemas/PendingActionConclusion'
+            - type: 'null'
+    PendingActionConclusion:
+      description: 待处理动作的结论（自定义工具的结果内容不在这里，见会话事件）。按动作类型只有对应的字段有值，其余为 null。
+      type: object
+      required: [origin, approved, deny_reason, remember_scope, decision, error]
+      properties:
+        origin:
+          description: |
+            结论的来源：`caller` 调用方的回应，`timeout` 超时，`interrupt` 等待回应时被中断，`unattended` 无人值守的会话自动拒绝。
+          type: string
+          enum: [caller, timeout, interrupt, unattended]
+        approved:
+          description: 工具确认与退出计划模式：是否批准。
+          type: [boolean, 'null']
+        deny_reason:
+          description: 拒绝理由；没有时为 null。
+          type: [string, 'null']
+        remember_scope:
+          description: 工具确认与退出计划模式："记住此决定"的作用域。
+          oneOf:
+            - $ref: '#/components/schemas/RememberScope'
+            - type: 'null'
+        decision:
+          description: 恢复确认：重试或跳过。
+          oneOf:
+            - $ref: '#/components/schemas/RecoveryDecision'
+            - type: 'null'
+        error:
+          description: 自定义工具：回传的是否为错误结果。
+          type: [boolean, 'null']
+    StatsWindow:
+      description: 统计时间窗：最近 1 小时、24 小时、7 天，按整点对齐。
+      type: string
+      enum: [1h, 24h, 7d]
+    SessionStats:
+      description: 当前项目（或某个智能体）的会话运行概况。
+      type: object
+      required: [window, window_start, generated_at, stats_updated_at, running_sessions, requires_action_sessions,
+                 pending_actions, agents, recent_errors]
+      properties:
+        window:
+          $ref: '#/components/schemas/StatsWindow'
+        window_start:
+          description: 时间窗的起点（整点）。
+          type: string
+          format: date-time
+        generated_at:
+          description: 生成本响应的时间。
+          type: string
+          format: date-time
+        stats_updated_at:
+          description: 失败率汇总到的时间，之后结束的轮次还没有计入；还没有汇总过时为 null。
+          type: [string, 'null']
+          format: date-time
+        running_sessions:
+          description: 执行中（含被置回队列、等待重新执行）的会话数。
+          type: integer
+          format: int64
+          minimum: 0
+        requires_action_sessions:
+          description: 等待调用方回应的会话数。
+          type: integer
+          format: int64
+          minimum: 0
+        pending_actions:
+          description: 等待回应的待处理动作数。
+          type: integer
+          format: int64
+          minimum: 0
+        agents:
+          description: 每个智能体的统计，按智能体 ID 排序；时间窗内没有轮次、也没有使用中会话的智能体不出现。
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentSessionStats'
+        recent_errors:
+          description: 时间窗内最近的失败轮次，新的在前，至多 10 个。
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentTurnError'
+    AgentSessionStats:
+      description: 一个智能体的会话统计。
+      type: object
+      required: [agent_id, active_sessions, running_sessions, turns, failed_turns, failure_rate]
+      properties:
+        agent_id:
+          description: 智能体 ID（agt_…）。
+          type: string
+        active_sessions:
+          description: 使用中（未归档、未删除）的会话数：删除智能体后这些会话无法继续。
+          type: integer
+          format: int64
+          minimum: 0
+        running_sessions:
+          description: 其中执行中的会话数。
+          type: integer
+          format: int64
+          minimum: 0
+        turns:
+          description: 时间窗内结束的轮次数（完成、中断、失败）。
+          type: integer
+          format: int64
+          minimum: 0
+        failed_turns:
+          description: 其中失败的轮次数。
+          type: integer
+          format: int64
+          minimum: 0
+        failure_rate:
+          description: 失败率，0 到 1；时间窗内没有轮次时为 null。
+          type: [number, 'null']
+          format: double
+          minimum: 0
+          maximum: 1
+    RecentTurnError:
+      description: 一个失败的轮次。
+      type: object
+      required: [session_id, thread_id, turn_id, agent_id, code, message, occurred_at]
+      properties:
+        session_id:
+          description: 会话 ID。
+          type: string
+        thread_id:
+          description: 线程 ID。
+          type: string
+        turn_id:
+          description: 轮次 ID。
+          type: string
+        agent_id:
+          description: 智能体 ID；T19b 之前创建的会话为 null。
+          type: [string, 'null']
+        code:
+          description: 错误码（该轮 `session.error` 事件的 `code`）；找不到该事件时为 null。
+          type: [string, 'null']
+        message:
+          description: 错误信息；找不到该事件时为 null。
+          type: [string, 'null']
+        occurred_at:
+          description: 轮次结束的时间。
+          type: string
           format: date-time
     PendingActionPage:
       description: 待处理动作列表的一页。

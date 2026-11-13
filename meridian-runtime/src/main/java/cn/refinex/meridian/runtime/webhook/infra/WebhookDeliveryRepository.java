@@ -48,6 +48,8 @@ public class WebhookDeliveryRepository extends TenantScopedRepository {
                            AND (CAST(:webhook_id AS text) IS NULL OR webhook_id = :webhook_id)
                            AND (CAST(:session_id AS text) IS NULL OR session_id = :session_id)
                            AND (CAST(:status AS text) IS NULL OR status = :status)
+                           AND (CAST(:created_after AS timestamptz) IS NULL OR created_at >= :created_after)
+                           AND (CAST(:created_before AS timestamptz) IS NULL OR created_at < :created_before)
                          ORDER BY id DESC
                          LIMIT :limit
                         """)
@@ -57,6 +59,8 @@ public class WebhookDeliveryRepository extends TenantScopedRepository {
                 .param(
                         "status",
                         filter.status() == null ? null : filter.status().value())
+                .param("created_after", filter.createdAfter())
+                .param("created_before", filter.createdBefore())
                 .param("limit", page.fetchSize())
                 .query(WebhookDeliveryRepository::map)
                 .list();

@@ -86,7 +86,8 @@ class SessionDomainTest {
                 Interaction.ATTENDED,
                 new EndUserAttributes(List.of("dept:finance")),
                 Map.of("ticket", "INC-1"),
-                null);
+                null,
+                "agt_1");
 
         assertThat(session.endUserAttributes().aclTags()).containsExactly("dept:finance");
         assertThat(session.metadata()).containsEntry("ticket", "INC-1");
@@ -122,6 +123,7 @@ class SessionDomainTest {
                 null,
                 terminatedAt,
                 deletedAt,
-                null);
+                null,
+                "agt_1");
     }
 }
