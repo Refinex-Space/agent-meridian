@@ -1490,43 +1490,43 @@
       "id": "T19b-A01",
       "task": "T19b",
       "description": "`docs/engineering/console-api-map.md` 覆盖十一个一级导航的每个页面，每行都有对应接口。验证：文件路径。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "docs/engineering/console-api-map.md：应用外壳与十一个一级导航逐页列出展示的数据、操作、实时性、接口与状态（已有/T19b），每行都有接口；另有聚合的数据来源与刷新频率、OIDC 下的成员语义、不做的事项"
     },
     {
       "id": "T19b-A02",
       "task": "T19b",
       "description": "对照表中缺失的接口已全部实现，写入规范，契约测试覆盖。验证：测试报告。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "新接口写入 meridian-v1.yaml（session-stats、pending-actions、会话筛选、知识库 PATCH/DELETE、投递记录时间范围、建议规则）与 meridian-admin-v1.yaml（me、me/access、budget-status、usage-records 与 :export、provider-accounts :test、webhooks :rotate-secret、成员邀请、last_check）；./mvnw -pl meridian-api -am test 通过（OpenApiSpecTest、AdminOpenApiSpecTest、OpenApiCompatibilityTest）；契约测试 SessionApiContractIT 校验全部 26 个 runtime 操作，KnowledgeApiIT、管理 API 测试客户端逐个按规范校验请求与响应；scripts/dev/verify.sh BUILD SUCCESS"
     },
     {
       "id": "T19b-A03",
       "task": "T19b",
       "description": "项目级待处理动作的列表与历史、概览聚合的结果与底层数据一致。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "meridian-runtime ConsoleQueriesIT 5 例通过：项目级待处理动作逐页读完与 rt.pending_actions 的行一致（新的在前、已删除会话不出现、状态/类型/智能体/会话筛选、结论与处理人）；session-stats 的执行中、等待回应、待处理动作数、按智能体的轮次/失败数/失败率、最近错误与 SQL 算出的值一致，汇总同一区间只累加一次；另有会话筛选、审批 Key、建议规则、投递记录时间范围"
     },
     {
       "id": "T19b-A04",
       "task": "T19b",
       "description": "OIDC 下添加的成员首次登录后获得授予的角色。验证：集成测试（Keycloak）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "meridian-control-plane MemberInvitationIT 3 例通过（Keycloak 26.4.7 签发令牌）：按邮箱邀请并授予 project_developer，用户以已验证邮箱首次登录后 /admin/v1/me 有该角色、能访问项目、成员变为 active、审计 member.bound；未验证邮箱不绑定；已是成员时邀请的角色合并；创建租户的首个所有者只给邮箱，首次登录后能删除租户"
     },
     {
       "id": "T19b-A05",
       "task": "T19b",
       "description": "新接口的授权规则已加入角色矩阵测试并通过。验证：测试报告。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "role-matrix.psv 新增 11 个操作的行（getMe、getMyAccess、listUsageRecords、exportUsageRecords、listProjectUsageRecords(#other)、exportProjectUsageRecords、getProjectBudgetStatus、testProviderAccount、rotateWebhookSecret）；RoleMatrixIT 等 813 例通过；公开 API 的 actions:respond 由 PublicApiScopesTest、ProjectAccessIT 与 ConsoleQueriesIT（审批 Key 只能发回应事件）覆盖；PermissionNamesTest 守住操作类别枚举"
     },
     {
       "id": "T19b-A06",
       "task": "T19b",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh exit=0：BUILD SUCCESS（Maven 测试 2335 个，含格式、编译、单元与集成、架构测试、enforcer、覆盖率、POM 版本），sandbox-runtime 23 passed，doc-parser 13 passed 2 skipped"
     },
     {
       "id": "R2-A01",

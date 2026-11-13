@@ -85,7 +85,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 已完成 | b7df25f |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 已完成 | 51dc16a |
 | T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 已完成 | c87dc78 |
-| T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 进行中 | — |
+| T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 已完成 | 695b7e3 |
 | R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 未开始 | — |
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 见控制台设计轨道 | — |
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 见控制台设计轨道 | — |
@@ -175,18 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T19b（开工基线 `scripts/dev/verify.sh` 通过）：
-
-- [ ] 1 对照表 `docs/engineering/console-api-map.md`（A01）
-- [x] 2 runtime：会话列表筛选与 `agent_id`、项目级待处理动作列表与历史（结论、处理人）、`GET /v1/session-stats` 与失败率小时汇总作业、投递记录的时间范围（D72）
-- [x] 3 security 与回应权限：作用域 `actions:respond`（审批人回应待处理动作）、OIDC 邮箱声明
-- [x] 4 control-plane：`GET /admin/v1/me`、`/me/access`；按邮箱邀请成员与首次登录绑定（A04）
-- [x] 5 control-plane：项目预算消耗 `budget-status`、用量明细与 CSV 导出（D68）
-- [x] 6 control-plane：供应商账号连通性测试、MCP 连接状态、Webhook 签名密钥轮换（D72）
-- [x] 7 knowledge：知识库的修改与删除（D81）
-- [x] 8 建议规则（D21）：内核随 `tool_confirmation` 带出建议规则，回应时可按建议记住
-- [x] 9 角色矩阵与契约测试（A02、A03、A05）
-- [ ] 10 ADR-0053、架构设计、模块 `CLAUDE.md`、登记事项；`verify.sh`（A06）；验收记录与收尾
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -503,6 +492,15 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：rerank 模型挂在知识库上、改写模型挂在智能体配置上；不限标签的切片对所有人可见；MCP 的标签放请求头不放工具入参；检索评测拆成两个录制类以守住每类 20 次真实调用；端到端问答用 knowledge 的 Jib 镜像容器与本进程 runtime
 - 开工与收尾：基线与收尾的全量检查各有一次 BlockHound 判定单调 ULID 生成器 park 为阻塞（基线 `SubagentSessionIT`、收尾 `EventStreamIT`，都是 D66 的根因），单独重跑通过
 - 遗留：D82（MCP 服务端会话在进程内、没有过期，T28、R2）；D78、D80 改到 R2；查询改写只看单条消息
+
+### 2026-11-13 T19b 已完成（提交 695b7e3）
+
+- 交付：页面到接口的对照表 `docs/engineering/console-api-map.md`（应用外壳与十一个一级导航）；runtime：会话的 `agent_id` 与列表筛选、`GET /v1/session-stats`（部分索引现读计数，失败率读 `TurnStatsRollup` 每分钟按水位汇总的 `agent_turn_stats`）、项目级 `GET /v1/pending-actions`（带智能体、处理人、结论）、投递记录的时间范围，rt `V0012`；security：作用域 `actions:respond`（审批人、所有者，只能发回应事件）、OIDC 的已验证邮箱、`ApiEnumConverterFactory` 移入并给 MVC 注册；control-plane：`/admin/v1/me`、`/me/access`，按邮箱邀请成员与首次登录绑定（cp `V0008`），项目预算消耗 `budget-status`，用量明细与 CSV 导出，供应商账号连通性测试与 MCP 的 `last_check`（cp `V0009`），Webhook 签名密钥轮换；knowledge：知识库的修改与删除；engine：工具确认带出建议规则、回应时 `remember_rule`（D21）；ADR-0053，架构设计 v1.27
+- 验收：A01–A06 全部 passing（`ConsoleQueriesIT`、`MemberInvitationIT`、`UsageReportIT`、`BudgetIT`、`ConnectivityIT`、`WebhookAdminIT`、`KnowledgeApiIT`、`RoleMatrixIT` 813 例、`verify.sh` 通过）
+- 决策：概览的失败率用后台小时汇总、不在轮次结束时累加；审批人经新作用域走事件回应而不另开回应接口；OIDC 成员按已验证邮箱绑定、不调 IdP 的专有接口；当前用户的权限由服务端按角色矩阵算出；建议规则由内核按工具重算（2.0.4 的 `ReActAgent` 丢掉了权限结论上的建议）；删除知识库不检查智能体版本的引用
+- 收尾时修复：测试类自己的开发期 Key 与新增的审批 Key 下标冲突（`ApiTestKeys.FIRST_FREE_KEY_INDEX`）；`MeApiController` 依赖 `infra.system` 的记录（移到 `member.domain`，ArchUnit 规则 5）
+- 顺带修复：MVC 服务的枚举查询参数按 Java 常量名转换（`level=project`、`kind=model_tokens` 会 400）
+- 遗留：D83（删除知识库不检查引用，R2）、D84（Webhook 密钥轮换没有过渡期，T26）、D85（之前的会话没有 `agent_id`，T28）；D74 文件删除改给 R2
 
 ## 计划变更记录
 
