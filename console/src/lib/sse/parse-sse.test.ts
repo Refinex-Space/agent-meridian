@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseSse, type SseFrame } from './parse-sse';
+import { parseSse, type SseMessage } from './parse-sse';
 
 function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -12,8 +12,8 @@ function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
   });
 }
 
-async function collect(chunks: string[]): Promise<SseFrame[]> {
-  const frames: SseFrame[] = [];
+async function collect(chunks: string[]): Promise<SseMessage[]> {
+  const frames: SseMessage[] = [];
   for await (const frame of parseSse(streamOf(chunks))) frames.push(frame);
   return frames;
 }

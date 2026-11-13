@@ -1700,50 +1700,50 @@
       "id": "T21-A01",
       "task": "T21",
       "description": "用 Keycloak 测试用户登录后进入控制台，令牌只在内存中（刷新页面后静默续期成功）；退出后受保护路由跳转登录。验证：Playwright 用例。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright console/e2e/app/auth.spec.ts 3 passed（本机 pnpm -C console e2e:app 与 Linux 容器 scripts/dev/console-playwright-linux.sh app 各一次，后端为 scripts/dev/console-e2e-env.sh up 起的 Compose app 与 auth profile、Keycloak 开发 realm）：未登录访问 /projects/<项目>/agents 跳到 Keycloak 登录页，dev-developer 登录后回到原页面；登录后的 access token 不出现在 localStorage、sessionStorage 与控制台 Cookie 中，也没有 access_token、refresh_token、id_token 字样；刷新页面后经 iframe 静默登录拿到新的令牌（与刷新前不同），主页面的导航从未到过 Keycloak；退出登录后到登录页，再访问受保护页面仍跳登录页。单元测试 src/lib/auth/session.test.ts 12 个用例覆盖续期合并、401 处理、回调与 login_required 跳转、身份提供方不可达时不跳转"
     },
     {
       "id": "T21-A02",
       "task": "T21",
       "description": "导航结构与架构设计一致，折叠状态被记住；⌘K 能跳转到任一页面。验证：Playwright 用例与截图。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright console/e2e/app/navigation.spec.ts 5 passed：主导航的链接文字依次为 概览、会话、Playground、智能体、环境、能力、知识库、模型、待处理、用量与预算、设置（与架构设计「信息架构」一致），逐个点击后地址、h1、aria-current 与面包屑正确；收起导航后宽 56px，刷新后仍为收起；⌘K 输入名称选中后跳转到全部十一个页面（回车同样可用）；切换项目停在同一导航，首页回到上次的项目；不存在的页面与无权进入的项目有说明。截图 tmp/evidence/T21/app/shell-{light,dark}-{1280,1920}.png、shell-collapsed-light-1280.png。单元测试 src/app/shell/app-shell.test.tsx 覆盖导航链接、收起记忆、⌘K、项目切换与账号菜单"
     },
     {
       "id": "T21-A03",
       "task": "T21",
       "description": "API 类型由规范生成，构建时自动更新；代码中没有手写的接口类型。验证：构建配置与代码搜索。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "构建配置：console/redocly.yaml 由 meridian-v1.yaml 与 meridian-admin-v1.yaml 生成 src/lib/api/v1.d.ts、admin.d.ts；package.json 的 dev、build 先运行 pnpm gen:api，lint 运行 gen:api --check（openapi-typescript --check 退出码 0，验证生成文件与规范一致）。代码搜索：解析两份生成类型的 285 个 schema 名，在 src（除 .d.ts）中查找同名的 interface/type 声明，除 src/lib/api/types.ts 与 approval-form 中 `= Schemas['…']` 的别名外没有手写声明（SSE 解析器的文本消息改名为 SseMessage；原型的 SandboxSize、EnvironmentTier 改为生成类型的别名，原型预算横幅的视图模型改名为 BudgetBannerState）；接口调用经 openapi-fetch（src/lib/api/client.ts）"
     },
     {
       "id": "T21-A04",
       "task": "T21",
       "description": "problem+json 错误按通知策略呈现，`request_id` 可复制。验证：组件测试与截图。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "组件测试：src/components/domain/error-state/notify-error.test.tsx 2 passed（409 problem+json 的通知写明标题、detail、下一步，请求 ID 按钮点击后剪贴板写入 req_01JC8Z4V7Q9X，带关闭按钮不自动消失；网络错误没有请求 ID）、src/app/query-client.test.tsx 2 passed（变更失败默认通知，meta.notifyError 为 false 时不通知）、src/components/domain/data-region/data-region.test.tsx 3 passed（区域内 problem+json 错误与可复制的请求 ID、重试恢复；骨架 150ms 后出现、至少 300ms）、src/lib/api/client.test.ts 6 passed（problem+json 映射为带 request_id 的 ApiError，非 problem 时取 X-Request-Id）。截图 tmp/evidence/T21/components/error-notification-{light,dark}-1280.png、error-state-*、data-region-failed-*、data-region-loading-*"
     },
     {
       "id": "T21-A05",
       "task": "T21",
       "description": "SSE 客户端在断线、乱序、重复、跳号四种情况下得到连续不重复的事件序列。验证：单元测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "单元测试 src/lib/sse/session-stream.test.ts 10 passed：断线（流中途出错后退避重连，Last-Event-ID=2）、乱序（1,3,4,2,6,5 交付为 1..6）、重复（含暂存区与重连补发的重复）、跳号（缺 3 的连接在 gapTimeoutMs 内等不到时中止并以 Last-Event-ID=2 重连补齐 1..6）、从中途订阅、不连续流只去重，以及固定种子的 300 个事件随机混合四种情况（每次连接随机丢失、重复、局部乱序、断开或保持打开），最终序列等于 1..300；原有 3 个用例（去重与续传、拒绝时不重连、退避与中止）照常通过"
     },
     {
       "id": "T21-A06",
       "task": "T21",
       "description": "权限：观察者角色看不到写操作，或操作被禁用并说明原因。验证：Playwright 用例。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Playwright console/e2e/app/permissions.spec.ts 2 passed：dev-viewer（项目观察者）在会话页的\"在 Playground 中对话\"为 aria-disabled，可访问描述与悬停提示为\"你在华东经营分析中是项目观察者，不能在 Playground 中对话。请联系项目管理员授予所需的角色。\"，强制点击不跳转；Playground 页整块说明\"没有权限使用 Playground\"及原因；账号菜单显示\"在华东经营分析中是项目观察者\"。dev-developer（项目开发者）同一操作可用并进入 Playground。权限来自 GET /admin/v1/me/access（src/lib/access），前端不判断角色。截图 tmp/evidence/T21/app/permission-viewer-disabled.png、permission-viewer-explain.png"
     },
     {
       "id": "T21-A07",
       "task": "T21",
       "description": "用 `toHaveScreenshot` 为应用外壳与四种页面模板建立亮暗主题、1280 与 1920 宽度的截图基线，并与 T20c 原型逐一对照一致。验证：基线文件与对照截图（`tmp/evidence/T21/`）。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "基线：console/e2e/shell-baseline.spec.ts 对应用外壳（展开、收起）与四种页面模板（列表、详情、编辑、工作台）在亮暗 × 1280、1920 下 toHaveScreenshot，darwin 与 Linux 各 24 张（e2e/shell-baseline.spec.ts-snapshots/），固定页面时钟；本机 pnpm e2e e2e/shell-baseline.spec.ts 24 passed，Linux 镜像 scripts/dev/console-playwright-linux.sh baseline 24 passed。对照：换上正式外壳后用 evidence-prototypes.spec.ts 重新截图（tmp/evidence/T21/round1）与开工时的 T20c 截图（tmp/evidence/T21/t20c）逐像素比较，外壳与四种模板亮暗 × 1280、1920 的 24 张及预算提醒、预算用完、切换项目 3 个状态完全一致；其余差异只在内容区（随\"现在\"生成的夹具、空态标题平衡换行、命令面板只列页面），结论与差异图见 tmp/evidence/T21/README.md、compare-t20c/、compare-baseline/"
     },
     {
       "id": "T21-A08",

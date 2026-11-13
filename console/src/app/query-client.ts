@@ -16,15 +16,18 @@ declare module '@tanstack/react-query' {
   }
 }
 
-/** 值得自动重试的失败：网络不可达、限流、服务端错误；4xx 是请求本身的问题，重试也不会成功。 */
+/**
+ * 值得自动重试的失败：网络不可达、限流、服务端错误，以及 401（认证模块收到 401 时同时续期，重试用的是新令牌；续期失败则
+ * 跳转登录）。其他 4xx 是请求本身的问题，重试也不会成功。
+ */
 export function isRetryable(error: unknown): boolean {
   if (isNetworkError(error)) return true;
-  return error instanceof ApiError && (error.status === 429 || error.status >= 500);
+  return error instanceof ApiError && (error.status === 401 || error.status === 429 || error.status >= 500);
 }
 
 /**
  * TanStack Query 的统一配置（frontend-design.md「状态与反馈」）：
- * - 查询：可重试的失败最多重试 2 次（指数退避）；30 秒内的数据视为新鲜；页面重新可见时刷新；轮询只在页面可见时进行
+ * - 查询：可重试的失败（见 isRetryable）最多重试 2 次（指数退避）；30 秒内的数据视为新鲜；页面重新可见时刷新；轮询只在页面可见时进行
  *   （`refetchInterval` 由各查询按 console-api-map.md 的实时性给出）。查询失败由所在区域（DataRegion 或 ErrorState）显示。
  * - 变更：不自动重试（写操作不一定幂等）；失败默认发错误通知（带可复制的请求 ID），`meta.notifyError: false` 时由界面就地显示。
  */

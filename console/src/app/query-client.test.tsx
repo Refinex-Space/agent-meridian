@@ -26,8 +26,9 @@ describe('TanStack Query 的统一配置', () => {
     });
   });
 
-  it('只重试网络错误、限流与服务端错误', () => {
+  it('只重试网络错误、401（令牌已在续期）、限流与服务端错误', () => {
     expect(isRetryable(new TypeError('Failed to fetch'))).toBe(true);
+    expect(isRetryable(problem(401))).toBe(true);
     expect(isRetryable(problem(503))).toBe(true);
     expect(isRetryable(problem(429))).toBe(true);
     expect(isRetryable(problem(404))).toBe(false);

@@ -1,9 +1,9 @@
 import { BudgetBanner as Banner } from '@/app/shell/budget-banner';
 
-import { CURRENT_PROJECT_ID, type BudgetAlert } from '../fixtures/identity';
+import { CURRENT_PROJECT_ID, type BudgetBannerState } from '../fixtures/identity';
 
 export interface BudgetBannerProps {
-  alert: BudgetAlert;
+  alert: BudgetBannerState;
 }
 
 const HARD = 1_000_000;

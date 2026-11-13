@@ -1,5 +1,8 @@
-/** SSE 的一条消息（架构设计「SSE 协议」：`event:` 为类型，`id:` 为 seq，`data:` 为事件信封 JSON）。 */
-export interface SseFrame {
+/**
+ * 解析出的一条 SSE 消息（架构设计「SSE 协议」：`event:` 为类型，`id:` 为 seq，`data:` 为事件信封 JSON）。这是传输层的文本形式，
+ * `data` 还没有按 JSON 解析；解析后的结构是规范中的 `SseFrame`。
+ */
+export interface SseMessage {
   event: string;
   /** 持久化事件的 seq；只在流上的事件（event_start、event_delta、ping）没有。 */
   id: string | null;
@@ -10,7 +13,7 @@ export interface SseFrame {
  * 按 WHATWG 的事件流格式逐条解析：空行结束一条消息，`:` 开头的行是注释（服务端连接建立时的 `:open`），
  * 多行 `data:` 以换行拼接；兼容 CRLF、CR、LF 三种换行与跨分块的行。
  */
-export async function* parseSse(stream: ReadableStream<Uint8Array>): AsyncGenerator<SseFrame> {
+export async function* parseSse(stream: ReadableStream<Uint8Array>): AsyncGenerator<SseMessage> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -18,7 +21,7 @@ export async function* parseSse(stream: ReadableStream<Uint8Array>): AsyncGenera
   let id: string | null = null;
   let data: string[] = [];
 
-  function* flushLine(line: string): Generator<SseFrame> {
+  function* flushLine(line: string): Generator<SseMessage> {
     if (line === '') {
       if (data.length > 0) yield { event: event || 'message', id, data: data.join('\n') };
       event = '';

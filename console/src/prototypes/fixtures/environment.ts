@@ -2,8 +2,10 @@
  * 环境编辑的视图模型。正式数据来自管理 API `GET/PUT P:/environments/{id}`（T22 接入时映射）。这里不是 API 类型。
  */
 
-export type Tier = 'none' | 'sandbox';
-export type SandboxSize = 'small' | 'medium' | 'large';
+import type { AdminSchemas } from '@/lib/api/types';
+
+export type Tier = AdminSchemas['EnvironmentTier'];
+export type SandboxSize = AdminSchemas['SandboxSize'];
 
 export interface EnvironmentForm {
   name: string;

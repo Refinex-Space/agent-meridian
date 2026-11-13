@@ -50,11 +50,15 @@ export const TENANTS: readonly TenantProjects[] = [
 ];
 
 /** 预算状态（`GET P:/budget-status` 的 `state` 与本周期用量）。 */
-export interface BudgetAlert {
+export interface BudgetBannerState {
   state: 'ok' | 'soft_exceeded' | 'hard_exceeded';
   /** 本周期已用占硬阈值的比例，0 到 1。 */
   usedRatio: number;
   softRatio: number;
 }
 
-export const BUDGET_SOFT_EXCEEDED: BudgetAlert = { state: 'soft_exceeded', usedRatio: 0.86, softRatio: 0.8 };
+export const BUDGET_SOFT_EXCEEDED: BudgetBannerState = {
+  state: 'soft_exceeded',
+  usedRatio: 0.86,
+  softRatio: 0.8,
+};

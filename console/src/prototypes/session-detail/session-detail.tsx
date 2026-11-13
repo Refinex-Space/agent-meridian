@@ -50,7 +50,7 @@ function useMinuteClock(): number {
  * 数据来自公开 API（原型中由 MSW 模拟）：读会话与历史事件，再订阅 SSE；批准与拒绝经 `POST …/events` 发送回应事件。
  */
 export function SessionDetail({ sessionId, modelNames }: SessionDetailProps) {
-  const { session, events, live, status, stream, error } = useSessionEvents(sessionId);
+  const { session, events, live, status, stream, error, reconnect } = useSessionEvents(sessionId);
   const [agent, setAgent] = useState<Schemas['Agent'] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [responding, setResponding] = useState<{ actionId: string; approved: boolean } | null>(null);
@@ -120,6 +120,7 @@ export function SessionDetail({ sessionId, modelNames }: SessionDetailProps) {
             agent={agent}
             status={status}
             stream={stream}
+            onReconnect={reconnect}
             events={events}
             pendingActions={pendingActions}
             onExpandInspector={inspectorOpen ? undefined : () => setInspectorOpen(true)}

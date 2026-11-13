@@ -18,6 +18,8 @@ export interface SessionHeaderProps {
   agent: Schemas['Agent'] | null;
   status: SessionStatus;
   stream: StreamState;
+  /** 推送已断开时手动重连（StreamIndicator 的"重新连接"）。 */
+  onReconnect?: () => void;
   events: readonly SessionEvent[];
   /** 等待回应的动作数：归档时随之作废，写进后果说明。 */
   pendingActions: number;
@@ -34,6 +36,7 @@ export function SessionHeader({
   agent,
   status,
   stream,
+  onReconnect,
   events,
   pendingActions,
   onExpandInspector,
@@ -60,7 +63,7 @@ export function SessionHeader({
           <span>
             环境修订 <span className="text-ink tabular-nums">{session.environment_revision}</span>
           </span>
-          {status !== 'terminated' && <StreamIndicator state={stream} />}
+          {status !== 'terminated' && <StreamIndicator state={stream} onReconnect={onReconnect} />}
         </div>
       </div>
       {total && <TokenUsage usage={total} />}

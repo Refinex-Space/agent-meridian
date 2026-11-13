@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Outlet, useMatches, useNavigate } from '@tanstack/react-router';
 import { useMemo } from 'react';
 
@@ -58,8 +58,9 @@ export function ShellLayout({ project }: { project: CurrentProject }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const matches = useMatches();
-  const me = useQuery(meQuery()).data;
-  const projects = useQuery({ ...projectsQuery(me!), enabled: me !== undefined }).data ?? [];
+  // 项目路由的 beforeLoad 已把身份与项目列表放进缓存，这里不会挂起。
+  const me = useSuspenseQuery(meQuery()).data;
+  const projects = useSuspenseQuery(projectsQuery(me)).data;
   const pendingCount = usePendingCount(project.projectId);
   const budget = useBudgetStatus(project);
 
