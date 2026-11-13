@@ -1672,29 +1672,29 @@
       "id": "T20c-A01",
       "task": "T20c",
       "description": "原型页面齐全（外壳、四种模板、会话列表、智能体编辑、待处理动作、概览），数据真实感强，没有占位文字。验证：截图。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "Storybook「原型」组 42 个故事齐全：应用外壳 6（展开、导航收起、预算告警、预算用完、切换项目、命令面板）、页面模板 4（列表页=智能体列表、详情页=智能体详情、编辑页=环境、工作台=会话详情）、会话列表 9、待处理 7、智能体编辑 6、概览 5、会话详情 5（T20a，头部、检查器、线程栏换成领域组件并接入 Workbench）。数据是华东区零售项目\"华东经营分析\"的中文数据（6 个智能体、148 个会话、20 个待处理动作含建议规则、运行概况与 runtime 真实错误码、14 天用量与本月预算、智能体 v13 草稿与版本历史），时间相对\"现在\"生成，无占位文字；运行时数据走 MSW 与 v1.d.ts 类型，管理数据是 src/prototypes/fixtures/ 的视图模型。截图 tmp/evidence/T20c/round2/（78 张：13 个页面 × 亮暗 × 1280、1920，加 26 个状态）"
     },
     {
       "id": "T20c-A02",
       "task": "T20c",
       "description": "至少两轮截图评审，问题清单与修正记录完整；禁用清单中需要人工检查的条目逐条无违反。验证：报告与 `tmp/evidence/T20c/` 中的截图。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "两轮截图评审：EVIDENCE_DIR=../tmp/evidence/T20c/round1 与 round2 pnpm -C console e2e e2e/evidence-prototypes.spec.ts（round1 77 张，round2 78 passed）。第 1 轮 13 项问题、第 2 轮 3 项问题及修正、评审表结论、禁用清单需人工检查的 16 条逐条结论记录在 docs/engineering/frontend-design.md「T20c 原型与评审」与最终报告，无一违反。a11y：EVIDENCE_DIR=../tmp/evidence/T20c pnpm -C console e2e e2e/a11y.spec.ts 全量检查 223 个故事亮暗两套 failures 0（tmp/evidence/T20c/a11y-light.json、a11y-dark.json），登记的 31 个原型与基础故事亮暗 62 passed（修正待处理标签页的 aria-controls 之后）"
     },
     {
       "id": "T20c-A03",
       "task": "T20c",
       "description": "最后一轮的减法已完成，每个页面记录了去掉的内容。验证：报告。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "最后一轮每页去掉一项并记录（frontend-design.md「T20c 原型与评审」减法表与最终报告）：外壳底部\"收起导航\"的文字、智能体列表未搜索时的结果数、智能体详情页头的草稿徽标、环境规格的系统名、会话详情线程栏\"待处理\"的计数、会话列表的创建列、待处理\"待回应\"标签的计数、待处理抽屉对默认类型的副标题、智能体编辑页头的智能体 ID、概览失败率表的使用中与运行中两列；round2 截图为减法之后"
     },
     {
       "id": "T20c-A04",
       "task": "T20c",
       "description": "`pnpm -C console lint`、`typecheck`、`test`、`build-storybook` 全部通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh 退出码 0（在 68cb79f 上）：其中 pnpm -C console install、lint（ESLint 与守护规则、check-css、Prettier、gen:api --check）、typecheck、test（Vitest 28 个文件 169 个用例全部通过）、build-storybook（Storybook build completed successfully）全部通过；Maven BUILD SUCCESS，两个 Python 子项目通过。另跑 pnpm -C console build 通过（入口 JS gzip 235.71 KB）"
     },
     {
       "id": "T21-A01",

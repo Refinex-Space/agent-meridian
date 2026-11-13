@@ -204,23 +204,11 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 |---|---|---|---|---|---|---|---|---|
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 已完成 | 2d99b8f |
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 已完成 | 3967cc5 |
-| T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 进行中 | — |
+| T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 已完成 | （见下） |
 
 ### 轨道检查点
 
-T20c（主工作区 `main`，沿用 T20b 的做法不建 worktree）：
-
-- [x] 1 开工：基线 `verify.sh` 通过，轨道看板标为进行中
-- [x] 2 外壳与模板：应用外壳（导航收起、项目切换、命令面板、预算横幅、待处理计数）与四种页面模板的布局组件（列表、详情、编辑、工作台三栏可调宽）
-- [x] 3 会话详情换成领域组件（T20b 遗留：头部、检查器、线程栏），接入工作台模板
-- [x] 4 原型：会话列表（MSW、筛选、实时更新、加载、空、错误、无权限、长内容）
-- [x] 5 原型：待处理动作（待回应与历史、详情抽屉、批准与拒绝、记住此决定、无权限）
-- [x] 6 原型：智能体编辑（视图模型夹具、分组导航、保存栏、校验错误、加载、错误、只读）
-- [x] 7 原型：概览（运行状况、按智能体的失败率、最近错误、用量趋势、预算消耗；ECharts 版本追加到 ADR-0021）
-- [x] 8 模板故事：列表页（智能体列表）、详情页（智能体详情）、编辑页（环境）、工作台（会话详情）
-- [x] 9 评审第 1 轮：亮暗 × 1280、1920 截图（`tmp/evidence/T20c/round1/`），问题清单与修正
-- [x] 10 评审第 2 轮：截图（`round2/`），每页做一次减法并记录
-- [ ] 11 收尾：a11y 全量、lint、typecheck、test、build-storybook、`verify.sh`；`console/CLAUDE.md`、frontend-design.md「设计定稿」、acceptance、PLAN
+（当前没有进行中的轨道任务）
 
 ### 轨道会话日志
 
@@ -241,6 +229,13 @@ T20c（主工作区 `main`，沿用 T20b 的做法不建 worktree）：
 - 验收：A01–A05 全部 passing（a11y 亮暗各 217 个故事零违规、领域组件 95 个用例、全量 164 个用例、`verify.sh` 通过，截图在 `tmp/evidence/T20b/`）
 - 决策：没有新 ADR（只追加 ADR-0021 的版本表与三点说明：TanStack Table 9、shadcn 在临时目录生成、语法色走令牌）；开关做成 4px 圆角的拨动开关；复选框与单选的记号是控件自身的形状；PermissionGate 用 aria-disabled 保持可聚焦；模态浮层外加 inert；命令面板的空结果放在 listbox 之外；可滚动区域可聚焦（jsx-a11y 放行 role=region 带 tabIndex）；给人读的工具结果用正文字体；Vitest 固定东八区
 - 遗留：会话详情原型的头部、检查器、线程栏仍是 T20a 的内联实现，T20c 换成领域组件；FilterBar 的 URL 同步用 History API，T21 换成 TanStack Router 的搜索参数；PermissionGate 只接收 `allowed` 与 `reason`，由 T21 按 `/admin/v1/me/access` 计算
+
+### 2026-11-13 T20c 已完成（主工作区 `main`，沿用 T20b 不建 worktree）
+- 交付：Storybook「原型」组 42 个故事——应用外壳（导航收起并记在本地、项目切换、⌘K 命令面板、预算横幅）、四种页面模板的布局组件与故事（`ListPage`、`DetailPage`、`EditPage`、`Workbench` 三栏可调宽，分别配智能体列表、智能体详情、环境编辑、会话详情）、会话列表、待处理（待回应与历史、详情抽屉）、智能体编辑（八个分组、校验、发布确认、只读）、概览（运行状况、用量趋势、本月预算、按智能体的失败率与最近错误）；会话详情换成领域组件（T20b 遗留）；新领域组件 `ApprovalForm`；MSW 项目级处理器与"华东经营分析"夹具；管理数据的视图模型；`e2e/evidence-prototypes.spec.ts`；a11y 用例登记原型故事并检查整页
+- 修正 T20b 的两处缺陷：超时的待处理动作显示为"已失效"（`actionStatus` 先判 expired）、选择器触发器一直是只读外观（`:read-only` 匹配按钮）
+- 验收：A01–A04 全部 passing（两轮评审截图 `tmp/evidence/T20c/round1`、`round2`，a11y 223 个故事亮暗零违规、原型 62 passed，`verify.sh` 通过）
+- 决策：没有新 ADR；ECharts 6.1.0 追加到 ADR-0021；评审记录写进 frontend-design.md「T20c 原型与评审」
+- 遗留：工作区主线已包含 `console/T20`（T20a 后已合并），`git merge console/T20` 为空操作，只需移除 worktree；原型里的筛选在组件状态、表单是受控状态，T21、T22 换成路由搜索参数与 React Hook Form
 
 ## 登记事项
 
