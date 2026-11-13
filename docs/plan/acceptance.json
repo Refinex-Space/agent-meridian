@@ -1616,8 +1616,8 @@
       "id": "T20a-A07",
       "task": "T20a",
       "description": "用户已确认视觉方向。验证：确认日期与意见（只有用户在对话中明确确认后才能标 `passing`）。",
-      "status": "not_started",
-      "evidence": "等待用户确认视觉方向：截图与录屏在 tmp/evidence/T20a/（亮暗、1280 与 1920），设计计划见 frontend-design.md「设计定稿」"
+      "status": "passing",
+      "evidence": "2026-11-13 用户在对话中确认视觉方向：\"看过了整体没什么问题\"，无修改意见。确认依据的截图与录屏在 tmp/evidence/T20a/（令牌页、图标页、子线程时间轴、会话详情的等待处理、检查器、实时追加、加载中，亮暗两种主题、1280 与 1920 两种宽度），设计计划见 frontend-design.md「设计定稿」"
     },
     {
       "id": "T20a-A08",
