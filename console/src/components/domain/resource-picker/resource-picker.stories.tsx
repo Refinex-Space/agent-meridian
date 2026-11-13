@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 
+import { Label } from '@/components/ui/label';
 import { ApiError } from '@/lib/api/errors';
 import { storyFrame } from '@/test/stories';
 
@@ -27,15 +28,17 @@ const SOURCE: ResourceSource = {
 function Select({ source, initial = 'mdl_qwen_plus' }: { source: ResourceSource; initial?: string | null }) {
   const [value, setValue] = useState<string | null>(initial);
   return (
-    <ResourceSelect
-      id="story-model"
-      ariaLabel="主模型"
-      value={value}
-      onChange={setValue}
-      source={source}
-      searchLabel="搜索模型"
-      emptyLabel="本租户的模型目录里还没有对话模型"
-    />
+    <div className="flex flex-col gap-2">
+      <Label htmlFor="story-model">主模型</Label>
+      <ResourceSelect
+        id="story-model"
+        value={value}
+        onChange={setValue}
+        source={source}
+        searchLabel="搜索模型"
+        emptyLabel="本租户的模型目录里还没有对话模型"
+      />
+    </div>
   );
 }
 

@@ -230,9 +230,12 @@ export function McpServerDialog({ open, onOpenChange, server }: McpServerDialogP
                           {...(rowError ? { 'aria-invalid': true } : {})}
                         />
                         <div className="min-w-0 flex-1">
+                          {/* 用 label 命名而不是 aria-label：触发器显示的是凭据名，读屏名要包含可见文字（WCAG 2.5.3）。 */}
+                          <Label htmlFor={`mcp-header-${i}`} className="sr-only">
+                            {`${header.name || `第 ${i + 1} 个请求头`}的凭据`}
+                          </Label>
                           <SecretSelect
                             id={`mcp-header-${i}`}
-                            ariaLabel={`${header.name || `第 ${i + 1} 个请求头`}的凭据`}
                             value={header.secretId}
                             onChange={(secretId) => patchHeader(i, { secretId })}
                             usedBy="project"
