@@ -160,11 +160,12 @@ public class SkillService {
      * @param tenantId 租户 ID
      * @param projectId 项目 ID
      * @param skillId 技能 ID
-     * @return 技能
+     * @return 技能与引用它的已发布智能体版本
      */
-    public Skill get(String tenantId, String projectId, String skillId) {
+    public SkillView get(String tenantId, String projectId, String skillId) {
         projects.require(tenantId, projectId);
-        return PlatformContexts.call(Scopes.project(tenantId, projectId), () -> require(skillId, null));
+        Skill skill = PlatformContexts.call(Scopes.project(tenantId, projectId), () -> require(skillId, null));
+        return withReferences(tenantId, List.of(skill)).getFirst();
     }
 
     /**
@@ -173,13 +174,14 @@ public class SkillService {
      * @param tenantId 租户 ID
      * @param projectId 项目 ID
      * @param page 分页参数
-     * @return 一页技能
+     * @return 一页技能，各自带引用方
      */
-    public PageResult<Skill> list(String tenantId, String projectId, PageRequest page) {
+    public PageResult<SkillView> list(String tenantId, String projectId, PageRequest page) {
         projects.require(tenantId, projectId);
-        return PlatformContexts.call(
+        PageResult<Skill> result = PlatformContexts.call(
                 Scopes.project(tenantId, projectId),
                 () -> PageResult.of(skills.list(page), page, s -> Cursor.of(s.id())));
+        return new PageResult<>(withReferences(tenantId, result.data()), result.hasMore(), result.nextCursor());
     }
 
     /**
@@ -269,6 +271,17 @@ public class SkillService {
         return stored;
     }
 
+    /** 引用方在租户级的 {@code agent_version_refs} 中，按租户作用域一次查全。 */
+    private List<SkillView> withReferences(String tenantId, List<Skill> page) {
+        Map<String, List<ResourceReference>> refs = PlatformContexts.call(
+                Scopes.tenant(tenantId),
+                () -> references.referencingAll(
+                        SpecReference.Type.SKILL, page.stream().map(Skill::id).toList()));
+        return page.stream()
+                .map(skill -> new SkillView(skill, refs.getOrDefault(skill.id(), List.of())))
+                .toList();
+    }
+
     private Skill require(String skillId, String lock) {
         return skills.find(skillId, lock)
                 .orElseThrow(() -> new NotFoundException(SkillErrorCode.NOT_FOUND, "技能不存在：" + skillId));
@@ -281,4 +294,12 @@ public class SkillService {
         details.put("files", version.files().size());
         return details;
     }
+
+    /**
+     * 技能与引用它的已发布智能体版本（ADR-0056）。
+     *
+     * @param skill 技能
+     * @param references 引用方，按版本 ID 排序
+     */
+    public record SkillView(Skill skill, List<ResourceReference> references) {}
 }

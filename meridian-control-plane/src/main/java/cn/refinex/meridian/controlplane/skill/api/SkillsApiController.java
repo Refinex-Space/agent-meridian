@@ -6,6 +6,7 @@ import cn.refinex.meridian.api.admin.model.SkillFileContent;
 import cn.refinex.meridian.api.admin.model.SkillPage;
 import cn.refinex.meridian.api.admin.model.SkillVersion;
 import cn.refinex.meridian.api.admin.model.SkillVersionPage;
+import cn.refinex.meridian.common.error.ResourceReference;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.controlplane.openapi.admin.SkillsApi;
 import cn.refinex.meridian.controlplane.skill.app.SkillService;
@@ -58,7 +59,7 @@ public class SkillsApiController implements SkillsApi {
                 body,
                 HttpStatus.CREATED,
                 Skill.class,
-                () -> toDto(skills.create(actor(), tenantId, projectId, skillPackage)));
+                () -> toDto(skills.create(actor(), tenantId, projectId, skillPackage), List.of()));
     }
 
     @Override
@@ -66,13 +67,16 @@ public class SkillsApiController implements SkillsApi {
     public ResponseEntity<SkillPage> listSkills(String tenantId, String projectId, Integer limit, String after) {
         var page = skills.list(tenantId, projectId, PageRequest.of(limit, after));
         return ResponseEntity.ok(new SkillPage(
-                page.data().stream().map(SkillsApiController::toDto).toList(), page.hasMore(), page.nextCursor()));
+                page.data().stream().map(v -> toDto(v.skill(), v.references())).toList(),
+                page.hasMore(),
+                page.nextCursor()));
     }
 
     @Override
     @RequiresPermission(Permission.AGENT_READ)
     public ResponseEntity<Skill> getSkill(String tenantId, String projectId, String skillId) {
-        return ResponseEntity.ok(toDto(skills.get(tenantId, projectId, skillId)));
+        var view = skills.get(tenantId, projectId, skillId);
+        return ResponseEntity.ok(toDto(view.skill(), view.references()));
     }
 
     @Override
@@ -132,7 +136,8 @@ public class SkillsApiController implements SkillsApi {
         return file.getContent() == null ? "" : file.getContent();
     }
 
-    private static Skill toDto(cn.refinex.meridian.controlplane.skill.domain.Skill skill) {
+    private static Skill toDto(
+            cn.refinex.meridian.controlplane.skill.domain.Skill skill, List<ResourceReference> references) {
         return new Skill()
                 .id(skill.id())
                 .tenantId(skill.tenantId())
@@ -141,7 +146,10 @@ public class SkillsApiController implements SkillsApi {
                 .description(skill.description())
                 .latestVersion(skill.latestVersion())
                 .createdAt(Times.utc(skill.createdAt()))
-                .updatedAt(Times.utc(skill.updatedAt()));
+                .updatedAt(Times.utc(skill.updatedAt()))
+                .references(references.stream()
+                        .map(r -> new cn.refinex.meridian.api.admin.model.ResourceReference(r.type(), r.id(), r.name()))
+                        .toList());
     }
 
     private static SkillVersion toDto(cn.refinex.meridian.controlplane.skill.domain.SkillVersion version) {

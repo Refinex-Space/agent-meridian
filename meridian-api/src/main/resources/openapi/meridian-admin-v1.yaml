@@ -5512,7 +5512,7 @@ components:
     Skill:
       description: 技能：版本化的 `SKILL.md` 与附带文件，属于项目。
       type: object
-      required: [id, tenant_id, project_id, name, description, latest_version, created_at, updated_at]
+      required: [id, tenant_id, project_id, name, description, latest_version, created_at, updated_at, references]
       properties:
         id:
           description: 技能 ID（skl_…）。
@@ -5540,6 +5540,13 @@ components:
           description: 最近一次上传新版本的时间。
           type: string
           format: date-time
+        references:
+          description: |
+            引用这个技能的、未删除智能体的已发布版本（类型 `agent_version`，名称为"智能体名 v版本号"，按版本 ID 排序）；草稿
+            不算，没有时为空数组。被引用的技能不能删除（`skill.in_use`），ADR-0056。
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceReference'
     SkillPage:
       description: 一页技能。
       type: object

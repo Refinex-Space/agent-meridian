@@ -2630,6 +2630,11 @@ export interface components {
              * @description 最近一次上传新版本的时间。
              */
             updated_at: string;
+            /**
+             * @description 引用这个技能的、未删除智能体的已发布版本（类型 `agent_version`，名称为"智能体名 v版本号"，按版本 ID 排序）；草稿
+             *     不算，没有时为空数组。被引用的技能不能删除（`skill.in_use`），ADR-0056。
+             */
+            references: components["schemas"]["ResourceReference"][];
         };
         /** @description 一页技能。 */
         SkillPage: {

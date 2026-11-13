@@ -2,10 +2,14 @@ package cn.refinex.meridian.controlplane.agent.infra;
 
 import cn.refinex.meridian.common.error.ResourceReference;
 import cn.refinex.meridian.controlplane.agent.domain.SpecReference;
+import cn.refinex.meridian.persistence.jdbc.JdbcValues;
 import cn.refinex.meridian.persistence.tenant.TenantScope;
 import cn.refinex.meridian.persistence.tenant.TenantScopedRepository;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.stereotype.Repository;
 
@@ -66,5 +70,40 @@ public class AgentVersionRefRepository extends TenantScopedRepository {
                 .query((rs, row) -> new ResourceReference(
                         "agent_version", rs.getString("id"), rs.getString("name") + " v" + rs.getInt("version")))
                 .list();
+    }
+
+    /**
+     * 一批同类资源各自的引用方（控制台的技能列表一次取全）。
+     *
+     * @param type 资源类型
+     * @param refIds 资源 ID
+     * @return 资源 ID → 引用方（与 {@link #referencing} 同样的名称与顺序）；没有引用方的资源不出现
+     */
+    public Map<String, List<ResourceReference>> referencingAll(SpecReference.Type type, Collection<String> refIds) {
+        Map<String, List<ResourceReference>> result = new LinkedHashMap<>();
+        if (refIds.isEmpty()) {
+            return result;
+        }
+        sql("""
+                        SELECT r.ref_id, v.id, a.name, v.version
+                          FROM cp.agent_version_refs r
+                          JOIN cp.agent_versions v ON v.id = r.agent_version_id
+                          JOIN cp.agents a ON a.id = v.agent_id
+                         WHERE r.tenant_id = :tenant_id AND r.ref_type = :type AND r.ref_id = ANY(:refs)
+                           AND a.deleted_at IS NULL
+                         ORDER BY r.ref_id, v.id
+                        """)
+                .param("type", type.value())
+                .param("refs", JdbcValues.textArray(refIds))
+                .query((rs, row) -> Map.entry(
+                        rs.getString("ref_id"),
+                        new ResourceReference(
+                                "agent_version",
+                                rs.getString("id"),
+                                rs.getString("name") + " v" + rs.getInt("version"))))
+                .list()
+                .forEach(e -> result.computeIfAbsent(e.getKey(), k -> new ArrayList<>())
+                        .add(e.getValue()));
+        return result;
     }
 }

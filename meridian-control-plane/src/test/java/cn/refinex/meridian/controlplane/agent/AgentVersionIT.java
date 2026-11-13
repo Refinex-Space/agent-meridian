@@ -340,6 +340,15 @@ class AgentVersionIT extends ControlPlaneTestBase {
         String tenant = "/admin/v1/tenants/" + fixture.get("tenant");
         String project = tenant + "/projects/" + fixture.get("project");
 
+        // 技能带着引用它的已发布版本（ADR-0056）：查看与列表一致，草稿不算
+        Reply viewed = client.admin("GET", project + "/skills/" + fixture.get("skill"), token("developer"), null);
+        assertThat(viewed.json().at("/references/0/type").asString()).isEqualTo("agent_version");
+        assertThat(viewed.json().at("/references/0/name").asString()).isEqualTo("fixture-agent v1");
+        assertThat(viewed.json().get("references").size()).isEqualTo(1);
+        Reply listed = client.admin("GET", project + "/skills", token("developer"), null);
+        assertThat(listed.json().at("/data/0/references"))
+                .isEqualTo(viewed.json().get("references"));
+
         Reply model = client.admin("DELETE", tenant + "/models/" + fixture.get("model"), token("owner"), null);
         Reply skill = client.admin("DELETE", project + "/skills/" + fixture.get("skill"), token("owner"), null);
         Reply mcp = client.admin("DELETE", project + "/mcp-servers/" + fixture.get("mcp"), token("owner"), null);
@@ -363,6 +372,11 @@ class AgentVersionIT extends ControlPlaneTestBase {
         assertThat(client.admin("DELETE", agentPath(fixture, fixture.get("agent")), token("owner"), null)
                         .status())
                 .isEqualTo(204);
+        assertThat(client.admin("GET", project + "/skills/" + fixture.get("skill"), token("developer"), null)
+                        .json()
+                        .get("references")
+                        .size())
+                .isZero();
         assertThat(client.admin("DELETE", project + "/skills/" + fixture.get("skill"), token("owner"), null)
                         .status())
                 .isEqualTo(204);
