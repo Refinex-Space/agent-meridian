@@ -178,8 +178,8 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 T19b（开工基线 `scripts/dev/verify.sh` 通过）：
 
 - [ ] 1 对照表 `docs/engineering/console-api-map.md`（A01）
-- [ ] 2 runtime：会话列表筛选与 `agent_id`、项目级待处理动作列表与历史（结论、处理人）、`GET /v1/session-stats` 与失败率小时汇总作业、投递记录的时间范围（D72）
-- [ ] 3 security 与回应权限：作用域 `actions:respond`（审批人回应待处理动作）、OIDC 邮箱声明
+- [x] 2 runtime：会话列表筛选与 `agent_id`、项目级待处理动作列表与历史（结论、处理人）、`GET /v1/session-stats` 与失败率小时汇总作业、投递记录的时间范围（D72）
+- [x] 3 security 与回应权限：作用域 `actions:respond`（审批人回应待处理动作）、OIDC 邮箱声明
 - [ ] 4 control-plane：`GET /admin/v1/me`、`/me/access`；按邮箱邀请成员与首次登录绑定（A04）
 - [ ] 5 control-plane：项目预算消耗 `budget-status`、用量明细与 CSV 导出（D68）
 - [ ] 6 control-plane：供应商账号连通性测试、MCP 连接状态、Webhook 签名密钥轮换（D72）
