@@ -1441,50 +1441,50 @@
       "id": "T19-A01",
       "task": "T19",
       "description": "混合检索的过滤条件全部在 SQL 中，`EXPLAIN` 确认使用了索引。验证：测试输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-knowledge -am verify -Dit.test=KnowledgeSearchIT：filtersArePushedIntoSqlAndBothRecallsUseIndexes 对 ChunkSearchRepository.NEAREST_SQL、MATCHING_SQL 做 EXPLAIN（enable_seqscan=off）：向量与全文召回都是 Index Scan using chunks_knowledge_base_idx，tenant_id、project_id、knowledge_base_id = ANY、acl_tags = '{}' OR acl_tags && 都在扫描节点的 Index Cond/Filter 上，全文条件 tsv @@ (InitPlan) 也在 Filter 中，没有 Seq Scan；enable_sort=off 时向量召回为 Index Scan using chunks_embedding_hnsw_idx（Order By 距离，Filter 含全部条件）；应用数据源 SHOW hnsw.iterative_scan = strict_order。计划打印在测试输出"
     },
     {
       "id": "T19-A02",
       "task": "T19",
       "description": "权限隔离：没有对应标签的调用方在 REST、`knowledge_search`、MCP、前置检索四种形态下都检索不到受限切片。验证：集成测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "REST：KnowledgeSearchIT.publicSearchReturnsSourcesAndOnlyChunksTheCallerMaySee（不带标签只得 5 个不限标签的切片，role:hr 得 10 个）；内部接口：KnowledgeSearchIT.internalSearchServesRuntimeWithSessionTagsRewriteAndMetering（会话没有 dept:finance 时报销制度一条都不出现）；knowledge_search 与前置检索：runtime 的 KnowledgeSessionIT（只带会话的 end_user_attributes.acl_tags，未授权会话的事件与模型请求中没有受限切片）；MCP：KnowledgeMcpIT（不带 Meridian-Acl-Tags 只得考勤 5 条，带 level:confidential 得 10 条）。全部通过"
     },
     {
       "id": "T19-A03",
       "task": "T19",
       "description": "检索评测：四种配置的命中率@5 与 MRR 已记录；回归测试使用录制的 Embedding 与 rerank 结果（离线、确定），以本次实测值为基线。\"混合加 rerank\"不占优时写分析，**不调整语料与问题**。验证：`-Plive` 输出、评测记录与回归测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "-Plive：RetrievalEvalEmbeddingsLiveIT（7 次调用）与 RetrievalEvalRerankLiveIT（20 次调用）录制 retrieval-eval/recording/；实测命中率@5/MRR：仅向量 1.00/0.9750、仅全文 0.95/0.7250、混合 1.00/0.9250、混合加 rerank 1.00/1.0000（记录与分析：docs/engineering/retrieval-evaluation.md）。离线回归 RetrievalEvalIT 回放录制，重算结果与录制时一致，基线写在 RetrievalEvalIT.BASELINE。语料与问题未调整"
     },
     {
       "id": "T19-A04",
       "task": "T19",
       "description": "端到端问答的 5 个问题引用的来源与检索结果一致；无权限用户的会话中，事件与工具结果里不出现受限切片（回答本身只断言非空）。验证：`-Plive` 测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -Plive -pl meridian-runtime -am verify -Dit.test=KnowledgeQaLiveIT：本进程 runtime（qwen-plus、DashScope Embedding）加 Jib 镜像的 knowledge 容器；带 level:confidential 的会话 5 个问题（年假 10 天、法定节假日 3 倍、核心时间 10 点、绩效 A 8%–12%、年终奖 2 个月）都检索到标准答案所在文件，回答末尾的来源（attendance.md、compensation.md）都在本轮检索结果中；无标签会话问年终奖，回答「找不到相关信息」，检索结果只有 attendance.md，事件中没有「年终奖基数」「调薪幅度」「compensation.md」。Tests run: 1, Failures: 0"
     },
     {
       "id": "T19-A05",
       "task": "T19",
       "description": "P8：MCP Inspector 调通 `knowledge_search`。验证：命令与输出；报告定稿。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "MCP Inspector 2.13.0 CLI：npx -y @modelcontextprotocol/inspector@2.13.0 --cli http://localhost:18083/mcp/knowledge --transport http --method tools/list 与 --method tools/call --tool-name knowledge_search --tool-arg query=年终奖一般发几个月 --tool-arg top_k=3，带 Authorization 头（API Key），另一次再带 Meridian-Acl-Tags: level:confidential；tools/list 返回 knowledge_search（只读注解）；不带标签只得 attendance.md 三条，带标签时 compensation.md 第四条 年终奖 0.8873 排第一。本机 control-plane、runtime（真实 Embedding 与 rerank）、knowledge。报告定稿 docs/poc/P08-MCP-Server.md，P8 状态改为通过"
     },
     {
       "id": "T19-A06",
       "task": "T19",
       "description": "前置检索按配置开关生效，注入内容带来源标签。验证：场景测试。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "./mvnw -pl meridian-engine-agentscope-test -am test -Dtest=KnowledgePrefetchScenarioTest：开启前置检索时用最后一条用户消息（带 query_rewrite_model）检索，切片以 <knowledge_context> 用户消息插在问题之前，每个切片包 <external_content source=\"knowledge_search\">，伪造的闭合标签被转义，上下文构成计为注入内容（2 条），下一轮仍在上下文中；检索失败或没有命中时不注入、本轮正常结束；PlatformMiddlewareProvider 只给开启前置检索的主智能体挂（关闭、子智能体、没有端口时不挂）。runtime 的 KnowledgeSessionIT 另验证生产装配下前置检索生效。3 + 2 个用例通过"
     },
     {
       "id": "T19-A07",
       "task": "T19",
       "description": "`scripts/dev/verify.sh` 通过。验证：命令输出。",
-      "status": "not_started",
-      "evidence": ""
+      "status": "passing",
+      "evidence": "scripts/dev/verify.sh（2026-11-12）：BOM 至 control-plane 全部 SUCCESS；runtime 299 个集成测试中 EventStreamIT 1 个用例失败，原因是 RequestIdWebFilter 生成请求 ID 时单调 ULID 生成器在 Netty 线程上 park、被 BlockHound 判为阻塞（与 D66 同一根因，主机负载约 14，与本任务改动无关），单独重跑 EventStreamIT 5/5 通过；之后安装上游模块，spotless:check verify knowledge（单测 48、集成测试 20）与 arch-tests（13）BUILD SUCCESS，check-pom-versions.sh、sandbox-runtime 与 doc-parser 的 ruff、mypy、pytest 全部通过"
     },
     {
       "id": "T19b-A01",

@@ -45,7 +45,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | 阶段 | 内容 | 任务 | 阶段门 | 状态 |
 |---|---|---|---|---|
 | 0 工程基座 | 脚手架、质量门禁、通用基础库、本地基础设施 | T01–T02 | — | 已完成 |
-| 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 已决（ADR-0043）；Q3 已决、D52 已落地（T15a，ADR-0045、ADR-0046）；T28 落实 D44–D46 并由 T29 复测 P7；P8 随 T19 定稿（`docs/poc/M0-总结.md`） |
+| 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 已决（ADR-0043）；Q3 已决、D52 已落地（T15a，ADR-0045、ADR-0046）；T28 落实 D44–D46 并由 T29 复测 P7；P8 已由 T19 定稿（`docs/poc/M0-总结.md`） |
 | 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 进行中 |
 | 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 进行中 |
 | 4 M1 控制台 | 设计方向与组件、原型（并行轨道）、工程基座、五组页面 | T20a–T25b | R3 | 未开始 |
@@ -84,7 +84,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T17a | [运行时补全：Webhook、会话删除、事件归档与保留](tasks/T17a-webhooks-deletion-retention.md) | 2 | T16 | high | 中 | 无 | 已完成 | 9aa41da |
 | T17b | [运行时补全：文件、工作区、用量事件与 Responses](tasks/T17b-files-workspace-responses.md) | 2 | T17a | high | 中 | 无 | 已完成 | b7df25f |
 | T18 | [知识库写入](tasks/T18-knowledge-ingestion.md) | 3 | T17b | high | 大 | 无 | 已完成 | 51dc16a |
-| T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 进行中 | — |
+| T19 | [知识库检索与接入](tasks/T19-knowledge-retrieval.md) | 3 | T18 | high | 中 | P8（定稿） | 已完成 | c87dc78 |
 | T19b | [控制台所需的后端接口](tasks/T19b-console-backend-apis.md) | 3 | T19 | high | 大 | 无 | 未开始 | — |
 | R2 | [M1 后端评审](tasks/R2-backend-review.md) | 3 | T19b | high | 中 | 无 | 未开始 | — |
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 见控制台设计轨道 | — |
@@ -175,18 +175,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-T19 知识库检索与接入（2026-11-12 开工；基线 `verify.sh` 只有 D66 的 `SubagentSessionIT` 失败，单独重跑通过后从 runtime 续跑）：
-
-- [x] 1. 检索核心（knowledge）：知识库的 `rerank_model`、model-client 的 rerank 与对话、混合检索 SQL（向量与全文各前 50，过滤下推）、RRF、rerank、查询改写；`EXPLAIN` 测试（A01）
-- [x] 2. 接口：内部 `POST /internal/v1/knowledge-bases:search`、公开 `POST /v1/knowledge-bases/{id}/search`、检索次数计量（D70）
-- [x] 3. MCP Server `/mcp/knowledge`（API Key 认证，工具 `knowledge_search`）
-- [x] 4. runtime：内部对话接口（查询改写）、`KnowledgeSearchPort` 的 HTTP 实现（服务 JWT、会话的 `acl_tags`）、智能体配置 `knowledge.query_rewrite_model`
-- [x] 5. engine：`KnowledgePrefetchMiddleware`（来源标签与注入标记，D33）与场景测试（A06）
-- [x] 6. 权限隔离：REST、`knowledge_search`、MCP、前置检索四种形态（A02）
-- [x] 7. 检索评测：语料与问题、`-Plive` 录制、离线回归、评测记录（A03）
-- [x] 8. 端到端问答 `-Plive`（A04）
-- [x] 9. P8 定稿：MCP Inspector 调通（A05）
-- [ ] 10. 收尾：`verify.sh`（A07）、文档、CLAUDE.md、验收记录
+（当前没有进行中的任务）
 
 ## 控制台设计轨道
 
@@ -296,7 +285,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D63 | T15b | `dev-config/` 的剩余用途只有测试与本地开发：`test` profile 的 `agent-config.source`、`catalog-source` 为 `file`（测试夹具读 `dev-config/agents`、`dev-config/providers`）；`dev` profile 默认 `file`（`run-runtime.sh`、Compose `app` 的 runtime 挂载 `dev-config/`）；预算限额 `dev-config/budgets`。其他 profile 选 `file` 时启动失败，生产只经 control-plane | T16（已落地：预算限额改由 control-plane 写进 Redis，`budget-source=file` 只允许 test），T28（生产 chart 不挂载 `dev-config/`） |
 | D64 | T15b | `TODO(T18)`：发布时知识库的存在性由 control-plane 的 `ConfiguredKnowledgeCatalog` 按配置 `meridian.control-plane.knowledge.dev-knowledge-base-ids` 判定，没有经 knowledge 服务校验存在且属于该项目 | T18（已落地：`KnowledgeServiceCatalog` 调 knowledge 的 `GET /internal/v1/knowledge-bases/{id}` 并比较租户与项目，出站服务 JWT 由 control-plane 进程内签发，ADR-0051，`AgentVersionIT`） |
 | D65 | T15b | 引用检查只统计未删除智能体的已发布版本：智能体软删除后，绑定其版本的会话仍可运行，但它引用的模型、凭据、MCP 服务、技能可以被删除，这些会话的下一轮解析失败（ADR-0047 第 4 条） | R2（评审是否要求删除智能体前先结束会话，或引用检查改为统计未删除的会话） |
-| D66 | T16 | runtime 测试偶发失败：BlockHound 在 Netty 线程上抓到 `Ids.newUlid()` 的阻塞（`ulid-creator` 单调工厂的 `ReentrantLock` 在并发生成时争用，`RequestIdWebFilter` 在事件循环上调用），表现为某个请求 500（T16 开工基线中 `SubagentSessionIT` 的 SSE 连接，重跑通过）。可选：`RuntimeBlockHoundIntegration` 放行 `UlidFactory.create`（临界区只有几条指令），或请求 ID 改用非单调 ULID | R2 |
+| D66 | T16 | runtime 测试偶发失败：BlockHound 在 Netty 线程上抓到 `Ids.newUlid()` 的阻塞（`ulid-creator` 单调工厂的 `ReentrantLock` 在并发生成时争用，`RequestIdWebFilter` 在事件循环上调用），表现为某个请求 500（T16 开工基线中 `SubagentSessionIT` 的 SSE 连接，重跑通过；T19 的基线与收尾中 `SubagentSessionIT`、`EventStreamIT` 各一次，主机负载高时更常见）。可选：`RuntimeBlockHoundIntegration` 放行 `UlidFactory.create`（临界区只有几条指令），或请求 ID 改用非单调 ULID | R2 |
 | D67 | T16 | `rt.sessions.budget_limit`（会话级预算的金额）没有使用：会话级预算改在 control-plane 的 `budgets`（token，ADR-0048）。列保留在 V0001 中，是否删除或改作创建会话时的会话级硬阈值待定 | R2 |
 | D68 | T16 | 用量报表只有聚合，没有明细列表与 CSV 导出；T25b 的“明细表、导出 CSV”需要按游标列出 `usage_records` 的接口 | T19b |
 | D69 | T16 | `cp.stream_dead_letters` 只有写入：没有查看与重放的接口或脚本，坏消息只能人工查表后重新发布；outbox 中 `attempts` 达到上限的消息同样只能人工处理 | T27（告警）、R2 |
@@ -492,6 +481,14 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：向量维度用 Flyway 占位符并在启动时核对；PDF 先用 PDFBox 检查，扫描件与有框线表格的交给 doc-parser；结束事务锁住文档与本次尝试再整体替换切片；存储量每天按执行时的大小上报并用 `storage_reports` 去重；doc-parser 不校验服务 JWT、靠网络策略；`acl_tags` 用逗号分隔的表单字段（Spring 解析不了数组表单字段）
 - 开工基线：`EventStreamIT` 在主机负载约 100 时连续失败，负载降下来后的全量运行中通过（时序敏感）；收尾时 D66 的 `SubagentSessionIT` 又出现两次
 - 遗留：D78（知识库 ID 没有进入用量账本）、D79（doc-parser 的网络策略与资源限额）、D80（PDF 路由的启发式、P8 复核）、D81（存储量取执行时的大小、知识库没有删改接口）；本机 `.env` 需要 `MERIDIAN_KNOWLEDGE_CLIENT_SECRET` 才能用 Compose 起 knowledge（`run-*.sh` 会取 `.env.example` 的值）
+
+### 2026-11-12 T19 已完成（提交 c87dc78）
+
+- 交付：knowledge 的 `search` 上下文（向量与全文并行召回、过滤下推到 SQL、HNSW 迭代扫描、全文词项"或"查询、每个 Embedding 模型一路、RRF k = 60、rerank 前 20 个候选、查询改写失败回退原查询、`knowledge_search_calls` 计量），知识库的 `rerank_model`（kb `V0002`）；公开 `POST /v1/knowledge-bases/{id}/search`、内部 `POST /internal/v1/knowledge-bases:search`、MCP Server `/mcp/knowledge`（`McpApiKeyFilter`，标签取 `Meridian-Acl-Tags`）；model-client 的 `RerankClient`、`ChatClient`；runtime 的 `/internal/v1/chat/completions`、`HttpKnowledgeSearch`（`meridian.runtime.knowledge.url`）；engine 的 `KnowledgePrefetchMiddleware`（150）与 `McpSession`（服务重启后重建客户端，D53 A-F8）；智能体规格的 `knowledge.query_rewrite_model`；control-plane 的 cp `V0007` 与发布校验；检索评测语料、录制与记录 `docs/engineering/retrieval-evaluation.md`；ADR-0052，架构设计 v1.26
+- 验收：A01–A07 全部 passing（`KnowledgeSearchIT`、`KnowledgeMcpIT`、`RetrievalEvalIT`、`KnowledgeSessionIT`、`KnowledgePrefetchScenarioTest`；`-Plive` 的两个评测录制类与 `KnowledgeQaLiveIT`；MCP Inspector 2.13.0 调通，P8 通过；`verify.sh` 通过）
+- 决策：rerank 模型挂在知识库上、改写模型挂在智能体配置上；不限标签的切片对所有人可见；MCP 的标签放请求头不放工具入参；检索评测拆成两个录制类以守住每类 20 次真实调用；端到端问答用 knowledge 的 Jib 镜像容器与本进程 runtime
+- 开工与收尾：基线与收尾的全量检查各有一次 BlockHound 判定单调 ULID 生成器 park 为阻塞（基线 `SubagentSessionIT`、收尾 `EventStreamIT`，都是 D66 的根因），单独重跑通过
+- 遗留：D82（MCP 服务端会话在进程内、没有过期，T28、R2）；D78、D80 改到 R2；查询改写只看单条消息
 
 ## 计划变更记录
 
