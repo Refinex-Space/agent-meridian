@@ -12,7 +12,7 @@
 
 - `tenant`：`TenantScopedRepository`（`PROJECT`/`TENANT` 作用域）、`SystemRepository` + `@CrossTenant`、`ScopedStatement`。
 - `jdbc`：`JdbcValues`（`jsonb`、`text[]`、`timestamptz` 转换）、`PersistenceAutoConfiguration`、`PeriodicJob`（随容器启停的后台任务）。
-- `outbox`：`OutboxWriter`（调用方事务内写）、`OutboxRelay`（短事务 `SKIP LOCKED` 认领 30 秒、事务外发布、再标记；失败记 `attempts` 不阻塞后面的消息，连续 3 条失败结束本批，10 次失败停止自动投递，ADR-0048）、`OutboxPublisher`；建表片段 `src/main/resources/cn/refinex/meridian/persistence/outbox/outbox.sql`。
+- `outbox`：`OutboxWriter`（调用方事务内写）、`OutboxRelay`（短事务 `SKIP LOCKED` 认领 30 秒、事务外发布、再标记；失败记 `attempts` 不阻塞后面的消息，连续 3 条失败结束本批，10 次失败停止自动投递，ADR-0048；发布目标不可用的瞬时错误（`TransientFailures`，与 `StreamConsumer` 共用）不计次数、释放本批，R2 审查 K-03）、`OutboxPublisher`；建表片段 `src/main/resources/cn/refinex/meridian/persistence/outbox/outbox.sql`。
 - `redis`：`RedisMessaging`（阻塞）、`ReactiveRedisMessaging`（响应式）、`RedisStreamOutboxPublisher`（主题即 Stream 键）、`StreamConsumer`（消费组循环：认领空闲的待确认消息、整批失败逐条重试、非瞬时错误交给死信回调、`trimAcknowledged` 按最小待确认 ID 裁剪，ADR-0048）。
 - `objectstore`：`ObjectStore`，属性前缀 `meridian.persistence.objectstore`。
 - `idempotency`：`Idempotency.execute(principal, key, hash, action)`；建表片段 `.../idempotency/idempotency.sql`。

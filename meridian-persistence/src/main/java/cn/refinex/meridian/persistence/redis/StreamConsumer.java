@@ -1,5 +1,6 @@
 package cn.refinex.meridian.persistence.redis;
 
+import cn.refinex.meridian.persistence.outbox.TransientFailures;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -9,11 +10,6 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.SmartLifecycle;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.dao.QueryTimeoutException;
-import org.springframework.dao.RecoverableDataAccessException;
-import org.springframework.dao.TransientDataAccessException;
-import org.springframework.transaction.CannotCreateTransactionException;
 
 /**
  * 按消费组消费一个 Redis Stream 的后台循环（ADR-0048 第 7 条），随 Spring 容器启停：control-plane 的用量与审计消费者。
@@ -152,16 +148,7 @@ public final class StreamConsumer implements SmartLifecycle {
      * @return 原因链上有瞬时错误时为 true
      */
     public static boolean isTransient(Throwable error) {
-        for (Throwable t = error; t != null; t = t.getCause()) {
-            if (t instanceof TransientDataAccessException
-                    || t instanceof RecoverableDataAccessException
-                    || t instanceof DataAccessResourceFailureException
-                    || t instanceof QueryTimeoutException
-                    || t instanceof CannotCreateTransactionException) {
-                return true;
-            }
-        }
-        return false;
+        return TransientFailures.isTransient(error);
     }
 
     private static List<String> ids(List<StreamMessage> batch) {

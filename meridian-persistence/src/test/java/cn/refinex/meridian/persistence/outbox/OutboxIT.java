@@ -25,6 +25,7 @@ import java.util.stream.IntStream;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -150,6 +151,29 @@ class OutboxIT {
         assertThat(relay.relayOnce()).isZero();
         assertThat(attempts(id)).isEqualTo(OutboxRelay.MAX_ATTEMPTS);
         assertThat(publisher.published).isEmpty();
+    }
+
+    @Test
+    void anUnavailablePublishTargetNeverExhaustsTheAttemptsOfAMessage() {
+        // R2 审查 K-03：Redis 中断时每一轮都失败，最老的消息不能因此达到上限、永久停止投递
+        List<String> ids = transactions.execute(status -> IntStream.range(0, 4)
+                .mapToObj(i -> writer.append("usage", Map.of("seq", i)))
+                .toList());
+        UnavailablePublisher publisher = new UnavailablePublisher();
+        OutboxRelay relay = relay(publisher, 10);
+
+        for (int i = 0; i < OutboxRelay.MAX_ATTEMPTS * 2; i++) {
+            assertThat(relay.relayUntilDrained()).isZero();
+        }
+        assertThat(ids).extracting(this::attempts).containsOnly(0);
+        assertThat(publisher.calls).as("每一轮在第一条失败后就结束").isEqualTo(OutboxRelay.MAX_ATTEMPTS * 2);
+        assertThat(jdbc.sql("SELECT count(*) FROM rt.outbox WHERE claimed_until IS NOT NULL")
+                        .query(Long.class)
+                        .single())
+                .isZero();
+
+        publisher.healthy = true;
+        assertThat(relay.relayUntilDrained()).isEqualTo(4);
     }
 
     @Test
@@ -319,6 +343,20 @@ class OutboxIT {
                 }
             }
             published.add(message);
+        }
+    }
+
+    /** 发布目标不可用：抛 Redis 连接失败（瞬时错误），直到被标记为恢复。 */
+    static final class UnavailablePublisher implements OutboxPublisher {
+        int calls;
+        volatile boolean healthy;
+
+        @Override
+        public void publish(OutboxMessage message) {
+            if (!healthy) {
+                calls++;
+                throw new RedisConnectionFailureException("Unable to connect to Redis");
+            }
         }
     }
 

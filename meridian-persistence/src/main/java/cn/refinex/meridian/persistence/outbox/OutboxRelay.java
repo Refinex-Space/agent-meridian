@@ -25,7 +25,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>一条消息发布失败时，它的失败次数加一、认领被释放，同批后面的消息照常发布（一条坏消息不阻塞整个队列）；连续
  * {@link #MAX_CONSECUTIVE_FAILURES} 条失败说明发布目标不可用，结束本批。失败 {@link #MAX_ATTEMPTS} 次的消息不再自动投递，留在表中
- * 等人工处理。
+ * 等人工处理。发布目标不可用的瞬时错误（{@link TransientFailures}，例如 Redis 连接失败）不是消息的问题：不计失败次数，释放本批剩下
+ * 的认领并结束本批，恢复后照常投递（R2 审查 K-03：否则 Redis 中断几秒，最老的消息就会达到上限、永久停止投递）。
  *
  * <p>线程安全：无状态，可被多个线程同时调用。
  */
@@ -127,6 +128,12 @@ public class OutboxRelay extends SystemRepository {
                 done.add(message.id());
                 consecutiveFailures = 0;
             } catch (RuntimeException e) {
+                if (TransientFailures.isTransient(e)) {
+                    log.warn("outbox 的发布目标不可用，本批留到下一轮 id={} topic={}", message.id(), message.topic(), e);
+                    release(batch.subList(i, batch.size()));
+                    consecutiveFailures = MAX_CONSECUTIVE_FAILURES;
+                    break;
+                }
                 recordFailure(message, e);
                 if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
                     release(batch.subList(i + 1, batch.size()));
