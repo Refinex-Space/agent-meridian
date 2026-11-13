@@ -76,6 +76,24 @@ public class WebhookRepository extends TenantScopedRepository {
     }
 
     /**
+     * 替换签名密钥的密文（轮换，D72）。
+     *
+     * @param id Webhook ID
+     * @param secretCiphertext 新密钥的密文
+     * @param updatedAt 修改时间
+     */
+    public void replaceSecret(String id, byte[] secretCiphertext, java.time.Instant updatedAt) {
+        sql("""
+                        UPDATE cp.webhooks SET secret_ciphertext = :secret, updated_at = :updated_at
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND id = :id
+                        """)
+                .param("id", id)
+                .param("secret", secretCiphertext)
+                .param("updated_at", updatedAt)
+                .update();
+    }
+
+    /**
      * 读取 Webhook。
      *
      * @param id Webhook ID

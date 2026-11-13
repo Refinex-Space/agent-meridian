@@ -18,6 +18,7 @@ import cn.refinex.meridian.common.page.PageResult;
 import cn.refinex.meridian.controlplane.agent.domain.SpecReference;
 import cn.refinex.meridian.controlplane.agent.infra.AgentVersionRefRepository;
 import cn.refinex.meridian.controlplane.audit.app.AdminAudit;
+import cn.refinex.meridian.controlplane.catalog.domain.ConnectivityCheck;
 import cn.refinex.meridian.controlplane.mcp.domain.McpErrorCode;
 import cn.refinex.meridian.controlplane.mcp.domain.McpServer;
 import cn.refinex.meridian.controlplane.mcp.domain.McpTool;
@@ -119,13 +120,15 @@ public class McpServerService {
      */
     public McpServer create(String actor, String tenantId, String projectId, Draft draft) {
         projects.require(tenantId, projectId);
+        long begin = System.nanoTime();
         List<McpTool> tools = validateAndProbe(tenantId, projectId, draft);
+        ConnectivityCheck check = succeeded(begin);
         return PlatformContexts.call(
                 Scopes.project(tenantId, projectId),
                 () -> transactions.execute(status -> {
                     Instant now = clock.instant();
                     McpServer server = draft.toServer(
-                            Ids.newId(IdPrefix.MCP_SERVER), tenantId, projectId, tools, actor, now, now, now);
+                            Ids.newId(IdPrefix.MCP_SERVER), tenantId, projectId, tools, actor, now, now, now, check);
                     try {
                         servers.insert(server);
                     } catch (DuplicateKeyException e) {
@@ -156,14 +159,16 @@ public class McpServerService {
     public McpServer update(String actor, String tenantId, String projectId, String id, Draft draft) {
         projects.require(tenantId, projectId);
         PlatformContexts.call(Scopes.project(tenantId, projectId), () -> require(id, null));
+        long begin = System.nanoTime();
         List<McpTool> tools = validateAndProbe(tenantId, projectId, draft);
+        ConnectivityCheck check = succeeded(begin);
         return PlatformContexts.call(
                 Scopes.project(tenantId, projectId),
                 () -> transactions.execute(status -> {
                     McpServer current = require(id, "UPDATE");
                     Instant now = clock.instant();
                     McpServer updated = draft.toServer(
-                            id, tenantId, projectId, tools, current.createdBy(), current.createdAt(), now, now);
+                            id, tenantId, projectId, tools, current.createdBy(), current.createdAt(), now, now, check);
                     try {
                         servers.update(updated);
                     } catch (DuplicateKeyException e) {
@@ -176,7 +181,8 @@ public class McpServerService {
     }
 
     /**
-     * 按已保存的配置重新探测并保存工具清单。
+     * 按已保存的配置重新探测并保存工具清单与连接状态（{@code last_check}，ADR-0053）。失败时清单不变，只在独立的事务中记下失败的
+     * 结果，再抛出 {@code mcp_server.probe_failed}。
      *
      * @param actor 操作者
      * @param tenantId 租户 ID
@@ -187,7 +193,21 @@ public class McpServerService {
     public McpServer reprobe(String actor, String tenantId, String projectId, String id) {
         projects.require(tenantId, projectId);
         McpServer current = PlatformContexts.call(Scopes.project(tenantId, projectId), () -> require(id, null));
-        List<McpTool> tools = probe(tenantId, projectId, current.transport(), current.url(), current.headerSecretIds());
+        long begin = System.nanoTime();
+        List<McpTool> tools;
+        try {
+            tools = probe(tenantId, projectId, current.transport(), current.url(), current.headerSecretIds());
+        } catch (MeridianException e) {
+            if (e.errorCode() == McpErrorCode.PROBE_FAILED) {
+                ConnectivityCheck failed = new ConnectivityCheck(
+                        ConnectivityCheck.ERROR, null, elapsed(begin), e.detail(), clock.instant());
+                PlatformContexts.run(
+                        Scopes.project(tenantId, projectId),
+                        () -> transactions.executeWithoutResult(status -> servers.saveCheck(id, failed)));
+            }
+            throw e;
+        }
+        ConnectivityCheck check = succeeded(begin);
         return PlatformContexts.call(
                 Scopes.project(tenantId, projectId),
                 () -> transactions.execute(status -> {
@@ -207,7 +227,8 @@ public class McpServerService {
                             now,
                             locked.createdBy(),
                             locked.createdAt(),
-                            now);
+                            now,
+                            check);
                     servers.update(probed);
                     audit.record("mcp_server.probed", actor, tenantId, projectId, "mcp_server", id, details(probed));
                     invalidations.resourceChanged(ConfigInvalidations.MCP_SERVER, tenantId, id);
@@ -304,6 +325,14 @@ public class McpServerService {
         }
     }
 
+    private ConnectivityCheck succeeded(long begin) {
+        return new ConnectivityCheck(ConnectivityCheck.OK, null, elapsed(begin), null, clock.instant());
+    }
+
+    private static long elapsed(long begin) {
+        return java.time.Duration.ofNanos(System.nanoTime() - begin).toMillis();
+    }
+
     private McpServer require(String id, String lock) {
         return servers.find(id, lock)
                 .orElseThrow(() -> new NotFoundException(McpErrorCode.NOT_FOUND, "MCP 服务不存在：" + id));
@@ -360,7 +389,8 @@ public class McpServerService {
                 String createdBy,
                 Instant createdAt,
                 Instant updatedAt,
-                Instant probedAt) {
+                Instant probedAt,
+                ConnectivityCheck lastCheck) {
             return new McpServer(
                     id,
                     tenantId,
@@ -375,7 +405,8 @@ public class McpServerService {
                     probedAt,
                     createdBy,
                     createdAt,
-                    updatedAt);
+                    updatedAt,
+                    lastCheck);
         }
     }
 }

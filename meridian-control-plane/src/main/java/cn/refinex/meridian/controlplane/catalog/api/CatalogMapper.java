@@ -1,5 +1,6 @@
 package cn.refinex.meridian.controlplane.catalog.api;
 
+import cn.refinex.meridian.api.admin.model.ConnectivityCheck;
 import cn.refinex.meridian.api.admin.model.ModelCapabilities;
 import cn.refinex.meridian.api.admin.model.ModelKind;
 import cn.refinex.meridian.api.admin.model.PriceBook;
@@ -18,7 +19,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /** 模型目录的 DTO 映射：生成的 DTO 与领域类型同名（{@code ProviderAccount}、{@code RateLimit}），领域类型用全限定名。 */
-final class CatalogMapper {
+public final class CatalogMapper {
 
     private CatalogMapper() {}
 
@@ -31,8 +32,24 @@ final class CatalogMapper {
                 account.baseUrl(),
                 account.secretId(),
                 toDto(account.rateLimit()),
+                account.lastCheck() == null ? null : toDto(account.lastCheck()),
                 Times.utc(account.createdAt()),
                 Times.utc(account.updatedAt()));
+    }
+
+    /**
+     * 连通性检查的结果（供应商账号与 MCP 服务共用，ADR-0053）。
+     *
+     * @param check 结果
+     * @return DTO
+     */
+    public static ConnectivityCheck toDto(cn.refinex.meridian.controlplane.catalog.domain.ConnectivityCheck check) {
+        return new ConnectivityCheck(
+                ConnectivityCheck.StatusEnum.fromValue(check.status()),
+                check.httpStatus(),
+                check.latencyMs(),
+                check.message(),
+                Times.utc(check.checkedAt()));
     }
 
     static cn.refinex.meridian.api.admin.model.Model toDto(CatalogModel model) {

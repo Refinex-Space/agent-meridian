@@ -182,7 +182,7 @@ T19b（开工基线 `scripts/dev/verify.sh` 通过）：
 - [x] 3 security 与回应权限：作用域 `actions:respond`（审批人回应待处理动作）、OIDC 邮箱声明
 - [x] 4 control-plane：`GET /admin/v1/me`、`/me/access`；按邮箱邀请成员与首次登录绑定（A04）
 - [x] 5 control-plane：项目预算消耗 `budget-status`、用量明细与 CSV 导出（D68）
-- [ ] 6 control-plane：供应商账号连通性测试、MCP 连接状态、Webhook 签名密钥轮换（D72）
+- [x] 6 control-plane：供应商账号连通性测试、MCP 连接状态、Webhook 签名密钥轮换（D72）
 - [ ] 7 knowledge：知识库的修改与删除（D81）
 - [ ] 8 建议规则（D21）：内核随 `tool_confirmation` 带出建议规则，回应时可按建议记住
 - [ ] 9 角色矩阵与契约测试（A02、A03、A05）

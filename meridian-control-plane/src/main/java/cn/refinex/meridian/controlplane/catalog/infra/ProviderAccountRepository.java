@@ -2,6 +2,7 @@ package cn.refinex.meridian.controlplane.catalog.infra;
 
 import cn.refinex.meridian.common.error.ResourceReference;
 import cn.refinex.meridian.common.page.PageRequest;
+import cn.refinex.meridian.controlplane.catalog.domain.ConnectivityCheck;
 import cn.refinex.meridian.controlplane.catalog.domain.ProviderAccount;
 import cn.refinex.meridian.controlplane.catalog.domain.ProviderType;
 import cn.refinex.meridian.controlplane.catalog.domain.RateLimit;
@@ -154,7 +155,21 @@ public class ProviderAccountRepository extends TenantScopedRepository {
                 rateLimit(rs, "rpm", "tpm"),
                 rs.getString("created_by"),
                 JdbcValues.instant(rs, "created_at"),
-                JdbcValues.instant(rs, "updated_at"));
+                JdbcValues.instant(rs, "updated_at"),
+                ConnectivityCheckJson.fromJson(rs.getString("last_check")));
+    }
+
+    /**
+     * 记下最近一次连通性测试的结果（ADR-0053）。
+     *
+     * @param id 账号 ID
+     * @param check 结果
+     */
+    public void saveCheck(String id, ConnectivityCheck check) {
+        sql("UPDATE cp.provider_accounts SET last_check = :check WHERE tenant_id = :tenant_id AND id = :id")
+                .param("check", ConnectivityCheckJson.toJsonb(check))
+                .param("id", id)
+                .update();
     }
 
     /**

@@ -187,7 +187,8 @@ public class ProviderAccountService {
                             rateLimit,
                             current.createdBy(),
                             current.createdAt(),
-                            clock.instant());
+                            clock.instant(),
+                            current.lastCheck());
                     try {
                         accounts.update(updated);
                     } catch (DuplicateKeyException e) {

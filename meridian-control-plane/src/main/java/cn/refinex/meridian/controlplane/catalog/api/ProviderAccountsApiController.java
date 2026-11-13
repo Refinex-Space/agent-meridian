@@ -1,11 +1,13 @@
 package cn.refinex.meridian.controlplane.catalog.api;
 
+import cn.refinex.meridian.api.admin.model.ConnectivityCheck;
 import cn.refinex.meridian.api.admin.model.CreateProviderAccountRequest;
 import cn.refinex.meridian.api.admin.model.ProviderAccount;
 import cn.refinex.meridian.api.admin.model.ProviderAccountPage;
 import cn.refinex.meridian.api.admin.model.UpdateProviderAccountRequest;
 import cn.refinex.meridian.common.page.PageRequest;
 import cn.refinex.meridian.controlplane.catalog.app.ProviderAccountService;
+import cn.refinex.meridian.controlplane.catalog.app.ProviderConnectivity;
 import cn.refinex.meridian.controlplane.catalog.domain.ProviderType;
 import cn.refinex.meridian.controlplane.openapi.admin.ProviderAccountsApi;
 import cn.refinex.meridian.controlplane.web.AdminRequests;
@@ -17,11 +19,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 供应商账号的管理接口（ProviderAccounts 标签，ADR-0045）：只做授权声明、decode → call → map。 */
+/** 供应商账号的管理接口（ProviderAccounts 标签，ADR-0045；连通性测试 ADR-0053）：只做授权声明、decode → call → map。 */
 @RestController
 public class ProviderAccountsApiController implements ProviderAccountsApi {
 
     private final ProviderAccountService accounts;
+    private final ProviderConnectivity connectivity;
     private final AdminRequests requests;
     private final HttpServletRequest request;
 
@@ -29,12 +32,17 @@ public class ProviderAccountsApiController implements ProviderAccountsApi {
      * 创建处理器。
      *
      * @param accounts 供应商账号用例
+     * @param connectivity 连通性测试
      * @param requests 写操作的幂等执行入口
      * @param request 当前请求（Spring 注入的代理）
      */
     public ProviderAccountsApiController(
-            ProviderAccountService accounts, AdminRequests requests, HttpServletRequest request) {
+            ProviderAccountService accounts,
+            ProviderConnectivity connectivity,
+            AdminRequests requests,
+            HttpServletRequest request) {
         this.accounts = accounts;
+        this.connectivity = connectivity;
         this.requests = requests;
         this.request = request;
     }
@@ -93,6 +101,20 @@ public class ProviderAccountsApiController implements ProviderAccountsApi {
                         body.getBaseUrl(),
                         body.getSecretId(),
                         CatalogMapper.fromDto(body.getRateLimit()))));
+    }
+
+    @Override
+    @RequiresPermission(Permission.MODEL_WRITE)
+    public ResponseEntity<ConnectivityCheck> testProviderAccount(
+            String tenantId, String providerAccountId, String idempotencyKey) {
+        return requests.write(
+                request,
+                tenantId,
+                idempotencyKey,
+                null,
+                HttpStatus.OK,
+                ConnectivityCheck.class,
+                () -> CatalogMapper.toDto(connectivity.test(actor(), tenantId, providerAccountId)));
     }
 
     @Override

@@ -7,6 +7,7 @@ import cn.refinex.meridian.api.admin.model.McpTool;
 import cn.refinex.meridian.api.admin.model.McpTransport;
 import cn.refinex.meridian.api.admin.model.SideEffect;
 import cn.refinex.meridian.common.page.PageRequest;
+import cn.refinex.meridian.controlplane.catalog.api.CatalogMapper;
 import cn.refinex.meridian.controlplane.mcp.app.McpServerService;
 import cn.refinex.meridian.controlplane.openapi.admin.McpServersApi;
 import cn.refinex.meridian.controlplane.web.AdminRequests;
@@ -147,6 +148,7 @@ public class McpServersApiController implements McpServersApi {
                                 .sideEffect(SideEffect.fromValue(server.sideEffectOf(tool.name()))))
                         .toList())
                 .probedAt(Times.utc(server.probedAt()))
+                .lastCheck(server.lastCheck() == null ? null : CatalogMapper.toDto(server.lastCheck()))
                 .createdAt(Times.utc(server.createdAt()))
                 .updatedAt(Times.utc(server.updatedAt()));
     }

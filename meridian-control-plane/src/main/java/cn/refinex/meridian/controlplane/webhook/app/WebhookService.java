@@ -185,6 +185,49 @@ public class WebhookService {
     }
 
     /**
+     * 轮换签名密钥（D72，ADR-0053）：生成新密钥立即替换旧的，Webhook ID 不变；之后的投递都用新密钥签名，runtime 收到
+     * {@code config.invalidate} 后淘汰缓存。审计 {@code webhook.secret_rotated} 不含密钥。
+     *
+     * @param actor 操作者
+     * @param tenantId 租户 ID
+     * @param projectId 项目 ID
+     * @param id Webhook ID
+     * @return Webhook 与新签名密钥的明文
+     * @throws NotFoundException Webhook 不存在时（{@code webhook.not_found}）
+     */
+    public Created rotateSecret(String actor, String tenantId, String projectId, String id) {
+        projects.require(tenantId, projectId);
+        String secret = newSecret();
+        // 数据密钥在业务事务之外取得（它有自己的事务），见 DataKeys
+        byte[] ciphertext = SecretCipher.encrypt(
+                dataKeys.forTenant(tenantId),
+                secret.getBytes(StandardCharsets.UTF_8),
+                SecretCipher.webhookAad(tenantId, id),
+                random);
+        Webhook rotated = PlatformContexts.call(
+                Scopes.project(tenantId, projectId),
+                () -> transactions.execute(status -> {
+                    Webhook current = require(id, true);
+                    Instant now = clock.instant();
+                    webhooks.replaceSecret(id, ciphertext, now);
+                    audit.record("webhook.secret_rotated", actor, tenantId, projectId, "webhook", id, details(current));
+                    invalidations.resourceChanged(ConfigInvalidations.WEBHOOK, tenantId, id);
+                    return new Webhook(
+                            id,
+                            tenantId,
+                            projectId,
+                            current.url(),
+                            current.events(),
+                            current.description(),
+                            current.enabled(),
+                            current.createdBy(),
+                            current.createdAt(),
+                            now);
+                }));
+        return new Created(rotated, secret);
+    }
+
+    /**
      * 读取。
      *
      * @param tenantId 租户 ID

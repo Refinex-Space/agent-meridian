@@ -16,6 +16,7 @@ import java.util.Objects;
  * @param createdBy 创建者；必填
  * @param createdAt 创建时间；必填
  * @param updatedAt 修改时间；必填
+ * @param lastCheck 最近一次连通性测试的结果；从未测试过时为空（ADR-0053）
  */
 public record ProviderAccount(
         String id,
@@ -27,7 +28,8 @@ public record ProviderAccount(
         RateLimit rateLimit,
         String createdBy,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        ConnectivityCheck lastCheck) {
 
     /**
      * 创建供应商账号。
@@ -43,5 +45,33 @@ public record ProviderAccount(
         Objects.requireNonNull(createdBy, "createdBy");
         Objects.requireNonNull(createdAt, "createdAt");
         Objects.requireNonNull(updatedAt, "updatedAt");
+    }
+
+    /**
+     * 创建还没有连通性测试结果的账号。
+     *
+     * @param id 账号 ID
+     * @param tenantId 所属租户
+     * @param name 名称
+     * @param provider 类型
+     * @param baseUrl 端点；可为空
+     * @param secretId 凭据 ID；可为空
+     * @param rateLimit 限流
+     * @param createdBy 创建者
+     * @param createdAt 创建时间
+     * @param updatedAt 修改时间
+     */
+    public ProviderAccount(
+            String id,
+            String tenantId,
+            String name,
+            ProviderType provider,
+            String baseUrl,
+            String secretId,
+            RateLimit rateLimit,
+            String createdBy,
+            Instant createdAt,
+            Instant updatedAt) {
+        this(id, tenantId, name, provider, baseUrl, secretId, rateLimit, createdBy, createdAt, updatedAt, null);
     }
 }

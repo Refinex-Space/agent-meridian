@@ -1147,6 +1147,43 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /admin/v1/tenants/{tenant_id}/provider-accounts/{provider_account_id}:test:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProviderAccountId'
+    post:
+      operationId: testProviderAccount
+      tags: [ProviderAccounts]
+      summary: 测试连通性
+      description: |
+        用账号的端点与凭据列一次模型清单（OpenAI 兼容 `GET {base_url}/models`、Anthropic `GET /v1/models`、Gemini
+        `GET /v1beta/models`），不产生用量；端点先按地址策略再校验一次。结果写进账号的 `last_check` 并写审计
+        `provider_account.tested`。连不上或凭据无效不是错误响应，而是 `status` 不为 `ok` 的结果。需要模型目录的管理权限。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 测试结果。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectivityCheck'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
   /admin/v1/tenants/{tenant_id}/models:
     parameters:
       - $ref: '#/components/parameters/TenantId'
@@ -3229,6 +3266,44 @@ paths:
         default:
           $ref: '#/components/responses/InternalError'
 
+  /admin/v1/tenants/{tenant_id}/projects/{project_id}/webhooks/{webhook_id}:rotate-secret:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WebhookId'
+    post:
+      operationId: rotateWebhookSecret
+      tags: [Webhooks]
+      summary: 轮换签名密钥
+      description: |
+        生成新的签名密钥并立即替换旧的，新密钥只在本响应（与它的幂等重放）中出现；Webhook ID 不变（D72）。之后的投递（含重试与重投）
+        都用新密钥签名，runtime 收到 `config.invalidate` 后立即生效（至多 60 秒的缓存）。接收方要先接受新密钥再轮换，否则这期间的
+        投递验签失败、按退避重试。写审计 `webhook.secret_rotated`，审计中没有密钥。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 已轮换，带新签名密钥的明文。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedWebhook'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/InternalError'
+
   /admin/v1/tenants/{tenant_id}/projects/{project_id}/webhooks/{webhook_id}:
     parameters:
       - $ref: '#/components/parameters/TenantId'
@@ -4662,10 +4737,36 @@ components:
           description: 每分钟 token 上限；为 null 表示不限（模型上为 null 表示用账号的）。
           type: [integer, 'null']
           minimum: 1
+    ConnectivityCheck:
+      description: 一次连通性检查（供应商账号的连通性测试、MCP 服务的探测）的结果（ADR-0053）。
+      type: object
+      required: [status, http_status, latency_ms, message, checked_at]
+      properties:
+        status:
+          description: |
+            `ok` 连通且凭据有效；`auth_failed` 对方返回 401 或 403；`unreachable` 连接失败或超时；`error` 其他失败（对方返回其他
+            状态码、MCP 握手或列工具失败）。
+          type: string
+          enum: [ok, auth_failed, unreachable, error]
+        http_status:
+          description: 对方返回的 HTTP 状态码；没有拿到响应时为 null。
+          type: [integer, 'null']
+        latency_ms:
+          description: 从发起到得到结果的毫秒数。
+          type: integer
+          format: int64
+          minimum: 0
+        message:
+          description: 失败的说明（不含凭据与响应内容）；成功时为 null。
+          type: [string, 'null']
+        checked_at:
+          description: 检查的时间。
+          type: string
+          format: date-time
     ProviderAccount:
       description: 供应商账号。
       type: object
-      required: [id, tenant_id, name, provider, base_url, secret_id, rate_limit, created_at, updated_at]
+      required: [id, tenant_id, name, provider, base_url, secret_id, rate_limit, last_check, created_at, updated_at]
       properties:
         id:
           description: 供应商账号 ID（prv_…）。
@@ -4686,6 +4787,11 @@ components:
           type: [string, 'null']
         rate_limit:
           $ref: '#/components/schemas/RateLimit'
+        last_check:
+          description: 最近一次连通性测试的结果；从未测试过时为 null。
+          oneOf:
+            - $ref: '#/components/schemas/ConnectivityCheck'
+            - type: 'null'
         created_at:
           description: 创建时间。
           type: string
@@ -5548,7 +5654,7 @@ components:
       description: 登记的 MCP 服务。
       type: object
       required: [id, tenant_id, project_id, name, transport, url, header_secret_ids, side_effect, tool_side_effects, tools,
-                 probed_at, created_at, updated_at]
+                 probed_at, last_check, created_at, updated_at]
       properties:
         id:
           description: MCP 服务 ID（mcp_…）。
@@ -5591,6 +5697,11 @@ components:
           description: 最近一次探测成功的时间。
           type: string
           format: date-time
+        last_check:
+          description: 最近一次探测（登记、修改或重新探测）的结果，即连接状态；T19b 之前登记、之后没有再探测过的服务为 null。
+          oneOf:
+            - $ref: '#/components/schemas/ConnectivityCheck'
+            - type: 'null'
         created_at:
           description: 登记时间。
           type: string

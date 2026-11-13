@@ -1,5 +1,6 @@
 package cn.refinex.meridian.controlplane.mcp.domain;
 
+import cn.refinex.meridian.controlplane.catalog.domain.ConnectivityCheck;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -24,6 +25,7 @@ import java.util.TreeMap;
  * @param createdBy 登记者
  * @param createdAt 登记时间
  * @param updatedAt 最近一次修改或探测的时间
+ * @param lastCheck 最近一次探测的结果（连接状态，ADR-0053）；T19b 之前登记、之后没有再探测过时为空
  */
 public record McpServer(
         String id,
@@ -39,7 +41,8 @@ public record McpServer(
         Instant probedAt,
         String createdBy,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        ConnectivityCheck lastCheck) {
 
     /** 未标注副作用等级时采用的等级：平台不知道外部工具有没有副作用，按最保守的等级记账、不重放（ADR-0035）。 */
     public static final String DEFAULT_SIDE_EFFECT = "non_idempotent";
@@ -59,6 +62,57 @@ public record McpServer(
         toolSideEffects =
                 toolSideEffects == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(toolSideEffects));
         tools = tools == null ? List.of() : List.copyOf(tools);
+    }
+
+    /**
+     * 创建没有探测结果的 MCP 服务。
+     *
+     * @param id MCP 服务 ID
+     * @param tenantId 所属租户
+     * @param projectId 所属项目
+     * @param name 服务名
+     * @param transport 传输
+     * @param url 服务端点
+     * @param headerSecretIds 注入的请求头
+     * @param sideEffect 服务级副作用等级；可为空
+     * @param toolSideEffects 按工具标注的副作用等级
+     * @param tools 工具
+     * @param probedAt 最近一次探测成功的时间
+     * @param createdBy 登记者
+     * @param createdAt 登记时间
+     * @param updatedAt 最近一次修改或探测的时间
+     */
+    public McpServer(
+            String id,
+            String tenantId,
+            String projectId,
+            String name,
+            String transport,
+            String url,
+            Map<String, String> headerSecretIds,
+            String sideEffect,
+            Map<String, String> toolSideEffects,
+            List<McpTool> tools,
+            Instant probedAt,
+            String createdBy,
+            Instant createdAt,
+            Instant updatedAt) {
+        this(
+                id,
+                tenantId,
+                projectId,
+                name,
+                transport,
+                url,
+                headerSecretIds,
+                sideEffect,
+                toolSideEffects,
+                tools,
+                probedAt,
+                createdBy,
+                createdAt,
+                updatedAt,
+                null);
     }
 
     /**

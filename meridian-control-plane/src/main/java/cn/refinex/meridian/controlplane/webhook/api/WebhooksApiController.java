@@ -58,6 +58,20 @@ public class WebhooksApiController implements WebhooksApi {
     }
 
     @Override
+    @RequiresPermission(Permission.API_KEY_WRITE)
+    public ResponseEntity<CreatedWebhook> rotateWebhookSecret(
+            String tenantId, String projectId, String webhookId, String idempotencyKey) {
+        return requests.write(
+                request,
+                tenantId,
+                idempotencyKey,
+                null,
+                HttpStatus.OK,
+                CreatedWebhook.class,
+                () -> created(webhooks.rotateSecret(actor(), tenantId, projectId, webhookId)));
+    }
+
+    @Override
     @RequiresPermission(Permission.API_KEY_READ)
     public ResponseEntity<WebhookPage> listWebhooks(String tenantId, String projectId, Integer limit, String after) {
         var page = webhooks.list(tenantId, projectId, PageRequest.of(limit, after));

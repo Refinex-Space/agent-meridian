@@ -113,6 +113,35 @@ class WebhookAdminIT extends ControlPlaneTestBase {
         assertThat(client.internal("GET", "/internal/v1/projects/prj_missing/webhooks", serviceToken(), null)
                         .status())
                 .isEqualTo(404);
+
+        // 轮换签名密钥（T19b，D72）：新密钥只在响应中出现一次，ID 不变，内部接口给出新密钥，审计不含密钥
+        Reply rotated = client.admin("POST", base + "/" + id + ":rotate-secret", token("developer"), null);
+        assertThat(rotated.status()).isEqualTo(200);
+        assertThat(rotated.text("id")).isEqualTo(id);
+        String newSecret = rotated.text("signing_secret");
+        assertThat(newSecret).startsWith("whsec_").isNotEqualTo(secret);
+        assertThat(client.admin("GET", base + "/" + id, token("viewer"), null).raw())
+                .doesNotContain(newSecret);
+        JsonNode renewed = null;
+        for (JsonNode node : client.internal(
+                        "GET", "/internal/v1/projects/" + fixture.get("project") + "/webhooks", serviceToken(), null)
+                .json()
+                .get("data")) {
+            if (node.get("id").asString().equals(id)) {
+                renewed = node;
+            }
+        }
+        assertThat(renewed).isNotNull();
+        assertThat(renewed.get("signing_secret").asString()).isEqualTo(newSecret);
+        assertThat(db.sql("SELECT payload::text FROM cp.outbox WHERE payload->>'tenant_id' = ?")
+                        .param(fixture.get("tenant"))
+                        .query(String.class)
+                        .list())
+                .anySatisfy(audit -> assertThat(audit).contains("\"webhook.secret_rotated\""))
+                .allSatisfy(audit -> assertThat(audit).doesNotContain(newSecret));
+        assertThat(client.admin("POST", base + "/whk_missing:rotate-secret", token("owner"), null)
+                        .status())
+                .isEqualTo(404);
     }
 
     @Test

@@ -2,6 +2,8 @@ package cn.refinex.meridian.controlplane.mcp.infra;
 
 import cn.refinex.meridian.common.json.JsonMappers;
 import cn.refinex.meridian.common.page.PageRequest;
+import cn.refinex.meridian.controlplane.catalog.domain.ConnectivityCheck;
+import cn.refinex.meridian.controlplane.catalog.infra.ConnectivityCheckJson;
 import cn.refinex.meridian.controlplane.mcp.domain.McpServer;
 import cn.refinex.meridian.controlplane.mcp.domain.McpTool;
 import cn.refinex.meridian.persistence.jdbc.JdbcValues;
@@ -40,9 +42,10 @@ public class McpServerRepository extends TenantScopedRepository {
         sql("""
                         INSERT INTO cp.mcp_servers (id, tenant_id, project_id, name, transport, url, header_secret_ids,
                                                     side_effect, tool_side_effects, tools, probed_at, created_by,
-                                                    created_at, updated_at)
+                                                    created_at, updated_at, last_check)
                         VALUES (:id, :tenant_id, :project_id, :name, :transport, :url, :headers, :side_effect,
-                                :tool_side_effects, :tools, :probed_at, :created_by, :created_at, :updated_at)
+                                :tool_side_effects, :tools, :probed_at, :created_by, :created_at, :updated_at,
+                                :last_check)
                         """)
                 .param("id", server.id())
                 .param("name", server.name())
@@ -56,6 +59,7 @@ public class McpServerRepository extends TenantScopedRepository {
                 .param("created_by", server.createdBy())
                 .param("created_at", server.createdAt())
                 .param("updated_at", server.updatedAt())
+                .param("last_check", checkOf(server))
                 .update();
     }
 
@@ -69,7 +73,8 @@ public class McpServerRepository extends TenantScopedRepository {
                         UPDATE cp.mcp_servers
                            SET name = :name, transport = :transport, url = :url, header_secret_ids = :headers,
                                side_effect = :side_effect, tool_side_effects = :tool_side_effects, tools = :tools,
-                               probed_at = :probed_at, updated_at = :updated_at
+                               probed_at = :probed_at, updated_at = :updated_at,
+                               last_check = COALESCE(:last_check, last_check)
                          WHERE tenant_id = :tenant_id AND project_id = :project_id AND id = :id
                         """)
                 .param("id", server.id())
@@ -82,6 +87,7 @@ public class McpServerRepository extends TenantScopedRepository {
                 .param("tools", JdbcValues.jsonbOf(server.tools()))
                 .param("probed_at", server.probedAt())
                 .param("updated_at", server.updatedAt())
+                .param("last_check", checkOf(server))
                 .update();
     }
 
@@ -145,6 +151,27 @@ public class McpServerRepository extends TenantScopedRepository {
                 JdbcValues.instant(rs, "probed_at"),
                 rs.getString("created_by"),
                 JdbcValues.instant(rs, "created_at"),
-                JdbcValues.instant(rs, "updated_at"));
+                JdbcValues.instant(rs, "updated_at"),
+                ConnectivityCheckJson.fromJson(rs.getString("last_check")));
+    }
+
+    /**
+     * 只记下一次探测的结果（重新探测失败时，清单不变，ADR-0053）。
+     *
+     * @param id MCP 服务 ID
+     * @param check 结果
+     */
+    public void saveCheck(String id, ConnectivityCheck check) {
+        sql("""
+                        UPDATE cp.mcp_servers SET last_check = :last_check
+                         WHERE tenant_id = :tenant_id AND project_id = :project_id AND id = :id
+                        """)
+                .param("last_check", ConnectivityCheckJson.toJsonb(check))
+                .param("id", id)
+                .update();
+    }
+
+    private static Object checkOf(McpServer server) {
+        return server.lastCheck() == null ? null : ConnectivityCheckJson.toJsonb(server.lastCheck());
     }
 }
