@@ -108,7 +108,11 @@ export function useSaveDraft(agentId: string, version: number) {
           { params: { path: { ...scope.path, agent_id: agentId, version } }, body: { spec } },
         ),
       ),
-    onSuccess: (saved) => queryClient.setQueryData(agentKeys.version(scope, agentId, version), saved),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(agentKeys.version(scope, agentId, version), saved);
+      // 草稿变了：之前读到的差异都过时了。
+      queryClient.removeQueries({ queryKey: agentKeys.comparisons(scope, agentId) });
+    },
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: agentKeys.versions(scope, agentId), exact: true }),
   });
@@ -145,7 +149,11 @@ export function usePublish(agentId: string, version: number) {
           { params: { path: { ...scope.path, agent_id: agentId, version } } },
         ),
       ),
-    onSuccess: (published) => queryClient.setQueryData(agentKeys.version(scope, agentId, version), published),
+    onSuccess: (published) => {
+      queryClient.setQueryData(agentKeys.version(scope, agentId, version), published);
+      // 发布时写入了快照字段：草稿时读到的差异不再适用。
+      queryClient.removeQueries({ queryKey: agentKeys.comparisons(scope, agentId) });
+    },
     // 当前版本变了：列表、智能体与版本都要重读。
     onSettled: () => queryClient.invalidateQueries({ queryKey: agentKeys.all(scope) }),
   });

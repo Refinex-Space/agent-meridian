@@ -84,15 +84,18 @@ describe('版本差异的呈现', () => {
     expect(rows[5]?.list).toEqual({ added: ['bash'], removed: ['web_fetch'] });
   });
 
-  it('两个已发布版本对比时，快照字段的变化照常显示（端点变了）', () => {
+  it('两个已发布版本对比时，快照字段的变化照常显示（端点变了、改了名字），版本 ID 不显示', () => {
     const rows = describeChanges(
-      [{ path: '/mcp_servers/0/url', kind: 'changed', before: 'https://a', after: 'https://b' }],
+      [
+        { path: '/agent_version_id', kind: 'changed', before: 'agv_1', after: 'agv_2' },
+        { path: '/mcp_servers/0/url', kind: 'changed', before: 'https://a', after: 'https://b' },
+        { path: '/name', kind: 'changed', before: 'assistant', after: 'analyst' },
+      ],
       base,
       base,
       { hideSnapshot: false, names },
     );
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.label).toBe('MCP 服务 crm');
+    expect(rows.map((r) => r.label)).toEqual(['MCP 服务 crm', '名称']);
   });
 
   it('列表只是换了顺序时不算差异', () => {

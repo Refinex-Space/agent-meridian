@@ -32,7 +32,7 @@ const ROW_GAP = 24;
 const CHIPS_PER_ROW = 3;
 
 function estimateHeight(agent: TopologyAgent): number {
-  return 72 + Math.max(1, Math.ceil(agent.tools.length / CHIPS_PER_ROW)) * 26;
+  return 88 + Math.max(1, Math.ceil(agent.tools.length / CHIPS_PER_ROW)) * 26;
 }
 
 /** 节点：名字、模型、工具集；主智能体用智能体图标，子智能体用线程图标（子智能体执行在子线程上）。 */
@@ -47,10 +47,16 @@ const AgentNodeView = memo(function AgentNodeView({ data }: NodeProps<AgentFlowN
       style={{ width: NODE_WIDTH }}
     >
       {role === 'subagent' && <Handle type="target" position={Position.Left} isConnectable={false} />}
-      <div className="flex items-center gap-2">
-        <Icon glyph={role === 'main' ? AgentGlyph : ThreadGlyph} className="text-ink-2" />
-        <span className="min-w-0 flex-1 truncate font-mono text-13 font-medium">{agent.name}</span>
-        <span className="truncate font-mono text-12 text-ink-2">{agent.modelName}</span>
+      <div className="flex items-start gap-2">
+        <span className="flex h-5 items-center">
+          <Icon glyph={role === 'main' ? AgentGlyph : ThreadGlyph} className="text-ink-2" />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate font-mono text-13 font-medium" title={agent.name}>
+            {agent.name}
+          </span>
+          <span className="truncate font-mono text-12 text-ink-2">{agent.modelName}</span>
+        </div>
       </div>
       <ul aria-label={`${agent.name} 的工具`} className="flex flex-wrap gap-1">
         {agent.tools.length === 0 && <li className="text-12 text-ink-2">没有工具</li>}

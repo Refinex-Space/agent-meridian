@@ -97,8 +97,12 @@ export function useUpdateEnvironment(id: string) {
           body,
         }),
       ),
-    onSuccess: (env) => queryClient.setQueryData(environmentKeys.one(scope, id), env),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: environmentKeys.all(scope) }),
+    onSuccess: async (env) => {
+      queryClient.setQueryData(environmentKeys.one(scope, id), env);
+      // 等修订历史重读完再结束保存：页头的修订号与历史表同时更新。
+      await queryClient.invalidateQueries({ queryKey: environmentKeys.revisions(scope, id) });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: environmentKeys.all(scope), exact: true }),
   });
 }
 

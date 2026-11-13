@@ -54,6 +54,9 @@ export function isSnapshotPath(pointer: string): boolean {
   return SNAPSHOT.some((re) => re.test(pointer));
 }
 
+/** 每个版本都不同、不是配置的字段：任何对比都不显示。 */
+const IDENTITY = /^\/(agent_id|agent_version_id)$/;
+
 /** 字符串列表：数组按位置比较时会出现一串逐项的变化，合成一行。 */
 const STRING_LISTS = [
   /^\/tools/,
@@ -71,6 +74,7 @@ function listRoot(pointer: string): string | null {
 }
 
 const FIELD_LABEL: Record<string, string> = {
+  name: '名称',
   'model/model_id': '主模型',
   'model/fallback_model_id': '备用模型',
   'model/max_output_tokens': '单次最大输出 token',
@@ -215,7 +219,7 @@ export function describeChanges(
   const rows: DiffRow[] = [];
   const listed = new Set<string>();
   for (const change of changes) {
-    if (hideSnapshot && isSnapshotPath(change.path)) continue;
+    if (IDENTITY.test(change.path) || (hideSnapshot && isSnapshotPath(change.path))) continue;
     const root = listRoot(change.path);
     if (root) {
       if (listed.has(root)) continue;

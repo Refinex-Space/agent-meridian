@@ -21,8 +21,9 @@ export const agentKeys = {
   versions: (s: Scope, agentId: string) => [...agentKeys.one(s, agentId), 'versions'] as const,
   version: (s: Scope, agentId: string, version: number) =>
     [...agentKeys.versions(s, agentId), version] as const,
+  comparisons: (s: Scope, agentId: string) => [...agentKeys.versions(s, agentId), 'compare'] as const,
   compare: (s: Scope, agentId: string, base: number, target: number) =>
-    [...agentKeys.versions(s, agentId), 'compare', base, target] as const,
+    [...agentKeys.comparisons(s, agentId), base, target] as const,
 };
 
 /** 项目的全部智能体（按创建时间）。 */
