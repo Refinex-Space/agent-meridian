@@ -9,6 +9,7 @@
 - 兼容性检查（与上一个已提交版本比较）：同上，`-Dtest=OpenApiCompatibilityTest`。基线取自 git：工作区的规范与最近一次改动它的提交不同时与那次提交比较，相同时与它的父提交比较；没有基线（首个版本、浅克隆）时跳过
 - 改了规范后跑 runtime 的契约测试：`./mvnw -pl meridian-runtime -am verify -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false -Dit.test='*ContractIT' -Dfailsafe.failIfNoSpecifiedTests=false`
 - 兼容性检查的基线是最近一次改动规范的提交：同一任务里多次改规范，后一次改了前一次新增、尚未发布的字段类型时会被拒绝，把改动并入那次提交（未推送时 `git commit --amend`）。
+- 管理 API 与公开 API 中作为查询参数的枚举，服务端按规范取值转换（`meridian-security` 的 `ApiEnumConverterFactory`）；邮箱字段不写 `format: email`（契约校验库拒绝 `.local` 等域名，服务端却接受，T19b）。
 - 生成器不清理输出目录：删除或改名 schema 后先 `./mvnw -q -pl meridian-api clean`，否则旧类残留，可能编译失败（"无效的 permits 子句"）。
 
 ## 包地图

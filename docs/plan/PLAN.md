@@ -185,7 +185,7 @@ T19b（开工基线 `scripts/dev/verify.sh` 通过）：
 - [x] 6 control-plane：供应商账号连通性测试、MCP 连接状态、Webhook 签名密钥轮换（D72）
 - [x] 7 knowledge：知识库的修改与删除（D81）
 - [x] 8 建议规则（D21）：内核随 `tool_confirmation` 带出建议规则，回应时可按建议记住
-- [ ] 9 角色矩阵与契约测试（A02、A03、A05）
+- [x] 9 角色矩阵与契约测试（A02、A03、A05）
 - [ ] 10 ADR-0053、架构设计、模块 `CLAUDE.md`、登记事项；`verify.sh`（A06）；验收记录与收尾
 
 ## 控制台设计轨道
@@ -251,7 +251,7 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D18 | T07 | `FileAgentConfigProvider` 不按项目隔离：任何项目的 API Key 都能用开发配置中的智能体与环境创建会话；`AgentConfigProvider` 新增的 `currentAgentVersion`、`currentEnvironment` 同样需要按项目解析 | T15b（已落地：`ControlPlaneAgentConfigProvider` 在绑定了 `PlatformContext` 时要求智能体、版本、环境属于该项目，否则与不存在相同；`file` 来源只允许 dev、test profile，ADR-0047，`AgentConfigSessionIT`） |
 | D19 | T07 | SSE 读取 Redis Stream 用每节点一个 100 毫秒间隔的不阻塞 `XREAD` 轮询（ADR-0030 第 4 条），实时延迟上限与单节点 Redis 负载需要在容量验证中核对 | R1（已核对，关闭：推送延迟 p50 约 60 至 90 毫秒、连接池不排队时 p99 105 至 193 毫秒，Redis CPU 5% 以内，P7） |
 | D20 | T07 | Hibernate Validator 第一次校验失败时在 Netty 事件循环上读取消息资源包（每个进程一次，测试中由 BlockHound 放行）；需要时可在启动时预热 | T27 |
-| D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a 部分完成：`PlatformTool.generateSuggestions` 给出内容级建议（文件工具为路径，`bash` 为每段的命令前缀）。T12a 部分完成：`bash` 改为记住这一条命令（规则内容为命令原文，ADR-0037），不再放行整个工具。剩余：内核随动作带出建议、runtime 按它保存，要给 `session.status_requires_action` 的动作与 `pending_actions` 加字段（公开事件载荷），建议 T19b（控制台待处理动作页展示建议规则）一并处理 |
+| D21 | T08 | "记住此决定"记的是整工具规则（批准 allow、拒绝 deny）：确认 `bash(git status)` 后记住会放行整个 `bash`（仍受 deny、ask 规则约束）。平台工具实现 `generateSuggestions` 后，内核应随 `tool_confirmation` 动作带出工具建议的内容级规则（命令前缀、路径），平台按它保存 | T10a 部分完成：`PlatformTool.generateSuggestions` 给出内容级建议（文件工具为路径，`bash` 为每段的命令前缀）。T12a 部分完成：`bash` 改为记住这一条命令（规则内容为命令原文，ADR-0037），不再放行整个工具。T19b 已落地剩余部分：内核按工具重新计算建议规则（2.0.4 的 `ReActAgent` 丢掉了 `PermissionDecision` 上的建议），随动作进入 `session.status_requires_action` 与 `pending_actions`，回应时 `remember_rule` 选一条记住（ADR-0053，`BashToolScenarioTest`、`FileToolScenarioTest`、`ConsoleQueriesIT`） |
 | D22 | T08 | 租户与项目策略的开发实现在 `rt.permission_rules`，租户层没有写入接口；项目级"记住此决定"写入 runtime。平台安全规则使权限上下文永远不平凡，`DEFAULT` 模式下没有命中 allow 的工具都要确认：智能体版本的默认配置要显式放行工具（`unattended` 会话中的 `BYPASS` 智能体同样变为 `DONT_ASK`） | T15b（已落地：租户与项目策略在 `cp.permission_rules`，两层管理 API，"记住此决定"经内部接口写入 control-plane；runtime 的生产实现 `ControlPlanePolicyStore`，`DatabasePolicyStore` 只在 `agent-config.source=file`；工具放行由版本规格的 `permission_policy` 显式给出，ADR-0047，`AgentResourcesIT`、`AgentConfigSessionIT`） |
 | D23 | T09a | 开发期的模型目录（`dev-config/providers`）与凭据解析（`EnvironmentSecretResolver`）不按项目授权：任何项目的智能体都能使用目录中的模型；`ModelGateway.resolve` 的"未授权给该项目"由 control-plane 的目录实现 | T15a（已落地：模型属于租户、租户内全部项目可用，别的租户的模型与不存在相同；凭据解析校验租户与项目；文件实现只允许 dev、test profile，ADR-0045，`ControlPlaneCatalogIT`） |
 | D24 | T09a | 预算以 token（输入加输出）计，Redis 计数不分周期；软阈值告警、按价格表换算金额、预扣记录过期（1 小时）后未结算部分的修正、四级计数与账本的每小时对账都未实现（ADR-0032 第 6 条） | T16（已落地：仍以 token 计，租户、项目、API Key 按自然月、会话不分周期；软阈值告警；成本按价格表版本记在账本；对账以账本加未过期预扣为目标，过期未结算的预扣随之修正，ADR-0048） |
@@ -298,20 +298,23 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | D65 | T15b | 引用检查只统计未删除智能体的已发布版本：智能体软删除后，绑定其版本的会话仍可运行，但它引用的模型、凭据、MCP 服务、技能可以被删除，这些会话的下一轮解析失败（ADR-0047 第 4 条） | R2（评审是否要求删除智能体前先结束会话，或引用检查改为统计未删除的会话） |
 | D66 | T16 | runtime 测试偶发失败：BlockHound 在 Netty 线程上抓到 `Ids.newUlid()` 的阻塞（`ulid-creator` 单调工厂的 `ReentrantLock` 在并发生成时争用，`RequestIdWebFilter` 在事件循环上调用），表现为某个请求 500（T16 开工基线中 `SubagentSessionIT` 的 SSE 连接，重跑通过；T19 的基线与收尾中 `SubagentSessionIT`、`EventStreamIT` 各一次，主机负载高时更常见）。可选：`RuntimeBlockHoundIntegration` 放行 `UlidFactory.create`（临界区只有几条指令），或请求 ID 改用非单调 ULID | R2 |
 | D67 | T16 | `rt.sessions.budget_limit`（会话级预算的金额）没有使用：会话级预算改在 control-plane 的 `budgets`（token，ADR-0048）。列保留在 V0001 中，是否删除或改作创建会话时的会话级硬阈值待定 | R2 |
-| D68 | T16 | 用量报表只有聚合，没有明细列表与 CSV 导出；T25b 的“明细表、导出 CSV”需要按游标列出 `usage_records` 的接口 | T19b |
+| D68 | T16 | 用量报表只有聚合，没有明细列表与 CSV 导出；T25b 的“明细表、导出 CSV”需要按游标列出 `usage_records` 的接口 | T19b（已落地：租户与项目的 `usage-records` 与 `:export`，至多 100000 行，ADR-0053，`UsageReportIT`） |
 | D69 | T16 | `cp.stream_dead_letters` 只有写入：没有查看与重放的接口或脚本，坏消息只能人工查表后重新发布；outbox 中 `attempts` 达到上限的消息同样只能人工处理 | T27（告警）、R2 |
 | D70 | T16 | 知识检索的次数没有计量：`search_calls` 只记联网搜索；知识库存储量的用量种类由 T18 加入 `UsageKind`、`UsageMessages` 与 `usage_records.kind` 的检查约束 | T18（存储量已落地：`knowledge_storage_gb_days`，cp `V0006`，`StorageMeteringIT`、`UsageLedgerIT`），T19（检索次数已落地：`knowledge_search_calls`，cp `V0007`，每次检索一条、带入口 `rest`/`mcp`/`agent`，`KnowledgeSearchIT`、`UsageLedgerIT`） |
 | D71 | T17a | 事件归档把会话的全部现存事件读进内存再压缩上传（`EventArchiver.readAll`、`EventArchives.write`），保留清理重写文件同样整份读入；单个会话事件很多（数十万条）时内存占用大，应改为流式读写与分段上传 | T28（容量与运维） |
-| D72 | T17a | Webhook 的签名密钥不能轮换（只能删除后重建，Webhook ID 随之改变）；投递记录的列表只按 Webhook、会话、状态过滤，没有时间范围 | T19b（控制台的 Webhook 页面需要时补轮换接口与时间过滤） |
+| D72 | T17a | Webhook 的签名密钥不能轮换（只能删除后重建，Webhook ID 随之改变）；投递记录的列表只按 Webhook、会话、状态过滤，没有时间范围 | T19b（已落地：`POST …/webhooks/{id}:rotate-secret`、投递记录按 `created_after`/`created_before` 筛选，ADR-0053，`WebhookAdminIT`、`ConsoleQueriesIT`；轮换没有新旧密钥并存的过渡期，见 D84） |
 | D73 | T17a | 删除通知的投递与会话清理的先后：清理等待该会话的 Webhook 投递至多 12 小时，之后未完成的投递随会话删除（外键级联），投递记录不再可查；接收方长时间不可用时业务系统收不到删除通知 | R2（评审是否把投递记录与会话解耦，单独按 30 天保留） |
-| D74 | T17b | 上传的文件（`rt.files` 与 `rt/{tenant}/{project}/files/`）没有删除接口与保留期，随项目一直累积；放进会话工作区的副本随会话清除 | T19b（控制台的文件管理需要时补删除接口），保留期给 R2 |
+| D74 | T17b | 上传的文件（`rt.files` 与 `rt/{tenant}/{project}/files/`）没有删除接口与保留期，随项目一直累积；放进会话工作区的副本随会话清除 | R2（T19b 的对照表中控制台不管理文件，没有补删除接口；删除接口与保留期一并给 R2） |
 | D75 | T17b | 按文件 ID 引用的图片作为文件放进工作区，不作为图片输入交给模型（视觉）：内核要读出内容转成 Base64 图片块，涉及大小上限与预扣估算 | M2（按业务方需要） |
 | D76 | T17b | 同一事件的 `created_at` 在 SSE 帧（`Instant`，保留 6 位小数）与列表接口（`OffsetDateTime`，去掉末尾的 0）中的文本表示不同（同一时刻；开工基线 `EventArchiveIT` 偶发失败的原因） | T26（SDK 与接入文档时统一时间的序列化） |
 | D77 | T17b | 引用平台文件的 `user.message` 按 queue 投递，保存的事件中 `delivery` 仍是请求的值（与跟在中断后面的消息相同）；调用方要从事件判断实际投递方式时需要额外字段 | T26 |
 | D78 | T18 | knowledge 调 runtime 的内部模型接口只在请求体带租户与项目，知识库 ID 没有进入用量消息与账本（架构设计「跨服务数据流」写的是"请求头带上租户、项目、知识库"）；按知识库看 Embedding、rerank 的用量要改内部接口、runtime 的用量消息、样本与 control-plane 的解析 | R2（T19 的 rerank、查询改写沿用同样的请求体，没有改） |
 | D79 | T18 | doc-parser 不校验服务 JWT，只靠集群内网与网络策略限定只有 knowledge 能访问（ADR-0051）；Helm 中的 NetworkPolicy、内存限额（至少 3 GB）与 CPU 还没有落地 | T28 |
 | D80 | T18 | PDF 的路由靠启发式：平均每页少于 50 个可见字符视为扫描件，横竖各至少 3 条线视为表格；没有框线的表格按正文切分，Word 文档没有页码。检索效果受切分影响，P8 定稿时按真实文档复核 | R2（T19 的检索评测与 P8 定稿用的是 Markdown 语料，没有复核 PDF 的路由与页码） |
-| D81 | T18 | 知识库存储量取每日执行时的大小（不是当天的平均值）；知识库本身没有删除与修改接口，`storage_reports` 只随知识库删除 | T19b（控制台需要时补知识库的修改与删除） |
+| D81 | T18 | 知识库存储量取每日执行时的大小（不是当天的平均值）；知识库本身没有删除与修改接口，`storage_reports` 只随知识库删除 | T19b 已落地知识库的修改与删除（`PATCH`/`DELETE /v1/knowledge-bases/{id}`，ADR-0053，`KnowledgeApiIT`）；存储量取执行时的大小留给 R2；删除不检查引用见 D83 |
+| D83 | T19b | 删除知识库不检查已发布智能体版本的引用（引用在 control-plane 的 `agent_version_refs`，检查要 knowledge 同步调用 control-plane）：引用它的智能体之后检索得到"知识库不存在"的工具错误，要发布新版本去掉引用 | R2（评审是否加 control-plane 的引用查询或删除前提示） |
+| D84 | T19b | Webhook 签名密钥轮换立即替换，没有新旧密钥并存的过渡期：接收方要先接受新密钥，否则轮换后到更新前的投递验签失败、按退避重试 | T26（接入文档写明轮换步骤），需要时 R2 评审双密钥签名 |
+| D85 | T19b | 按智能体的统计与会话筛选依赖 `rt.sessions.agent_id`（V0012 新增），之前创建的会话为空、不计入；`TurnStatsRollup` 第一次运行时从 8 天前开始汇总 | T28（升级说明） |
 | D82 | T19 | MCP SDK 0.17.2 的服务端会话保存在 knowledge 进程内，只在 DELETE 或推送失败时移除，没有空闲过期：多副本要按 `Mcp-Session-Id` 粘滞路由，不发 DELETE 的客户端会让会话累积（P8） | T28（Helm 的路由与副本），会话过期给 R2 |
 
 ## 技术债

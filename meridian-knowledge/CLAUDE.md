@@ -39,5 +39,5 @@
 
 ## 对外接口
 
-- 公开 API：`/v1/knowledge-bases*`（9 个操作，`meridian-v1.yaml`）。内部接口：`GET /internal/v1/knowledge-bases/{id}`（control-plane 发布智能体版本时校验）、`POST /internal/v1/knowledge-bases:search`（只接受 runtime）。MCP：`/mcp/knowledge`。
+- 公开 API：`/v1/knowledge-bases*`（11 个操作，`meridian-v1.yaml`；T19b 起有知识库的修改与删除，删除级联文档、切片、作业与存储计量，提交后按 `KnowledgeBase.objectPrefix` 删除原文件，不检查智能体版本的引用，ADR-0053）。内部接口：`GET /internal/v1/knowledge-bases/{id}`（control-plane 发布智能体版本时校验）、`POST /internal/v1/knowledge-bases:search`（只接受 runtime）。MCP：`/mcp/knowledge`。
 - 调用：control-plane 的 `api-keys:verify`、`project-access:resolve`（经 `security`），runtime 的 `/internal/v1/embeddings`、`/internal/v1/rerank`、`/internal/v1/chat/completions`（经 `meridian-model-client`），doc-parser 的 `POST /v1/parse`。outbox：`audit`（`knowledge_base.created`、`document.uploaded`、`document.reprocessed`、`document.deleted`）、`usage`（`knowledge_storage_gb_days`、`knowledge_search_calls`，样本在 `meridian-test-support`）。订阅 `key.revoked`。

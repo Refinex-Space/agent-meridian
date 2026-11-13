@@ -76,7 +76,7 @@
 | 区域 | 展示的数据 | 操作 | 实时性 | 接口 | 状态 |
 |---|---|---|---|---|---|
 | 技能 | 技能、版本、frontmatter | 上传、发布新版本、删除 | 按需 | `GET/POST/DELETE P:/skills[/{id}]`、`GET/POST P:/skills/{id}/versions` | 已有 |
-| MCP 服务 | 端点、工具清单与副作用、连接状态（最近一次探测的结果、时间、错误） | 登记、修改、删除、重新探测 | 按需 | `GET/POST/PUT/DELETE P:/mcp-servers[/{id}]`、`POST P:/mcp-servers/{id}:probe`；`probe_status`、`probe_error` | 已有；连接状态 T19b |
+| MCP 服务 | 端点、工具清单与副作用、连接状态（最近一次探测的结果、时间、错误） | 登记、修改、删除、重新探测 | 按需 | `GET/POST/PUT/DELETE P:/mcp-servers[/{id}]`、`POST P:/mcp-servers/{id}:probe`；连接状态是 `last_check`（`ok` 或 `error`，带说明与时间） | 已有；连接状态 T19b |
 | 自定义工具 | 声明方式、命名规则与保留名的说明 | — | — | 自定义工具由业务系统在创建会话时声明（`POST /v1/sessions` 的 `custom_tools`），平台不做项目级登记；具体会话声明的工具在会话详情查看（`GET /v1/sessions/{id}` 的 `custom_tools`） | 已有 |
 
 ## 7 知识库
@@ -92,7 +92,7 @@
 
 | 区域 | 展示的数据 | 操作 | 实时性 | 接口 | 状态 |
 |---|---|---|---|---|---|
-| 供应商账号 | 名称、类型、端点、凭据、限流、最近一次连通性测试 | 新建、修改、删除、测试连通性 | 按需 | `GET/POST/PUT/DELETE T:/provider-accounts[/{id}]`、`POST T:/provider-accounts/{id}:test` | 已有；测试 T19b |
+| 供应商账号 | 名称、类型、端点、凭据、限流、最近一次连通性测试（`last_check`：`ok`、`auth_failed`、`unreachable`、`error`） | 新建、修改、删除、测试连通性 | 按需 | `GET/POST/PUT/DELETE T:/provider-accounts[/{id}]`、`POST T:/provider-accounts/{id}:test` | 已有；测试 T19b |
 | 模型目录 | 模型、种类、上下文窗口、价格表 | 新建、修改、删除 | 按需 | `GET/POST/PUT/DELETE T:/models[/{id}]` | 已有 |
 | 价格表 | 价格表与各版本的单价 | 新建、发布新版本 | 按需 | `GET/POST T:/price-books[/{id}]`、`GET/POST T:/price-books/{id}/versions` | 已有 |
 
@@ -100,7 +100,7 @@
 
 | 区域 | 展示的数据 | 操作 | 实时性 | 接口 | 状态 |
 |---|---|---|---|---|---|
-| 待处理列表 | 本项目等待回应的动作：类型、工具与入参、建议规则、会话、智能体、截止时间 | 按类型、智能体、会话筛选；批准、拒绝（可选记住此决定）、恢复确认 | 轮询 15 秒 | `GET /v1/pending-actions?status=pending&type=&agent_id=&session_id=`（R）；回应 `POST /v1/sessions/{id}/events`（R） | T19b（列表），已有（回应） |
+| 待处理列表 | 本项目等待回应的动作：类型、工具与入参、建议规则（`suggested_rules`）、会话、智能体、截止时间 | 按类型、智能体、会话筛选；批准、拒绝（可选记住此决定，可选一条建议规则作为 `remember_rule`）、恢复确认 | 轮询 15 秒 | `GET /v1/pending-actions?status=pending&type=&agent_id=&session_id=`（R）；回应 `POST /v1/sessions/{id}/events`（R） | T19b（列表），已有（回应） |
 | 历史 | 已回应与超时的动作：结论、来源（调用方、超时、中断、无人值守）、处理人、时间 | 按状态、类型、智能体筛选 | 按需 | `GET /v1/pending-actions?status=resolved|expired`（R） | T19b |
 
 审批人只有 `sessions:read` 与 `actions:respond`：回应事件（`user.tool_confirmation`、`user.custom_tool_result`、`user.recovery_confirmation`）接受 `sessions:write` 或 `actions:respond`，其他事件仍要 `sessions:write`（ADR-0053）。

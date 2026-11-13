@@ -63,6 +63,7 @@ span 层级：`turn` → `invoke_agent` → `chat {model}` 与 `execute_tool`（
 
 ## 易错点
 
+- 2.0.4 的 `PermissionEngine` 在 ask 时把 `generateSuggestions` 附在 `PermissionDecision` 上，但 `ReActAgent` 只保留结论的行为、丢掉建议：`tool_confirmation` 动作的 `suggestedRules` 由 `AgentScopeEngine` 按工具名在本实例 Toolkit 中重新计算，经 `TurnEventMapper.Settings.ruleSuggester` 交给映射器（D21，ADR-0053）；子线程不产生确认动作，用不带建议的 `Settings`。
 - 2.0.4 在 `onActing` 的事件流结束之后才把工具结果写进 `AgentState`（`notifyPostActingHook`）：批次 checkpoint 放在下一次推理之前保存，在 `onActing` 结束时保存会得到没有 tool_result 的状态（P3）。
 - 推理输入是 `PreReasoningEvent` 复制出来的列表：往上下文注入消息要同时加进 `ReasoningInput.messages()` 与 `ctx.getAgentState().contextMutable()`，否则本次模型调用看不到或状态里存不下。
 - 工具的 `Mono` 出错（例如账本写入被拒）时，2.0.4 的 `ToolExecutor` 把它转成错误结果，调用继续；不会让整轮失败。
