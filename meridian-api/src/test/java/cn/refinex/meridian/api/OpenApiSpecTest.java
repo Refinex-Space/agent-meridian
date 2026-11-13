@@ -67,6 +67,8 @@ class OpenApiSpecTest {
             "POST /v1/knowledge-bases",
             "GET /v1/knowledge-bases",
             "GET /v1/knowledge-bases/{knowledge_base_id}",
+            "PATCH /v1/knowledge-bases/{knowledge_base_id}",
+            "DELETE /v1/knowledge-bases/{knowledge_base_id}",
             "POST /v1/knowledge-bases/{knowledge_base_id}/documents",
             "GET /v1/knowledge-bases/{knowledge_base_id}/documents",
             "GET /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}",

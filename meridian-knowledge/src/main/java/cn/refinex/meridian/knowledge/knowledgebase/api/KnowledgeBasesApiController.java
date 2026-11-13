@@ -11,6 +11,7 @@ import cn.refinex.meridian.api.model.KnowledgeDocument;
 import cn.refinex.meridian.api.model.KnowledgeDocumentPage;
 import cn.refinex.meridian.api.model.KnowledgeSearchRequest;
 import cn.refinex.meridian.api.model.KnowledgeSearchResult;
+import cn.refinex.meridian.api.model.UpdateKnowledgeBaseRequest;
 import cn.refinex.meridian.common.context.PlatformContexts;
 import cn.refinex.meridian.common.crypto.Sha256;
 import cn.refinex.meridian.common.page.PageRequest;
@@ -109,6 +110,20 @@ public class KnowledgeBasesApiController implements KnowledgeBasesApi {
     public ResponseEntity<KnowledgeBase> getKnowledgeBase(String knowledgeBaseId) {
         PublicApiRequests.require(request, ApiKeyScope.KNOWLEDGE_READ);
         return ResponseEntity.ok(toDto(bases.get(knowledgeBaseId)));
+    }
+
+    @Override
+    public ResponseEntity<KnowledgeBase> updateKnowledgeBase(String knowledgeBaseId, UpdateKnowledgeBaseRequest body) {
+        PublicApiRequests.require(request, ApiKeyScope.KNOWLEDGE_WRITE);
+        return ResponseEntity.ok(
+                toDto(bases.update(knowledgeBaseId, body.getName(), body.getDescription(), body.getRerankModel())));
+    }
+
+    @Override
+    public ResponseEntity<Void> deleteKnowledgeBase(String knowledgeBaseId) {
+        PublicApiRequests.require(request, ApiKeyScope.KNOWLEDGE_WRITE);
+        bases.delete(knowledgeBaseId);
+        return ResponseEntity.noContent().build();
     }
 
     @Override

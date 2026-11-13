@@ -28,4 +28,17 @@ public record KnowledgeBase(
         long documentCount,
         String createdBy,
         Instant createdAt,
-        Instant updatedAt) {}
+        Instant updatedAt) {
+
+    /**
+     * 知识库在对象存储中的前缀，文档原文件都在它下面（ADR-0051）；删除知识库时按它删除（ADR-0053）。
+     *
+     * @param tenantId 租户 ID
+     * @param projectId 项目 ID
+     * @param knowledgeBaseId 知识库 ID
+     * @return {@code kb/{tenant}/{project}/{kb}/}
+     */
+    public static String objectPrefix(String tenantId, String projectId, String knowledgeBaseId) {
+        return "kb/" + tenantId + "/" + projectId + "/" + knowledgeBaseId + "/";
+    }
+}

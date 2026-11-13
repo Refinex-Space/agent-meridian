@@ -1,5 +1,6 @@
 package cn.refinex.meridian.knowledge.document.domain;
 
+import cn.refinex.meridian.knowledge.knowledgebase.domain.KnowledgeBase;
 import java.time.Instant;
 import java.util.List;
 
@@ -58,6 +59,6 @@ public record Document(
      * @return 键
      */
     public static String objectKey(String tenantId, String projectId, String knowledgeBaseId, String documentId) {
-        return "kb/" + tenantId + "/" + projectId + "/" + knowledgeBaseId + "/" + documentId;
+        return KnowledgeBase.objectPrefix(tenantId, projectId, knowledgeBaseId) + documentId;
     }
 }

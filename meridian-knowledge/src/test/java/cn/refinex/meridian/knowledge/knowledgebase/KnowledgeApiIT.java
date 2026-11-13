@@ -8,6 +8,7 @@ import cn.refinex.meridian.common.id.Ids;
 import cn.refinex.meridian.common.json.JsonMappers;
 import cn.refinex.meridian.knowledge.support.ApiClient;
 import cn.refinex.meridian.knowledge.support.KnowledgeTestBase;
+import cn.refinex.meridian.persistence.objectstore.ObjectStore;
 import cn.refinex.meridian.security.apikey.ControlPlaneApiKeyResolver;
 import cn.refinex.meridian.security.servicejwt.ServiceJwts;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +25,9 @@ import tools.jackson.databind.JsonNode;
  * {@code Idempotency-Key}；写操作的审计；API Key 经 control-plane 校验、吊销后 1 秒内拒绝；内部接口只接受 control-plane 与 runtime。
  */
 class KnowledgeApiIT extends KnowledgeTestBase {
+
+    @Autowired
+    private ObjectStore objects;
 
     private static final String KB = "/v1/knowledge-bases";
 
@@ -148,6 +152,103 @@ class KnowledgeApiIT extends KnowledgeTestBase {
                         "GET /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}",
                         "DELETE /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}",
                         "POST /v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}:reprocess"));
+        // 修改与删除知识库在 knowledgeBasesCanBeUpdatedAndDeletedWithEverythingInThem 中校验
+    }
+
+    @Test
+    void knowledgeBasesCanBeUpdatedAndDeletedWithEverythingInThem() {
+        Tenant tenant = newTenant();
+        ApiClient api = client();
+        String base = createKnowledgeBase(tenant);
+        String path = KB + "/" + base;
+
+        ApiClient.Reply renamed = api.api(
+                "PATCH /v1/knowledge-bases/{knowledge_base_id}",
+                "PATCH",
+                path,
+                tenant.key(),
+                "{\"name\":\" 新名字 \",\"description\":\"\",\"rerank_model\":\"mdl_test_rerank\"}",
+                Map.of());
+        assertThat(renamed.status()).isEqualTo(200);
+        assertThat(renamed.text("name")).isEqualTo("新名字");
+        assertThat(renamed.json().get("description").isNull()).isTrue();
+        assertThat(renamed.text("rerank_model")).isEqualTo("mdl_test_rerank");
+        ApiClient.Reply cleared = api.api(
+                "PATCH /v1/knowledge-bases/{knowledge_base_id}",
+                "PATCH",
+                path,
+                tenant.key(),
+                "{\"rerank_model\":\"\"}",
+                Map.of());
+        assertThat(cleared.text("name")).as("没给出的字段不变").isEqualTo("新名字");
+        assertThat(cleared.json().get("rerank_model").isNull()).isTrue();
+
+        String document = upload(tenant, base, "onboarding.md", "dept:hr");
+        awaitFinished(tenant, base, document);
+        String objectKey =
+                db().queryForObject("SELECT object_key FROM kb.documents WHERE id = ?", String.class, document);
+        assertThat(objects.exists(objectKey)).isTrue();
+        assertThat(chunks(document)).isNotEmpty();
+
+        String readOnly = PLATFORM.issue(tenant.tenantId(), tenant.projectId(), "knowledge:read");
+        assertThat(api.api("DELETE /v1/knowledge-bases/{knowledge_base_id}", "DELETE", path, readOnly, null, Map.of())
+                        .status())
+                .isEqualTo(403);
+        assertThat(api.api(
+                                "DELETE /v1/knowledge-bases/{knowledge_base_id}",
+                                "DELETE",
+                                path,
+                                newTenant().key(),
+                                null,
+                                Map.of())
+                        .status())
+                .as("其他项目的知识库与不存在相同")
+                .isEqualTo(404);
+        assertThat(api.api(
+                                "DELETE /v1/knowledge-bases/{knowledge_base_id}",
+                                "DELETE",
+                                path,
+                                tenant.key(),
+                                null,
+                                Map.of())
+                        .status())
+                .isEqualTo(204);
+
+        assertThat(api.api("GET /v1/knowledge-bases/{knowledge_base_id}", "GET", path, tenant.key(), null, Map.of())
+                        .text("code"))
+                .isEqualTo("knowledge_base.not_found");
+        for (String table : List.of("documents", "storage_reports")) {
+            assertThat(db().queryForObject(
+                                    "SELECT count(*) FROM kb." + table + " WHERE knowledge_base_id = ?",
+                                    Long.class,
+                                    base))
+                    .as(table)
+                    .isZero();
+        }
+        assertThat(chunks(document)).isEmpty();
+        assertThat(db().queryForObject(
+                                "SELECT count(*) FROM kb.ingestion_jobs WHERE document_id = ?", Long.class, document))
+                .isZero();
+        assertThat(objects.exists(objectKey)).as("原文件随之删除").isFalse();
+        assertThat(db().queryForList(
+                                "SELECT payload->>'action' FROM kb.outbox WHERE topic = 'audit' AND payload->>'resource_id' = ?"
+                                        + " ORDER BY id",
+                                String.class,
+                                base))
+                .containsExactly(
+                        "knowledge_base.created",
+                        "knowledge_base.updated",
+                        "knowledge_base.updated",
+                        "knowledge_base.deleted");
+        assertThat(api.api(
+                                "DELETE /v1/knowledge-bases/{knowledge_base_id}",
+                                "DELETE",
+                                path,
+                                tenant.key(),
+                                null,
+                                Map.of())
+                        .status())
+                .isEqualTo(404);
     }
 
     @Test

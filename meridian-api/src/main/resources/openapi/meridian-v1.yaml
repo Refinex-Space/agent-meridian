@@ -1491,6 +1491,69 @@ paths:
           $ref: '#/components/responses/RateLimited'
         default:
           $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateKnowledgeBase
+      tags: [KnowledgeBases]
+      summary: 修改知识库
+      description: |
+        修改名称、说明与 rerank 模型，只改给出的字段；`description`、`rerank_model` 给空字符串表示清除。Embedding 模型创建后不能修改
+        （切片的向量由它生成）。新的 rerank 模型在下一次检索时生效、在那时校验（D81，ADR-0053）。写审计 `knowledge_base.updated`。
+      security:
+        - ApiKeyAuth: [knowledge:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKnowledgeBaseRequest'
+      responses:
+        '200':
+          description: 修改后的知识库。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeBase'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/KnowledgeBaseNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteKnowledgeBase
+      tags: [KnowledgeBases]
+      summary: 删除知识库
+      description: |
+        删除知识库与它的全部文档、切片、写入作业、存储计量记录，以及对象存储中的原文件，不可恢复；正在进行的写入被放弃（D81，
+        ADR-0053）。引用它的已发布智能体版本不会被修改：这些智能体之后检索它时得到"知识库不存在"的工具错误，需要发布新版本去掉
+        引用。写审计 `knowledge_base.deleted`。
+      security:
+        - ApiKeyAuth: [knowledge:write]
+      responses:
+        '204':
+          description: 已删除。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/KnowledgeBaseNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        default:
+          $ref: '#/components/responses/InternalError'
 
   /v1/knowledge-bases/{knowledge_base_id}/documents:
     parameters:
@@ -2125,6 +2188,24 @@ components:
             $ref: '#/components/schemas/Problem'
 
   schemas:
+    UpdateKnowledgeBaseRequest:
+      description: 修改知识库的请求，只改给出的字段。
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          description: 名称，1 至 128 个字符。
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          description: 说明，至多 1000 个字符；空字符串表示清除。
+          type: string
+          maxLength: 1000
+        rerank_model:
+          description: 本租户模型目录中的 rerank 模型 ID；空字符串表示不再重排。
+          type: string
+          maxLength: 64
     CreateKnowledgeBaseRequest:
       description: 创建知识库的请求。
       type: object
