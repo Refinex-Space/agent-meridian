@@ -80,6 +80,8 @@ export function CodeBlock({
         <p className="p-3 text-13 text-ink-2">空</p>
       ) : (
         <pre
+          // 不换行时横向滚动：要能用键盘聚焦后滚动（WCAG 2.1.1）。
+          {...(!wrap && { tabIndex: 0, role: 'region', 'aria-label': label })}
           className={cn(
             'p-3 pr-12 font-mono text-12 leading-5 text-ink',
             wrap ? 'break-words whitespace-pre-wrap' : 'overflow-x-auto whitespace-pre',

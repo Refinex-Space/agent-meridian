@@ -61,6 +61,11 @@ export default defineConfig(
     languageOptions: { globals: globals.browser },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // 可滚动区域要能用键盘聚焦与滚动（WCAG 2.1.1，axe 的 scrollable-region-focusable）：允许 role="region" 带 tabIndex。
+      'jsx-a11y/no-noninteractive-tabindex': [
+        'error',
+        { tags: [], roles: ['tabpanel', 'region'], allowExpressionValues: true },
+      ],
       'meridian/no-raw-color': 'error',
       'meridian/no-banned-classes': 'error',
       'meridian/no-decorative-glyphs': 'error',

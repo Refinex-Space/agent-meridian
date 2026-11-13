@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from '@/components/ui/button';
 import { PlusIcon } from '@/components/ui/glyphs';
 import { Icon } from '@/components/ui/icon';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { focus, hover, storyFrame } from '@/test/stories';
 
 import { CopyableId } from '../copyable-id';
@@ -42,6 +42,13 @@ type Story = StoryObj<typeof meta>;
 
 export const List: Story = { name: '列表页' };
 
+const TABS = [
+  ['summary', '概要'],
+  ['versions', '版本'],
+  ['sessions', '会话'],
+  ['permissions', '权限'],
+] as const;
+
 export const Detail: Story = {
   name: '详情页',
   args: {
@@ -54,17 +61,26 @@ export const Detail: Story = {
         <Button variant="primary">发布版本</Button>
       </>
     ),
-    children: (
-      <Tabs defaultValue="summary">
-        <TabsList>
-          <TabsTrigger value="summary">概要</TabsTrigger>
-          <TabsTrigger value="versions">版本</TabsTrigger>
-          <TabsTrigger value="sessions">会话</TabsTrigger>
-          <TabsTrigger value="permissions">权限</TabsTrigger>
-        </TabsList>
-      </Tabs>
-    ),
   },
+  // 标签页的触发器在页头里、内容在页头下方，两者都放在同一个 Tabs 里。
+  render: (args) => (
+    <Tabs defaultValue="summary">
+      <PageHeader {...args}>
+        <TabsList>
+          {TABS.map(([value, label]) => (
+            <TabsTrigger key={value} value={value}>
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </PageHeader>
+      {TABS.map(([value, label]) => (
+        <TabsContent key={value} value={value} className="py-6 text-13 text-ink-2">
+          {label}的内容
+        </TabsContent>
+      ))}
+    </Tabs>
+  ),
 };
 
 export const Hover: Story = { name: '悬停', parameters: hover('[data-slot=button]') };

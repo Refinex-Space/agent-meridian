@@ -3,7 +3,7 @@
  * - 只保留左右两侧（上下抽屉在控制台没有用处）；默认宽 480px（`size` 可选 md 480、lg 640），全高、贴边一侧有 1px 刻线，
  *   不加圆角；surface-raised 底与唯一的浮层阴影；遮罩用 scrim 令牌；
  * - 滑入 250ms ease-out、滑出 200ms ease-in（上游 500ms 与 300ms），减少动效时只有不透明度；动画不依赖 tw-animate-css；
- * - 结构改为固定的三段：头部 48px（标题与关闭按钮同行）、可滚动的主体、底部操作栏（上方一条刻线，按钮靠右）；
+ * - 结构改为固定的三段：头部 48px（标题与关闭按钮同行）、可滚动的主体（可用键盘聚焦）、底部操作栏（上方一条刻线，按钮靠右）；
  * - 关闭按钮用 Button 的 ghost 图标按钮与 Phosphor 的 X，可访问名称"关闭"；去掉 "use client"。
  */
 import { Dialog as SheetPrimitive } from 'radix-ui';
@@ -99,10 +99,22 @@ export function SheetHeader({ className, children, ...props }: ComponentProps<'d
   );
 }
 
-/** 可滚动的主体。 */
-export function SheetBody({ className, ...props }: ComponentProps<'div'>) {
+export interface SheetBodyProps extends ComponentProps<'div'> {
+  /** 滚动区域的可访问名称，默认"抽屉内容"。 */
+  label?: string;
+}
+
+/** 可滚动的主体：可用键盘聚焦后滚动（role="region"）。 */
+export function SheetBody({ className, label = '抽屉内容', ...props }: SheetBodyProps) {
   return (
-    <div data-slot="sheet-body" className={cn('min-h-0 flex-1 overflow-y-auto p-6', className)} {...props} />
+    <div
+      data-slot="sheet-body"
+      role="region"
+      aria-label={label}
+      tabIndex={0}
+      className={cn('min-h-0 flex-1 overflow-y-auto p-6', className)}
+      {...props}
+    />
   );
 }
 

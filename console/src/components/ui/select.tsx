@@ -5,7 +5,8 @@
  *   减少动效时只有不透明度；动画不依赖 tw-animate-css，关键帧在 tokens.css；
  * - 默认 `position="popper"`（上游 item-aligned），列表在触发器正下方展开、与触发器同宽，位置可预期；
  * - 选项 32px 高、13px 文字，高亮为 surface-hover 底，选中项右侧是海图蓝对勾；禁用项为 ink-disabled，不用整体半透明；
- * - 图标换成 Phosphor 的封装（CaretDown、CaretUp、Check）。
+ * - 图标换成 Phosphor 的封装（CaretDown、CaretUp、Check）；
+ * - 打开时给浮层以外的内容加 inert（InertOutside），与 Radix 加的 aria-hidden 一致，外面的控件不可聚焦。
  */
 import { Select as SelectPrimitive } from 'radix-ui';
 import type { ComponentProps } from 'react';
@@ -15,6 +16,7 @@ import { cn } from '@/lib/cn';
 import { controlHeight, controlSurface, type ControlSize } from './field-styles';
 import { CaretDownIcon, CaretUpIcon, CheckIcon } from './glyphs';
 import { Icon } from './icon';
+import { InertOutside } from './inert-outside';
 
 /** 选择器：选项超过 5 个、或空间不够放单选组时使用。 */
 export function Select(props: ComponentProps<typeof SelectPrimitive.Root>) {
@@ -77,6 +79,7 @@ export function SelectContent({
         )}
         {...props}
       >
+        <InertOutside />
         <SelectScrollUpButton />
         <SelectPrimitive.Viewport
           className={cn(

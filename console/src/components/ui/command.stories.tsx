@@ -5,7 +5,6 @@ import { storyFrame } from '@/test/stories';
 import {
   Command,
   CommandDialog,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -19,7 +18,6 @@ import { Icon } from './icon';
 function Items() {
   return (
     <>
-      <CommandEmpty>没有匹配的页面或对象</CommandEmpty>
       <CommandGroup heading="页面">
         <CommandItem>
           <Icon glyph={GaugeIcon} />
@@ -66,7 +64,7 @@ export const Default: Story = {
   render: () => (
     <CommandDialog defaultOpen>
       <CommandInput placeholder="搜索页面、智能体、会话 ID" />
-      <CommandList>
+      <CommandList empty="没有匹配的页面或对象">
         <Items />
       </CommandList>
     </CommandDialog>
@@ -78,7 +76,7 @@ export const Empty: Story = {
   render: () => (
     <CommandDialog defaultOpen>
       <CommandInput placeholder="搜索页面、智能体、会话 ID" value="ses_404" />
-      <CommandList>
+      <CommandList empty="没有匹配的页面或对象">
         <Items />
       </CommandList>
     </CommandDialog>

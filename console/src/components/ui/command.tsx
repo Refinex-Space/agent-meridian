@@ -4,10 +4,13 @@
  * - 搜索行 48px、14px 文字，左侧 Phosphor 的放大镜；结果列表最高 320px；
  * - 结果项 36px 高、13px 文字、4px 圆角，键盘选中为 accent-weak 底（上游 bg-accent）；禁用为 ink-disabled，不用整体半透明；
  * - 分组标题 12px 石墨色、句子式；快捷键去掉 tracking-widest（字距令牌已移除）；空结果 13px 石墨色；
- * - 标题与描述的默认值改为中文（"命令面板""搜索页面、对象与操作"），只给读屏；去掉右上角的关闭按钮（Esc 关闭，面板内没有多余元素）。
+ * - 标题与描述的默认值改为中文（"命令面板""搜索页面、对象与操作"），只给读屏；去掉右上角的关闭按钮（Esc 关闭，面板内没有多余元素）；
+ * - 空结果改由 CommandList 的 `empty` 渲染在列表之外，没有结果时列表隐藏：listbox 不能没有选项，也不能含非选项的子元素
+ *   （axe 的 aria-required-children）；分隔线不用 cmdk 的 Separator（它固定为 role="separator"，不允许出现在 listbox 中），
+ *   改为对读屏隐藏的刻线，搜索时同样隐藏。去掉 CommandEmpty 导出。
  */
-import { Command as CommandPrimitive } from 'cmdk';
-import type { ComponentProps } from 'react';
+import { Command as CommandPrimitive, useCommandState } from 'cmdk';
+import type { ComponentProps, ReactNode } from 'react';
 
 import { cn } from '@/lib/cn';
 
@@ -74,23 +77,32 @@ export function CommandInput({ className, ...props }: ComponentProps<typeof Comm
   );
 }
 
-export function CommandList({ className, ...props }: ComponentProps<typeof CommandPrimitive.List>) {
-  return (
-    <CommandPrimitive.List
-      data-slot="command-list"
-      className={cn('max-h-80 scroll-py-1 overflow-x-hidden overflow-y-auto p-1', className)}
-      {...props}
-    />
-  );
+export interface CommandListProps extends ComponentProps<typeof CommandPrimitive.List> {
+  /** 没有匹配结果时显示的一句话（"没有匹配的页面或对象"）。 */
+  empty?: ReactNode;
 }
 
-export function CommandEmpty({ className, ...props }: ComponentProps<typeof CommandPrimitive.Empty>) {
+/** 结果列表；没有结果时隐藏列表，在原处显示 `empty`。 */
+export function CommandList({ className, empty, ...props }: CommandListProps) {
+  const count = useCommandState((state) => state.filtered.count);
   return (
-    <CommandPrimitive.Empty
-      data-slot="command-empty"
-      className={cn('px-3 py-6 text-center text-13 text-ink-2', className)}
-      {...props}
-    />
+    <>
+      <CommandPrimitive.List
+        data-slot="command-list"
+        label="结果"
+        hidden={count === 0}
+        className={cn('max-h-80 scroll-py-1 overflow-x-hidden overflow-y-auto p-1', className)}
+        {...props}
+      />
+      {empty && (
+        <CommandPrimitive.Empty
+          data-slot="command-empty"
+          className="px-3 py-6 text-center text-13 text-ink-2"
+        >
+          {empty}
+        </CommandPrimitive.Empty>
+      )}
+    </>
   );
 }
 
@@ -108,10 +120,14 @@ export function CommandGroup({ className, ...props }: ComponentProps<typeof Comm
   );
 }
 
-export function CommandSeparator({ className, ...props }: ComponentProps<typeof CommandPrimitive.Separator>) {
+/** 结果分组之间的刻线：对读屏隐藏，搜索时不显示。 */
+export function CommandSeparator({ className, ...props }: ComponentProps<'div'>) {
+  const searching = useCommandState((state) => state.search !== '');
+  if (searching) return null;
   return (
-    <CommandPrimitive.Separator
+    <div
       data-slot="command-separator"
+      aria-hidden
       className={cn('-mx-1 my-1 h-px bg-rule', className)}
       {...props}
     />

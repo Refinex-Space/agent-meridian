@@ -4,7 +4,8 @@
  * - 面板：surface-raised 底、1px 刻线、8px 圆角、唯一的浮层阴影，内边距 24px；宽度分 sm 400、md 480、lg 640 三档；
  * - 出现 200ms 不透明度加 2% 缩放（ease-out），退出 150ms（ease-in），减少动效时只有不透明度；动画不依赖 tw-animate-css；
  * - 标题 16px 600 字重、描述 13px 石墨色，头部与底部都左对齐（上游小屏居中）；底部按钮靠右、主操作在最右；
- * - 关闭按钮用 Button 的 ghost 图标按钮与 Phosphor 的 X，可访问名称"关闭"；去掉底部的 showCloseButton（取消按钮由调用方写明动作）。
+ * - 关闭按钮用 Button 的 ghost 图标按钮与 Phosphor 的 X，可访问名称"关闭"；去掉底部的 showCloseButton（取消按钮由调用方写明动作）；
+ * - 新增 DialogBody：长内容的滚动区域，可用键盘聚焦。
  */
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import type { ComponentProps } from 'react';
@@ -94,6 +95,25 @@ export function DialogContent({
 
 export function DialogHeader({ className, ...props }: ComponentProps<'div'>) {
   return <div data-slot="dialog-header" className={cn('flex flex-col gap-2 pr-8', className)} {...props} />;
+}
+
+export interface DialogBodyProps extends ComponentProps<'div'> {
+  /** 滚动区域的可访问名称，默认"对话框内容"。 */
+  label?: string;
+}
+
+/** 内容较长时的滚动区域：可用键盘聚焦后滚动（role="region"），两侧贴到面板边缘。 */
+export function DialogBody({ className, label = '对话框内容', ...props }: DialogBodyProps) {
+  return (
+    <div
+      data-slot="dialog-body"
+      role="region"
+      aria-label={label}
+      tabIndex={0}
+      className={cn('-mx-6 min-h-0 overflow-y-auto px-6', className)}
+      {...props}
+    />
+  );
 }
 
 /** 底部操作：靠右，主操作在最右。 */

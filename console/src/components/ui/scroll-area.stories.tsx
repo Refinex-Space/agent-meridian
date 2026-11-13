@@ -31,7 +31,7 @@ export const Default: Story = {
 export const LongContent: Story = {
   name: '长内容',
   render: () => (
-    <ScrollArea className="h-60 rounded-panel border border-rule" type="always">
+    <ScrollArea className="h-60 rounded-panel border border-rule" type="always" label="调用记录">
       <ul className="p-3 text-13 leading-6">
         {LINES.map((line) => (
           <li key={line}>{line}</li>

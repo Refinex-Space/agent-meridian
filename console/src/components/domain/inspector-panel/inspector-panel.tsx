@@ -88,13 +88,13 @@ export function InspectorPanel({
             {raw !== undefined && <TabsTrigger value="json">原始 JSON</TabsTrigger>}
           </TabsList>
           <TabsContent value="summary" className="min-h-0">
-            <ScrollArea className="h-full">
+            <ScrollArea className="h-full" label="概要">
               <div className="flex flex-col gap-6 p-4">{children}</div>
             </ScrollArea>
           </TabsContent>
           {raw !== undefined && (
             <TabsContent value="json" className="min-h-0">
-              <ScrollArea className="h-full">
+              <ScrollArea className="h-full" label="原始 JSON">
                 <div className="p-4">
                   <CodeBlock
                     code={JSON.stringify(raw, null, 2)}

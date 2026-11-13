@@ -176,7 +176,7 @@ function SearchBox({
             setDraft('');
             inputRef.current?.focus();
           }}
-          className="absolute top-1/2 right-1 flex size-5 -translate-y-1/2 items-center justify-center rounded-control text-ink-2 hover:bg-surface-hover hover:text-ink"
+          className="absolute top-1/2 right-px flex size-6 -translate-y-1/2 items-center justify-center rounded-control text-ink-2 hover:bg-surface-hover hover:text-ink"
         >
           <Icon glyph={XIcon} />
         </button>

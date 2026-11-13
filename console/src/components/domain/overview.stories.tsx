@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { PlusIcon } from '@/components/ui/glyphs';
 import { Icon } from '@/components/ui/icon';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ApiError } from '@/lib/api/sessions';
 import type { EventOf, SessionEvent } from '@/lib/api/types';
 
@@ -76,7 +76,7 @@ function Overview() {
     <div className="flex min-h-screen flex-col gap-12 bg-canvas p-8 text-ink">
       <h1 className="text-22 leading-heading font-semibold">领域组件总览</h1>
 
-      <div className="rounded-panel border border-rule bg-surface px-6">
+      <Tabs defaultValue="summary" className="rounded-panel border border-rule bg-surface px-6">
         <PageHeader
           title="经营分析助手"
           breadcrumb={[{ label: '智能体', href: '#agents' }, { label: '经营分析助手' }]}
@@ -99,15 +99,19 @@ function Overview() {
             </>
           }
         >
-          <Tabs defaultValue="summary">
-            <TabsList>
-              <TabsTrigger value="summary">概要</TabsTrigger>
-              <TabsTrigger value="versions">版本</TabsTrigger>
-              <TabsTrigger value="sessions">会话</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <TabsList>
+            <TabsTrigger value="summary">概要</TabsTrigger>
+            <TabsTrigger value="versions">版本</TabsTrigger>
+            <TabsTrigger value="sessions">会话</TabsTrigger>
+          </TabsList>
         </PageHeader>
-        <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-12 py-6">
+        <TabsContent value="versions" className="py-6 text-13 text-ink-2">
+          版本历史
+        </TabsContent>
+        <TabsContent value="sessions" className="py-6 text-13 text-ink-2">
+          最近的会话
+        </TabsContent>
+        <TabsContent value="summary" className="grid grid-cols-[minmax(0,1fr)_320px] gap-12 py-6">
           <KeyValueList
             items={[
               { label: '模型', value: 'qwen-plus', mono: true },
@@ -117,8 +121,8 @@ function Overview() {
             ]}
           />
           <TokenUsage variant="detail" usage={USAGE} cost={{ amount: 1.237, currency: 'CNY' }} />
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
 
       <Section title="状态">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-panel border border-rule bg-surface p-4">

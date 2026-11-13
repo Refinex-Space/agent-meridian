@@ -5,6 +5,7 @@ import { storyFrame } from '@/test/stories';
 import { Button } from './button';
 import {
   Dialog,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -82,7 +83,7 @@ export const LongContent: Story = {
         <DialogHeader>
           <DialogTitle>发布记录</DialogTitle>
         </DialogHeader>
-        <div className="-mx-6 min-h-0 overflow-y-auto px-6">
+        <DialogBody label="发布记录">
           <ol className="flex flex-col text-13">
             {Array.from({ length: 30 }, (_, i) => (
               <li key={i} className="flex h-10 items-center justify-between border-b border-rule">
@@ -91,7 +92,7 @@ export const LongContent: Story = {
               </li>
             ))}
           </ol>
-        </div>
+        </DialogBody>
         <DialogFooter>
           <DialogClose asChild>
             <Button>关闭</Button>

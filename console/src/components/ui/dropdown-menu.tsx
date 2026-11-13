@@ -7,6 +7,7 @@
  * - `variant="destructive"` 改名 `danger`：信号红文字、高亮时 danger-weak 底；
  * - 勾选与单选项的记号：勾选用 Phosphor 的 Check（海图蓝），单选用 6px 实心圆（控件自身的形状）；子菜单记号换成 CaretRight；
  * - 快捷键去掉 tracking-widest（字距令牌已移除），12px 石墨色；分组标题 12px 石墨色，句子式；
+ * - 模态菜单打开时给浮层以外的内容加 inert（InertOutside），与 Radix 加的 aria-hidden 一致；
  * - 去掉 "use client"。
  */
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
@@ -16,6 +17,7 @@ import { cn } from '@/lib/cn';
 
 import { CaretRightIcon, CheckIcon } from './glyphs';
 import { Icon } from './icon';
+import { InertOutside } from './inert-outside';
 
 const menuPanel = [
   'shadow-overlay z-50 min-w-40 overflow-x-hidden overflow-y-auto rounded-overlay border border-rule bg-surface-raised p-1 text-ink',
@@ -47,6 +49,7 @@ export function DropdownMenuContent({
   className,
   sideOffset = 4,
   align = 'start',
+  children,
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
@@ -57,7 +60,10 @@ export function DropdownMenuContent({
         align={align}
         className={cn(menuPanel, 'max-h-(--radix-dropdown-menu-content-available-height)', className)}
         {...props}
-      />
+      >
+        <InertOutside />
+        {children}
+      </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Portal>
   );
 }

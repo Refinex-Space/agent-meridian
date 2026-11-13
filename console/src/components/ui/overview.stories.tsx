@@ -23,7 +23,7 @@ import { Separator } from './separator';
 import { Skeleton } from './skeleton';
 import { Switch } from './switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
-import { Tabs, TabsList, TabsTrigger } from './tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs';
 import { Textarea } from './textarea';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -163,6 +163,11 @@ function Overview() {
               权限
             </TabsTrigger>
           </TabsList>
+          {['summary', 'versions', 'sessions', 'permissions'].map((value) => (
+            <TabsContent key={value} value={value} className="pt-3 text-13 text-ink-2">
+              标签页内容
+            </TabsContent>
+          ))}
         </Tabs>
         <Table className="max-w-200">
           <TableHeader>
