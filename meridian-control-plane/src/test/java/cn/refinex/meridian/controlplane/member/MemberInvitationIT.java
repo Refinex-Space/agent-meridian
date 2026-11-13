@@ -87,6 +87,16 @@ class MemberInvitationIT extends ControlPlaneTestBase {
                 .contains("agent_write", "session_write")
                 .doesNotContain("member_write", "pending_action_decide");
         assertThat(texts(access.json().get("scopes"))).contains("sessions:write", "knowledge:write");
+
+        // R2 审查 I-07：别的租户的项目与不存在的项目相同，没有任何权限（租户级角色不能"作用"到别的租户的项目上）
+        String foreignProject = TenantFixture.create(client()).get("project");
+        Reply foreign = client().admin(
+                        "GET",
+                        "/admin/v1/me/access?tenant_id=" + tenant + "&project_id=" + foreignProject,
+                        token("owner"),
+                        null);
+        assertThat(foreign.json().get("permissions")).isEmpty();
+        assertThat(foreign.json().get("scopes")).isEmpty();
     }
 
     @Test

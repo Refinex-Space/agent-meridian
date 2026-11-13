@@ -2,6 +2,7 @@ package cn.refinex.meridian.controlplane.member.app;
 
 import cn.refinex.meridian.controlplane.member.domain.Membership;
 import cn.refinex.meridian.controlplane.member.infra.system.MemberDirectoryRepository;
+import cn.refinex.meridian.controlplane.project.app.ProjectDirectory;
 import cn.refinex.meridian.security.apikey.ApiKeyScope;
 import cn.refinex.meridian.security.oidc.ConsoleUser;
 import cn.refinex.meridian.security.rbac.AccessContext;
@@ -25,16 +26,19 @@ public class MeQuery {
 
     private final MemberDirectoryRepository directory;
     private final GrantSource grants;
+    private final ProjectDirectory projects;
 
     /**
      * 创建查询。
      *
      * @param directory 跨租户的成员目录
      * @param grants 角色绑定的来源（同时绑定邀请）
+     * @param projects 按项目 ID 找租户
      */
-    public MeQuery(MemberDirectoryRepository directory, GrantSource grants) {
+    public MeQuery(MemberDirectoryRepository directory, GrantSource grants, ProjectDirectory projects) {
         this.directory = directory;
         this.grants = grants;
+        this.projects = projects;
     }
 
     /**
@@ -53,10 +57,15 @@ public class MeQuery {
      *
      * @param user 控制台用户
      * @param tenantId 租户 ID
-     * @param projectId 项目 ID；可为空，此时项目级的操作类别只按租户级角色计，作用域为空
+     * @param projectId 项目 ID；可为空，此时项目级的操作类别只按租户级角色计，作用域为空；不属于该租户（或不存在）时没有任何权限，
+     *     与管理 API 的"项目不存在与没有角色同样 403"一致（R2 审查 I-07）
      * @return 权限
      */
     public Access access(ConsoleUser user, String tenantId, String projectId) {
+        if (projectId != null
+                && !projects.tenantOf(projectId).filter(tenantId::equals).isPresent()) {
+            return new Access(tenantId, projectId, List.of(), List.of());
+        }
         Set<Grant> granted = grants.grants(user, tenantId);
         AccessContext context = new AccessContext(user, tenantId, granted);
         List<Permission> permissions = granted.isEmpty()

@@ -90,6 +90,7 @@ class FilesApiIT extends ApiTestBase {
 
         ApiResponse tooLarge = api.uploadFile("big.bin", new byte[64 * 1024 + 1], null);
         assertThat(tooLarge.status()).isEqualTo(413);
+        assertThat(tooLarge.text("code")).as("规范写的错误码（R2 审查 A-09）").isEqualTo("file.too_large");
         assertThat(DbAssertions.list("SELECT count(*) FROM rt.files WHERE filename = 'big.bin'", Long.class))
                 .containsExactly(0L);
 

@@ -56,6 +56,8 @@ public final class ApiTestClient {
         this.client = WebTestClient.bindToServer()
                 .baseUrl(baseUrl)
                 .responseTimeout(Duration.ofSeconds(30))
+                // 响应可能带回很长的事件（与服务端的 10 MB 请求体上限一致，R2 审查 A-04），客户端默认只聚合 256 KB
+                .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
                 .build();
         this.apiKey = bearer;
         this.defaultHeaders = Map.copyOf(defaultHeaders);

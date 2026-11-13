@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -67,6 +68,8 @@ public class FilesApiController implements FilesApi {
         return Mono.usingWhen(
                 Blocking.call(() -> Files.createTempFile("meridian-upload-", ".part")),
                 temp -> filePart.transferTo(temp)
+                        // 表单解析阶段的单部分上限（max-disk-usage-per-part）在这里触发：与业务的上限检查同为 file.too_large（R2 审查 A-09）
+                        .onErrorMap(DataBufferLimitException.class, error -> FileService.tooLarge(files.maxSize()))
                         .then(Mono.defer(() -> upload(exchange, idempotencyKey, filePart.filename(), temp))),
                 temp -> Blocking.run(() -> Files.deleteIfExists(temp)));
     }

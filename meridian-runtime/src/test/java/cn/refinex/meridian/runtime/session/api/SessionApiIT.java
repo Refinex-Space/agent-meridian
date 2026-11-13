@@ -236,6 +236,27 @@ class SessionApiIT extends ApiTestBase {
     }
 
     @Test
+    void aLongMessageIsAccepted() {
+        // R2 审查 A-04：WebFlux 的 JSON 请求体默认只聚合 256 KB，长消息（粘贴的文档、大段日志）会被拒绝
+        String sessionId = createSession("u_long_message");
+        // 单个文本块至多 100000 个字符（规范），三块共约 810 KB 的 UTF-8
+        String block = "{\"type\": \"text\", \"text\": \"" + "长".repeat(90_000) + "\"}";
+        ApiResponse sent = api(ApiTestKeys.KEY_A)
+                .sendEvents(
+                        sessionId,
+                        "{\"events\": [{\"type\": \"user.message\", \"content\": [" + block + ", " + block + ", "
+                                + block + "]}]}",
+                        null);
+
+        assertThat(sent.status()).isEqualTo(202);
+        assertThat(DbAssertions.list(
+                        "SELECT length(data::text) > 270000 FROM rt.session_events WHERE session_id = ? AND type = 'user.message'",
+                        Boolean.class,
+                        sessionId))
+                .containsExactly(true);
+    }
+
+    @Test
     void errorsAreProblemJsonWithCodeAndRequestId() {
         ApiResponse anonymous = api(null)
                 .callInvalid(

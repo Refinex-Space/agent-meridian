@@ -6,6 +6,11 @@ spring:
     deserialization:
       # 公开 API 的请求体：未声明的字段返回 400，不静默忽略（编码规范「通用能力复用」中 JsonMappers.strict 的约定）
       fail-on-unknown-properties: true
+  http:
+    codecs:
+      # JSON 请求体的聚合上限（默认 256 KB）：对话补全的大上下文、长消息与工具结果回传会超过默认值（R2 审查 A-04）；
+      # 上传文件与工作区写入另有 files.max-size
+      max-in-memory-size: 10MB
   webflux:
     multipart:
       # 上传文件（ADR-0050）：表单解析阶段就截断超过上限的文件部分（默认无上限，会把任意大的上传落到本机磁盘）
