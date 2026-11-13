@@ -48,7 +48,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | 1 M0 内核与运行时核心 | 引擎契约与适配、调度与租约、恢复、会话 API 与 SSE、投递与权限、模型层与脚本化模型服务、工具、沙箱与出网、子智能体；M0 验证 P1–P15 | T03–T13 | R1 | 有条件完成：进入 M1。前提（都不阻塞 T14a）：Q2 已决（ADR-0043）；Q3 已决、D52 已落地（T15a，ADR-0045、ADR-0046）；T28 落实 D44–D46 并由 T29 复测 P7；P8 已由 T19 定稿（`docs/poc/M0-总结.md`） |
 | 2 M1 控制面与治理 | 租户与 API Key、OIDC 与服务 JWT、凭据与模型目录、智能体与配置分发、计量预算审计、运行时补全 | T14a–T17b | — | 进行中 |
 | 3 M1 知识库与后端收口 | 写入、检索与接入、控制台所需的后端接口 | T18–T19b | R2 | 已完成：M1 后端完整，进入控制台阶段。控制台可依赖的接口清单是 `docs/engineering/console-api-map.md`；评审结论与登记事项 D86–D94 见 `docs/plan/R2-后端评审.md`（D86 API Key 最后使用时间需要你决定是否插入补充任务） |
-| 4 M1 控制台 | 设计方向与组件、原型（并行轨道）、工程基座、五组页面 | T20a–T25b | R3 | 未开始 |
+| 4 M1 控制台 | 设计方向与组件、原型（并行轨道）、工程基座、五组页面 | T20a–T25b | R3 | 进行中 |
 | 5 M1 交付 | SDK 与接入文档、可观测性、部署、端到端验收 | T26–T29 | R4 | 未开始 |
 | 6 M2 扩展能力 | AgentScope 2.1 评估、长期记忆、后台子智能体与团队、分叉与回退、智能问数、Web 终端、A2A 与 AG-UI、安全加固 | T30–T37 | R5 | 未开始 |
 | 7 M3 生态能力 | JEV、外部 Agent Worker、浏览器沙箱、IM 渠道与定时任务、轨迹评估 | T38–T42 | R6 | 未开始 |
@@ -90,7 +90,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 见控制台设计轨道 | — |
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 见控制台设计轨道 | — |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
-| T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 未开始 | — |
+| T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 进行中 | — |
 | T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 未开始 | — |
 | T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 未开始 | — |
 | T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 未开始 | — |
@@ -175,7 +175,20 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T21 控制台工程基座（开工 2026-11-13）：
+
+- [x] 1 开工：基线 `verify.sh`（通过）；T20c 原型的参照截图（`tmp/evidence/T21/t20c/`，78 张）
+- [ ] 2 依赖与类型生成：TanStack Router 与 Query、openapi-fetch、oidc-client-ts（追加 ADR-0021）；管理 API 类型生成并接入构建（A03）
+- [ ] 3 API 客户端与错误：openapi-fetch 客户端注入 `Authorization` 与 `Meridian-Project`，problem+json 映射为 `ErrorState` 或通知，`request_id` 可复制（A04）
+- [ ] 4 登录：OIDC 授权码加 PKCE、令牌只在内存、静默续期、未登录跳转、退出（A01）
+- [ ] 5 路由与外壳：TanStack Router、十一个一级导航的路由模块（空态）、可折叠导航、项目切换、面包屑、⌘K、用户菜单、筛选放 URL 搜索参数（A02）
+- [ ] 6 数据加载模式：TanStack Query 的统一配置、区域级 Suspense 与骨架（150ms 延迟、300ms 最短）
+- [ ] 7 SSE 客户端：去重、乱序、跳号、断线续传，Hook 与 `StreamIndicator`（A05）
+- [ ] 8 权限：`/admin/v1/me/access` 与 `PermissionGate`（A06）
+- [ ] 9 主题（亮、暗、跟随系统）与全局横幅（断开、预算告警）
+- [ ] 10 Playwright：登录、导航、主题、权限用例；外壳与四种模板的截图基线并与 T20c 对照（A01、A02、A06、A07）
+- [ ] 11 CI：控制台的 lint、typecheck、test、build、Storybook、Playwright（compose `app` 与 `auth`）（A08）
+- [ ] 12 收尾：`verify.sh`（A09）、文档与 `console/CLAUDE.md`、验收记录、会话日志
 
 ## 控制台设计轨道
 
