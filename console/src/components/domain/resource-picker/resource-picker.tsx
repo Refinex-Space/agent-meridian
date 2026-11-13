@@ -61,7 +61,7 @@ function ResourceList({
 }: ResourceListProps) {
   if (source.loading)
     return (
-      <div aria-busy="true" aria-label="正在加载" className="flex flex-col gap-2 p-3">
+      <div role="status" aria-busy="true" aria-label="正在加载" className="flex flex-col gap-2 p-3">
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-5 w-full" />
         ))}
