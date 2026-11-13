@@ -203,23 +203,12 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | 编号 | 任务 | 阶段 | 依赖 | effort | 规模 | 验证项 | 状态 | 完成提交 |
 |---|---|---|---|---|---|---|---|---|
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 已完成 | 2d99b8f |
-| T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 进行中 | — |
+| T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 已完成 | 待填 |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 未开始 | — |
 
 ### 轨道检查点
 
-T20b（主工作区 `main`，用户要求不建 worktree）：
-
-- [x] 依赖：cmdk、sonner、@tanstack/react-table、shiki，版本追加到 ADR-0021
-- [x] 基元：shadcn CLI 生成并按令牌重塑（输入框、文本域、选择器、复选框、单选、开关、对话框、抽屉、下拉菜单、弹出层、表格、分隔线、命令面板、通知，以及标签、警示对话框、面包屑），每个状态一个故事
-- [x] 三张空态插画（256 网格、16 线宽）
-- [x] 领域组件一：StatusBadge、CopyableId、RelativeTime、TokenUsage、StreamIndicator、KeyValueList、CodeBlock（故事与 Vitest）
-- [x] 领域组件二：EmptyState、ErrorState、PermissionGate、DangerConfirmDialog、PageHeader（故事与 Vitest）
-- [x] 领域组件三：FilterBar（URL 同步交互测试）、DataTable（虚拟滚动交互测试）
-- [x] 领域组件四：EventCard、ToolCallView、ThreadTree、InspectorPanel（故事与 Vitest）
-- [ ] a11y：新故事全部加入 `e2e/a11y.spec.ts`，亮暗两套零违规（A01）
-- [ ] 截图：`tmp/evidence/T20b/` 亮暗两套（A04）
-- [ ] 收尾：lint、typecheck、test、build-storybook（A05）、`verify.sh`、`console/CLAUDE.md`、`frontend-design.md`、验收记录与会话日志
+（当前没有进行中的轨道任务）
 
 ### 轨道会话日志
 
@@ -234,6 +223,12 @@ T20b（主工作区 `main`，用户要求不建 worktree）：
 - 验收：9 项通过，0 项阻塞
 - 决策：应用户要求，T20a 完成后即把 `console/T20` 合并回 `main`（原计划在 T20c 之后合并）；T20b、T20c 可在主工作区继续，进度仍写在本节
 - 遗留：同上一条；全量 `verify.sh` 在 2d99b8f 上通过，本次只改文档
+
+### 2026-11-13 T20b 已完成（主工作区 `main`，用户要求不建 worktree）
+- 交付：shadcn CLI 4.23.0 在会话临时目录生成并按令牌重塑的 17 个基元（输入框、文本域、标签、选择器、复选框、单选、开关、对话框、警示对话框、抽屉、下拉菜单、弹出层、表格、分隔线、面包屑、命令面板 cmdk、通知 Sonner），T20a 的 6 个基元补上故事；「自研组件」表中其余 18 个领域组件（StatusBadge 与统一状态映射、EventCard、ToolCallView、ThreadTree、InspectorPanel、TokenUsage、CopyableId、RelativeTime、EmptyState、ErrorState、PermissionGate、DangerConfirmDialog、PageHeader、FilterBar 与 URL 同步、DataTable 与虚拟滚动、KeyValueList、CodeBlock 与 Shiki、StreamIndicator）；三张空态插画；新令牌 `scrim` 与四种语法色、浮层退出与抽屉滑入的关键帧、`unavailable:` 变体；`InertOutside`；每个状态一个故事（pseudo-states 插件）与基元、领域组件总览；a11y 用例改为读 `index.json` 检查全部故事；`evidence-components.spec.ts`；会话列表夹具；依赖追加到 ADR-0021
+- 验收：A01–A05 全部 passing（a11y 亮暗各 217 个故事零违规、领域组件 95 个用例、全量 164 个用例、`verify.sh` 通过，截图在 `tmp/evidence/T20b/`）
+- 决策：没有新 ADR（只追加 ADR-0021 的版本表与三点说明：TanStack Table 9、shadcn 在临时目录生成、语法色走令牌）；开关做成 4px 圆角的拨动开关；复选框与单选的记号是控件自身的形状；PermissionGate 用 aria-disabled 保持可聚焦；模态浮层外加 inert；命令面板的空结果放在 listbox 之外；可滚动区域可聚焦（jsx-a11y 放行 role=region 带 tabIndex）；给人读的工具结果用正文字体；Vitest 固定东八区
+- 遗留：会话详情原型的头部、检查器、线程栏仍是 T20a 的内联实现，T20c 换成领域组件；FilterBar 的 URL 同步用 History API，T21 换成 TanStack Router 的搜索参数；PermissionGate 只接收 `allowed` 与 `reason`，由 T21 按 `/admin/v1/me/access` 计算
 
 ## 登记事项
 
