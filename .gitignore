@@ -155,3 +155,6 @@ tmp/
 *.tgz
 *.rar
 *.7z
+
+# e2e/backend/env.sh 启动的进程与日志（R2）
+e2e/backend/.run/
