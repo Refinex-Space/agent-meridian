@@ -91,7 +91,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 见控制台设计轨道 | — |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 见控制台设计轨道 | — |
 | T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 已完成 | 5220288 |
-| T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 已完成 | 待填 |
+| T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 已完成 | 1cf2761 |
 | T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 未开始 | — |
 | T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 未开始 | — |
 | T25a | [控制台：知识库、待处理与概览](tasks/T25a-console-knowledge-pending-overview.md) | 4 | T24 | high | 大 | 无 | 未开始 | — |
@@ -554,7 +554,7 @@ R4 及之后的评审汇总的技术债，按影响排序。
 - 决策：ADR-0055（刷新后用 iframe 静默登录而不把令牌写进存储；运行时配置；项目放在路径里；搜索参数格式；外部路由补上三个 runtime 接口；模板单独一层；截图基线按平台分开并在官方镜像中生成）；不用 TanStack Router 的文件路由；Zod 留给 T22；401 视为可重试（认证模块同时续期）；空态标题平衡换行
 - 遗留：D95（控制台的部署，T28）、D96（CI 的 verify 作业缺 uv，CI 尚未在 GitHub 上实跑）、D97（命令面板的智能体与最近会话，T22、T24）
 
-### 2026-11-13 T22 已完成（提交 待填）
+### 2026-11-13 T22 已完成（提交 1cf2761）
 
 - 交付：console 的智能体（列表、详情的概要、版本、会话、子智能体四个标签页、编辑页九个分组、版本对比、基于任一版本创建草稿、删除）与环境（列表、新建与编辑、出网白名单、修订历史与修订详情、删除）；规格的 Zod schema 与 agent-spec.schema.json 逐字段比对、跨字段规则同发布校验、本地与服务端错误经同一套字段锚点定位；Monaco 提示词编辑器（本地 worker，只打包 Markdown）；可搜索的资源选择器带状态；按工具提示语法的权限规则编辑器；xyflow 子智能体拓扑；领域组件 FormField、LeaveGuard；面包屑的动态名称（`lib/crumbs.tsx`）；DetailPage 受控标签页；⌘K 加入智能体（D97）；智能体与环境按路由懒加载（首屏 gzip 约 219 KB）；端到端后端 `console-e2e-env.sh` 起 knowledge、runtime 读 control-plane（compose 变量默认仍是 file），全局准备建模型、技能与知识库；Playwright `agents`、`environments`、`a11y-agents`、`evidence-agents` 四个用例文件；删除智能体编辑原型
 - 修复：knowledge 的公开 API 不接受控制台用户（meridian-security 的 MVC 分支补上经 control-plane 的项目权限，151af58）；`InertOutside` 在关闭的选择器里常驻、对话框关闭后外壳仍是 inert（bbb8841）；FilterBar 测试的时序（b53a602）；会话统计 `active_sessions` 的说明（删除智能体后会话继续用已绑定的版本）
