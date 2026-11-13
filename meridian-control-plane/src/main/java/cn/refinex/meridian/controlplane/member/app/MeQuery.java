@@ -1,7 +1,7 @@
 package cn.refinex.meridian.controlplane.member.app;
 
+import cn.refinex.meridian.controlplane.member.domain.Membership;
 import cn.refinex.meridian.controlplane.member.infra.system.MemberDirectoryRepository;
-import cn.refinex.meridian.controlplane.member.infra.system.MemberDirectoryRepository.Membership;
 import cn.refinex.meridian.security.apikey.ApiKeyScope;
 import cn.refinex.meridian.security.oidc.ConsoleUser;
 import cn.refinex.meridian.security.rbac.AccessContext;

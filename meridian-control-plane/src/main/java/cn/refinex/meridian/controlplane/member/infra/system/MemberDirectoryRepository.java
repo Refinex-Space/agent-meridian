@@ -1,5 +1,7 @@
 package cn.refinex.meridian.controlplane.member.infra.system;
 
+import cn.refinex.meridian.controlplane.member.domain.Membership;
+import cn.refinex.meridian.controlplane.member.domain.Membership.BoundRole;
 import cn.refinex.meridian.persistence.tenant.CrossTenant;
 import cn.refinex.meridian.persistence.tenant.SystemRepository;
 import cn.refinex.meridian.security.rbac.Role;
@@ -90,23 +92,4 @@ public class MemberDirectoryRepository extends SystemRepository {
      * @param tenantId 租户 ID
      */
     public record Invitation(String memberId, String tenantId) {}
-
-    /**
-     * 用户在一个租户中的成员身份。
-     *
-     * @param tenantId 租户 ID
-     * @param tenantName 租户名称
-     * @param memberId 成员 ID
-     * @param roles 角色绑定，按绑定 ID 排序
-     */
-    public record Membership(String tenantId, String tenantName, String memberId, List<BoundRole> roles) {}
-
-    /**
-     * 成员身份中的一个角色。
-     *
-     * @param bindingId 角色绑定 ID
-     * @param role 角色
-     * @param projectId 项目级角色的项目；租户级为空
-     */
-    public record BoundRole(String bindingId, Role role, String projectId) {}
 }
