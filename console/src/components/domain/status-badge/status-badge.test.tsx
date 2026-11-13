@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Schemas } from '@/lib/api/types';
 
-import { actionStatus, toolStatus, turnStatus } from './labels';
+import { actionStatus, connectivityStatus, toolStatus, turnStatus } from './labels';
 import { StatusBadge } from './status-badge';
 
 const conclusion = (
@@ -78,5 +78,23 @@ describe('状态映射', () => {
       label: '跳过',
     });
     expect(actionStatus('resolved', conclusion({ error: true })).kind).toBe('failure');
+  });
+});
+
+describe('connectivityStatus', () => {
+  const check = (status: 'ok' | 'auth_failed' | 'unreachable' | 'error') => ({
+    status,
+    http_status: null,
+    latency_ms: 120,
+    message: null,
+    checked_at: '2026-11-13T02:00:00Z',
+  });
+
+  it('从未测试为空闲，连通为成功，其余按原因写明并标为失败', () => {
+    expect(connectivityStatus(null)).toEqual({ kind: 'idle', label: '未测试' });
+    expect(connectivityStatus(check('ok'))).toEqual({ kind: 'success', label: '连通' });
+    expect(connectivityStatus(check('auth_failed'))).toEqual({ kind: 'failure', label: '凭据无效' });
+    expect(connectivityStatus(check('unreachable'))).toEqual({ kind: 'failure', label: '连不上' });
+    expect(connectivityStatus(check('error'))).toEqual({ kind: 'failure', label: '出错' });
   });
 });

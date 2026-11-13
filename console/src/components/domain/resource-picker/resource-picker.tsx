@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 
-import { ErrorState } from '@/components/domain/error-state';
-import { StatusBadge } from '@/components/domain/status-badge';
+import { ErrorState } from '../error-state';
+import { StatusBadge } from '../status-badge';
 import { Button } from '@/components/ui/button';
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { controlHeight, controlSurface } from '@/components/ui/field-styles';

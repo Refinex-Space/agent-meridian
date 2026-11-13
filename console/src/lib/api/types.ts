@@ -56,8 +56,34 @@ export type Skill = AdminSchemas['Skill'];
 export type SkillVersion = AdminSchemas['SkillVersion'];
 export type McpServer = AdminSchemas['McpServer'];
 export type FieldViolation = AdminSchemas['FieldViolation'];
+export type ResourceReference = AdminSchemas['ResourceReference'];
+export type SkillPackage = AdminSchemas['SkillPackage'];
+export type McpServerRequest = AdminSchemas['McpServerRequest'];
+export type McpTool = AdminSchemas['McpTool'];
+export type McpTransport = AdminSchemas['McpTransport'];
+export type SideEffect = AdminSchemas['SideEffect'];
+export type ConnectivityCheck = AdminSchemas['ConnectivityCheck'];
+export type Secret = AdminSchemas['Secret'];
+export type ProviderAccount = AdminSchemas['ProviderAccount'];
+export type ProviderType = AdminSchemas['ProviderType'];
+export type RateLimit = AdminSchemas['RateLimit'];
+export type CreateProviderAccountRequest = AdminSchemas['CreateProviderAccountRequest'];
+export type UpdateProviderAccountRequest = AdminSchemas['UpdateProviderAccountRequest'];
+export type ModelKind = AdminSchemas['ModelKind'];
+export type ModelCapabilities = AdminSchemas['ModelCapabilities'];
+export type CreateModelRequest = AdminSchemas['CreateModelRequest'];
+export type UpdateModelRequest = AdminSchemas['UpdateModelRequest'];
+export type PriceBook = AdminSchemas['PriceBook'];
+export type PriceBookVersion = AdminSchemas['PriceBookVersion'];
+export type TokenPrices = AdminSchemas['TokenPrices'];
+export type CreatePriceBookRequest = AdminSchemas['CreatePriceBookRequest'];
 
 /** 公开 API 中智能体页用到的别名。 */
 export type KnowledgeBase = Schemas['KnowledgeBase'];
 export type SessionStats = Schemas['SessionStats'];
 export type AgentSessionStats = Schemas['AgentSessionStats'];
+
+/** 公开 API 中模型测试用到的别名（模型直通接口，ADR-0056）。 */
+export type ChatCompletion = Schemas['ChatCompletion'];
+export type CompletionUsage = Schemas['CompletionUsage'];
+export type EmbeddingList = Schemas['EmbeddingList'];

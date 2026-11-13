@@ -3,6 +3,7 @@
  * 任何页面不另起一套。语义决定状态符号的形状与颜色（StatusGlyph），文字按用户理解的概念写。
  */
 import type {
+  ConnectivityCheck,
   PendingActionStatus,
   Schemas,
   SessionStatus,
@@ -91,4 +92,21 @@ export function actionStatus(
   if (conclusion.decision === 'skip') return { kind: 'idle', label: '跳过' };
   if (conclusion.error === true) return { kind: 'failure', label: '回传了错误' };
   return { kind: 'success', label: '已回传结果' };
+}
+
+/**
+ * 连通性检查（供应商账号的连通性测试、MCP 服务的探测，`ConnectivityCheck`）的结果；从未检查过为空闲。
+ */
+export function connectivityStatus(check: ConnectivityCheck | null): StatusMeaning {
+  if (check === null) return { kind: 'idle', label: '未测试' };
+  switch (check.status) {
+    case 'ok':
+      return { kind: 'success', label: '连通' };
+    case 'auth_failed':
+      return { kind: 'failure', label: '凭据无效' };
+    case 'unreachable':
+      return { kind: 'failure', label: '连不上' };
+    case 'error':
+      return { kind: 'failure', label: '出错' };
+  }
 }

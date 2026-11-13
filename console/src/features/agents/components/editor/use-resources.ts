@@ -8,7 +8,7 @@ import { formatInteger, formatTokens } from '@/lib/format';
 import { knowledgeBasesQuery, mcpServersQuery, modelsQuery, skillsQuery } from '../../api/queries';
 import type { SpecContext } from '../../model/spec';
 
-import type { ResourceOption, ResourceSource } from './resource-picker';
+import type { ResourceOption, ResourceSource } from '@/components/domain/resource-picker';
 
 function source<T>(query: UseQueryResult<T[]>, map: (item: T) => ResourceOption): ResourceSource {
   return {

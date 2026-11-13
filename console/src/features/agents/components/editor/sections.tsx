@@ -31,7 +31,7 @@ import { isPlatformTool, mcpToolName, PLATFORM_TOOLS, TOOL_INFO } from '../../mo
 
 import { NumberInput } from './number-input';
 import { PermissionRules } from './permission-rules';
-import { ResourceAdd, ResourceSelect } from './resource-picker';
+import { ResourceAdd, ResourceSelect } from '@/components/domain/resource-picker';
 import type { AgentForm, FieldErrors } from './use-agent-editor';
 import type { AgentResources } from './use-resources';
 import { mcpStatus } from './use-resources';

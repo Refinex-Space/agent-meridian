@@ -19,14 +19,13 @@ import {
 } from '@tanstack/react-router';
 
 import type { AgentDetailTab } from '@/features/agents';
-import { CapabilitiesPage } from '@/features/capabilities';
+import type { CapabilitiesTab } from '@/features/capabilities';
 import { KnowledgePage } from '@/features/knowledge';
-import { ModelsPage } from '@/features/models';
+import type { ModelsTab } from '@/features/models';
 import { OverviewPage } from '@/features/overview';
 import { PendingPage } from '@/features/pending';
 import { PlaygroundPage } from '@/features/playground';
 import { SessionsPage } from '@/features/sessions';
-import { SettingsPage } from '@/features/settings';
 import { UsagePage } from '@/features/usage';
 import {
   accessQuery,
@@ -61,6 +60,18 @@ const EnvironmentListPage = lazy(() =>
 const EnvironmentEditPage = lazy(() =>
   environmentsFeature().then((m) => ({ default: m.EnvironmentEditPage })),
 );
+/** 能力与设置（T23）同样按路由懒加载：技能包的 YAML 解析、凭据的对话框只在进入时下载。 */
+const capabilitiesFeature = () => import('@/features/capabilities');
+const settingsFeature = () => import('@/features/settings');
+const CapabilitiesPage = lazy(() => capabilitiesFeature().then((m) => ({ default: m.CapabilitiesPage })));
+const SkillDetailPage = lazy(() => capabilitiesFeature().then((m) => ({ default: m.SkillDetailPage })));
+const McpServerDetailPage = lazy(() =>
+  capabilitiesFeature().then((m) => ({ default: m.McpServerDetailPage })),
+);
+const modelsFeature = () => import('@/features/models');
+const ModelsPage = lazy(() => modelsFeature().then((m) => ({ default: m.ModelsPage })));
+const PriceBookDetailPage = lazy(() => modelsFeature().then((m) => ({ default: m.PriceBookDetailPage })));
+const SecretsPage = lazy(() => settingsFeature().then((m) => ({ default: m.SecretsPage })));
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -178,12 +189,97 @@ function navRoute<P extends string>(path: P, nav: NavKey, crumb: string, compone
 const overviewRoute = navRoute('overview', 'overview', '概览', OverviewPage);
 const sessionsRoute = navRoute('sessions', 'sessions', '会话', SessionsPage);
 const playgroundRoute = navRoute('playground', 'playground', 'Playground', PlaygroundPage);
-const capabilitiesRoute = navRoute('capabilities', 'capabilities', '能力', CapabilitiesPage);
 const knowledgeRoute = navRoute('knowledge', 'knowledge', '知识库', KnowledgePage);
-const modelsRoute = navRoute('models', 'models', '模型', ModelsPage);
 const pendingRoute = navRoute('pending', 'pending', '待处理', PendingPage);
 const usageRoute = navRoute('usage', 'usage', '用量与预算', UsagePage);
-const settingsRoute = navRoute('settings', 'settings', '设置', SettingsPage);
+
+/** 能力（T23）：技能、MCP 服务、自定义工具三个标签页（搜索参数 `tab`），技能与 MCP 服务各有详情页。 */
+const CAPABILITY_TABS: readonly CapabilitiesTab[] = ['skills', 'mcp-servers', 'custom-tools'];
+const capabilitiesRoute = navRoute('capabilities', 'capabilities', '能力', () => <Outlet />);
+const capabilityListRoute = createRoute({
+  getParentRoute: () => capabilitiesRoute,
+  path: '/',
+  validateSearch: (search: Record<string, unknown>): { tab?: CapabilitiesTab } => {
+    const tab = searchString(search['tab']) as CapabilitiesTab | undefined;
+    return tab && CAPABILITY_TABS.includes(tab) && tab !== 'skills' ? { tab } : {};
+  },
+  component: function CapabilityListRoute() {
+    const { tab } = capabilityListRoute.useSearch();
+    const navigate = capabilityListRoute.useNavigate();
+    return (
+      <CapabilitiesPage
+        tab={tab ?? 'skills'}
+        onTabChange={(next) =>
+          void navigate({ search: next === 'skills' ? {} : { tab: next }, replace: true })
+        }
+      />
+    );
+  },
+});
+const skillRoute = createRoute({
+  getParentRoute: () => capabilitiesRoute,
+  path: 'skills/$skillId',
+  component: function SkillRoute() {
+    const { skillId } = skillRoute.useParams();
+    return <SkillDetailPage key={skillId} skillId={skillId} />;
+  },
+});
+const mcpServerRoute = createRoute({
+  getParentRoute: () => capabilitiesRoute,
+  path: 'mcp-servers/$mcpServerId',
+  component: function McpServerRoute() {
+    const { mcpServerId } = mcpServerRoute.useParams();
+    return <McpServerDetailPage key={mcpServerId} mcpServerId={mcpServerId} />;
+  },
+});
+
+/** 模型（T23）：供应商账号、模型目录、价格表三个标签页（搜索参数 `tab`），价格表有详情页（版本历史）。 */
+const MODELS_TABS: readonly ModelsTab[] = ['providers', 'catalog', 'price-books'];
+const modelsRoute = navRoute('models', 'models', '模型', () => <Outlet />);
+const modelListRoute = createRoute({
+  getParentRoute: () => modelsRoute,
+  path: '/',
+  validateSearch: (search: Record<string, unknown>): { tab?: ModelsTab } => {
+    const tab = searchString(search['tab']) as ModelsTab | undefined;
+    return tab && MODELS_TABS.includes(tab) && tab !== 'providers' ? { tab } : {};
+  },
+  component: function ModelListRoute() {
+    const { tab } = modelListRoute.useSearch();
+    const navigate = modelListRoute.useNavigate();
+    return (
+      <ModelsPage
+        tab={tab ?? 'providers'}
+        onTabChange={(next) =>
+          void navigate({ search: next === 'providers' ? {} : { tab: next }, replace: true })
+        }
+      />
+    );
+  },
+});
+const priceBookRoute = createRoute({
+  getParentRoute: () => modelsRoute,
+  path: 'price-books/$priceBookId',
+  component: function PriceBookRoute() {
+    const { priceBookId } = priceBookRoute.useParams();
+    return <PriceBookDetailPage key={priceBookId} priceBookId={priceBookId} />;
+  },
+});
+
+/** 设置（T25b 补全其余页面）：T23 起有凭据；设置的首页暂时就是凭据。 */
+const settingsRoute = navRoute('settings', 'settings', '设置', () => <Outlet />);
+const settingsHomeRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: '/',
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/projects/$projectId/settings/secrets', params, replace: true });
+  },
+});
+const secretsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: 'secrets',
+  staticData: { crumb: '凭据' },
+  component: () => <SecretsPage />,
+});
 
 /** 智能体（T22）：列表、单个智能体的详情、编辑草稿与版本对比；单个智能体这一级在面包屑中显示它的名字。 */
 const agentsRoute = navRoute('agents', 'agents', '智能体', () => <Outlet />);
@@ -301,12 +397,12 @@ export const routeTree = rootRoute.addChildren([
       agentRoute.addChildren([agentDetailRoute, agentEditRoute, agentCompareRoute]),
     ]),
     environmentsRoute.addChildren([environmentListRoute, environmentNewRoute, environmentEditRoute]),
-    capabilitiesRoute,
+    capabilitiesRoute.addChildren([capabilityListRoute, skillRoute, mcpServerRoute]),
     knowledgeRoute,
-    modelsRoute,
+    modelsRoute.addChildren([modelListRoute, priceBookRoute]),
     pendingRoute,
     usageRoute,
-    settingsRoute,
+    settingsRoute.addChildren([settingsHomeRoute, secretsRoute]),
     projectNotFoundRoute,
   ]),
 ]);

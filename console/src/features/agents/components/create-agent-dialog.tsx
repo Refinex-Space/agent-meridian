@@ -20,7 +20,7 @@ import { ApiError } from '@/lib/api/errors';
 import { useCreateAgent } from '../api/mutations';
 import { AGENT_NAME, defaultSpec, type DraftSpec } from '../model/spec';
 
-import { ResourceSelect } from './editor/resource-picker';
+import { ResourceSelect } from '@/components/domain/resource-picker';
 import { useAgentResources } from './editor/use-resources';
 
 export interface CreateAgentDialogProps {
