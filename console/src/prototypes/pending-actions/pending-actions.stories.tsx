@@ -8,9 +8,13 @@ import { AppShell } from '../shell/app-shell';
 
 import { PendingActions, type PendingActionsProps } from './pending-actions';
 
-function Page(props: Omit<PendingActionsProps, 'deciders'>) {
+/** `navPending`：导航上的待处理计数，与故事的数据一致（全部处理完时为 0）。 */
+function Page({
+  navPending = PENDING_ACTION_COUNT,
+  ...props
+}: Omit<PendingActionsProps, 'deciders'> & { navPending?: number }) {
   return (
-    <AppShell active="pending" pendingCount={PENDING_ACTION_COUNT} breadcrumb={[{ label: '待处理' }]}>
+    <AppShell active="pending" pendingCount={navPending} breadcrumb={[{ label: '待处理' }]}>
       <PendingActions deciders={DECIDERS} {...props} />
     </AppShell>
   );
@@ -47,7 +51,11 @@ export const Detail: Story = {
 
 export const History: Story = { name: '历史', args: { initialTab: 'history' }, ...scenario({}) };
 
-export const AllClear: Story = { name: '全部处理完', ...scenario({ mode: 'empty' }) };
+export const AllClear: Story = {
+  name: '全部处理完',
+  args: { navPending: 0 },
+  ...scenario({ mode: 'empty' }),
+};
 
 export const Loading: Story = { name: '加载中', ...scenario({ mode: 'loading' }) };
 

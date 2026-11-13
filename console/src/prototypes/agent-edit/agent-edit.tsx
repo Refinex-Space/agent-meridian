@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { formatClock } from '@/lib/format';
 
 import type { AgentDefinitionForm, DraftMeta } from '../fixtures/agent-definition';
 import { EditPage, type EditGroup } from '../templates/edit-page';
@@ -149,7 +148,7 @@ export function AgentEdit({
         saveBar={{
           dirty,
           saving,
-          savedAt: formatClock(savedAt).slice(0, 5),
+          savedAt,
           errorCount: errorFields.length,
           saveLabel: '保存草稿',
           onSave: save,

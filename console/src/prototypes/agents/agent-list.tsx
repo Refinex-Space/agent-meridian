@@ -51,12 +51,19 @@ export function AgentList({ agents, canWrite = true }: AgentListProps) {
           header: '名称',
           enableHiding: false,
           sortFn: 'alphanumeric',
+          meta: { width: 160 },
           cell: (c) => <span className="truncate font-medium">{c.getValue()}</span>,
+        }),
+        col.accessor('description', {
+          header: '说明',
+          enableSorting: false,
+          meta: { label: '说明' },
+          cell: (c) => <span className="truncate text-ink-2">{c.getValue()}</span>,
         }),
         col.accessor('version', {
           header: '当前版本',
           enableSorting: false,
-          meta: { width: 144 },
+          meta: { width: 128 },
           cell: (c) => (
             <span className="flex items-center gap-2">
               <span className="tabular-nums">v{c.getValue()}</span>
@@ -67,19 +74,19 @@ export function AgentList({ agents, canWrite = true }: AgentListProps) {
         col.accessor('modelName', {
           header: '主模型',
           enableSorting: false,
-          meta: { width: 152 },
+          meta: { width: 136 },
           cell: (c) => <span className="truncate font-mono text-12">{c.getValue()}</span>,
         }),
         col.accessor('activeSessions', {
           header: '使用中的会话',
           sortFn: 'basic',
-          meta: { width: 128, align: 'right' },
+          meta: { width: 112, align: 'right' },
           cell: (c) => <span className="tabular-nums">{formatInteger(c.getValue())}</span>,
         }),
         col.accessor('failureRate', {
           header: '失败率',
           sortFn: 'basic',
-          meta: { width: 104, align: 'right' },
+          meta: { width: 96, align: 'right' },
           cell: (c) => {
             const rate = c.getValue();
             if (rate === null) return <span className="text-ink-2">无轮次</span>;
@@ -97,14 +104,14 @@ export function AgentList({ agents, canWrite = true }: AgentListProps) {
         col.accessor('updatedAt', {
           header: '更新',
           sortFn: 'datetime',
-          meta: { width: 120 },
+          meta: { width: 136 },
           cell: (c) => <RelativeTime value={c.getValue()} className="text-ink-2" />,
         }),
         col.display({
           id: 'actions',
           header: () => <span className="sr-only">操作</span>,
           enableHiding: false,
-          meta: { width: 56, align: 'right', label: '操作' },
+          meta: { width: 48, align: 'right', label: '操作' },
           cell: (c) =>
             canWrite && (
               <DropdownMenu>

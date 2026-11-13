@@ -7,9 +7,10 @@ import { AppShell } from '../shell/app-shell';
 
 import { Overview, type OverviewProps } from './overview';
 
-function Page(props: OverviewProps) {
+/** `navPending`：导航上的待处理计数，与故事的数据一致（新项目为 0）。 */
+function Page({ navPending = PENDING_ACTION_COUNT, ...props }: OverviewProps & { navPending?: number }) {
   return (
-    <AppShell active="overview" pendingCount={PENDING_ACTION_COUNT} breadcrumb={[{ label: '概览' }]}>
+    <AppShell active="overview" pendingCount={navPending} breadcrumb={[{ label: '概览' }]}>
       <Overview {...props} />
     </AppShell>
   );
@@ -38,7 +39,11 @@ function scenario(options: ProjectOptions): Pick<Story, 'beforeEach'> {
 
 export const Default: Story = { name: '默认', ...scenario({}) };
 
-export const NewProject: Story = { name: '新项目', args: { usage: 'empty' }, ...scenario({ mode: 'empty' }) };
+export const NewProject: Story = {
+  name: '新项目',
+  args: { usage: 'empty', navPending: 0 },
+  ...scenario({ mode: 'empty' }),
+};
 
 export const Loading: Story = {
   name: '加载中',

@@ -6,6 +6,7 @@ import { AppShell } from '@/prototypes/shell/app-shell';
 import { SessionDetail } from '@/prototypes/session-detail/session-detail';
 import '@/styles/index.css';
 
+import { PENDING_ACTION_COUNT } from '@mocks/fixtures/pending-actions';
 import { MODEL_NAMES, Q3_SESSION_ID } from '@mocks/fixtures/q3-session';
 
 /**
@@ -22,7 +23,7 @@ async function start() {
       <TooltipProvider>
         <AppShell
           active="sessions"
-          pendingCount={4}
+          pendingCount={PENDING_ACTION_COUNT}
           breadcrumb={[
             { label: '会话', href: '/sessions' },
             { label: Q3_SESSION_ID, mono: true },

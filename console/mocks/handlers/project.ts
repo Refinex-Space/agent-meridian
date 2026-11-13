@@ -26,7 +26,14 @@ export interface ProjectOptions {
   live?: boolean;
   /** 首次请求的延迟（毫秒）。 */
   latency?: number;
+  /** 长内容：一个名字很长的智能体，几个很长的终端用户标识。 */
+  longContent?: boolean;
 }
+
+/** 长内容的写法：企业微信的终端用户标识、带括号说明的智能体名。 */
+const LONG_AGENT_NAME = '门店巡检报告与整改跟踪（华东区试运行，含照片识别）';
+const LONG_END_USER = (i: number) =>
+  `wecom:ww8a3f2c91d0e7b6a4:store-manager-hangzhou-xixi-${String(i).padStart(3, '0')}`;
 
 /** 控制台用户在原型中的标识（回应者）。 */
 const CURRENT_SUBJECT = 'f3a9c2e1-7b4d-4e58-9a61-2c8d0e5b7f14';
@@ -76,9 +83,17 @@ function arrivals(now: number): Session[] {
 }
 
 export function projectHandlers(options: ProjectOptions = {}): RequestHandler[] {
-  const { mode = 'normal', live = false, latency = 260 } = options;
+  const { mode = 'normal', live = false, latency = 260, longContent = false } = options;
   const start = Date.now();
-  const sessions = mode === 'empty' ? [] : buildProjectSessions(start);
+  const built = mode === 'empty' ? [] : buildProjectSessions(start);
+  const sessions = longContent
+    ? built.map((s, i) =>
+        s.agent_id === AGENT_STORE_PATROL.id ? { ...s, end_user_id: LONG_END_USER(i) } : s,
+      )
+    : built;
+  const agents = longContent
+    ? PROJECT_AGENTS.map((a) => (a.id === AGENT_STORE_PATROL.id ? { ...a, name: LONG_AGENT_NAME } : a))
+    : PROJECT_AGENTS;
   const actions = mode === 'empty' ? [] : buildPendingActions(start);
   let sessionReads = 0;
 
@@ -99,7 +114,7 @@ export function projectHandlers(options: ProjectOptions = {}): RequestHandler[] 
   return [
     http.get('/v1/agents', async ({ request }) => {
       await wait();
-      return HttpResponse.json<Schemas['AgentPage']>(page(PROJECT_AGENTS, new URL(request.url)));
+      return HttpResponse.json<Schemas['AgentPage']>(page(agents, new URL(request.url)));
     }),
 
     http.get<PathParams, DefaultBodyType, OrProblem<Schemas['SessionPage']>>(

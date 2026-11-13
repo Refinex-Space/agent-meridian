@@ -115,7 +115,10 @@ export function buildProjectSessions(now: number, count = 148, seed = 11): Sessi
   let updated = now - 95_000;
   for (let i = waiting.length; i < count; i += 1) {
     const mix = pick(next);
-    const status = statusOf(now - updated, next);
+    // 最近的 6 个会话正在执行（其中一个被置回队列等待重新执行），像一个工作日上午的项目。
+    const recent = i - waiting.length;
+    const status: SessionStatus =
+      recent < 6 ? (recent === 4 ? 'rescheduled' : 'running') : statusOf(now - updated, next);
     const created = updated - Math.floor(60_000 + next() * 2_400_000);
     rows.push(
       session(
@@ -128,8 +131,9 @@ export function buildProjectSessions(now: number, count = 148, seed = 11): Sessi
         Math.floor(8 + next() * 320),
       ),
     );
-    // 工作时间更密：间隔在 1 到 90 分钟之间。
-    updated -= Math.floor(60_000 + next() * next() * 5_400_000);
+    // 正在执行的会话间隔 20 秒到 3 分钟；其余在 1 到 90 分钟之间，工作时间更密。
+    updated -=
+      recent < 6 ? Math.floor(20_000 + next() * 160_000) : Math.floor(60_000 + next() * next() * 5_400_000);
   }
   return rows.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
 }

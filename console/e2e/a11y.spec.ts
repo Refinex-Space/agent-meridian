@@ -5,8 +5,8 @@ import { openStory, writeEvidence, type Theme } from './support';
 
 /**
  * Storybook 的 a11y 检查不得有违规（frontend-design.md「测试」）：用 axe 按 WCAG 2.2 AA 检查每个故事的亮暗两套主题，
- * 含颜色对比度。原型的故事等到数据加载完成再检查（下面的列表）；其余故事从构建产物的 index.json 读出全部，
- * 逐个检查整个页面（对话框、菜单、提示渲染在 Portal 里，不在 #storybook-root 中）。
+ * 含颜色对比度。原型的故事等到数据加载完成再检查（下面的列表）；其余故事从构建产物的 index.json 读出全部。
+ * 都检查整个页面（对话框、菜单、提示渲染在 Portal 里，不在 #storybook-root 中）。
  */
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const STORIES: { id: string; ready: string | null }[] = [
@@ -18,6 +18,29 @@ const STORIES: { id: string; ready: string | null }[] = [
   { id: '原型-会话详情--awaiting-action', ready: '等待批准' },
   { id: '原型-会话详情--finished', ready: '本轮结束' },
   { id: '原型-会话详情--load-failed', ready: '无法打开这个会话' },
+  { id: '原型-应用外壳--expanded', ready: '门店巡检报告' },
+  { id: '原型-应用外壳--collapsed', ready: '门店巡检报告' },
+  { id: '原型-应用外壳--budget-alert', ready: '查看用量与预算' },
+  { id: '原型-应用外壳--command-palette', ready: '最近的会话' },
+  { id: '原型-页面模板--list-template', ready: '门店巡检报告' },
+  { id: '原型-页面模板--detail-template', ready: '最近的版本' },
+  { id: '原型-页面模板--edit-template', ready: '资源规格' },
+  { id: '原型-页面模板--workbench-template', ready: '本轮结束' },
+  { id: '原型-会话列表--default', ready: '加载更多' },
+  { id: '原型-会话列表--long-content', ready: '加载更多' },
+  { id: '原型-会话列表--first-use', ready: '在 Playground 中对话' },
+  { id: '原型-会话列表--load-failed', ready: '无法加载会话列表' },
+  { id: '原型-会话列表--no-permission', ready: '没有权限查看会话' },
+  { id: '原型-待处理--pending', ready: '由业务系统回传' },
+  { id: '原型-待处理--detail', ready: '记住此决定' },
+  { id: '原型-待处理--history', ready: '超时视为拒绝' },
+  { id: '原型-待处理--no-permission', ready: '记住此决定' },
+  { id: '原型-智能体编辑--saved', ready: '已保存于' },
+  { id: '原型-智能体编辑--invalid', ready: '处需要修改' },
+  { id: '原型-智能体编辑--read-only', ready: '系统提示词' },
+  { id: '原型-概览--default', ready: '门店巡检报告' },
+  { id: '原型-概览--new-project', ready: '还没有用量' },
+  { id: '原型-概览--no-usage-permission', ready: '没有权限查看用量' },
 ];
 
 for (const theme of ['light', 'dark'] as Theme[]) {
@@ -25,7 +48,8 @@ for (const theme of ['light', 'dark'] as Theme[]) {
     test(`${id}（${theme === 'light' ? '亮色' : '暗色'}）没有无障碍违规`, async ({ page }) => {
       await openStory(page, id, theme);
       if (ready) await page.getByText(ready).first().waitFor();
-      const results = await new AxeBuilder({ page }).include('#storybook-root').withTags(TAGS).analyze();
+      // 整个页面：抽屉、对话框、命令面板渲染在 Portal 里，不在 #storybook-root 中。
+      const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
       const violations = results.violations.map((v) => ({
         id: v.id,
         impact: v.impact,

@@ -6,6 +6,8 @@ import { KeyValueList } from '@/components/domain/key-value-list';
 import { PermissionGate } from '@/components/domain/permission-gate';
 import { StatusBadge } from '@/components/domain/status-badge';
 import { Button } from '@/components/ui/button';
+import { LockSimpleIcon } from '@/components/ui/glyphs';
+import { Icon } from '@/components/ui/icon';
 import {
   Sheet,
   SheetBody,
@@ -148,23 +150,34 @@ export function ActionSheet({
                   collapseAfter={20}
                 />
               </InspectorSection>
-              {waiting && (action.type === 'tool_confirmation' || action.type === 'plan_exit') && (
-                <ApprovalForm
-                  actionId={action.id}
-                  toolName={action.tool_name}
-                  suggestedRules={action.suggested_rules}
-                  pending={pending === 'approve' || pending === 'deny' ? pending : null}
-                  deniedReason={deniedReason}
-                  onDecide={(d: ApprovalDecision) =>
-                    onRespond({
-                      approved: d.approved,
-                      rememberScope: d.rememberScope,
-                      rememberRule: d.rememberRule,
-                    })
-                  }
-                />
+              {waiting && deniedReason !== undefined && action.type !== 'custom_tool_result' && (
+                // 没有回应权限：不摆一组不能用的控件，直接说明缺少什么。
+                <p className="flex items-start gap-2 rounded-panel bg-surface-inset p-3 text-13 leading-5 text-ink">
+                  <span className="flex h-5 items-center">
+                    <Icon glyph={LockSimpleIcon} className="text-ink-2" />
+                  </span>
+                  {deniedReason}
+                </p>
               )}
-              {waiting && action.type === 'recovery_confirmation' && (
+              {waiting &&
+                deniedReason === undefined &&
+                (action.type === 'tool_confirmation' || action.type === 'plan_exit') && (
+                  <ApprovalForm
+                    actionId={action.id}
+                    toolName={action.tool_name}
+                    suggestedRules={action.suggested_rules}
+                    pending={pending === 'approve' || pending === 'deny' ? pending : null}
+                    deniedReason={deniedReason}
+                    onDecide={(d: ApprovalDecision) =>
+                      onRespond({
+                        approved: d.approved,
+                        rememberScope: d.rememberScope,
+                        rememberRule: d.rememberRule,
+                      })
+                    }
+                  />
+                )}
+              {waiting && deniedReason === undefined && action.type === 'recovery_confirmation' && (
                 <RecoveryControls pending={pending} deniedReason={deniedReason} onRespond={onRespond} />
               )}
               {waiting && action.type === 'custom_tool_result' && (

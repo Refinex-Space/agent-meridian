@@ -7,6 +7,9 @@ import { StreamIndicator } from '@/components/domain/stream-indicator';
 import { TokenUsage } from '@/components/domain/token-usage';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SidebarSimpleIcon } from '@/components/ui/glyphs';
+import { Icon } from '@/components/ui/icon';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Schemas, Session, SessionEvent, SessionStatus } from '@/lib/api/types';
 import type { StreamState } from '@/lib/sse/session-stream';
 
@@ -18,6 +21,8 @@ export interface SessionHeaderProps {
   events: readonly SessionEvent[];
   /** 等待回应的动作数：归档时随之作废，写进后果说明。 */
   pendingActions: number;
+  /** 检查器收起时给出：头部最右侧出现"展开检查器"（展开后由检查器自己的标题栏收起）。 */
+  onExpandInspector?: () => void;
 }
 
 /**
@@ -31,6 +36,7 @@ export function SessionHeader({
   stream,
   events,
   pendingActions,
+  onExpandInspector,
 }: SessionHeaderProps) {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const usage = events.findLast((e) => e.type === 'session.usage');
@@ -65,6 +71,16 @@ export function SessionHeader({
         <Button size="sm" disabled={!archivable} onClick={() => setArchiveOpen(true)}>
           归档
         </Button>
+        {onExpandInspector && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="icon-sm" variant="ghost" aria-label="展开检查器" onClick={onExpandInspector}>
+                <Icon glyph={SidebarSimpleIcon} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>展开检查器</TooltipContent>
+          </Tooltip>
+        )}
       </div>
       <DangerConfirmDialog
         open={archiveOpen}

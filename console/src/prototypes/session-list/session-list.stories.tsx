@@ -8,9 +8,10 @@ import { AppShell } from '../shell/app-shell';
 
 import { SessionList, type SessionListProps } from './session-list';
 
-function Page(props: SessionListProps) {
+/** `navPending`：导航上的待处理计数，与故事的数据一致（没有会话时为 0）。 */
+function Page({ navPending = PENDING_ACTION_COUNT, ...props }: SessionListProps & { navPending?: number }) {
   return (
-    <AppShell active="sessions" pendingCount={PENDING_ACTION_COUNT} breadcrumb={[{ label: '会话' }]}>
+    <AppShell active="sessions" pendingCount={navPending} breadcrumb={[{ label: '会话' }]}>
       <SessionList {...props} />
     </AppShell>
   );
@@ -62,7 +63,9 @@ export const FilteredEmpty: Story = {
   ...scenario({}),
 };
 
-export const FirstUse: Story = { name: '空', ...scenario({ mode: 'empty' }) };
+export const LongContent: Story = { name: '长内容', ...scenario({ longContent: true }) };
+
+export const FirstUse: Story = { name: '空', args: { navPending: 0 }, ...scenario({ mode: 'empty' }) };
 
 export const Loading: Story = { name: '加载中', ...scenario({ mode: 'loading' }) };
 

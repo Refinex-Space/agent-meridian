@@ -167,10 +167,10 @@ export function SessionList({ canRead = true, initialFilters, pollMs = 15_000 }:
           meta: { width: 128 },
           cell: (c) => <StatusBadge of="session" status={c.getValue()} />,
         }),
+        // 智能体与终端用户两列平分剩余宽度：宽屏上不在一列后面留出大片空白。
         col.accessor('end_user_id', {
           header: '终端用户',
           enableSorting: false,
-          meta: { width: 200 },
           cell: (c) => {
             const v = c.getValue();
             return v ? <span className="truncate">{v}</span> : <span className="text-ink-2">无</span>;
@@ -179,13 +179,13 @@ export function SessionList({ canRead = true, initialFilters, pollMs = 15_000 }:
         col.accessor('created_at', {
           header: '创建',
           enableSorting: false,
-          meta: { width: 120 },
+          meta: { width: 136 },
           cell: (c) => <RelativeTime value={c.getValue()} className="text-ink-2" />,
         }),
         col.accessor('updated_at', {
           header: '更新',
           enableSorting: false,
-          meta: { width: 120 },
+          meta: { width: 136 },
           cell: (c) => <RelativeTime value={c.getValue()} className="text-ink-2" />,
         }),
       ]),

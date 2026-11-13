@@ -81,7 +81,7 @@ function Section({
 }
 
 /** 运行状况：三个可点击的计数，排成一行，不做成卡片。 */
-function Health({ stats, loading }: { stats: Schemas['SessionStats'] | null; loading: boolean }) {
+function Health({ stats, skeleton }: { stats: Schemas['SessionStats'] | null; skeleton: boolean }) {
   const items = [
     {
       kind: 'running' as const,
@@ -115,8 +115,9 @@ function Health({ stats, loading }: { stats: Schemas['SessionStats'] | null; loa
               <StatusGlyph kind={item.kind} />
               {item.label}
             </span>
-            {loading || item.value === undefined ? (
-              <Skeleton className="h-7 w-12" />
+            {item.value === undefined ? (
+              // 数据到之前占住同样的高度；超过 150ms 才显示骨架。
+              <Skeleton className={cn('h-9 w-12', !skeleton && 'invisible')} />
             ) : (
               <span className="text-28 font-semibold text-ink">{formatInteger(item.value)}</span>
             )}
@@ -342,7 +343,11 @@ export function Overview({ usage = 'ready', canReadUsage = true, pollMs = 30_000
         : buildDailyUsage(now),
     usage,
   );
-  const budget = useFixture<BudgetStatus>(() => buildBudgetStatus(now), usage);
+  const budget = useFixture<BudgetStatus>(
+    () =>
+      usage === 'empty' ? { ...buildBudgetStatus(now), usedTokens: 0, state: 'ok' } : buildBudgetStatus(now),
+    usage,
+  );
   const usageSkeleton = useDelayedVisible(daily.data === null && daily.error === null);
   const total = daily.data?.reduce((s, d) => s + d.tokens, 0) ?? 0;
   const cost = daily.data?.reduce((s, d) => s + d.cost, 0) ?? 0;
@@ -365,66 +370,79 @@ export function Overview({ usage = 'ready', canReadUsage = true, pollMs = 30_000
         {stats.error && !shown ? (
           <ErrorState title="无法加载运行状况" error={stats.error} onRetry={stats.reload} size="inline" />
         ) : (
-          <Health stats={shown} loading={statsSkeleton || shown === null} />
+          <Health stats={shown} skeleton={statsSkeleton} />
         )}
 
-        <div className="grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <Section
-            title="最近 14 天的用量"
-            actions={
-              daily.data &&
-              canReadUsage && (
-                <span className="text-13 text-ink-2 tabular-nums">
-                  合计 <span className="text-ink">{formatTokens(total)}</span> token，成本{' '}
-                  <span className="text-ink">{formatMoney(cost, 'CNY')}</span>
-                </span>
-              )
-            }
-          >
-            {usageBlock(
-              daily.error ? (
-                <ErrorState
-                  title="无法加载用量"
-                  error={daily.error}
-                  onRetry={() => undefined}
-                  size="inline"
-                />
-              ) : daily.data === null ? (
-                usageSkeleton && <Skeleton className="h-64 w-full" />
-              ) : total === 0 ? (
-                <EmptyState
-                  variant="first-use"
-                  size="inline"
-                  title="还没有用量，会话开始调用模型后按天显示在这里"
-                />
-              ) : (
-                <UsageChart data={daily.data} className="h-64" />
-              ),
-            )}
+        {canReadUsage && daily.error ? (
+          // 用量与预算来自同一个接口：失败时只报一次错，占这一行。
+          <Section title="用量与预算">
+            <ErrorState
+              title="无法加载用量与预算"
+              error={daily.error}
+              onRetry={() => undefined}
+              size="inline"
+            />
           </Section>
-          <Section title="本月预算" hint="达到上限后，本项目新的模型调用会被拒绝；提醒阈值只发告警">
-            {usageBlock(
-              budget.error ? (
-                <ErrorState
-                  title="无法加载预算"
-                  error={budget.error}
-                  onRetry={() => undefined}
-                  size="inline"
-                />
-              ) : budget.data === null ? (
-                usageSkeleton && (
-                  <div aria-hidden className="flex flex-col gap-4">
-                    <Skeleton className="h-9 w-40" />
-                    <Skeleton className="h-2 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                  </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <Section
+              title="最近 14 天的用量"
+              actions={
+                daily.data &&
+                canReadUsage &&
+                total > 0 && (
+                  <span className="text-13 text-ink-2 tabular-nums">
+                    合计 <span className="text-ink">{formatTokens(total)}</span> token，成本{' '}
+                    <span className="text-ink">{formatMoney(cost, 'CNY')}</span>
+                  </span>
                 )
-              ) : (
-                <Budget budget={budget.data} />
-              ),
-            )}
-          </Section>
-        </div>
+              }
+            >
+              {usageBlock(
+                daily.error ? (
+                  <ErrorState
+                    title="无法加载用量"
+                    error={daily.error}
+                    onRetry={() => undefined}
+                    size="inline"
+                  />
+                ) : daily.data === null ? (
+                  usageSkeleton && <Skeleton className="h-64 w-full" />
+                ) : total === 0 ? (
+                  <EmptyState
+                    variant="first-use"
+                    size="inline"
+                    title="还没有用量，会话开始调用模型后按天显示在这里"
+                  />
+                ) : (
+                  <UsageChart data={daily.data} className="h-64" />
+                ),
+              )}
+            </Section>
+            <Section title="本月预算" hint="达到上限后，本项目新的模型调用会被拒绝；提醒阈值只发告警">
+              {usageBlock(
+                budget.error ? (
+                  <ErrorState
+                    title="无法加载预算"
+                    error={budget.error}
+                    onRetry={() => undefined}
+                    size="inline"
+                  />
+                ) : budget.data === null ? (
+                  usageSkeleton && (
+                    <div aria-hidden className="flex flex-col gap-4">
+                      <Skeleton className="h-9 w-40" />
+                      <Skeleton className="h-2 w-full" />
+                      <Skeleton className="h-16 w-full" />
+                    </div>
+                  )
+                ) : (
+                  <Budget budget={budget.data} />
+                ),
+              )}
+            </Section>
+          </div>
+        )}
 
         <Section
           title="运行质量"
@@ -453,12 +471,12 @@ export function Overview({ usage = 'ready', canReadUsage = true, pollMs = 30_000
           ) : !shown ? (
             statsSkeleton && <Skeleton className="h-48 w-full" />
           ) : (
-            <div className="flex flex-col gap-8">
-              <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-1 gap-8 2xl:grid-cols-2 2xl:gap-12">
+              <div className="flex min-w-0 flex-col gap-2">
                 <h3 className="text-13 font-semibold">按智能体</h3>
                 <AgentQuality stats={shown} names={names} />
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex min-w-0 flex-col gap-2">
                 <h3 className="text-13 font-semibold">最近失败的轮次</h3>
                 <RecentErrors stats={shown} names={names} />
               </div>

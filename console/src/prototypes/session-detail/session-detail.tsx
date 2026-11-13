@@ -7,9 +7,6 @@ import {
   SessionTimeline,
   SessionTimelineSkeleton,
 } from '@/components/domain/session-timeline';
-import { Button } from '@/components/ui/button';
-import { SidebarSimpleIcon } from '@/components/ui/glyphs';
-import { Icon } from '@/components/ui/icon';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getAgent, sendEvents } from '@/lib/api/sessions';
 import type { Schemas } from '@/lib/api/types';
@@ -125,6 +122,7 @@ export function SessionDetail({ sessionId, modelNames }: SessionDetailProps) {
             stream={stream}
             events={events}
             pendingActions={pendingActions}
+            onExpandInspector={inspectorOpen ? undefined : () => setInspectorOpen(true)}
           />
         ) : (
           showSkeleton && <HeaderSkeleton />
@@ -167,41 +165,27 @@ export function SessionDetail({ sessionId, modelNames }: SessionDetailProps) {
       }}
       main={{
         label: '事件时间线',
-        content: (
-          <>
-            {session && status ? (
-              <SessionTimeline
-                className="h-full"
-                events={events}
-                status={status}
-                live={live}
-                modelNames={modelNames}
-                selectedId={selectedId}
-                onSelect={(event) => {
-                  setSelectedId(event.id);
-                  setInspectorOpen(true);
-                }}
-                onRespond={(actionId, approved) =>
-                  respond(actionId, { approved, rememberScope: 'none', rememberRule: null })
-                }
-                respondingActionId={responding?.actionId ?? null}
-              />
-            ) : (
-              showSkeleton && <SessionTimelineSkeleton className="h-full" />
-            )}
-            {session && !inspectorOpen && (
-              <Button
-                size="icon-sm"
-                variant="secondary"
-                aria-label="展开检查器"
-                className="absolute top-3 right-4"
-                onClick={() => setInspectorOpen(true)}
-              >
-                <Icon glyph={SidebarSimpleIcon} />
-              </Button>
-            )}
-          </>
-        ),
+        content:
+          session && status ? (
+            <SessionTimeline
+              className="h-full"
+              events={events}
+              status={status}
+              live={live}
+              modelNames={modelNames}
+              selectedId={selectedId}
+              onSelect={(event) => {
+                setSelectedId(event.id);
+                setInspectorOpen(true);
+              }}
+              onRespond={(actionId, approved) =>
+                respond(actionId, { approved, rememberScope: 'none', rememberRule: null })
+              }
+              respondingActionId={responding?.actionId ?? null}
+            />
+          ) : (
+            showSkeleton && <SessionTimelineSkeleton className="h-full" />
+          ),
       }}
       right={{
         label: '检查器',

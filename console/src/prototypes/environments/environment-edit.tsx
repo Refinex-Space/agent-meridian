@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
-import { formatClock } from '@/lib/format';
 
 import {
   SIZES,
@@ -78,7 +77,7 @@ export function EnvironmentEdit({ environment, meta }: EnvironmentEditProps) {
       saveBar={{
         dirty,
         saving,
-        savedAt: formatClock(savedAt).slice(0, 5),
+        savedAt,
         saveLabel: `保存为修订 ${revision + 1}`,
         onSave: () => {
           setSaving(true);

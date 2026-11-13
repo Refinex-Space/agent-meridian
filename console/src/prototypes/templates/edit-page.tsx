@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { PageHeader } from '@/components/domain/page-header';
 import { StatusGlyph } from '@/components/domain/status-badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
+import { formatClock } from '@/lib/format';
 
 export interface EditGroup {
   /** 分组的锚点 ID，与 `EditSection` 的 `id` 相同。 */
@@ -18,7 +19,7 @@ export interface SaveBarState {
   /** 有未保存的更改。 */
   dirty: boolean;
   saving?: boolean;
-  /** 最近一次保存的时刻（"已保存于 10:42"），保存后表单就地变为已保存，不另弹通知。 */
+  /** 最近一次保存的时间（ISO）：今天的写"已保存于 10:42"，更早的带日期；保存后表单就地变为已保存，不另弹通知。 */
   savedAt?: string | null;
   /** 校验错误数：保存栏写明，保存按钮仍可点（点了聚焦第一个错误）。 */
   errorCount?: number;
@@ -27,6 +28,8 @@ export interface SaveBarState {
   onDiscard: () => void;
   /** 当前用户不能保存时的说明（按钮由调用方用 PermissionGate 包装时不传）。 */
   readOnly?: string;
+  /** 加载中：不写状态。 */
+  hideStatus?: boolean;
 }
 
 export interface EditPageProps {
@@ -58,34 +61,57 @@ export function EditSection({ id, title, children }: { id: string; title: string
   );
 }
 
-/** 滚动时高亮当前分组：取视口上部 40% 内最靠上的分组。 */
-function useActiveGroup(container: React.RefObject<HTMLDivElement | null>, ids: readonly string[]) {
+/** 滚动时高亮当前分组：标题已经滚过容器顶部往下 96px 的最后一个分组；滚到底时是最后一个。 */
+function useActiveGroup(container: RefObject<HTMLDivElement | null>, ids: readonly string[]) {
   const [active, setActive] = useState(ids[0] ?? '');
+  const key = ids.join(' ');
   useEffect(() => {
     const root = container.current;
     if (!root) return undefined;
-    const visible = new Map<string, boolean>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) visible.set(entry.target.id, entry.isIntersecting);
-        const first = ids.find((id) => visible.get(id));
-        if (first) setActive(first);
-      },
-      { root, rootMargin: '0px 0px -60% 0px' },
-    );
-    for (const id of ids) {
-      const el = root.querySelector(`#${CSS.escape(id)}`);
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
-  }, [container, ids]);
+    const update = () => {
+      const top = root.getBoundingClientRect().top + 96;
+      const atBottom = root.scrollTop + root.clientHeight >= root.scrollHeight - 2;
+      let current = ids[0] ?? '';
+      for (const id of ids) {
+        const el = root.querySelector(`#${CSS.escape(id)}`);
+        if (el && el.getBoundingClientRect().top <= top) current = id;
+      }
+      setActive(atBottom ? (ids.at(-1) ?? current) : current);
+    };
+    update();
+    root.addEventListener('scroll', update, { passive: true });
+    return () => root.removeEventListener('scroll', update);
+    // ids 的内容由 key 表示，数组本身每次渲染都是新的。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [container, key]);
   return [active, setActive] as const;
 }
 
+/** 保存时间：今天只写时刻，更早的带日期。 */
+function savedLabel(iso: string): string {
+  const date = new Date(iso);
+  const time = formatClock(iso).slice(0, 5);
+  const today = new Date();
+  return date.toDateString() === today.toDateString()
+    ? time
+    : `${date.getMonth() + 1} 月 ${date.getDate()} 日 ${time}`;
+}
+
 function SaveBar({ state }: { state: SaveBarState }) {
-  const { dirty, saving = false, savedAt, errorCount = 0, saveLabel, onSave, onDiscard, readOnly } = state;
+  const {
+    dirty,
+    saving = false,
+    savedAt,
+    errorCount = 0,
+    saveLabel,
+    onSave,
+    onDiscard,
+    readOnly,
+    hideStatus,
+  } = state;
   let status: ReactNode;
-  if (readOnly) status = <span className="text-ink-2">{readOnly}</span>;
+  if (hideStatus) status = null;
+  else if (readOnly) status = <span className="text-ink-2">{readOnly}</span>;
   else if (errorCount > 0)
     status = (
       <span className="flex items-center gap-2 text-danger">
@@ -99,7 +125,7 @@ function SaveBar({ state }: { state: SaveBarState }) {
         有未保存的更改
       </span>
     );
-  else if (savedAt) status = <span className="text-ink-2">已保存于 {savedAt}</span>;
+  else if (savedAt) status = <span className="text-ink-2">已保存于 {savedLabel(savedAt)}</span>;
   else status = <span className="text-ink-2">没有更改</span>;
 
   return (
@@ -117,6 +143,21 @@ function SaveBar({ state }: { state: SaveBarState }) {
           </Button>
         </>
       )}
+    </div>
+  );
+}
+
+/** 表单的骨架：与分组标题、字段标签和输入框同样的行高。 */
+function FormSkeleton() {
+  return (
+    <div aria-hidden className="flex flex-col gap-4">
+      <Skeleton className="h-5 w-24" />
+      {['w-16', 'w-12', 'w-20'].map((w, i) => (
+        <div key={w} className="flex flex-col gap-2">
+          <Skeleton className={cn('h-4', w)} />
+          <Skeleton className={cn('h-8', i === 1 ? 'w-full' : 'w-100')} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -147,7 +188,7 @@ export function EditPage({
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div className="shrink-0 border-b border-rule px-6">
-        <PageHeader title={title} meta={meta} actions={actions} loading={loading} />
+        <PageHeader title={title} meta={meta} actions={loading ? undefined : actions} loading={loading} />
       </div>
       {error ?? (
         <>
@@ -202,11 +243,15 @@ export function EditPage({
                   </ul>
                 )}
               </nav>
-              <div className="flex max-w-220 min-w-0 flex-1 flex-col gap-12 pt-6 pb-12">{children}</div>
+              <div className="flex max-w-220 min-w-0 flex-1 flex-col gap-12 pt-6 pb-12">
+                {loading ? <FormSkeleton /> : children}
+              </div>
             </div>
           </div>
           {notice}
-          <SaveBar state={saveBar} />
+          <SaveBar
+            state={loading ? { ...saveBar, dirty: false, savedAt: null, hideStatus: true } : saveBar}
+          />
         </>
       )}
     </div>
