@@ -24,7 +24,7 @@ import {
   type RuleBehavior,
 } from '../fixtures/agent-definition';
 import { Field, fieldAria } from '../shared/field';
-import { EditSection } from '../templates/edit-page';
+import { EditSection } from '@/components/templates';
 
 import type { FormErrors } from './validate';
 

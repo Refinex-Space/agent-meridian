@@ -21,7 +21,7 @@ import type { PendingAction, Schemas } from '@/lib/api/types';
 import { useNow } from '@/lib/use-now';
 
 import { useInterval, useResource } from '../shared/use-resource';
-import { ListPage } from '../templates/list-page';
+import { ListPage } from '@/components/templates';
 
 import { ActionSheet, type ActionResponse } from './action-sheet';
 import { ACTION_TYPE_LABEL, inputSummary, toolLabel } from './describe';

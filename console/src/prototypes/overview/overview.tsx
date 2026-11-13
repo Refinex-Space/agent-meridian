@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ApiError, getSessionStats, listAgents } from '@/lib/api/sessions';
+import { ApiError } from '@/lib/api/errors';
+import { getSessionStats, listAgents } from '@/lib/api/sessions';
 import type { Schemas } from '@/lib/api/types';
 import { cn } from '@/lib/cn';
 import { formatClock, formatInteger, formatMoney, formatTokens } from '@/lib/format';
@@ -20,7 +21,7 @@ import { useDelayedVisible } from '@/lib/use-delayed-visible';
 
 import { buildBudgetStatus, buildDailyUsage, type BudgetStatus, type DailyUsage } from '../fixtures/usage';
 import { useInterval, useResource } from '../shared/use-resource';
-import { DetailPage } from '../templates/detail-page';
+import { DetailPage } from '@/components/templates';
 
 import { UsageChart } from './usage-chart';
 

@@ -18,7 +18,7 @@ import {
   type AgentRow,
   type AgentVersionRow,
 } from '../fixtures/agent-definition';
-import { DetailPage } from '../templates/detail-page';
+import { DetailPage } from '@/components/templates';
 
 export interface AgentDetailProps {
   agent: AgentRow;

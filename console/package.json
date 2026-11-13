@@ -8,8 +8,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "pnpm gen:api && vite",
+    "build": "pnpm gen:api && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings=0 && node scripts/check-css.mjs && prettier --check . && pnpm run gen:api --check",
@@ -18,13 +18,15 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build --quiet",
     "e2e": "playwright test",
-    "gen:api": "openapi-typescript ../meridian-api/src/main/resources/openapi/meridian-v1.yaml -o src/lib/api/v1.d.ts"
+    "gen:api": "openapi-typescript"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "5.3.0",
     "@fontsource/ibm-plex-sans": "5.3.0",
     "@ibm/plex-sans-sc": "1.1.0",
     "@phosphor-icons/react": "2.1.10",
+    "@tanstack/react-query": "5.105.0",
+    "@tanstack/react-router": "1.170.46",
     "@tanstack/react-table": "9.3.1",
     "@tanstack/react-virtual": "3.14.24",
     "class-variance-authority": "0.7.1",
@@ -32,6 +34,8 @@
     "cmdk": "1.1.1",
     "echarts": "6.1.0",
     "motion": "14.9.0",
+    "oidc-client-ts": "3.5.0",
+    "openapi-fetch": "0.17.0",
     "radix-ui": "1.8.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",

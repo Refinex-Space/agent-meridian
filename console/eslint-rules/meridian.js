@@ -288,15 +288,17 @@ const noDecorativeGlyphs = {
 /**
  * 目录分层（frontend-design.md「边界规则」）：键是导入方所在层，值是允许导入的层。
  * `feature` 之间只能经对方的 `index.ts`；故事与测试另外可以导入 `mocks`、`test` 与底层（ui、lib、assets、styles）。
+ * `app` 是正式应用（路由、外壳、Provider），不依赖原型与 MSW；原型可以借用 `app` 的外壳，T25b 之后随原型一起删除。
  */
 const LAYER_RULES = {
   ui: ['ui', 'lib', 'assets', 'styles'],
   domain: ['domain', 'ui', 'lib', 'assets', 'styles'],
-  feature: ['feature', 'domain', 'ui', 'lib', 'assets', 'styles'],
+  template: ['template', 'domain', 'ui', 'lib', 'assets', 'styles'],
+  feature: ['feature', 'template', 'domain', 'ui', 'lib', 'assets', 'styles'],
   lib: ['lib'],
   assets: ['assets'],
-  prototype: ['prototype', 'feature', 'domain', 'ui', 'lib', 'assets', 'styles', 'mocks'],
-  app: ['app', 'prototype', 'feature', 'domain', 'ui', 'lib', 'assets', 'styles', 'mocks'],
+  prototype: ['prototype', 'app', 'feature', 'template', 'domain', 'ui', 'lib', 'assets', 'styles', 'mocks'],
+  app: ['app', 'feature', 'template', 'domain', 'ui', 'lib', 'assets', 'styles'],
   mocks: ['mocks', 'lib'],
   test: ['test', 'lib', 'mocks'],
 };
@@ -309,6 +311,7 @@ function layerOf(relative) {
     case 'components':
       if (parts[2] === 'ui') return { layer: 'ui' };
       if (parts[2] === 'domain') return { layer: 'domain' };
+      if (parts[2] === 'templates') return { layer: 'template' };
       return null;
     case 'features':
       return { layer: 'feature', feature: parts[2], rest: parts.slice(3).join('/') };

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { getSession, listAllEvents, type RequestOptions } from '@/lib/api/sessions';
+import { authorizedFetch, v1Api } from '@/lib/api/client';
+import { getSession, listAllEvents } from '@/lib/api/sessions';
 import type { Session, SessionEvent, SessionStatus } from '@/lib/api/types';
 
 import { applyToLiveBlocks, type LiveBlock } from './live-blocks';
@@ -16,6 +17,16 @@ export interface SessionEventsState {
   error: Error | null;
 }
 
+export interface SessionEvents extends SessionEventsState {
+  /** 已断开（被拒绝或会话终止之外的原因）后手动重连，给 StreamIndicator 的"重新连接"。 */
+  reconnect: () => void;
+}
+
+export interface SessionEventsOptions {
+  /** 当前项目：请求带 `Meridian-Project`。不给时不带项目头（MSW 应答的原型）。 */
+  projectId?: string;
+}
+
 const STATUS_BY_EVENT: Partial<Record<SessionEvent['type'], SessionStatus>> = {
   'session.status_running': 'running',
   'session.status_idle': 'idle',
@@ -24,27 +35,26 @@ const STATUS_BY_EVENT: Partial<Record<SessionEvent['type'], SessionStatus>> = {
   'session.status_terminated': 'terminated',
 };
 
+const INITIAL: SessionEventsState = {
+  session: null,
+  events: [],
+  live: [],
+  status: null,
+  stream: 'connecting',
+  error: null,
+};
+
 /**
- * 会话详情的数据：读会话与全部历史事件，再从最后一个 seq 订阅事件流（带增量），断线自动续传。
- * 事件按 seq 去重追加；正在生成的内容块单独维护，持久化事件到达后移除。
+ * 会话详情的数据：读会话与全部历史事件，再从最后一个 seq 订阅会话流（带增量），断线自动续传。事件由 `runSessionStream`
+ * 去重并按序交付；正在生成的内容块单独维护，持久化事件到达后移除。连接状态交给 `StreamIndicator` 显示。
  */
-export function useSessionEvents(
-  sessionId: string,
-  options: Omit<RequestOptions, 'signal'> = {},
-): SessionEventsState {
-  const [state, setState] = useState<SessionEventsState>({
-    session: null,
-    events: [],
-    live: [],
-    status: null,
-    stream: 'connecting',
-    error: null,
-  });
-  const { baseUrl = '/v1', headers } = options;
+export function useSessionEvents(sessionId: string, { projectId }: SessionEventsOptions = {}): SessionEvents {
+  const [state, setState] = useState<SessionEventsState>(INITIAL);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    const request = { baseUrl, ...(headers ? { headers } : {}), signal: controller.signal };
+    const request = { client: v1Api(projectId), signal: controller.signal };
     void (async () => {
       try {
         const [session, history] = await Promise.all([
@@ -52,27 +62,24 @@ export function useSessionEvents(
           listAllEvents(sessionId, request),
         ]);
         if (controller.signal.aborted) return;
-        setState((s) => ({ ...s, session, events: history, status: session.status }));
+        setState((s) => ({ ...s, session, events: history, status: session.status, error: null }));
         if (session.status === 'terminated') {
           setState((s) => ({ ...s, stream: 'closed' }));
           return;
         }
         await runSessionStream({
-          url: `${baseUrl}/sessions/${encodeURIComponent(sessionId)}/stream?event_deltas=true`,
+          url: `/v1/sessions/${encodeURIComponent(sessionId)}/stream?event_deltas=true`,
           lastSeq: history.at(-1)?.seq ?? 0,
-          ...(headers ? { headers } : {}),
+          fetchImpl: authorizedFetch(projectId),
           signal: controller.signal,
           onState: (stream) => setState((s) => ({ ...s, stream })),
           onEvent: (event) =>
-            setState((s) => {
-              if (s.events.length > 0 && event.seq <= (s.events.at(-1)?.seq ?? 0)) return s;
-              return {
-                ...s,
-                events: [...s.events, event],
-                live: applyToLiveBlocks(s.live, event),
-                status: STATUS_BY_EVENT[event.type] ?? s.status,
-              };
-            }),
+            setState((s) => ({
+              ...s,
+              events: [...s.events, event],
+              live: applyToLiveBlocks(s.live, event),
+              status: STATUS_BY_EVENT[event.type] ?? s.status,
+            })),
           onStreamOnly: (event) => setState((s) => ({ ...s, live: applyToLiveBlocks(s.live, event) })),
         });
       } catch (error) {
@@ -82,7 +89,12 @@ export function useSessionEvents(
       }
     })();
     return () => controller.abort();
-  }, [sessionId, baseUrl, headers]);
+  }, [sessionId, projectId, attempt]);
 
-  return state;
+  const reconnect = useCallback(() => {
+    setState(INITIAL);
+    setAttempt((n) => n + 1);
+  }, []);
+
+  return { ...state, reconnect };
 }

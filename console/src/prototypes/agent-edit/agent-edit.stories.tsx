@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { ApiError } from '@/lib/api/sessions';
+import { ApiError } from '@/lib/api/errors';
 
 import { PENDING_ACTION_COUNT } from '@mocks/fixtures/pending-actions';
 

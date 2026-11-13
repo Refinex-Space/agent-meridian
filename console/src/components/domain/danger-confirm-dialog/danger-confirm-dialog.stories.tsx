@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { userEvent, within } from 'storybook/test';
 
-import { ApiError } from '@/lib/api/sessions';
+import { ApiError } from '@/lib/api/errors';
 import { storyFrame } from '@/test/stories';
 
 import { DangerConfirmDialog } from './danger-confirm-dialog';

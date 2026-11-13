@@ -5,7 +5,7 @@ import { userEvent, within } from 'storybook/test';
 import { Button } from '@/components/ui/button';
 import { PlusIcon } from '@/components/ui/glyphs';
 import { Icon } from '@/components/ui/icon';
-import { ApiError } from '@/lib/api/sessions';
+import { ApiError } from '@/lib/api/errors';
 import { focus, hover, storyFrame } from '@/test/stories';
 
 import { buildSessionList, SESSION_LIST_NOW, type SessionListRow } from '@mocks/fixtures/session-list';

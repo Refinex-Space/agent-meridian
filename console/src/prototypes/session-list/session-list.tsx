@@ -21,7 +21,7 @@ import { listAgents, listSessions } from '@/lib/api/sessions';
 import type { Session, SessionStatus } from '@/lib/api/types';
 
 import { useInterval, useResource } from '../shared/use-resource';
-import { ListPage } from '../templates/list-page';
+import { ListPage } from '@/components/templates';
 
 const PAGE_SIZE = 50;
 

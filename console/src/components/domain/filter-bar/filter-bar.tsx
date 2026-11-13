@@ -186,7 +186,7 @@ function SearchBox({
 }
 
 /**
- * 列表页的筛选与搜索：受控组件，取值与 URL 同步由 useUrlFilters 负责。有筛选条件时出现"清除筛选"，
+ * 列表页的筛选与搜索：受控组件，取值与 URL 同步由 useSearchFilters 负责。有筛选条件时出现"清除筛选"，
  * 结果数在右侧。
  */
 export function FilterBar({

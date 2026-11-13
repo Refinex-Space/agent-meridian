@@ -1,15 +1,17 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useLocation } from '@tanstack/react-router';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 
 import { Button } from '@/components/ui/button';
 import { ColumnsIcon } from '@/components/ui/glyphs';
 import { Icon } from '@/components/ui/icon';
+import { withRouter } from '@/test/router';
 import { focus, hover, storyFrame } from '@/test/stories';
 
 import { FilterBar } from './filter-bar';
 import { emptyValues, type FilterDef, type FilterValues } from './filters';
-import { useUrlFilters } from './use-url-filters';
+import { useSearchFilters } from './use-search-filters';
 
 const DEFS: FilterDef[] = [
   {
@@ -65,11 +67,12 @@ function Controlled({ initial }: { initial: FilterValues }) {
 }
 
 function UrlSynced() {
-  const [value, setValue] = useUrlFilters(DEFS);
+  const [value, setValue] = useSearchFilters(DEFS);
+  const search = useLocation({ select: (l) => l.searchStr });
   return (
     <div className="flex flex-col gap-4">
       <FilterBar filters={DEFS} value={value} onChange={setValue} search={SEARCH} resultCount={128} />
-      <code className="text-12 text-ink-2">{decodeURIComponent(window.location.search)}</code>
+      <code className="text-12 text-ink-2">{decodeURIComponent(search)}</code>
     </div>
   );
 }
@@ -130,7 +133,13 @@ export const Open: Story = {
   },
 };
 
-export const UrlSync: Story = { name: 'URL 同步', args: base, render: () => <UrlSynced /> };
+export const UrlSync: Story = {
+  name: 'URL 同步',
+  args: base,
+  decorators: [withRouter],
+  parameters: { route: '/sessions?status=running&q=u_82' },
+  render: () => <UrlSynced />,
+};
 
 export const LongContent: Story = {
   name: '长内容',

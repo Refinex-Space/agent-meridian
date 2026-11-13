@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { PlusIcon } from '@/components/ui/glyphs';
 import { Icon } from '@/components/ui/icon';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ApiError } from '@/lib/api/sessions';
+import { ApiError } from '@/lib/api/errors';
 import type { EventOf, SessionEvent } from '@/lib/api/types';
 
 import { buildQ3Scenario, MODEL_NAMES, Q3_FIXED_START } from '@mocks/fixtures/q3-session';

@@ -13,7 +13,7 @@ import type { Schemas } from '@/lib/api/types';
 import { useSessionEvents } from '@/lib/sse/use-session-events';
 import { useDelayedVisible } from '@/lib/use-delayed-visible';
 
-import { Workbench } from '../templates/workbench';
+import { Workbench } from '@/components/templates';
 
 import { Inspector } from './inspector';
 import { SessionHeader } from './session-header';

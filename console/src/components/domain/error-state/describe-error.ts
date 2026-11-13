@@ -1,4 +1,4 @@
-import { ApiError } from '@/lib/api/sessions';
+import { ApiError, isNetworkError, isProblem } from '@/lib/api/errors';
 import type { Problem } from '@/lib/api/types';
 
 export interface ErrorDescription {
@@ -12,16 +12,6 @@ export interface ErrorDescription {
   status: number | null;
   /** 字段校验失败的明细。 */
   violations: Problem['errors'];
-}
-
-function isProblem(value: unknown): value is Problem {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'status' in value &&
-    'request_id' in value &&
-    'code' in value
-  );
 }
 
 /** 按 HTTP 状态给出"发生了什么"与"下一步"。 */
@@ -46,13 +36,13 @@ function byStatus(status: number | null): { title: string; next: string } {
 export function describeError(error: unknown): ErrorDescription {
   const problem = error instanceof ApiError ? error.problem : isProblem(error) ? error : null;
   const status = error instanceof ApiError ? error.status : (problem?.status ?? null);
-  const network = error instanceof TypeError;
+  const network = isNetworkError(error);
   const { title, next } = byStatus(network ? null : status);
   return {
     title,
     detail: problem?.detail ?? (network || problem ? null : error instanceof Error ? error.message : null),
     next,
-    requestId: problem?.request_id ?? null,
+    requestId: error instanceof ApiError ? error.requestId : (problem?.request_id ?? null),
     status: network ? null : status,
     violations: problem?.errors,
   };

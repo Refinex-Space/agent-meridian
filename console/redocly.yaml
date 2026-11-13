@@ -1,0 +1,10 @@
+# openapi-typescript 的生成配置（`pnpm gen:api`）：公开 API 与管理 API 各生成一份类型，禁止手改生成的文件。
+apis:
+  v1:
+    root: ../meridian-api/src/main/resources/openapi/meridian-v1.yaml
+    x-openapi-ts:
+      output: ./src/lib/api/v1.d.ts
+  admin:
+    root: ../meridian-api/src/main/resources/openapi/meridian-admin-v1.yaml
+    x-openapi-ts:
+      output: ./src/lib/api/admin.d.ts

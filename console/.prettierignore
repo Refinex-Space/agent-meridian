@@ -6,3 +6,4 @@ test-results
 pnpm-lock.yaml
 public/mockServiceWorker.js
 src/lib/api/v1.d.ts
+src/lib/api/admin.d.ts

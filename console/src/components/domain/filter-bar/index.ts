@@ -8,4 +8,4 @@ export {
   type FilterOption,
   type FilterValues,
 } from './filters';
-export { useUrlFilters } from './use-url-filters';
+export { useSearchFilters } from './use-search-filters';

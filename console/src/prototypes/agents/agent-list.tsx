@@ -21,7 +21,7 @@ import { Icon } from '@/components/ui/icon';
 import { formatInteger } from '@/lib/format';
 
 import type { AgentRow } from '../fixtures/agent-definition';
-import { ListPage } from '../templates/list-page';
+import { ListPage } from '@/components/templates';
 
 export interface AgentListProps {
   agents: readonly AgentRow[];

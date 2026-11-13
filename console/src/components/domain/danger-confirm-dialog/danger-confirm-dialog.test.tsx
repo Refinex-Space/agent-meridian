@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { ApiError } from '@/lib/api/sessions';
+import { ApiError } from '@/lib/api/errors';
 
 import { DangerConfirmDialog } from './danger-confirm-dialog';
 

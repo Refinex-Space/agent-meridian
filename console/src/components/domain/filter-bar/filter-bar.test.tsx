@@ -1,10 +1,12 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { renderWithRouter } from '@/test/router';
+
 import { FilterBar } from './filter-bar';
 import { parseFilters, serializeFilters, type FilterDef } from './filters';
-import { useUrlFilters } from './use-url-filters';
+import { useSearchFilters } from './use-search-filters';
 
 const DEFS: FilterDef[] = [
   {
@@ -28,7 +30,7 @@ const DEFS: FilterDef[] = [
 ];
 
 function Harness() {
-  const [values, setValues] = useUrlFilters(DEFS);
+  const [values, setValues] = useSearchFilters(DEFS);
   return (
     <FilterBar
       filters={DEFS}
@@ -71,8 +73,8 @@ describe('FilterBar 与 URL 同步', () => {
     window.history.replaceState(null, '', '/');
   });
 
-  it('初始取值读自地址栏，无效值被丢弃', () => {
-    render(<Harness />);
+  it('初始取值读自地址栏，无效值被丢弃', async () => {
+    await renderWithRouter(<Harness />);
     expect(screen.getByRole('button', { name: '状态：运行中' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索会话' })).toHaveValue('u_82');
     expect(screen.getByRole('status')).toHaveTextContent('128 个结果');
@@ -80,7 +82,7 @@ describe('FilterBar 与 URL 同步', () => {
 
   it('多选：勾选后写回 URL（按选项顺序），菜单保持打开，其他参数保留', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<Harness />);
+    await renderWithRouter(<Harness />);
     await user.click(screen.getByRole('button', { name: '状态：运行中' }));
     await user.click(screen.getByRole('menuitemcheckbox', { name: '空闲' }));
     expect(params().getAll('status')).toEqual(['running', 'idle']);
@@ -92,7 +94,7 @@ describe('FilterBar 与 URL 同步', () => {
 
   it('单选：选中写回 URL，选"不限"移除参数', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<Harness />);
+    await renderWithRouter(<Harness />);
     await user.click(screen.getByRole('button', { name: '创建时间' }));
     await user.click(screen.getByRole('menuitemradio', { name: '最近 24 小时' }));
     expect(params().get('created_within')).toBe('24h');
@@ -104,7 +106,7 @@ describe('FilterBar 与 URL 同步', () => {
 
   it('搜索：输入停顿 300ms 后才写回 URL', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<Harness />);
+    await renderWithRouter(<Harness />);
     const box = screen.getByRole('searchbox', { name: '搜索会话' });
     await user.clear(box);
     await user.type(box, 'ses_01');
@@ -115,25 +117,37 @@ describe('FilterBar 与 URL 同步', () => {
 
   it('清除筛选：移除筛选与搜索参数，按钮随之消失', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<Harness />);
+    await renderWithRouter(<Harness />);
     await user.click(screen.getByRole('button', { name: '清除筛选' }));
     expect(window.location.search).toBe('?tab=all');
     expect(screen.getByRole('searchbox', { name: '搜索会话' })).toHaveValue('');
     expect(screen.queryByRole('button', { name: '清除筛选' })).toBeNull();
   });
 
-  it('前进后退时按地址栏重新读取', () => {
-    render(<Harness />);
-    act(() => {
-      window.history.pushState(null, '', '/sessions?status=idle');
-      window.dispatchEvent(new PopStateEvent('popstate'));
+  it('前进后退时按地址栏重新读取', async () => {
+    const { history } = await renderWithRouter(<Harness />);
+    // 先前进到新地址，再后退、前进：地址栏变化后按它重新读取。
+    await act(async () => {
+      history.push('/sessions?status=idle');
+      await vi.waitFor(() => expect(params().get('status')).toBe('idle'));
     });
-    expect(screen.getByRole('button', { name: '状态：空闲' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '状态：空闲' })).toBeInTheDocument();
+    await act(async () => {
+      history.back();
+      await vi.waitFor(() => expect(params().get('status')).toBe('running'));
+    });
+    expect(await screen.findByRole('button', { name: '状态：运行中' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: '搜索会话' })).toHaveValue('u_82');
+    await act(async () => {
+      history.forward();
+      await vi.waitFor(() => expect(params().get('status')).toBe('idle'));
+    });
+    expect(await screen.findByRole('button', { name: '状态：空闲' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索会话' })).toHaveValue('');
   });
 
-  it('按 / 聚焦搜索框；焦点已在输入框里时不拦截', () => {
-    render(<Harness />);
+  it('按 / 聚焦搜索框；焦点已在输入框里时不拦截', async () => {
+    await renderWithRouter(<Harness />);
     const box = screen.getByRole('searchbox', { name: '搜索会话' });
     fireEvent.keyDown(document.body, { key: '/' });
     expect(box).toHaveFocus();

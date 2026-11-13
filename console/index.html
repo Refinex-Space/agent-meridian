@@ -6,14 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AgentMeridian 控制台</title>
     <script>
-      // 首次绘制前按系统偏好写入主题，避免暗色用户先看到亮色；之后跟随系统变化（T21 的主题设置可固定为亮或暗）。
+      // 首次绘制前按主题设置写入主题（lib/theme.ts 的 meridian.theme：light、dark，没有时跟随系统），避免暗色用户先看到亮色；
+      // 之后的切换与跟随系统由 lib/theme.ts 接管。
       (function () {
-        var query = window.matchMedia('(prefers-color-scheme: dark)');
-        var apply = function () {
-          document.documentElement.dataset.theme = query.matches ? 'dark' : 'light';
-        };
-        apply();
-        query.addEventListener('change', apply);
+        var stored = null;
+        try {
+          stored = window.localStorage.getItem('meridian.theme');
+        } catch (e) {}
+        var dark =
+          stored === 'dark' ||
+          (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
       })();
     </script>
   </head>

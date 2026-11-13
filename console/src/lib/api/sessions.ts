@@ -1,7 +1,7 @@
 /**
- * 会话相关的请求。类型全部来自生成的 v1.d.ts。
- * TODO(T21)：T21 引入 openapi-fetch 客户端（认证头、problem+json 错误、request_id）后，这里改为经它调用。
+ * 会话相关的请求，经 openapi-fetch 客户端调用（认证头、项目头、problem+json 错误）。类型全部来自生成的 v1.d.ts。
  */
+import { unwrap, v1Api, type V1Client } from './client';
 import type {
   EventPage,
   Schemas,
@@ -12,45 +12,31 @@ import type {
 } from './types';
 
 export interface RequestOptions {
-  /** 公开 API 的前缀，默认 `/v1`。 */
-  baseUrl?: string;
-  headers?: Record<string, string>;
+  /** 公开 API 的客户端；页面传当前项目的 `v1Api(projectId)`，不传时不带项目头（MSW 应答的原型与测试）。 */
+  client?: V1Client;
   signal?: AbortSignal;
 }
 
-/** 请求失败：带 HTTP 状态与服务端返回的 problem+json（如果有）。 */
-export class ApiError extends Error {
-  readonly status: number;
-  readonly problem: Schemas['Problem'] | null;
-
-  constructor(status: number, problem: Schemas['Problem'] | null) {
-    super(problem?.detail ?? problem?.title ?? `请求失败（HTTP ${status}）`);
-    this.status = status;
-    this.problem = problem;
-  }
-}
-
-async function request<T>(path: string, options: RequestOptions, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${options.baseUrl ?? '/v1'}${path}`, {
-    ...init,
-    headers: { Accept: 'application/json', ...init.headers, ...options.headers },
-    signal: options.signal ?? null,
-  });
-  if (!response.ok) {
-    const problem = response.headers.get('Content-Type')?.includes('json')
-      ? ((await response.json()) as Schemas['Problem'])
-      : null;
-    throw new ApiError(response.status, problem);
-  }
-  return (await response.json()) as T;
+function api(options: RequestOptions): V1Client {
+  return options.client ?? v1Api();
 }
 
 export function getSession(sessionId: string, options: RequestOptions = {}): Promise<Session> {
-  return request<Session>(`/sessions/${encodeURIComponent(sessionId)}`, options);
+  return unwrap(
+    api(options).GET('/v1/sessions/{session_id}', {
+      params: { path: { session_id: sessionId } },
+      signal: options.signal,
+    }),
+  );
 }
 
 export function getAgent(agentId: string, options: RequestOptions = {}): Promise<Schemas['Agent']> {
-  return request<Schemas['Agent']>(`/agents/${encodeURIComponent(agentId)}`, options);
+  return unwrap(
+    api(options).GET('/v1/agents/{agent_id}', {
+      params: { path: { agent_id: agentId } },
+      signal: options.signal,
+    }),
+  );
 }
 
 /** 按页读完会话的全部持久化事件（每页 100 条）。 */
@@ -61,11 +47,14 @@ export async function listAllEvents(
   const events: SessionEvent[] = [];
   let cursor: string | null = null;
   do {
-    const query = new URLSearchParams({ limit: '100' });
-    if (cursor) query.set('after', cursor);
-    const page: EventPage = await request<EventPage>(
-      `/sessions/${encodeURIComponent(sessionId)}/events?${query.toString()}`,
-      options,
+    const page: EventPage = await unwrap(
+      api(options).GET('/v1/sessions/{session_id}/events', {
+        params: {
+          path: { session_id: sessionId },
+          query: { limit: 100, ...(cursor ? { after: cursor } : {}) },
+        },
+        signal: options.signal,
+      }),
     );
     events.push(...page.data);
     cursor = page.has_more ? page.next_cursor : null;
@@ -78,23 +67,20 @@ export function sendEvents(
   body: SendEventsRequest,
   options: RequestOptions = {},
 ): Promise<SendEventsResponse> {
-  return request<SendEventsResponse>(`/sessions/${encodeURIComponent(sessionId)}/events`, options, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  return unwrap(
+    api(options).POST('/v1/sessions/{session_id}/events', {
+      params: { path: { session_id: sessionId } },
+      body,
+      signal: options.signal,
+    }),
+  );
 }
 
-/** 列表查询参数：值为 undefined 或空串的键不出现在 URL 中。 */
-type Query = Record<string, string | number | undefined>;
-
-function withQuery(path: string, query: Query): string {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(query)) {
-    if (value !== undefined && value !== '') params.set(key, String(value));
-  }
-  const text = params.toString();
-  return text ? `${path}?${text}` : path;
+/** 去掉值为 undefined 或空串的查询参数，不让空的筛选条件出现在 URL 中。 */
+function compact<Q extends object>(query: Q): Q {
+  return Object.fromEntries(
+    Object.entries(query).filter(([, value]) => value !== undefined && value !== ''),
+  ) as Q;
 }
 
 /** 会话列表（游标分页），筛选条件见 `GET /v1/sessions`。 */
@@ -110,7 +96,9 @@ export function listSessions(
   },
   options: RequestOptions = {},
 ): Promise<Schemas['SessionPage']> {
-  return request<Schemas['SessionPage']>(withQuery('/sessions', query), options);
+  return unwrap(
+    api(options).GET('/v1/sessions', { params: { query: compact(query) }, signal: options.signal }),
+  );
 }
 
 /** 本项目的智能体（游标分页）。 */
@@ -118,7 +106,9 @@ export function listAgents(
   query: { limit?: number; after?: string },
   options: RequestOptions = {},
 ): Promise<Schemas['AgentPage']> {
-  return request<Schemas['AgentPage']>(withQuery('/agents', query), options);
+  return unwrap(
+    api(options).GET('/v1/agents', { params: { query: compact(query) }, signal: options.signal }),
+  );
 }
 
 /** 本项目的待处理动作（游标分页），筛选条件见 `GET /v1/pending-actions`。 */
@@ -133,7 +123,9 @@ export function listPendingActions(
   },
   options: RequestOptions = {},
 ): Promise<Schemas['PendingActionPage']> {
-  return request<Schemas['PendingActionPage']>(withQuery('/pending-actions', query), options);
+  return unwrap(
+    api(options).GET('/v1/pending-actions', { params: { query: compact(query) }, signal: options.signal }),
+  );
 }
 
 /** 会话运行概况：运行中、等待回应的会话数，待处理动作数，按智能体的失败率与最近的失败轮次。 */
@@ -141,5 +133,7 @@ export function getSessionStats(
   query: { window?: Schemas['StatsWindow']; agent_id?: string },
   options: RequestOptions = {},
 ): Promise<Schemas['SessionStats']> {
-  return request<Schemas['SessionStats']>(withQuery('/session-stats', query), options);
+  return unwrap(
+    api(options).GET('/v1/session-stats', { params: { query: compact(query) }, signal: options.signal }),
+  );
 }

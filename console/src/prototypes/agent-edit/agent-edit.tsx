@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 import type { AgentDefinitionForm, DraftMeta } from '../fixtures/agent-definition';
-import { EditPage, type EditGroup } from '../templates/edit-page';
+import { EditPage, type EditGroup } from '@/components/templates';
 
 import {
   BasicSection,

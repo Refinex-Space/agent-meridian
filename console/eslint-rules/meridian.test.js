@@ -143,6 +143,18 @@ tester.run('import-boundaries', meridian.rules['import-boundaries'], {
     },
     { code: "import { Icon } from '@/components/ui/icon';", filename: file('src/styles/tokens.stories.tsx') },
     { code: "import { useQuery } from '@tanstack/react-query';", filename: file('src/lib/query.ts') },
+    {
+      code: "import { ListPage } from '@/components/templates/list-page';",
+      filename: file('src/features/agents/routes/agents-page.tsx'),
+    },
+    {
+      code: "import { PageHeader } from '@/components/domain/page-header';",
+      filename: file('src/components/templates/list-page.tsx'),
+    },
+    {
+      code: "import { AppShell } from '@/app/shell/app-shell';",
+      filename: file('src/prototypes/x/x.stories.tsx'),
+    },
   ],
   invalid: [
     {
@@ -173,6 +185,21 @@ tester.run('import-boundaries', meridian.rules['import-boundaries'], {
     {
       code: "import { Button } from '@/components/ui/button';",
       filename: file('mocks/handlers/q3.ts'),
+      errors: [{ messageId: 'layer' }],
+    },
+    {
+      code: "import { AgentsPage } from '@/features/agents';",
+      filename: file('src/components/templates/list-page.tsx'),
+      errors: [{ messageId: 'layer' }],
+    },
+    {
+      code: "import { q3Handlers } from '@mocks/handlers/q3';",
+      filename: file('src/app/main.tsx'),
+      errors: [{ messageId: 'layer' }],
+    },
+    {
+      code: "import { AgentList } from '@/prototypes/agents/agent-list';",
+      filename: file('src/app/router.tsx'),
       errors: [{ messageId: 'layer' }],
     },
   ],

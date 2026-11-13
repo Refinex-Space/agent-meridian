@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { ApiError } from '@/lib/api/sessions';
+import { ApiError } from '@/lib/api/errors';
 import type { Problem } from '@/lib/api/types';
 import { focus, hover, storyFrame } from '@/test/stories';
 

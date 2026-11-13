@@ -39,6 +39,7 @@ export default defineConfig(
       'test-results',
       'public/mockServiceWorker.js',
       'src/lib/api/v1.d.ts',
+      'src/lib/api/admin.d.ts',
       '!.storybook',
     ],
   },
@@ -52,6 +53,13 @@ export default defineConfig(
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
+      // TanStack Router 以 throw redirect()、throw notFound() 中断路由加载。
+      '@typescript-eslint/only-throw-error': [
+        'error',
+        {
+          allow: [{ from: 'package', package: '@tanstack/router-core', name: ['Redirect', 'NotFoundError'] }],
+        },
+      ],
     },
   },
   {

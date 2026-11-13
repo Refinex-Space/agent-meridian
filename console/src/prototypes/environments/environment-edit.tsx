@@ -19,7 +19,7 @@ import {
   type Tier,
 } from '../fixtures/environment';
 import { Field, fieldAria } from '../shared/field';
-import { EditPage, EditSection } from '../templates/edit-page';
+import { EditPage, EditSection } from '@/components/templates';
 
 const DOMAIN = /^(\*\.)?([a-z0-9-]+\.)+[a-z]{2,}$/;
 

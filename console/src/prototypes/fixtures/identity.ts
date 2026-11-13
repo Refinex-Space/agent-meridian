@@ -1,6 +1,6 @@
 /**
- * 外壳的视图模型：当前用户、能进入的租户与项目、预算告警。正式数据来自 `GET /admin/v1/me`、`GET T:/projects` 与
- * `GET P:/budget-status`（console-api-map.md「应用外壳」），T21 接入时把接口结果映射成这些结构。
+ * 原型外壳的身份夹具：当前用户、能进入的租户与项目、预算告警。正式外壳的数据来自 `GET /admin/v1/me`、`GET T:/projects`、
+ * `GET /admin/v1/me/access` 与 `GET P:/budget-status`（`app/shell/shell-layout.tsx`），原型经 `shell/app-shell.tsx` 映射。
  */
 
 export interface ProjectOption {
