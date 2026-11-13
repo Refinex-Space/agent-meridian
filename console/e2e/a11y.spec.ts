@@ -48,6 +48,8 @@ for (const theme of ['light', 'dark'] as Theme[]) {
     test(`${id}（${theme === 'light' ? '亮色' : '暗色'}）没有无障碍违规`, async ({ page }) => {
       await openStory(page, id, theme);
       if (ready) await page.getByText(ready).first().waitFor();
+      // 预览里的 a11y 插件在渲染后也跑一次 axe，同时运行会报"Axe is already running"：与下面的全量检查一样先等它跑完。
+      await page.waitForTimeout(400);
       // 整个页面：抽屉、对话框、命令面板渲染在 Portal 里，不在 #storybook-root 中。
       const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
       const violations = results.violations.map((v) => ({
