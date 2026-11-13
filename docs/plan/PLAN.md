@@ -184,7 +184,7 @@ T19 知识库检索与接入（2026-11-12 开工；基线 `verify.sh` 只有 D66
 - [x] 5. engine：`KnowledgePrefetchMiddleware`（来源标签与注入标记，D33）与场景测试（A06）
 - [x] 6. 权限隔离：REST、`knowledge_search`、MCP、前置检索四种形态（A02）
 - [x] 7. 检索评测：语料与问题、`-Plive` 录制、离线回归、评测记录（A03）
-- [ ] 8. 端到端问答 `-Plive`（A04）
+- [x] 8. 端到端问答 `-Plive`（A04）
 - [ ] 9. P8 定稿：MCP Inspector 调通（A05）
 - [ ] 10. 收尾：`verify.sh`（A07）、文档、CLAUDE.md、验收记录
 
