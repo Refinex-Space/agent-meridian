@@ -86,7 +86,7 @@ BlockHound 需要 JVM 参数 `-XX:+AllowRedefinitionToAddDeleteMethods -XX:+Enab
 
 - **Vitest 加 Testing Library**：组件与 Hook 的行为测试。
 - **Storybook**：每个通用组件都有 story，覆盖所有状态（默认、悬停、聚焦、禁用、加载、空、错误）；启用无障碍检查插件。
-- **Playwright**：关键用户路径的端到端测试，在亮色和暗色两种主题下截图。
+- **Playwright**：关键用户路径的端到端测试，在亮色和暗色两种主题下截图。控制台本身的用例在 `console/e2e/app/`，连接 `scripts/dev/console-e2e-env.sh up` 起的后端与 Keycloak（全局准备建自己的租户、项目与成员）；外壳与页面模板的截图基线在 Storybook 上（`console/e2e/shell-baseline.spec.ts`），按平台分开，CI 与 Linux 基线都在 Playwright 官方镜像中运行（`scripts/dev/console-playwright-linux.sh`）。
 - **ego-browser 技能**：由 AI 驱动浏览器做探索式走查，用于设计验收。每个页面检查：布局与对齐、加载骨架、空态、错误态、键盘操作、亮暗主题、`prefers-reduced-motion`、窗口宽度 1280 与 1920。截图保存在 `tmp/evidence/<任务编号>/`（已被忽略），任务报告中列出检查结果。
 - **frontend-design 技能**：在做视觉决策和页面设计时使用。
 

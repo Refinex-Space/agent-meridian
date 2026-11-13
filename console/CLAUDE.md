@@ -1,42 +1,43 @@
 # console
 
-React 19 单页应用：管理与调试控制台。T20 阶段有工程、设计令牌、全部基元与领域组件（T20b）、`SessionTimeline`，以及应用外壳、四种页面模板与关键页面的原型（T20c，Storybook「原型」组 + MSW）；路由、认证与真实 API 客户端在 T21。完整规范见 `docs/engineering/frontend-design.md`（「设计定稿」是令牌与自查的依据），依赖与版本见 ADR-0021。
+React 19 单页应用：管理与调试控制台。T20 做了设计系统、组件与原型；T21 做了工程基座：OIDC 登录、TanStack Router 路由与应用外壳、openapi-fetch 客户端、TanStack Query、SSE 续传、权限、主题与端到端测试，十一个一级导航目前是空态，页面由 T22 至 T25b 实现。完整规范见 `docs/engineering/frontend-design.md`，依赖与版本见 ADR-0021，基座的约定见 ADR-0055。
 
 ## 命令
 
-在仓库根目录用 `pnpm -C console <脚本>`，或在 `console/` 内直接 `pnpm <脚本>`。pnpm 版本由 `packageManager` 锁定（10.34.9），全局 pnpm 10 会自动切换。
+在仓库根目录用 `pnpm -C console <脚本>`，或在 `console/` 内直接 `pnpm <脚本>`。pnpm 版本由 `packageManager` 锁定（10.34.9）。
 
 - 安装：`pnpm install --frozen-lockfile`
-- 开发：`pnpm dev`（入口直接展示会话详情原型，接口由 MSW 模拟，第 2 轮实时推送并停在等待批准）
-- lint：`pnpm lint` = ESLint（含 `eslint-rules/meridian.js` 守护规则）+ `scripts/check-css.mjs` + Prettier 检查 + `gen:api --check`（生成类型是否过期）
-- 类型检查：`pnpm typecheck`；单元测试：`pnpm test`（Vitest，含守护规则的 RuleTester 测试）；单个：`pnpm exec vitest run <路径>`
-- Storybook：`pnpm storybook`（6006），构建 `pnpm build-storybook`（输出 `storybook-static/`）
-- 端到端：`pnpm e2e`（Playwright，跑在构建后的 Storybook 上：时间轴性能、动效、无障碍）；首次先 `pnpm exec playwright install chromium`。`e2e/a11y.spec.ts` 从 `index.json` 读出全部故事逐个检查（亮暗各约 4 分钟），设了 `EVIDENCE_DIR` 时写出 `a11y-light.json`、`a11y-dark.json`
-- 评审截图与录屏：`EVIDENCE_DIR=../tmp/evidence/<任务编号> pnpm e2e e2e/evidence.spec.ts`；原型页面（亮暗 × 1280、1920，加各状态）用 `e2e/evidence-prototypes.spec.ts`
-- 改了 `meridian-api/…/meridian-v1.yaml` 后：`pnpm gen:api`，提交生成的 `src/lib/api/v1.d.ts`
-- 格式化：`pnpm format`
-- `scripts/dev/verify.sh` 运行 install、lint、typecheck、test、build-storybook；Playwright 不在其中
+- 开发：先起后端 `scripts/dev/console-e2e-env.sh up`（Compose 的 app 与 auth profile：control-plane、runtime、脚本化模型服务、Keycloak），再 `pnpm dev`，打开 `http://localhost:5173`（只能用 localhost:5173：Keycloak 只登记了它的回调地址），用 `dev-developer` / `meridian-dev` 登录；本机直接跑的服务也行（`run-control-plane.sh`、`run-runtime.sh --server.port=18080`），地址可用 `MERIDIAN_*_URL` 覆盖（`vite.config.ts` 的代理表）
+- lint：`pnpm lint` = ESLint（含 `eslint-rules/meridian.js`）+ `scripts/check-css.mjs` + Prettier 检查 + `gen:api --check`；类型检查 `pnpm typecheck`；单元测试 `pnpm test`，单个 `pnpm exec vitest run <路径>`
+- 构建：`pnpm build`（先 `gen:api`）；Storybook `pnpm storybook`（6006）、`pnpm build-storybook`；格式化 `pnpm format`
+- 端到端（控制台本身）：`pnpm e2e:app`（`playwright.app.config.ts`：构建后 `vite preview` 在 5173，全局准备建租户"T21 控制台验收"、两个项目与成员；要先起后端）。评审截图加 `EVIDENCE_DIR=../tmp/evidence/<任务>`
+- 端到端（Storybook 上）：`pnpm e2e`（截图基线、时间轴性能与动效、无障碍；评审截图 `evidence*.spec.ts` 只在设了 `EVIDENCE_DIR` 时运行）；首次先 `pnpm exec playwright install chromium`。截图基线 `pnpm e2e e2e/shell-baseline.spec.ts`；Linux 基线与 CI 一样在 Playwright 官方镜像中跑：`scripts/dev/console-playwright-linux.sh baseline [--update-snapshots]`
+- 改了 `meridian-api/…/meridian-v1.yaml` 或 `meridian-admin-v1.yaml` 后：`pnpm gen:api`（`redocly.yaml` 同时生成 `src/lib/api/v1.d.ts` 与 `admin.d.ts`），提交生成的文件
+- `scripts/dev/verify.sh` 运行 install、lint、typecheck、test、build-storybook；CI 的 `console` 作业另跑 build、截图基线与 `e2e:app`
 
 ## 目录
 
-- `src/styles/tokens.css`：令牌的唯一来源。`@theme inline static` 把颜色、阴影映射到 `--palette-*`；`:root, [data-theme='light']` 与 `[data-theme='dark']` 是两套调色板；字号、字重、圆角、动效在 `@theme static`。Tailwind 默认的色板、字号、圆角、阴影、字距全部移除
-- `src/lib/`：`api/`（生成类型 `v1.d.ts` 与别名 `types.ts`、会话请求）、`sse/`（解析、订阅、正在生成的块、`useSessionEvents`）、`tokens.ts`（颜色令牌清单与对比度要求）、`color.ts`、`format.ts`、`cn.ts`
-- `src/components/ui/`：基元（shadcn 源码按令牌重塑，文件头写明与上游的差异；`field-styles.ts` 是输入类控件共用的外观）、`icon.tsx` 与 `glyphs.ts`（图标清单）。组件清单见 frontend-design.md「自研组件」，每个组件旁边是它的 `*.stories.tsx`
-- `src/components/domain/<组件>/`：领域组件，一个目录一个，经 `index.ts` 导出，旁边是故事与 Vitest 测试。`session-timeline/` 的 `model.ts` 是事件到行、线、分叉的纯函数，界面只读它；`status-badge/labels.ts` 是全控制台唯一的状态文字与语义映射；`data-table/features.ts` 登记 TanStack Table 9 的功能与列元数据；`filter-bar/use-url-filters.ts` 是筛选与 URL 的同步（T21 换成路由的搜索参数）
-- `src/test/`：Vitest 的 `setup.ts`、`clipboard.ts`（可断言的剪贴板），故事的公共外框与伪类参数 `stories.tsx`（`storyFrame`、`hover`、`focus`）
-- `src/assets/icons/`：自研 SVG（256 网格、16 线宽），经 SVGO、SVGR 生成组件，`index.tsx` 包成与 Phosphor 相同的接口
-- `src/prototypes/`：原型（T21 起由正式页面替换，见下面的「原型」）；`mocks/`：MSW 处理器与夹具（`fixtures/q3-session.ts` 原型会话，`large-session.ts` 固定的 1 万条事件，`session-list.ts` 组件故事用的会话列表；`agents.ts`、`project-sessions.ts`、`pending-actions.ts`、`session-stats.ts` 是原型项目"华东经营分析"的数据，以"现在"为基准生成，`handlers/project.ts` 模拟项目级的公开 API）
-- `components.json`：shadcn CLI 的配置，只用于 `shadcn add --dry-run`、`--view` 比对上游；生成新基元见下面的「新增组件」
-- `eslint-rules/`：本地 ESLint 插件；`e2e/`：Playwright
+- `src/app/`：`main.tsx`（静默登录回调直接处理，其余按需加载 `bootstrap.tsx`：读 `/config.json`、登录、渲染）、`router.tsx`（路由树，`/projects/$projectId/<导航>`）、`query-client.ts`（Query 的统一配置）、`shell/`（`AppShell` 只负责呈现，`ShellLayout` 接入路由、身份、待处理计数与横幅；`nav.ts` 是一级导航）
+- `src/features/<领域>/`：一级导航的页面，`routes/` 放路由组件，`index.ts` 导出
+- `src/components/templates/`：四种页面模板 `ListPage`、`DetailPage`、`EditPage`（`EditSection`）、`Workbench`
+- `src/components/domain/<组件>/`：领域组件（`status-badge/labels.ts` 是唯一的状态文字映射，`data-region/` 是区域级加载，`error-state/notify-error.tsx` 是错误通知）；`src/components/ui/`：基元与 `glyphs.ts`
+- `src/lib/`：`api/`（`client.ts` 的 `adminApi()`、`v1Api(projectId)`、`unwrap`、`authorizedFetch`，`errors.ts` 的 `ApiError`，`connection.ts` 连接状态，生成类型与 `types.ts` 别名）、`auth/`（oidc-client-ts 的会话、`useAuth`）、`access/`（`meQuery`、`projectsQuery`、`accessQuery`、`useProject`、`usePermission`）、`sse/`（`runSessionStream`、`useSessionEvents`）、`search.ts`（搜索参数格式）、`theme.ts`、`tokens.ts`、`format.ts`
+- `src/test/`：`setup.ts`、`clipboard.ts`、`stories.tsx`（`storyFrame`、`hover`、`focus`）、`router.tsx`（`renderWithRouter`、故事的 `withRouter`）
+- `src/prototypes/`：T20c 原型（见下）；`mocks/`：MSW 处理器与夹具，只给 Storybook 与测试；`e2e/`：Playwright（`app/` 连接后端，其余在 Storybook 上）
+
+## 新增页面
+
+1. 路由：页面组件放 `src/features/<领域>/routes/`，经 `index.ts` 导出；在 `app/router.tsx` 的项目路由下加子路由（`staticData` 的 `nav` 高亮导航、`crumb` 是面包屑）。筛选条件放搜索参数：FilterBar 用 `useSearchFilters(defs)`，其他参数在路由的 `validateSearch` 中校验（值只有字符串与字符串数组）。
+2. 页面选四种模板之一，对照 Storybook「原型」组与 console-api-map.md 的接口与实时性。
+3. 数据：在 `features/<领域>/api/` 写查询与变更的 Hook。公开 API 用 `useProjectApi()`（带 `Meridian-Project`），管理 API 用 `adminApi()`，结果经 `unwrap`；查询键以 `['v1', projectId, …]` 或 `['admin', tenantId, projectId, …]` 开头；轮询给 `refetchInterval`（页面隐藏时自动停止）。类型只用生成的类型与 `types.ts` 的别名。
+4. 加载与错误：每个数据区域一个 `DataRegion`（骨架与最终几何一致）加 `useSuspenseQuery`；变更失败默认发错误通知，结果就在视野里的（表单、行内）设 `meta: { notifyError: false }` 就地显示 `ErrorState`；空态用 `EmptyState`。
+5. 权限：`usePermission('<操作类别>', '<按钮做的事>')` 展开给 `PermissionGate`（页面主操作 disable，行操作 hide，整块 explain）；不在前端判断角色。
+6. 测试：Hook 与组件写 Vitest；关键路径写 `e2e/app/<领域>.spec.ts`（`openAs(page, 'developer' | 'viewer', url)`）。外壳与模板的截图基线不应变化；改了外壳或模板要更新 darwin 与 Linux 两份基线并在评审中说明。
+7. 截图评审：`EVIDENCE_DIR=../tmp/evidence/<任务> pnpm e2e:app`，亮暗 × 1280、1920，存到 `tmp/evidence/<任务>/`；页面完成后删除对应的原型与故事。
 
 ## 原型
 
-T21 至 T25b 的验收基准：页面成品与 Storybook「原型」组一致（布局、层级、状态、文案）。
-
-- 位置：`shell/`（外壳、命令面板、预算横幅）；`templates/`（`ListPage`、`DetailPage`、`EditPage` 与 `EditSection`、`Workbench`，四种模板的故事在 `templates.stories.tsx`）；页面 `session-list/`、`session-detail/`、`pending-actions/`、`agent-edit/`、`overview/`，模板的例子 `agents/`、`environments/`；`shared/`（`useResource`、`useInterval`、表单 `Field`）
-- 数据：运行时数据（会话、事件、待处理动作、运行概况）走 MSW 与 `v1.d.ts` 的类型；管理数据（智能体定义、环境、用量、预算、身份）是 `src/prototypes/fixtures/` 的视图模型，不冒充 API 类型，页面任务接入管理 API 时写映射
-- 原型里的筛选放组件状态（T21 换成路由的搜索参数）；表单是受控状态加 `agent-edit/validate.ts`（T22 换成 React Hook Form 与 Zod）；ECharts 在组件里动态导入
-- 原型故事要等 MSW 数据，a11y 用例在 `e2e/a11y.spec.ts` 的列表里逐个登记就绪文字
+T22 至 T25b 的验收基准：页面成品与 Storybook「原型」组一致（布局、层级、状态、文案）。页面 `session-list/`、`session-detail/`、`pending-actions/`、`agent-edit/`、`overview/`，模板的例子 `agents/`、`environments/`；`shell/app-shell.tsx` 是正式外壳加原型身份夹具的适配器。运行时数据走 MSW 与生成类型；管理数据是 `fixtures/` 的视图模型，页面任务接入管理 API 时写映射。原型故事要等 MSW 数据，a11y 用例在 `e2e/a11y.spec.ts` 的列表里逐个登记就绪文字。
 
 ## 令牌与组件的使用规则
 
@@ -49,7 +50,7 @@ T21 至 T25b 的验收基准：页面成品与 Storybook「原型」组一致（
 - 状态用 `StatusBadge`（`of="session|turn|tool|action|custom"`），不用带底色的胶囊徽标；文字与语义只改 `status-badge/labels.ts`
 - 禁用样式写 `unavailable:`（原生 disabled 与 `aria-disabled="true"` 都命中），不写 `disabled:`：`PermissionGate` 用 aria-disabled 让无权限的按钮可聚焦并提示原因
 - 禁用清单见 frontend-design.md；能机检的由 `meridian/*` 规则与 `check-css.mjs` 拦截，其余在截图评审中人工检查
-- 目录分层由 `meridian/import-boundaries` 检查：ui → lib；domain → ui、lib；`features/A` 只经 `features/B/index.ts` 引用 B；故事与测试另外可以导入 mocks
+- 目录分层由 `meridian/import-boundaries` 检查：ui → lib；domain → ui、lib；templates → domain；features → templates；`features/A` 只经 `features/B/index.ts` 引用 B；app 不依赖原型与 mocks；故事与测试另外可以导入 mocks 与 test
 
 ## 新增组件
 
@@ -78,7 +79,11 @@ T21 至 T25b 的验收基准：页面成品与 Storybook「原型」组一致（
 - `:read-only` 也匹配 `<button>`：只读样式写 `[&:is(input,textarea):read-only]:`，否则选择器的触发器一直是只读外观
 - ECharts 不认 OKLCH：图表颜色在渲染时读 `--palette-*` 经 `lib/color.ts` 换成十六进制，主题切换时重绘（`overview/usage-chart.tsx`）
 - Playwright 的 `getByText(...).first()` 可能命中 `PermissionGate` 给读屏的隐藏原因（`<span hidden>`），就绪文字不要用无权限的原因
+- openapi-fetch 在创建客户端时取全局 `fetch`：单元测试先 `vi.stubGlobal('fetch', …)` 再 `vi.resetModules()` 与动态导入（`lib/api/client.test.ts`）
+- 用到 Link、搜索参数的组件要在路由中渲染：Vitest 用 `renderWithRouter`（异步），故事用 `withRouter`；路由首次渲染是异步的，故事的 play 用 `findBy…`
+- Playwright 认为 `aria-disabled` 的元素不可点击，验证"点了不生效"要 `click({ force: true })`
+- 截图基线固定页面时钟（夹具按"现在"生成相对时间与日期）；基线文件名带平台后缀，CI 只认 `-linux`
 
 ## 对外接口
 
-只消费 `docs/engineering/console-api-map.md` 列出的接口；类型全部来自 `meridian-api` 的 `meridian-v1.yaml`（管理 API 的类型在 T21 生成），禁止手写。SSE 用基于 `fetch` 的 `lib/sse/session-stream.ts`（`Last-Event-ID` 续传、按 seq 去重、退避重连）。
+只消费 `docs/engineering/console-api-map.md` 列出的接口；类型全部来自 `meridian-v1.yaml` 与 `meridian-admin-v1.yaml` 的生成类型，禁止手写。SSE 用 `lib/sse/session-stream.ts`（`fetch` 读取、`Last-Event-ID` 续传、按 seq 去重、乱序暂存、跳号重连补发、退避重连），请求经 `authorizedFetch(projectId)`。

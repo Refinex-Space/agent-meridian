@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 版本 | v1.28 |
+| 版本 | v1.29 |
 | 日期 | 2026-11-13 |
 | 状态 | 基线，后续变更走"防漂移机制"一节的 ADR 流程 |
 | 依据 | [技术选型调研](../research/tech-selection.md)；AgentScope Java `v2.0.4` 源码逐类核查；两轮架构对抗性评审；一轮交付计划对抗性评审 |
@@ -152,7 +152,7 @@ flowchart TB
 
 外部请求按路径路由：
 
-- `/v1/sessions*`、`/v1/files*`、`/v1/chat/completions`、`/v1/responses`、`/v1/embeddings` 进 runtime。
+- `/v1/sessions*`、`/v1/session-stats`、`/v1/pending-actions*`、`/v1/webhook-deliveries*`、`/v1/files*`、`/v1/chat/completions`、`/v1/responses`、`/v1/embeddings` 进 runtime（ADR-0055）。
 - `/v1/knowledge-bases*` 和 `/mcp/knowledge` 进 knowledge。
 - 其余 `/v1/*`，以及管理 API `/admin/v1/*`（控制台使用，ADR-0042），进 control-plane。
 - `/` 进 console。
@@ -1033,7 +1033,7 @@ AgentScope 会在状态上记下停机中断标志，下一次调用（无论在
 | 调用方 | 方式 |
 |---|---|
 | 业务系统 | `Authorization: Bearer mk_live_…`。只存 SHA-256 哈希；各服务经 control-plane 内部接口 `POST /internal/v1/api-keys:verify` 按哈希校验，结果（含无效）缓存 60 秒，吊销经 Pub/Sub `key.revoked` 广播 Key ID 立即失效（ADR-0042） |
-| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存。签发方、受众与客户端是配置项，服务端按发现文档与 JWKS 校验签名、`iss`、`aud`、`exp`；用户标识默认取 `sub`、可配置为其他稳定声明，平台管理员可按主体标识或组声明配置（ADR-0043）。成员按用户标识识别，角色只来自 control-plane 的角色绑定（ADR-0042）；也可以只按邮箱邀请，用户首次访问管理接口时按令牌中经过验证的邮箱（默认要求 `email_verified`）绑定（ADR-0053）。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目：服务按令牌形状区分 API Key 与 OIDC 令牌，经 control-plane 内部接口 `POST /internal/v1/project-access:resolve` 取该用户在项目上的作用域（缓存 60 秒），按用户限流（ADR-0044） |
+| 控制台用户 | OIDC 授权码 + PKCE，access token 只放内存：运行中由 refresh token（同样只在内存）续期，刷新页面后经隐藏的 iframe 以 `prompt=none` 静默登录，身份提供方没有会话时整页跳转登录；身份提供方的地址与客户端由控制台运行时的 `/config.json` 给出（ADR-0055）。签发方、受众与客户端是配置项，服务端按发现文档与 JWKS 校验签名、`iss`、`aud`、`exp`；用户标识默认取 `sub`、可配置为其他稳定声明，平台管理员可按主体标识或组声明配置（ADR-0043）。成员按用户标识识别，角色只来自 control-plane 的角色绑定（ADR-0042）；也可以只按邮箱邀请，用户首次访问管理接口时按令牌中经过验证的邮箱（默认要求 `email_verified`）绑定（ADR-0053）。控制台调用公开 API（如 Playground 创建会话）时，同样携带 OIDC access token，并用请求头 `Meridian-Project` 指定项目：服务按令牌形状区分 API Key 与 OIDC 令牌，经 control-plane 内部接口 `POST /internal/v1/project-access:resolve` 取该用户在项目上的作用域（缓存 60 秒），按用户限流（ADR-0044） |
 | 服务之间 | control-plane 签发的服务 JWT（RS256，5 分钟有效，`aud` 是被调用的服务名，`sub` 是调用方服务名）。服务用自己的客户端密钥在 `POST /oauth2/token` 换取（OAuth2 客户端凭据模式，每个客户端登记允许的目标服务），按目标服务缓存、过期前 60 秒刷新；资源服务经 `GET /oauth2/jwks` 校验，公钥缓存 5 分钟、遇到未知 `kid` 立即刷新一次。每个内部接口只接受列明的调用方服务。签名密钥经 `SigningKeySource` 取得：开发方式是目录中的密钥文件，生产从密钥管理系统加载（ADR-0044） |
 | 外部 MCP 客户端 | API Key；MCP 规范的 OAuth 在二期支持 |
 
@@ -1335,7 +1335,8 @@ curl -N "$MERIDIAN_BASE_URL/v1/sessions/ses_01JC.../stream" \
 - 服务端状态统一用 TanStack Query 管理。
 - SSE 客户端基于 `fetch` 流式读取实现，封装成可订阅的 Hook，复用"SSE 协议"一节的去重和续传逻辑。浏览器的 `EventSource` 不能携带 `Authorization` 头，不使用。
 - API 类型从 OpenAPI 生成，禁止手写。
-- 路由和权限守卫用 TanStack Router。
+- 路由和权限守卫用 TanStack Router。一级导航都在 `/projects/$projectId/` 之下，每项一个路由模块；筛选条件放搜索参数，格式是 `key=value` 与重复键（ADR-0055）。
+- 控制台同源调用公开 API 与管理 API，由入口按路径转发（见"容器视图"）；公开 API 的请求带 `Meridian-Project`。
 
 ## 测试策略
 
@@ -1518,6 +1519,7 @@ ADR-0001 至 ADR-0019 随本文档 v1.0 基线一起确立，决策与理由以�
 | v1.19 | 2026-11-09 | T14b：服务 JWT 的换取（客户端凭据模式）、JWKS、密钥与轮换、按调用方限定内部接口；控制台用户经 `Meridian-Project` 调用公开 API 的作用域来源与限流；`PlatformContext` 增加控制台用户；出网代理的回调凭据；技术基线补 Nimbus；本地开发的 `auth` profile（ADR-0044） |
 | v1.18 | 2026-11-09 | Q2 已决：身份只认标准 OIDC，声明映射可配置，SAML、LDAP 经 Keycloak 转接，Keycloak 作为参考实现与可选组件（ADR-0043） |
 | v1.17 | 2026-11-09 | T14a：外部请求的路由加 `/admin/v1/*`；ID 前缀 `mbr`、`rbd`；control-plane 核心表补列；认证补 API Key 的校验接口与控制台的开发期令牌；授权补平台管理员与声明式矩阵；约定补管理 API 规范与限流的算法和参数；租户并发计数行补配额的读取时机与 `config.invalidate` 格式；本地开发的 `app` profile（ADR-0042） |
+| v1.29 | 2026-11-13 | T21：控制台工程基座——刷新页面后的静默登录与运行时配置 `/config.json`、`/projects/$projectId/` 的地址结构与搜索参数格式、外部路由补上 runtime 提供的 `/v1/session-stats`、`/v1/pending-actions`、`/v1/webhook-deliveries`（ADR-0055） |
 | v1.28 | 2026-11-13 | R2：M1 后端评审的修正——所有者邀请的邮箱、MCP 请求头的租户级凭据与审批人的"记住此决定"收紧授权，敏感写操作的幂等记录加密，公开 API 幂等主体加项目，outbox 瞬时错误不计次数，会话清理的等待与按会话推迟（`purge_after`，删除 `budget_limit`），用量结算重试，JSON 请求体上限 10 MB（ADR-0054） |
 | v1.27 | 2026-11-13 | T19b：控制台所需的后端接口——会话的 `agent_id` 与筛选、`GET /v1/session-stats` 与失败率小时汇总、项目级待处理动作与结论、作用域 `actions:respond`、工具确认的建议规则与 `remember_rule`、按邮箱邀请成员与首次登录绑定、`/admin/v1/me`、项目预算消耗、用量明细与导出、连通性测试与 `last_check`、Webhook 密钥轮换、知识库的修改与删除（ADR-0053） |
 | v1.26 | 2026-11-12 | T19：检索的模型来源（知识库的 `rerank_model`、智能体配置的 `knowledge.query_rewrite_model` 与 runtime 的内部对话接口）、不限标签的切片可见、HNSW 迭代扫描与全文"或"查询、多 Embedding 模型分路召回、REST 与 MCP 的调用方标签、`KnowledgePrefetchMiddleware` 的顺序与注入方式、`knowledge_search_calls` 计量（ADR-0052） |

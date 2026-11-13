@@ -186,8 +186,8 @@ T21 控制台工程基座（开工 2026-11-13）：
 - [x] 7 SSE 客户端：去重、乱序、跳号、断线续传，Hook 与 `StreamIndicator`（A05）
 - [x] 8 权限：`/admin/v1/me/access` 与 `PermissionGate`（A06）
 - [x] 9 主题（亮、暗、跟随系统）与全局横幅（断开、预算告警）
-- [ ] 10 Playwright：登录、导航、主题、权限用例；外壳与四种模板的截图基线并与 T20c 对照（A01、A02、A06、A07）
-- [ ] 11 CI：控制台的 lint、typecheck、test、build、Storybook、Playwright（compose `app` 与 `auth`）（A08）
+- [x] 10 Playwright：登录、导航、主题、权限用例；外壳与四种模板的截图基线并与 T20c 对照（A01、A02、A06、A07）
+- [x] 11 CI：控制台的 lint、typecheck、test、build、Storybook、Playwright（compose `app` 与 `auth`）（A08）
 - [ ] 12 收尾：`verify.sh`（A09）、文档与 `console/CLAUDE.md`、验收记录、会话日志
 
 ## 控制台设计轨道

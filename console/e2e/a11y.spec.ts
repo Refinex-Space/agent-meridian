@@ -21,7 +21,7 @@ const STORIES: { id: string; ready: string | null }[] = [
   { id: '原型-应用外壳--expanded', ready: '门店巡检报告' },
   { id: '原型-应用外壳--collapsed', ready: '门店巡检报告' },
   { id: '原型-应用外壳--budget-alert', ready: '查看用量与预算' },
-  { id: '原型-应用外壳--command-palette', ready: '最近的会话' },
+  { id: '原型-应用外壳--command-palette', ready: '页面' },
   { id: '原型-页面模板--list-template', ready: '门店巡检报告' },
   { id: '原型-页面模板--detail-template', ready: '最近的版本' },
   { id: '原型-页面模板--edit-template', ready: '资源规格' },

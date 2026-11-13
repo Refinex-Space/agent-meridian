@@ -47,13 +47,13 @@ export const BudgetExhausted: Story = {
 export const ProjectSwitcher: Story = {
   name: '切换项目',
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: /切换项目/ }));
+    await userEvent.click(await within(canvasElement).findByRole('button', { name: /切换项目/ }));
   },
 };
 
 export const CommandPalette: Story = {
   name: '命令面板',
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: /搜索/ }));
+    await userEvent.click(await within(canvasElement).findByRole('button', { name: /搜索/ }));
   },
 };

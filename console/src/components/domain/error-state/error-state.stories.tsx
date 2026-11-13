@@ -1,10 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useEffect } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { notify, Toaster } from '@/components/ui/sonner';
 
 import { ApiError } from '@/lib/api/errors';
 import type { Problem } from '@/lib/api/types';
 import { focus, hover, storyFrame } from '@/test/stories';
 
 import { ErrorState } from './error-state';
+import { notifyError } from './notify-error';
 
 const problem = (over: Partial<Problem> = {}): Problem => ({
   type: 'urn:meridian:error:internal',
@@ -86,4 +91,44 @@ export const LongContent: Story = {
       }),
     ),
   },
+};
+
+function NotifyDemo({ error, title }: { error: unknown; title?: string }) {
+  useEffect(() => {
+    notifyError(error, title);
+    return () => {
+      notify.dismiss();
+    };
+  }, [error, title]);
+  return (
+    <div>
+      <Button onClick={() => notifyError(error, title)}>再发一条</Button>
+      <Toaster />
+    </div>
+  );
+}
+
+/**
+ * 操作失败、结果不在视野里时的错误通知（`notifyError`）：不自动消失，写明原因与下一步，请求 ID 可复制。
+ * 变更（TanStack Query 的 mutation）失败时默认由它通知。
+ */
+export const Notification: Story = {
+  name: '错误通知',
+  render: () => (
+    <NotifyDemo
+      title="发布失败"
+      error={
+        new ApiError(
+          409,
+          problem({
+            status: 409,
+            title: 'Conflict',
+            code: 'agent.version_published',
+            detail: '版本 v12 已经发布，不能再修改。',
+            instance: '/admin/v1/tenants/ten_1/projects/prj_1/agents/agt_1/versions/12',
+          }),
+        )
+      }
+    />
+  ),
 };

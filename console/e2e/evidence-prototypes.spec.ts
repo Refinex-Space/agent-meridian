@@ -43,7 +43,7 @@ const STATES: Shot[] = [
   { name: 'shell-budget-alert', story: '原型-应用外壳--budget-alert', ready: '查看用量与预算' },
   { name: 'shell-budget-exhausted', story: '原型-应用外壳--budget-exhausted', ready: '查看用量与预算' },
   { name: 'shell-project-switcher', story: '原型-应用外壳--project-switcher', ready: '集团财务共享' },
-  { name: 'shell-command', story: '原型-应用外壳--command-palette', ready: '最近的会话' },
+  { name: 'shell-command', story: '原型-应用外壳--command-palette', ready: '页面' },
   { name: 'sessions-live', story: '原型-会话列表--live', ready: '条更新' },
   { name: 'sessions-filtered', story: '原型-会话列表--filtered', ready: '门店巡检报告' },
   { name: 'sessions-filtered-empty', story: '原型-会话列表--filtered-empty', ready: '没有匹配的会话' },

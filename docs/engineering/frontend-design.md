@@ -185,6 +185,7 @@ Meridian 是子午线：导航、测绘、天文观测共同的基准线。控�
 | `CodeBlock` | 只读代码与 JSON，Shiki 高亮，复制 |
 | `StreamIndicator` | SSE 连接状态：已连接、重连中、已断开 |
 | `ApprovalForm` | 工具调用的审批：批准或拒绝，可选"记住此决定"的作用域与一条建议规则；无回应权限时说明原因（T20c，会话检查器与待处理页共用） |
+| `DataRegion` | 区域级的数据加载：一个 Suspense 边界，150ms 后出现骨架、至少保持 300ms，失败时在区域内显示 `ErrorState` 与重试（T21，内容用 `useSuspenseQuery`） |
 
 同一个能力只有一个组件。新增领域组件前先查这张表；表里没有的，先在这里加一行。
 
@@ -241,7 +242,7 @@ Meridian 是子午线：导航、测绘、天文观测共同的基准线。控�
 
 ### 加载
 
-- 区域级加载：每个独立的数据区域有自己的 Suspense 边界，**禁止**整页转圈。
+- 区域级加载：每个独立的数据区域有自己的 Suspense 边界（`DataRegion`），**禁止**整页转圈。
 - 骨架屏与最终布局的几何一致，包括行高、列宽、头像与图标的位置，加载完成时不跳动。
 - 请求在 150ms 内返回时不显示骨架；一旦显示，至少保持 300ms，避免闪烁。
 - 骨架使用柔和的不透明度呼吸，不用从左到右的高光扫过；`prefers-reduced-motion` 时为静态。
@@ -326,7 +327,7 @@ T20a 至 T20c 按以下顺序完成设计，每一步都有可检查的产物。
 ```text
 console/
 ├── src/
-│   ├── app/                 应用入口、路由树、全局 Provider、错误边界
+│   ├── app/                 应用入口、路由树、全局 Provider、错误边界；shell/ 是应用外壳
 │   ├── features/<领域>/      按业务领域组织：sessions、agents、environments、knowledge ...
 │   │   ├── api/             该领域的查询与变更 Hook（基于生成的客户端）
 │   │   ├── components/      只在本领域使用的组件
@@ -334,8 +335,9 @@ console/
 │   │   └── index.ts         对外导出
 │   ├── components/
 │   │   ├── ui/              基元（shadcn 源码重塑）
-│   │   └── domain/          跨领域复用的领域组件（上表）
-│   ├── lib/                 api 客户端、SSE、格式化、权限、常量
+│   │   ├── domain/          跨领域复用的领域组件（上表）
+│   │   └── templates/       四种页面模板（列表页、详情页、编辑页、工作台）
+│   ├── lib/                 api 客户端、认证、权限、SSE、搜索参数、主题、格式化
 │   ├── styles/              tokens.css、全局样式、字体
 │   └── assets/icons/        自研 SVG
 ├── .storybook/
@@ -346,6 +348,7 @@ console/
 ### 边界规则
 
 - `features/A` 不能引用 `features/B` 的内部文件，只能通过 `features/B/index.ts`；跨领域复用的东西移到 `components/domain` 或 `lib`。用 ESLint 的导入限制规则检查。
+- 分层：ui → lib；domain → ui、lib；templates → domain、ui、lib；features → templates、domain、ui、lib；app（入口、路由、外壳）→ features 及以下，不依赖原型与 MSW。
 - 组件中不直接调用 `fetch`，统一走 `lib/api` 与各领域的 `api/` Hook。
 - 颜色、间距、圆角、阴影、动效时长只能来自令牌。
 
@@ -366,7 +369,7 @@ console/
 ### 测试
 
 - 每个领域组件、每个复杂 Hook 都有 Vitest 测试。
-- 每个页面的关键路径有 Playwright 用例。T21 用 `toHaveScreenshot` 为应用外壳与四种页面模板建立亮暗主题的截图基线，页面任务只允许内容区与基线不同。
+- 每个页面的关键路径有 Playwright 用例（`console/e2e/app/`，连接本机后端与 Keycloak）。T21 用 `toHaveScreenshot` 为应用外壳与四种页面模板建立亮暗主题、1280 与 1920 宽度的截图基线（`console/e2e/shell-baseline.spec.ts`，按平台分开，Linux 基线在 Playwright 官方镜像中生成），页面任务只允许内容区与基线不同。
 - Playwright 默认连接脚本化模型服务（`ScriptedOpenAiServer`，见 T09b），结果确定；只有标注 `live` 的用例才调用真实模型。
 - Storybook 的 a11y 检查不得有违规。
 

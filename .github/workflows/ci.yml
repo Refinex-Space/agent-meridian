@@ -31,5 +31,54 @@ jobs:
           java-version: '25'
           cache: maven
 
+      # 控制台（verify.sh 中的 lint、typecheck、test、build-storybook）：Node 24，pnpm 由 package.json 的 packageManager 锁定
+      - name: Set up Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Enable pnpm
+        run: corepack enable
+
       - name: Verify
         run: scripts/dev/verify.sh
+
+  # 控制台的构建与 Playwright（T21）：verify 已覆盖 lint、typecheck、单元测试与 Storybook 构建；这里构建生产包，
+  # 在 Playwright 官方镜像中检查外壳与页面模板的截图基线，再用 Compose 的 app 与 auth profile 起后端、Keycloak 与
+  # 脚本化模型服务，跑登录、导航、主题、权限的端到端用例。
+  console:
+    name: console
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Build
+        run: |
+          pnpm -C console install --frozen-lockfile
+          pnpm -C console build
+
+      - name: Screenshot baselines
+        run: scripts/dev/console-playwright-linux.sh baseline
+
+      - name: Start backend (Compose app and auth profiles)
+        run: scripts/dev/console-e2e-env.sh up
+
+      - name: End-to-end
+        run: scripts/dev/console-playwright-linux.sh app
