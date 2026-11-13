@@ -150,16 +150,16 @@ export function ThreadTree({ items, selectedId, onSelect, label = '线程', clas
         >
           <div
             className={cn(
-              'flex h-8 cursor-pointer items-center gap-2 rounded-control pr-2 text-13 transition-colors duration-150 ease-out',
+              'grid min-h-8 cursor-pointer grid-cols-[12px_minmax(0,1fr)] items-center gap-x-2 rounded-control py-1 pr-2 text-13 transition-colors duration-150 ease-out',
               selected ? 'bg-accent-weak' : 'hover:bg-surface-hover',
             )}
             style={{ paddingLeft: `${8 + (node.level - 1) * 16}px` }}
           >
             <StatusGlyph kind={item.status} />
-            <span className={cn('min-w-0 flex-1 truncate', node.level > 1 && 'font-mono text-12')}>
+            <span className={cn('truncate leading-5', node.level > 1 && 'font-mono text-12')}>
               {item.label}
             </span>
-            {item.note && <span className="shrink-0 text-12 text-danger">{item.note}</span>}
+            {item.note && <span className="col-start-2 text-12 leading-4 text-danger">{item.note}</span>}
           </div>
           {open && (
             <div role="group" className="relative">

@@ -60,13 +60,13 @@ export function TokenUsage({ usage, cost, variant = 'inline', className }: Token
     return (
       <dl data-slot="token-usage" className={cn('flex flex-col text-13 tabular-nums', className)}>
         {items(usage, true).map(({ label, value }) => (
-          <div key={label} className="flex h-7 items-center justify-between gap-4 border-b border-rule">
+          <div key={label} className="flex h-9 items-center justify-between gap-4 border-b border-rule">
             <dt className="text-ink-2">{label}</dt>
             <dd>{formatInteger(value)} token</dd>
           </div>
         ))}
         {cost && (
-          <div className="flex h-7 items-center justify-between gap-4">
+          <div className="flex h-9 items-center justify-between gap-4">
             <dt className="text-ink-2">成本</dt>
             <dd className="font-medium">{formatMoney(cost.amount, cost.currency)}</dd>
           </div>
