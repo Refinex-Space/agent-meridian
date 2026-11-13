@@ -203,12 +203,23 @@ T20a、T20b、T20c 在独立的 worktree 与分支中执行，与后端任务并
 | 编号 | 任务 | 阶段 | 依赖 | effort | 规模 | 验证项 | 状态 | 完成提交 |
 |---|---|---|---|---|---|---|---|---|
 | T20a | [控制台设计方向：工程、令牌、图标与时间轴原型](tasks/T20a-console-direction-and-timeline.md) | 4 | T07（在独立 worktree 中与后端任务并行） | xhigh | 大 | 无 | 已完成 | 2d99b8f |
-| T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 未开始 | — |
+| T20b | [控制台基元与领域组件](tasks/T20b-console-components.md) | 4 | T20a（视觉方向已确认） | high | 大 | 无 | 进行中 | — |
 | T20c | [控制台原型与设计评审](tasks/T20c-console-prototypes-and-review.md) | 4 | T20b | xhigh | 中 | 无 | 未开始 | — |
 
 ### 轨道检查点
 
-（当前没有进行中的轨道任务）
+T20b（主工作区 `main`，用户要求不建 worktree）：
+
+- [ ] 依赖：cmdk、sonner、@tanstack/react-table、shiki，版本追加到 ADR-0021
+- [ ] 基元：shadcn CLI 生成并按令牌重塑（输入框、文本域、选择器、复选框、单选、开关、对话框、抽屉、下拉菜单、弹出层、表格、分隔线、命令面板、通知，以及标签、警示对话框、面包屑），每个状态一个故事
+- [ ] 三张空态插画（256 网格、16 线宽）
+- [ ] 领域组件一：StatusBadge、CopyableId、RelativeTime、TokenUsage、StreamIndicator、KeyValueList、CodeBlock（故事与 Vitest）
+- [ ] 领域组件二：EmptyState、ErrorState、PermissionGate、DangerConfirmDialog、PageHeader（故事与 Vitest）
+- [ ] 领域组件三：FilterBar（URL 同步交互测试）、DataTable（虚拟滚动交互测试）
+- [ ] 领域组件四：EventCard、ToolCallView、ThreadTree、InspectorPanel（故事与 Vitest）
+- [ ] a11y：新故事全部加入 `e2e/a11y.spec.ts`，亮暗两套零违规（A01）
+- [ ] 截图：`tmp/evidence/T20b/` 亮暗两套（A04）
+- [ ] 收尾：lint、typecheck、test、build-storybook（A05）、`verify.sh`、`console/CLAUDE.md`、`frontend-design.md`、验收记录与会话日志
 
 ### 轨道会话日志
 
