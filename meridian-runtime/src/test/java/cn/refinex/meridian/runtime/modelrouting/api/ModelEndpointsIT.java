@@ -74,7 +74,7 @@ class ModelEndpointsIT extends ApiTestBase {
         registry.add(
                 "meridian.runtime.model-routing.budgets-directory",
                 () -> DIRECTORY.resolve("budgets").toString());
-        String prefix = "meridian.security.dev-api-keys.keys[3].";
+        String prefix = "meridian.security.dev-api-keys.keys[" + ApiTestKeys.FIRST_FREE_KEY_INDEX + "].";
         registry.add(prefix + "key", () -> KEY_TINY_BUDGET);
         registry.add(prefix + "api-key-id", () -> KEY_TINY_BUDGET_ID);
         registry.add(prefix + "tenant-id", () -> ApiTestKeys.TENANT);

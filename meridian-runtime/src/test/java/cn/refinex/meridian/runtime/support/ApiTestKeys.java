@@ -32,6 +32,9 @@ public final class ApiTestKeys {
     /** 项目 A 的审批 Key：只能读会话与回应待处理动作（{@code actions:respond}，ADR-0053）。 */
     public static final String KEY_A_APPROVER = "mk_test_project_a_approver";
 
+    /** 测试类自己登记开发期 Key 时从这个下标开始，前面的下标由 {@link #register} 占用（否则属性互相覆盖）。 */
+    public static final int FIRST_FREE_KEY_INDEX = 4;
+
     /** 服务 JWT 的签发方：测试夹具，runtime 经它的 JWKS 校验内部接口的令牌（ADR-0044）。 */
     public static final TestTokenIssuer SERVICE_TOKENS = TestTokenIssuer.start();
 
