@@ -79,6 +79,21 @@ function Node({ shape, tone }: { shape: NodeShape; tone: NodeTone }) {
   }
 }
 
+export interface NodeGlyphProps {
+  shape: NodeShape;
+  tone: NodeTone;
+  className?: string;
+}
+
+/** 单独使用的节点符号（12px）：EventCard 等组件用它与时间轴保持同一套形状与颜色；对读屏隐藏。 */
+export function NodeGlyph({ shape, tone, className }: NodeGlyphProps) {
+  return (
+    <svg viewBox="-6 -6 12 12" aria-hidden className={cn('size-3 shrink-0', TONE_CLASS[tone], className)}>
+      <Node shape={shape} tone={tone} />
+    </svg>
+  );
+}
+
 function laneClass(lane: number): string {
   return lane === 0 ? 'text-meridian' : 'text-lane';
 }

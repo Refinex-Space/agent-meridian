@@ -22,6 +22,8 @@ export interface KeyValueListProps {
   columns?: 1 | 2;
   /** 加载中：按 `items` 的条数（没有时 4 条）画同样行高的骨架。 */
   loading?: boolean;
+  /** 标签列宽：regular 160px（详情页），narrow 72px（检查器这类窄面板）。 */
+  labelWidth?: 'regular' | 'narrow';
   className?: string;
 }
 
@@ -30,18 +32,27 @@ function isEmpty(value: ReactNode): boolean {
 }
 
 /**
- * 详情页的属性列表：标签 160px 石墨色，值墨色；每行 36px 高、底部一条刻线。
+ * 详情页的属性列表：标签 160px（窄面板 72px）石墨色，值墨色；每行至少 36px 高、底部一条刻线。
  */
-export function KeyValueList({ items, columns = 1, loading = false, className }: KeyValueListProps) {
+const LABEL_COLUMN = {
+  regular: 'grid-cols-[160px_minmax(0,1fr)]',
+  narrow: 'grid-cols-[72px_minmax(0,1fr)]',
+} as const;
+
+export function KeyValueList({
+  items,
+  columns = 1,
+  loading = false,
+  labelWidth = 'regular',
+  className,
+}: KeyValueListProps) {
   const grid = cn('grid gap-x-12', columns === 2 && 'xl:grid-cols-2', className);
+  const row = LABEL_COLUMN[labelWidth];
   if (loading) {
     return (
       <div data-slot="key-value-list" aria-busy className={grid}>
         {Array.from({ length: items.length || 4 }, (_, i) => (
-          <div
-            key={i}
-            className="grid min-h-9 grid-cols-[160px_minmax(0,1fr)] items-center gap-4 border-b border-rule"
-          >
+          <div key={i} className={cn('grid min-h-9 items-center gap-4 border-b border-rule', row)}>
             <Skeleton className="h-3 w-16" />
             <Skeleton className="h-3 w-40" />
           </div>
@@ -54,7 +65,7 @@ export function KeyValueList({ items, columns = 1, loading = false, className }:
       {items.map(({ label, value, hint, mono }) => (
         <div
           key={label}
-          className="grid min-h-9 grid-cols-[160px_minmax(0,1fr)] items-baseline gap-4 border-b border-rule py-2 text-13"
+          className={cn('grid min-h-9 items-baseline gap-4 border-b border-rule py-2 text-13', row)}
         >
           <dt className="flex items-center gap-1 text-ink-2">
             {label}
