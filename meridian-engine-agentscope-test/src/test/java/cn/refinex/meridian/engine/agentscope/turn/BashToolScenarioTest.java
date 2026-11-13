@@ -120,6 +120,12 @@ class BashToolScenarioTest {
                 userText("清理"));
 
         assertAwaitsConfirmation(events, "call_1");
+        // 动作带出 bash 按命令建议的前缀规则（D21）：权限引擎丢掉了建议，内核按工具重新算出
+        assertThat(((SessionEvent.StatusRequiresAction) events.getLast())
+                        .actions()
+                        .getFirst()
+                        .suggestedRules())
+                .containsExactly("rm:*");
         assertThat(sandbox.commands()).isEmpty();
         assertThat(harness.ledger.sandboxCommands()).isEmpty();
     }

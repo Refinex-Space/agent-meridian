@@ -103,6 +103,7 @@ public class PendingActionsApiController implements PendingActionsApi {
                 .toolUseId(action.toolUseId())
                 .toolName(action.toolName())
                 .input(action.input())
+                .suggestedRules(action.suggestedRules())
                 .expiresAt(ApiTimes.utc(action.expiresAt()))
                 .createdAt(ApiTimes.utc(action.createdAt()))
                 .resolvedAt(ApiTimes.utc(action.resolvedAt()))
@@ -125,6 +126,7 @@ public class PendingActionsApiController implements PendingActionsApi {
                                 ? null
                                 : RecoveryDecision.fromValue(
                                         conclusion.decision().value()))
-                .error(conclusion.error());
+                .error(conclusion.error())
+                .rememberRule(conclusion.rememberRule());
     }
 }

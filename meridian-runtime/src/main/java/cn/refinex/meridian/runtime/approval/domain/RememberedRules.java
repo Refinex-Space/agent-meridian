@@ -13,8 +13,8 @@ import java.util.Optional;
  * 会话层，{@code project} 写入项目层。
  *
  * <p>一般工具记整工具规则。{@code bash} 记这一条命令（规则内容为命令原文，不带 {@code :*} 即整条命令相同才匹配）：记整工具规则会
- * 放行之后的任何命令（T12a，ADR-0037）。复合命令与看不出会执行什么的命令按原文记下也不会匹配（规则逐段比较），等于不放行。工具
- * 建议的内容级规则（命令前缀、路径）由内核随动作带出之后改用它们（登记事项 D21）。
+ * 放行之后的任何命令（T12a，ADR-0037）。复合命令与看不出会执行什么的命令按原文记下也不会匹配（规则逐段比较），等于不放行。回应时
+ * 选了动作的一条建议规则（命令前缀、路径等，内核随动作带出）时记这一条（登记事项 D21，ADR-0053）。
  *
  * <p>AgentScope 只在批准时把 {@code ConfirmResult.rules} 加进本轮的权限引擎，且不写回状态，所以平台保存规则，之后每轮合成时注入。
  * 纯函数，线程安全。
@@ -38,7 +38,9 @@ public final class RememberedRules {
             return Optional.empty();
         }
         String content = null;
-        if (PlatformToolNames.BASH.equals(toolName)) {
+        if (conclusion.rememberRule() != null) {
+            content = conclusion.rememberRule();
+        } else if (PlatformToolNames.BASH.equals(toolName)) {
             if (!(input.get("command") instanceof String command) || command.isBlank()) {
                 return Optional.empty();
             }

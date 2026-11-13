@@ -47,13 +47,15 @@ public sealed interface UserEvent extends EngineEvent {
      * @param updatedInput 审批人修改后的入参；可为空，表示按原入参执行
      * @param denyReason 拒绝理由；可为空
      * @param rememberScope "记住此决定"的作用域；必填，不记住时为 {@link RememberScope#NONE}
+     * @param rememberRule 记住哪条建议规则（动作 {@code suggested_rules} 中的一条）；为空表示按原来的方式记（D21，ADR-0053）
      */
     record ToolConfirmation(
             String actionId,
             boolean approved,
             Map<String, Object> updatedInput,
             String denyReason,
-            RememberScope rememberScope)
+            RememberScope rememberScope,
+            String rememberRule)
             implements UserEvent {
 
         /**
@@ -65,6 +67,24 @@ public sealed interface UserEvent extends EngineEvent {
             Objects.requireNonNull(actionId, "actionId");
             Objects.requireNonNull(rememberScope, "rememberScope");
             updatedInput = updatedInput == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(updatedInput));
+        }
+
+        /**
+         * 创建不指定建议规则的工具确认事件。
+         *
+         * @param actionId 被回应的动作 ID
+         * @param approved 是否批准
+         * @param updatedInput 修改后的入参；可为空
+         * @param denyReason 拒绝理由；可为空
+         * @param rememberScope "记住此决定"的作用域
+         */
+        public ToolConfirmation(
+                String actionId,
+                boolean approved,
+                Map<String, Object> updatedInput,
+                String denyReason,
+                RememberScope rememberScope) {
+            this(actionId, approved, updatedInput, denyReason, rememberScope, null);
         }
     }
 

@@ -184,7 +184,7 @@ T19b（开工基线 `scripts/dev/verify.sh` 通过）：
 - [x] 5 control-plane：项目预算消耗 `budget-status`、用量明细与 CSV 导出（D68）
 - [x] 6 control-plane：供应商账号连通性测试、MCP 连接状态、Webhook 签名密钥轮换（D72）
 - [x] 7 knowledge：知识库的修改与删除（D81）
-- [ ] 8 建议规则（D21）：内核随 `tool_confirmation` 带出建议规则，回应时可按建议记住
+- [x] 8 建议规则（D21）：内核随 `tool_confirmation` 带出建议规则，回应时可按建议记住
 - [ ] 9 角色矩阵与契约测试（A02、A03、A05）
 - [ ] 10 ADR-0053、架构设计、模块 `CLAUDE.md`、登记事项；`verify.sh`（A06）；验收记录与收尾
 

@@ -3,6 +3,7 @@ package cn.refinex.meridian.engine.spi.event;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -20,9 +21,17 @@ import java.util.Objects;
  * @param toolName 相关工具名；必填
  * @param input 相关工具调用的入参；必填，可为空映射
  * @param expiresAt 截止时间，超时按动作类型处理；可为空，表示尚未由 runtime 设置
+ * @param suggestedRules {@code tool_confirmation} 的建议规则：工具按这次的入参给出的"记住此决定"规则内容（命令前缀、路径等），回应时
+ *     可以选一条记住；其他类型为空列表（登记事项 D21，ADR-0053）
  */
 public record PendingAction(
-        String id, Type type, String toolUseId, String toolName, Map<String, Object> input, Instant expiresAt) {
+        String id,
+        Type type,
+        String toolUseId,
+        String toolName,
+        Map<String, Object> input,
+        Instant expiresAt,
+        List<String> suggestedRules) {
 
     /**
      * 创建待处理动作。
@@ -36,6 +45,22 @@ public record PendingAction(
         Objects.requireNonNull(toolName, "toolName");
         Objects.requireNonNull(input, "input");
         input = Collections.unmodifiableMap(new LinkedHashMap<>(input));
+        suggestedRules = suggestedRules == null ? List.of() : List.copyOf(suggestedRules);
+    }
+
+    /**
+     * 创建没有建议规则的待处理动作。
+     *
+     * @param id 动作 ID
+     * @param type 动作类型
+     * @param toolUseId 相关工具调用 ID
+     * @param toolName 相关工具名
+     * @param input 相关工具调用的入参
+     * @param expiresAt 截止时间；可为空
+     */
+    public PendingAction(
+            String id, Type type, String toolUseId, String toolName, Map<String, Object> input, Instant expiresAt) {
+        this(id, type, toolUseId, toolName, input, expiresAt, List.of());
     }
 
     /**
@@ -45,7 +70,7 @@ public record PendingAction(
      * @return 新的动作
      */
     public PendingAction withExpiresAt(Instant deadline) {
-        return new PendingAction(id, type, toolUseId, toolName, input, deadline);
+        return new PendingAction(id, type, toolUseId, toolName, input, deadline, suggestedRules);
     }
 
     /** 待处理动作的类型，见架构设计「待处理动作」表。 */

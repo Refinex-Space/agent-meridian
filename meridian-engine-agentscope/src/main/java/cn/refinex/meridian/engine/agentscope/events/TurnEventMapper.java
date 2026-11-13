@@ -499,8 +499,17 @@ public final class TurnEventMapper {
     }
 
     private PendingAction pendingAction(PendingAction.Type type, ToolUseBlock call) {
+        List<String> suggestions = type == PendingAction.Type.TOOL_CONFIRMATION
+                ? settings.ruleSuggester().suggest(call.getName(), call.getInput() == null ? Map.of() : call.getInput())
+                : List.of();
         return new PendingAction(
-                Ids.newId(IdPrefix.PENDING_ACTION), type, call.getId(), call.getName(), call.getInput(), null);
+                Ids.newId(IdPrefix.PENDING_ACTION),
+                type,
+                call.getId(),
+                call.getName(),
+                call.getInput(),
+                null,
+                suggestions);
     }
 
     private static SessionEvent.Error sessionError(MeridianException error, RetryStatus status) {
@@ -576,6 +585,8 @@ public final class TurnEventMapper {
      * @param customToolNames 本会话声明的自定义工具名；它们以 {@code agent.custom_tool_use} 输出
      * @param approvedToolUseIds 本轮输入中被批准的工具调用 ID，对应结果的 {@code permission} 为 {@code approved}
      * @param platformStop 平台中间件记录的停止原因；必填
+     * @param ruleSuggester {@code tool_confirmation} 动作的建议规则从哪里来：2.0.4 的权限引擎算出建议后只保留行为，丢掉了建议，
+     *     所以按工具名找到本实例中的工具再算一次（D21，ADR-0053）；为空表示没有建议
      */
     public record Settings(
             String modelId,
@@ -583,7 +594,8 @@ public final class TurnEventMapper {
             boolean exposeThinking,
             Set<String> customToolNames,
             Set<String> approvedToolUseIds,
-            PlatformStopRequest platformStop) {
+            PlatformStopRequest platformStop,
+            RuleSuggester ruleSuggester) {
 
         /**
          * 创建映射参数，对集合做不可变复制。
@@ -595,7 +607,45 @@ public final class TurnEventMapper {
             Objects.requireNonNull(platformStop, "platformStop");
             customToolNames = customToolNames == null ? Set.of() : Set.copyOf(customToolNames);
             approvedToolUseIds = approvedToolUseIds == null ? Set.of() : Set.copyOf(approvedToolUseIds);
+            ruleSuggester = ruleSuggester == null ? RuleSuggester.NONE : ruleSuggester;
         }
+
+        /**
+         * 创建没有建议规则的映射参数（子线程：子线程的 ask 已改写为 deny，不会产生确认动作）。
+         *
+         * @param modelId 本轮主模型的平台模型 ID
+         * @param maxIters 单轮最大推理次数
+         * @param exposeThinking 是否带出思考内容
+         * @param customToolNames 自定义工具名
+         * @param approvedToolUseIds 被批准的工具调用 ID
+         * @param platformStop 平台中间件记录的停止原因
+         */
+        public Settings(
+                String modelId,
+                int maxIters,
+                boolean exposeThinking,
+                Set<String> customToolNames,
+                Set<String> approvedToolUseIds,
+                PlatformStopRequest platformStop) {
+            this(modelId, maxIters, exposeThinking, customToolNames, approvedToolUseIds, platformStop, null);
+        }
+    }
+
+    /** 工具对一次调用给出的"记住此决定"建议规则的内容（D21）。 */
+    @FunctionalInterface
+    public interface RuleSuggester {
+
+        /** 没有建议。 */
+        RuleSuggester NONE = (toolName, input) -> List.of();
+
+        /**
+         * 建议规则的内容。
+         *
+         * @param toolName 工具名
+         * @param input 调用的入参
+         * @return 规则内容，按工具给出的顺序；没有时为空列表
+         */
+        List<String> suggest(String toolName, Map<String, Object> input);
     }
 
     /** 一个工具调用的名字与累积的入参 JSON 片段。 */

@@ -39,4 +39,21 @@ class RememberedRulesTest {
                 .as("没有命令时不记，不能退回整工具规则")
                 .isEmpty();
     }
+
+    @Test
+    void aChosenSuggestionIsRememberedInsteadOfTheDefault() {
+        ActionConclusion prefix = ActionConclusion.of(
+                new UserEvent.ToolConfirmation("act_1", true, null, null, RememberScope.PROJECT, "git:*"));
+        assertThat(RememberedRules.of("bash", Map.of("command", "git status --short"), prefix))
+                .contains(new PermissionRule("bash", "git:*", PermissionBehavior.ALLOW, PolicyLayer.PROJECT));
+        ActionConclusion path = ActionConclusion.of(
+                new UserEvent.ToolConfirmation("act_1", false, null, null, RememberScope.SESSION, "private/**"));
+        assertThat(RememberedRules.of("write_file", Map.of("path", "private/a.md"), path))
+                .contains(new PermissionRule("write_file", "private/**", PermissionBehavior.DENY, PolicyLayer.SESSION));
+        ActionConclusion none = ActionConclusion.of(
+                new UserEvent.ToolConfirmation("act_1", true, null, null, RememberScope.NONE, "git:*"));
+        assertThat(none.rememberRule()).as("不记住时不保留选中的规则").isNull();
+        assertThat(RememberedRules.of("bash", Map.of("command", "git status"), none))
+                .isEmpty();
+    }
 }

@@ -64,6 +64,40 @@ class EventAdmissionTest {
     }
 
     @Test
+    void aRememberedRuleMustBeOneOfTheActionSuggestions() {
+        StoredPendingAction suggested = new StoredPendingAction(
+                "act_s",
+                "ses_1",
+                "thr_1",
+                "trn_1",
+                PendingAction.Type.TOOL_CONFIRMATION,
+                PendingActionStatus.PENDING,
+                "toolu_1",
+                "bash",
+                Map.of("command", "git status"),
+                NOW,
+                NOW,
+                null,
+                List.of("git:*"));
+        Map<String, StoredPendingAction> actions = Map.of("act_s", suggested);
+        UserEvent chosen =
+                new UserEvent.ToolConfirmation("act_s", true, null, null, UserEvent.RememberScope.SESSION, "git:*");
+        UserEvent invented =
+                new UserEvent.ToolConfirmation("act_s", true, null, null, UserEvent.RememberScope.SESSION, "rm:*");
+        UserEvent notRemembered =
+                new UserEvent.ToolConfirmation("act_s", true, null, null, UserEvent.RememberScope.NONE, "rm:*");
+
+        assertThatCode(() -> EventAdmission.checkResponses(List.of(chosen), actions))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> EventAdmission.checkResponses(List.of(notRemembered), actions))
+                .as("不记住时忽略")
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> EventAdmission.checkResponses(List.of(invented), actions))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("remember_rule");
+    }
+
+    @Test
     void respondingToTheSameActionTwiceInOneBatchIsInvalid() {
         assertThat(EventAdmission.respondedActionIds(
                         List.of(confirm("act_1"), message(UserEvent.Delivery.QUEUE), confirm("act_2"))))

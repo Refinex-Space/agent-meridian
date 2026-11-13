@@ -92,7 +92,8 @@ final class EventMapper {
                         confirmation.getDenyReason(),
                         confirmation.getRememberScope() == null
                                 ? UserEvent.RememberScope.NONE
-                                : rememberScope(confirmation.getRememberScope()));
+                                : rememberScope(confirmation.getRememberScope()),
+                        confirmation.getRememberRule());
             case UserCustomToolResultInput result ->
                 new UserEvent.CustomToolResult(
                         result.getActionId(),

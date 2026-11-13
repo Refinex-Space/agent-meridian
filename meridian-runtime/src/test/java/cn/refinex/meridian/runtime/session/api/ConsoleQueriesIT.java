@@ -276,6 +276,50 @@ class ConsoleQueriesIT extends ApiTestBase {
         assertThat(resolved.get("conclusion").get("approved").asBoolean()).isTrue();
     }
 
+    @Test
+    void aSuggestedRuleCanBeRememberedWhenApproving() {
+        ApiTestClient api = api(ApiTestKeys.KEY_A);
+        String session = createSession("u_suggest");
+        assertThat(api.sendMessage(session, "看一下状态").status()).isEqualTo(202);
+        String turn = turnOf(session);
+        DbAssertions.update("UPDATE rt.turns SET status = 'awaiting_action', finished_at = now() WHERE id = ?", turn);
+        DbAssertions.update("UPDATE rt.sessions SET status = 'requires_action' WHERE id = ?", session);
+        String action = insertAction(session, turn, "tool_confirmation", null, null);
+        DbAssertions.update(
+                "UPDATE rt.pending_actions SET payload = payload || CAST(? AS jsonb) WHERE id = ?",
+                "{\"suggested_rules\": [\"a.md\", \"docs/**\"]}",
+                action);
+        assertThat(texts(find(api, "status=pending&session_id=" + session, action)
+                        .get("suggested_rules")))
+                .containsExactly("a.md", "docs/**");
+
+        ApiResponse invented = api.sendEvents(session, """
+                {"events": [{"type": "user.tool_confirmation", "action_id": "%s", "approved": true,
+                             "remember_scope": "session", "remember_rule": "**"}]}
+                """.formatted(action), null);
+        assertThat(invented.status()).isEqualTo(400);
+        assertThat(invented.text("code")).isEqualTo("request.validation_failed");
+
+        assertThat(api.sendEvents(session, """
+                        {"events": [{"type": "user.tool_confirmation", "action_id": "%s", "approved": true,
+                                     "remember_scope": "session", "remember_rule": "docs/**"}]}
+                        """.formatted(action), null).status())
+                .isEqualTo(202);
+        assertThat(DbAssertions.list(
+                        "SELECT rule_content FROM rt.permission_rules WHERE session_id = ? AND tool_name = 'write_file'",
+                        String.class,
+                        session))
+                .containsExactly("docs/**");
+        JsonNode resolved = find(api, "status=resolved&session_id=" + session, action);
+        assertThat(resolved.get("conclusion").get("remember_rule").asString()).isEqualTo("docs/**");
+    }
+
+    private static List<String> texts(JsonNode array) {
+        List<String> values = new ArrayList<>();
+        array.forEach(value -> values.add(value.asString()));
+        return values;
+    }
+
     private static String insertDelivery(String webhookId, String sessionId, Instant createdAt) {
         String id = Ids.newId(IdPrefix.WEBHOOK_DELIVERY);
         DbAssertions.update(

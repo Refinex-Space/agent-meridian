@@ -2906,8 +2906,8 @@ components:
     PendingAction:
       description: 一个待处理动作。
       type: object
-      required: [id, session_id, agent_id, thread_id, turn_id, type, status, tool_use_id, tool_name, input, expires_at,
-                 created_at, resolved_at, decided_by, conclusion]
+      required: [id, session_id, agent_id, thread_id, turn_id, type, status, tool_use_id, tool_name, input,
+                 suggested_rules, expires_at, created_at, resolved_at, decided_by, conclusion]
       properties:
         id:
           description: 动作 ID（act_…），回应事件的 `action_id`。
@@ -2938,6 +2938,13 @@ components:
           description: 相关工具调用的入参。
           type: object
           additionalProperties: true
+        suggested_rules:
+          description: |
+            `tool_confirmation` 的建议规则（命令前缀、路径、域名等内容级规则），回应时可以选一条作为 `remember_rule`；其他类型、
+            T19b 之前产生的动作为空（D21，ADR-0053）。
+          type: array
+          items:
+            type: string
         expires_at:
           description: 截止时间，超时按动作类型处理（工具确认视为拒绝、自定义工具以 timeout 错误回传、恢复确认视为 skip）。
           type: string
@@ -2963,7 +2970,7 @@ components:
     PendingActionConclusion:
       description: 待处理动作的结论（自定义工具的结果内容不在这里，见会话事件）。按动作类型只有对应的字段有值，其余为 null。
       type: object
-      required: [origin, approved, deny_reason, remember_scope, decision, error]
+      required: [origin, approved, deny_reason, remember_scope, remember_rule, decision, error]
       properties:
         origin:
           description: |
@@ -2981,6 +2988,9 @@ components:
           oneOf:
             - $ref: '#/components/schemas/RememberScope'
             - type: 'null'
+        remember_rule:
+          description: 记住的建议规则内容；没有选建议规则（按原来的方式记）或不记住时为 null。
+          type: [string, 'null']
         decision:
           description: 恢复确认：重试或跳过。
           oneOf:
@@ -3337,6 +3347,14 @@ components:
           maxLength: 2000
         remember_scope:
           $ref: '#/components/schemas/RememberScope'
+        remember_rule:
+          description: |
+            记住此决定时记哪条规则：必须是该动作 `suggested_rules` 中的一条（命令前缀、路径等内容级规则），否则 400
+            `request.validation_failed`；不传时按原来的方式记（一般工具记整个工具，`bash` 记这一条命令，D21，ADR-0053）。
+            `remember_scope` 为 `none` 时忽略。
+          type: string
+          minLength: 1
+          maxLength: 1024
     UserCustomToolResultInput:
       description: 回传自定义工具的执行结果。
       type: object
@@ -3463,6 +3481,9 @@ components:
           type: [string, 'null']
         remember_scope:
           $ref: '#/components/schemas/RememberScope'
+        remember_rule:
+          description: 记住的规则内容（该动作的一条建议规则）；为 null 表示按原来的方式记。T19b 之前的事件没有这个字段。
+          type: [string, 'null']
     UserCustomToolResultData:
       type: object
       required: [action_id, content, error]
@@ -3673,6 +3694,13 @@ components:
           description: 截止时间。
           type: [string, 'null']
           format: date-time
+        suggested_rules:
+          description: |
+            `tool_confirmation` 的建议规则：工具按这次的入参给出的"记住此决定"规则内容（命令前缀、路径、域名等），回应时可以选一条作为
+            `remember_rule`；其他类型为空。T19b 之前的事件没有这个字段（D21，ADR-0053）。
+          type: array
+          items:
+            type: string
     SessionStatusRequiresActionData:
       type: object
       required: [actions]

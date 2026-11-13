@@ -22,6 +22,7 @@ import java.util.Set;
  *       {@code user.recovery_confirmation} 回应 {@code recovery_confirmation}；同一批里不能回应同一个动作两次。
  *   <li>跟在 {@code user.interrupt} 后面的消息一律按 queue 投递：AgentScope 忽略随中断传入的消息，steer 来不及注入当前轮。
  *   <li>引用了平台文件的消息一律按 queue 投递：文件在轮次开始时才放进工作区，steer 注入当前轮时文件不在（ADR-0050）。
+ *   <li>{@code user.tool_confirmation} 选择的 {@code remember_rule} 必须是该动作的建议规则之一（D21，ADR-0053）。
  *   <li>同一批里不能既有 {@code user.interrupt} 又有回应事件：等待回应时中断会把全部待处理动作视为拒绝，与同批的回应相互矛盾
  *       （曾在回应时因动作已有结论抛出 500 并回滚整批，R1 并发审查）。
  * </ul>
@@ -84,6 +85,15 @@ public final class EventAdmission {
             if (!action.isPending()) {
                 throw new ConflictException(
                         EventErrorCode.ACTION_NOT_PENDING, "待处理动作已" + statusText(action) + "：" + actionId);
+            }
+            if (event instanceof UserEvent.ToolConfirmation confirmation
+                    && confirmation.rememberRule() != null
+                    && confirmation.rememberScope() != UserEvent.RememberScope.NONE
+                    && !action.suggestedRules().contains(confirmation.rememberRule())) {
+                throw new ValidationException(
+                        CommonErrorCode.VALIDATION_FAILED,
+                        "remember_rule 不是该动作的建议规则：" + actionId,
+                        List.of(new FieldViolation("remember_rule", "只能从动作的 suggested_rules 中选一条")));
             }
         }
     }

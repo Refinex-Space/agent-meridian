@@ -33,10 +33,12 @@ import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolResultState;
 import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.shutdown.GracefulShutdownConfig;
 import io.agentscope.core.shutdown.GracefulShutdownManager;
 import io.agentscope.core.shutdown.PartialReasoningPolicy;
 import io.agentscope.core.tool.AgentTool;
+import io.agentscope.core.tool.ToolBase;
 import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.ToolRequestConfig;
 import io.agentscope.core.util.JsonUtils;
@@ -492,7 +494,29 @@ public final class AgentScopeEngine implements AgentEngine {
                     spec.exposeThinking(),
                     ctx.customTools().stream().map(CustomToolDeclaration::name).collect(Collectors.toSet()),
                     TurnInputTranslator.approvedToolUseIds(input),
-                    platformStop);
+                    platformStop,
+                    this::suggestRules);
+        }
+
+        /**
+         * 本实例中的工具对一次调用给出的建议规则内容（D21）：只取针对这个工具、有内容的规则，去重；工具不在 Toolkit 中或不是
+         * {@code ToolBase} 时没有建议。
+         */
+        private List<String> suggestRules(String toolName, Map<String, Object> toolInput) {
+            AgentTool tool = handle.agent().getToolkit().getTool(toolName);
+            if (!(tool instanceof ToolBase base)) {
+                return List.of();
+            }
+            List<PermissionRule> rules = base.generateSuggestions(toolInput);
+            if (rules == null) {
+                return List.of();
+            }
+            return rules.stream()
+                    .filter(rule -> toolName.equals(rule.toolName()))
+                    .map(PermissionRule::ruleContent)
+                    .filter(content -> content != null && !content.isBlank())
+                    .distinct()
+                    .toList();
         }
 
         /** 先中断本轮的子线程，再中断父线程：{@code spawn_subagent} 是工具，父线程被中断后它不会停（架构设计「消息投递」）。 */

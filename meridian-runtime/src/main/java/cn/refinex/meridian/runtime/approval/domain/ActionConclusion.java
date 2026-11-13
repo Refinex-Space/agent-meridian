@@ -23,6 +23,7 @@ import java.util.Objects;
  * @param content {@code custom_tool_result}：结果内容块
  * @param error {@code custom_tool_result}：是否为错误结果
  * @param decision {@code recovery_confirmation}：重试或跳过
+ * @param rememberRule 确认类动作：记住哪条建议规则（D21）；为空表示按原来的方式记
  */
 public record ActionConclusion(
         ConclusionOrigin origin,
@@ -32,7 +33,8 @@ public record ActionConclusion(
         RememberScope remember,
         List<MessageContent> content,
         Boolean error,
-        RecoveryDecision decision) {
+        RecoveryDecision decision,
+        String rememberRule) {
 
     /** 超时的自定义工具回传给智能体的内容（架构设计「待处理动作」）。 */
     public static final String TIMEOUT_RESULT = "timeout";
@@ -49,6 +51,30 @@ public record ActionConclusion(
         Objects.requireNonNull(origin, "origin");
         updatedInput = updatedInput == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(updatedInput));
         content = content == null ? null : List.copyOf(content);
+    }
+
+    /**
+     * 创建不指定建议规则的结论。
+     *
+     * @param origin 结论的来源
+     * @param approved 是否批准；可为空
+     * @param updatedInput 修改后的入参；可为空
+     * @param denyReason 拒绝理由；可为空
+     * @param remember 记住的作用域；可为空
+     * @param content 自定义工具的结果；可为空
+     * @param error 是否为错误结果；可为空
+     * @param decision 恢复确认的决定；可为空
+     */
+    public ActionConclusion(
+            ConclusionOrigin origin,
+            Boolean approved,
+            Map<String, Object> updatedInput,
+            String denyReason,
+            RememberScope remember,
+            List<MessageContent> content,
+            Boolean error,
+            RecoveryDecision decision) {
+        this(origin, approved, updatedInput, denyReason, remember, content, error, decision, null);
     }
 
     /**
@@ -69,7 +95,8 @@ public record ActionConclusion(
                         c.rememberScope(),
                         null,
                         null,
-                        null);
+                        null,
+                        c.rememberScope() == RememberScope.NONE ? null : c.rememberRule());
             case UserEvent.CustomToolResult r ->
                 new ActionConclusion(ConclusionOrigin.CALLER, null, null, null, null, r.content(), r.error(), null);
             case UserEvent.RecoveryConfirmation r ->

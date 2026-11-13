@@ -84,6 +84,9 @@ public class PendingActionRepository extends TenantScopedRepository {
         payload.put("tool_use_id", action.toolUseId());
         payload.put("tool_name", action.toolName());
         payload.put("input", action.input());
+        if (!action.suggestedRules().isEmpty()) {
+            payload.put("suggested_rules", action.suggestedRules());
+        }
         payload.putAll(extra);
         sql("""
                         INSERT INTO rt.pending_actions (id, tenant_id, project_id, session_id, turn_id, thread_id, type,
@@ -410,7 +413,19 @@ public class PendingActionRepository extends TenantScopedRepository {
                 input,
                 JdbcValues.instant(rs, "expires_at"),
                 JdbcValues.instant(rs, "created_at"),
-                JdbcValues.instant(rs, "resolved_at"));
+                JdbcValues.instant(rs, "resolved_at"),
+                suggestedRules(payload.get("suggested_rules")));
+    }
+
+    /** {@code payload.suggested_rules}（D21）；T19b 之前的动作没有。 */
+    private static List<String> suggestedRules(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .toList();
     }
 
     private static PendingAction.Type typeOf(String value) {

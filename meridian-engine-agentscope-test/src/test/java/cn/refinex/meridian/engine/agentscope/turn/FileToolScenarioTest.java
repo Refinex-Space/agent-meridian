@@ -222,6 +222,8 @@ class FileToolScenarioTest {
                         s -> assertThat(s.actions()).singleElement().satisfies(a -> {
                             assertThat(a.type()).isEqualTo(PendingAction.Type.TOOL_CONFIRMATION);
                             assertThat(a.toolUseId()).isEqualTo("call_other");
+                            // 文件工具建议这次的路径（D21）
+                            assertThat(a.suggestedRules()).containsExactly("private/salary.md");
                         }));
         assertThat(harness.ledger.invocations())
                 .extracting(i -> i.start().toolUseId())
