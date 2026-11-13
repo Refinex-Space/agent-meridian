@@ -3,6 +3,7 @@
  * - 颜色、圆角换成本项目令牌：rounded-control（4px）；焦点环由全局 :focus-visible 给出（2px 实线海图蓝），去掉 ring 光晕；
  * - 变体改为 primary、secondary、ghost、danger；去掉 link、outline 的阴影与 dark: 分支（令牌自带亮暗两套）；
  * - 悬停只换底色，不上浮、不缩放；禁用态用 ink-disabled 与 surface-inset，不用整体半透明；
+ *   禁用样式同时作用于 `aria-disabled="true"`（`unavailable:` 变体），PermissionGate 用它让无权限的按钮保持可聚焦并提示原因；
  * - 尺寸只有 sm（28px）与 md（32px）及其图标按钮；文字 13px、500 字重；
  * - 新增 `pending`：按钮内显示进度并禁止重复提交（frontend-design.md「加载」）。
  */
@@ -19,19 +20,19 @@ const buttonVariants = cva(
   [
     'inline-flex shrink-0 items-center justify-center gap-2 rounded-control text-13 font-medium whitespace-nowrap select-none',
     'transition-colors duration-150 ease-out',
-    'disabled:cursor-not-allowed aria-busy:cursor-progress',
+    'aria-busy:cursor-progress unavailable:cursor-not-allowed',
   ],
   {
     variants: {
       variant: {
         primary:
-          'bg-accent text-on-accent hover:bg-accent-hover disabled:bg-surface-inset disabled:text-ink-disabled',
+          'bg-accent text-on-accent hover:bg-accent-hover unavailable:bg-surface-inset unavailable:text-ink-disabled',
         secondary:
-          'border border-rule-strong/70 bg-surface text-ink hover:border-rule-strong hover:bg-surface-hover disabled:border-rule disabled:bg-surface disabled:text-ink-disabled',
+          'border border-rule-strong/70 bg-surface text-ink hover:border-rule-strong hover:bg-surface-hover unavailable:border-rule unavailable:bg-surface unavailable:text-ink-disabled',
         ghost:
-          'text-ink-2 hover:bg-surface-hover hover:text-ink disabled:bg-transparent disabled:text-ink-disabled',
+          'text-ink-2 hover:bg-surface-hover hover:text-ink unavailable:bg-transparent unavailable:text-ink-disabled',
         danger:
-          'bg-danger text-on-accent hover:bg-danger-hover disabled:bg-surface-inset disabled:text-ink-disabled',
+          'bg-danger text-on-accent hover:bg-danger-hover unavailable:bg-surface-inset unavailable:text-ink-disabled',
       },
       size: {
         sm: 'h-7 px-2',

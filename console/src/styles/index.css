@@ -5,6 +5,9 @@
 /* 主题：<html data-theme="light|dark">（index.html 在首次绘制前按系统偏好写入）；暗色变体用于极少数需要按主题区分结构的地方。 */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
+/* 不可用：原生禁用，或无权限时的 aria-disabled（PermissionGate 让按钮保持可聚焦，以便提示原因）。 */
+@custom-variant unavailable (&:is(:disabled, [aria-disabled='true']));
+
 @layer base {
   html {
     font-family: var(--font-sans);
