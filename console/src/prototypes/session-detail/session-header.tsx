@@ -36,9 +36,10 @@ function CopySessionId({ id }: { id: string }) {
         <button
           type="button"
           onClick={copy}
-          aria-label={`复制会话 ID ${id}`}
           className="flex h-6 items-center gap-1 rounded-control px-1 font-mono text-12 text-ink-2 hover:bg-surface-hover hover:text-ink"
         >
+          {/* 可访问名称包含可见文字（WCAG 2.5.3）："复制会话 ID" 加可见的缩写 ID。 */}
+          <span className="sr-only">复制会话 ID </span>
           {shortId(id)}
           <Icon glyph={copied ? CheckIcon : CopyIcon} className={copied ? 'text-success' : undefined} />
         </button>
