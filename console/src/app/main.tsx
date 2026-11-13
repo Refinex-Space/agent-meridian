@@ -21,9 +21,12 @@ async function start() {
     <StrictMode>
       <TooltipProvider>
         <AppShell
-          active="会话"
-          pendingCount={2}
-          breadcrumb={<span className="font-mono text-12 text-ink">{Q3_SESSION_ID}</span>}
+          active="sessions"
+          pendingCount={4}
+          breadcrumb={[
+            { label: '会话', href: '/sessions' },
+            { label: Q3_SESSION_ID, mono: true },
+          ]}
         >
           <SessionDetail sessionId={Q3_SESSION_ID} modelNames={MODEL_NAMES} />
         </AppShell>

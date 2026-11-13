@@ -6,23 +6,16 @@ import { q3Handlers, type Q3Mode } from '@mocks/handlers/q3';
 import { AppShell } from '../shell/app-shell';
 import { SessionDetail } from './session-detail';
 
-function Breadcrumb() {
-  return (
-    <>
-      <a href="/sessions" onClick={(e) => e.preventDefault()} className="text-ink-2 hover:text-ink">
-        会话
-      </a>
-      <span aria-hidden className="text-ink-2">
-        /
-      </span>
-      <span className="font-mono text-12 text-ink">{Q3_SESSION_ID}</span>
-    </>
-  );
-}
-
 function Page() {
   return (
-    <AppShell active="会话" pendingCount={2} breadcrumb={<Breadcrumb />}>
+    <AppShell
+      active="sessions"
+      pendingCount={4}
+      breadcrumb={[
+        { label: '会话', href: '/sessions' },
+        { label: Q3_SESSION_ID, mono: true },
+      ]}
+    >
       <SessionDetail sessionId={Q3_SESSION_ID} modelNames={MODEL_NAMES} />
     </AppShell>
   );

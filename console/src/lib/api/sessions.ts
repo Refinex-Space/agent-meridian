@@ -84,3 +84,62 @@ export function sendEvents(
     body: JSON.stringify(body),
   });
 }
+
+/** 列表查询参数：值为 undefined 或空串的键不出现在 URL 中。 */
+type Query = Record<string, string | number | undefined>;
+
+function withQuery(path: string, query: Query): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  }
+  const text = params.toString();
+  return text ? `${path}?${text}` : path;
+}
+
+/** 会话列表（游标分页），筛选条件见 `GET /v1/sessions`。 */
+export function listSessions(
+  query: {
+    limit?: number;
+    after?: string;
+    agent_id?: string;
+    status?: Schemas['SessionStatus'];
+    end_user_id?: string;
+    created_after?: string;
+    created_before?: string;
+  },
+  options: RequestOptions = {},
+): Promise<Schemas['SessionPage']> {
+  return request<Schemas['SessionPage']>(withQuery('/sessions', query), options);
+}
+
+/** 本项目的智能体（游标分页）。 */
+export function listAgents(
+  query: { limit?: number; after?: string },
+  options: RequestOptions = {},
+): Promise<Schemas['AgentPage']> {
+  return request<Schemas['AgentPage']>(withQuery('/agents', query), options);
+}
+
+/** 本项目的待处理动作（游标分页），筛选条件见 `GET /v1/pending-actions`。 */
+export function listPendingActions(
+  query: {
+    limit?: number;
+    after?: string;
+    status?: Schemas['PendingActionStatus'];
+    type?: Schemas['PendingActionType'];
+    agent_id?: string;
+    session_id?: string;
+  },
+  options: RequestOptions = {},
+): Promise<Schemas['PendingActionPage']> {
+  return request<Schemas['PendingActionPage']>(withQuery('/pending-actions', query), options);
+}
+
+/** 会话运行概况：运行中、等待回应的会话数，待处理动作数，按智能体的失败率与最近的失败轮次。 */
+export function getSessionStats(
+  query: { window?: Schemas['StatsWindow']; agent_id?: string },
+  options: RequestOptions = {},
+): Promise<Schemas['SessionStats']> {
+  return request<Schemas['SessionStats']>(withQuery('/session-stats', query), options);
+}
