@@ -68,6 +68,11 @@ export function formatInstant(iso: string): string {
   );
 }
 
+/** 详情页子表格里的绝对时间：2026-11-13 10:02（本地时区，到分钟；秒、毫秒与时区在悬停的提示里不需要时用它）。 */
+export function formatDateTime(iso: string): string {
+  return formatInstant(iso).slice(0, 16);
+}
+
 /** 字节数：512 B、12.4 KB、3.1 MB。 */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

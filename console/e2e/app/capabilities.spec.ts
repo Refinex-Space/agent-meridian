@@ -57,7 +57,9 @@ test.describe('能力', () => {
     // 新版本：name 必须一致；版本表多出 v2。
     await page.getByRole('button', { name: '上传新版本' }).click();
     const v2 = page.getByRole('dialog', { name: `上传 ${name} 的 v2` });
-    await v2.getByLabel('选择技能文件夹').setInputFiles(skillFolder(name, '按经营分析的口径整理周报，附带毛利率'));
+    await v2
+      .getByLabel('选择技能文件夹')
+      .setInputFiles(skillFolder(name, '按经营分析的口径整理周报，附带毛利率'));
     await v2.getByRole('button', { name: '上传 v2' }).click();
     await expect(v2).toBeHidden();
     await expect(page.getByText('最新 v2')).toBeVisible();
@@ -71,9 +73,11 @@ test.describe('能力', () => {
       { spec: { ...baseSpec(ids.chat), skills: [{ skill_id: skillId, version: 2 }] }, publish: true },
     ]);
     await page.reload();
-    await expect(page.getByRole('list', { name: '引用这个技能的智能体版本' })).toContainText(`${agentName} v1`);
+    await expect(page.getByRole('list', { name: '引用这个技能的智能体版本' })).toContainText(
+      `${agentName} v1`,
+    );
     await page.goto(`/projects/${project}/capabilities`);
-    await expect(page.getByRole('row').filter({ hasText: name })).toContainText(`智能体版本 ${agentName} v1`);
+    await expect(page.getByRole('row').filter({ hasText: name })).toContainText(`${agentName} v1`);
   });
 
   test('登记 MCP 服务：就地写入凭据，工具清单出现，逐个标注副作用等级并保存（T23-A02）', async ({ page }) => {
@@ -94,7 +98,9 @@ test.describe('能力', () => {
     await dialog.getByRole('textbox', { name: '服务名' }).fill(serverName);
     await dialog.getByRole('textbox', { name: '地址' }).fill('http://knowledge:18083/mcp/knowledge');
 
-    // 请求头 Authorization 的凭据就地写入（只给本项目），写好后自动选中。
+    // 请求头 Authorization（添加第一个请求头时预填）的凭据就地写入（只给本项目），写好后自动选中。
+    await dialog.getByRole('button', { name: '添加请求头' }).click();
+    await expect(dialog.getByRole('textbox', { name: '第 1 个请求头的名称' })).toHaveValue('Authorization');
     await dialog.getByRole('button', { name: '写入凭据' }).click();
     const secret = page.getByRole('dialog', { name: '写入凭据' });
     const secretName = unique('e2e-mcp-token');
@@ -122,11 +128,16 @@ test.describe('能力', () => {
     await expect(page.getByText('有 1 个工具的标注未保存')).toHaveCount(0);
     await page.reload();
     await expect(
-      page.getByRole('table', { name: '工具清单' }).getByRole('combobox', { name: 'knowledge_search 的副作用等级' }),
+      page
+        .getByRole('table', { name: '工具清单' })
+        .getByRole('combobox', { name: 'knowledge_search 的副作用等级' }),
     ).toHaveText('无副作用');
-    const saved = await api.GET('/admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers/{mcp_server_id}', {
-      params: { path: { ...projectPath(), mcp_server_id: serverId } },
-    });
+    const saved = await api.GET(
+      '/admin/v1/tenants/{tenant_id}/projects/{project_id}/mcp-servers/{mcp_server_id}',
+      {
+        params: { path: { ...projectPath(), mcp_server_id: serverId } },
+      },
+    );
     expect(saved.data?.tool_side_effects).toEqual({ knowledge_search: 'none' });
     expect(saved.data?.last_check?.status).toBe('ok');
 
@@ -144,6 +155,9 @@ test.describe('能力', () => {
     await expect(page.getByRole('button', { name: '复制创建会话并声明自定义工具的请求体' })).toBeVisible();
     // 观察者只能看：技能页的上传按钮禁用并说明原因。
     await page.getByRole('tab', { name: '技能' }).click();
-    await expect(page.getByRole('button', { name: '上传技能' }).first()).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByRole('button', { name: '上传技能' }).first()).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });

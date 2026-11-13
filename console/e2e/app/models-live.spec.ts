@@ -57,7 +57,11 @@ test.describe('模型（真实供应商）', () => {
       await sheet.getByRole('textbox', { name: '默认最大输出' }).fill('2048');
       await sheet.getByRole('button', { name: '添加模型' }).click();
       await expect(sheet).toBeHidden();
-      await page.getByRole('row').filter({ hasText: modelName }).getByRole('button', { name: '测试' }).click();
+      await page
+        .getByRole('row')
+        .filter({ hasText: modelName })
+        .getByRole('button', { name: '测试' })
+        .click();
       const test = page.getByRole('dialog', { name: `测试 ${modelName}` });
       await test.getByRole('button', { name: '发送测试请求' }).click();
       await expect(test).toContainText('调用成功', { timeout: 60_000 });
@@ -71,7 +75,9 @@ test.describe('模型（真实供应商）', () => {
       // 清理：真实的 API Key 不留在开发库里。
       const api = await adminClient();
       const tenant = { tenant_id: projectPath().tenant_id };
-      const models = await api.GET('/admin/v1/tenants/{tenant_id}/models', { params: { path: tenant, query: { limit: 100 } } });
+      const models = await api.GET('/admin/v1/tenants/{tenant_id}/models', {
+        params: { path: tenant, query: { limit: 100 } },
+      });
       const accounts = await api.GET('/admin/v1/tenants/{tenant_id}/provider-accounts', {
         params: { path: tenant, query: { limit: 100 } },
       });

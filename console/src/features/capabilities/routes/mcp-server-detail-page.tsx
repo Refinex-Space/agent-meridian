@@ -275,7 +275,11 @@ function Loaded({ mcpServerId }: McpServerDetailPageProps) {
                     {headers.map(([name, secretId]) => (
                       <span key={name}>
                         <span className="font-mono text-12">{name}</span>
-                        <span className="ml-2 text-ink-2">{secretNames.get(secretId) ?? secretId}</span>
+                        <span className="ml-2 text-ink-2">
+                          {secretNames.get(secretId) ?? (
+                            <CopyableId id={secretId} label={`${name} 的凭据 ID`} />
+                          )}
+                        </span>
                       </span>
                     ))}
                   </span>

@@ -57,14 +57,14 @@ export function SkillTable({ uploadButton }: SkillTableProps) {
         }),
         col.display({
           id: 'references',
-          header: '引用',
-          meta: { width: 240, label: '引用' },
+          header: '被引用',
+          meta: { width: 240, label: '被引用' },
           cell: (c) => {
             const refs = c.row.original.references;
             return refs.length === 0 ? (
               <span className="text-ink-2">未被引用</span>
             ) : (
-              <span className="truncate">{summarizeReferences(refs)}</span>
+              <span className="truncate">{summarizeReferences(refs, { withType: false })}</span>
             );
           },
         }),

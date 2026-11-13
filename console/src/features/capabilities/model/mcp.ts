@@ -38,7 +38,7 @@ export const EMPTY_MCP_FORM: McpForm = {
   name: '',
   transport: 'streamable_http',
   url: '',
-  headers: [{ name: 'Authorization', secretId: null }],
+  headers: [],
   sideEffect: null,
 };
 

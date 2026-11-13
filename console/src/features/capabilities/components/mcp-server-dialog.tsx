@@ -265,7 +265,15 @@ export function McpServerDialog({ open, onOpenChange, server }: McpServerDialogP
                     variant="ghost"
                     className="-ml-2 self-start"
                     icon={<Icon glyph={PlusIcon} />}
-                    onClick={() => patch({ headers: [...form.headers, { name: '', secretId: null }] })}
+                    onClick={() =>
+                      patch({
+                        // 第一个请求头多半是认证：预填 Authorization。
+                        headers: [
+                          ...form.headers,
+                          { name: form.headers.length === 0 ? 'Authorization' : '', secretId: null },
+                        ],
+                      })
+                    }
                   >
                     添加请求头
                   </Button>

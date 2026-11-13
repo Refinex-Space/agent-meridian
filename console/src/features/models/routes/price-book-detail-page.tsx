@@ -17,7 +17,7 @@ import { meQuery, usePermission, useProject } from '@/lib/access';
 import type { PriceBook } from '@/lib/api/types';
 import { cn } from '@/lib/cn';
 import { useCrumb } from '@/lib/crumbs';
-import { formatInstant, middleEllipsis } from '@/lib/format';
+import { formatDateTime, middleEllipsis } from '@/lib/format';
 
 import { catalogModelsQuery, priceBookQuery, priceBookVersionsQuery } from '../api/queries';
 import { PublishVersionDialog } from '../components/price-book-dialogs';
@@ -41,7 +41,7 @@ function Versions({ priceBook, me }: { priceBook: PriceBook; me: string }) {
               {f.label}
             </TableHead>
           ))}
-          <TableHead className="w-44">生效于</TableHead>
+          <TableHead className="w-40">生效于</TableHead>
           <TableHead className="w-28">发布人</TableHead>
         </TableRow>
       </TableHeader>
@@ -59,7 +59,9 @@ function Versions({ priceBook, me }: { priceBook: PriceBook; me: string }) {
                   {v.prices[f.key]}
                 </TableCell>
               ))}
-              <TableCell className="tabular-nums">{formatInstant(v.effective_from)}</TableCell>
+              <TableCell className="whitespace-nowrap tabular-nums">
+                {formatDateTime(v.effective_from)}
+              </TableCell>
               <TableCell>{v.created_by === me ? '你' : middleEllipsis(v.created_by, 8, 4)}</TableCell>
             </TableRow>
           );
@@ -100,7 +102,7 @@ function Loaded({ priceBookId }: PriceBookDetailPageProps) {
         </PermissionGate>
       }
     >
-      <div className="flex flex-col gap-8 pt-6">
+      <div className="flex max-w-260 flex-col gap-8 pt-6">
         <section aria-labelledby="price-versions" className="flex flex-col gap-3">
           <div className="flex items-center gap-1">
             <h2 id="price-versions" className="text-16 font-semibold">

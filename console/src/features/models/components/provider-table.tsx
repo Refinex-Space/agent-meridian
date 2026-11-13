@@ -6,7 +6,6 @@ import { DataTable, dataTableColumns } from '@/components/domain/data-table';
 import { EmptyState } from '@/components/domain/empty-state';
 import { ErrorState } from '@/components/domain/error-state';
 import { InUseDialog } from '@/components/domain/reference-list';
-import { RelativeTime } from '@/components/domain/relative-time';
 import { connectivityStatus, StatusBadge } from '@/components/domain/status-badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,7 +22,7 @@ import { secretsQuery } from '@/features/settings';
 import { usePermission, useProject } from '@/lib/access';
 import { inUseReferences } from '@/lib/api/errors';
 import type { ProviderAccount, ResourceReference } from '@/lib/api/types';
-import { formatDuration } from '@/lib/format';
+import { formatDateTime, formatDuration } from '@/lib/format';
 
 import { providerAccountsQuery, useDeleteProviderAccount, useTestProviderAccount } from '../api/queries';
 import { PROVIDER_LABEL } from '../model/catalog';
@@ -32,7 +31,7 @@ import { ProviderDialog } from './provider-dialog';
 
 const col = dataTableColumns<ProviderAccount>();
 
-/** 连通性：状态符号、成功时的延迟；失败的原因放在提示里。 */
+/** 连通性：状态符号与成功时的延迟；测试时间与失败原因放在提示里。 */
 function Connectivity({ account }: { account: ProviderAccount }) {
   const check = account.last_check;
   const { kind, label } = connectivityStatus(check);
@@ -44,7 +43,7 @@ function Connectivity({ account }: { account: ProviderAccount }) {
       )}
     </span>
   );
-  if (!check?.message) return badge;
+  if (!check) return badge;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -52,7 +51,10 @@ function Connectivity({ account }: { account: ProviderAccount }) {
           {badge}
         </button>
       </TooltipTrigger>
-      <TooltipContent className="max-w-80">{check.message}</TooltipContent>
+      <TooltipContent className="flex max-w-80 flex-col gap-1">
+        <span>测试于 {formatDateTime(check.checked_at)}</span>
+        {check.message && <span>{check.message}</span>}
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -87,13 +89,13 @@ export function ProviderTable({ createButton }: ProviderTableProps) {
           header: '名称',
           enableHiding: false,
           sortFn: 'alphanumeric',
-          meta: { width: 200 },
+          meta: { width: 176 },
           cell: (c) => <span className="truncate font-medium">{c.getValue()}</span>,
         }),
         col.accessor('provider', {
           header: '类型',
           enableSorting: false,
-          meta: { width: 120 },
+          meta: { width: 104 },
           cell: (c) => PROVIDER_LABEL[c.getValue()],
         }),
         col.accessor('base_url', {
@@ -112,7 +114,7 @@ export function ProviderTable({ createButton }: ProviderTableProps) {
         col.accessor('secret_id', {
           header: '凭据',
           enableSorting: false,
-          meta: { width: 176 },
+          meta: { width: 152 },
           cell: (c) => {
             const id = c.getValue();
             if (!id) return <span className="text-ink-2">不需要</span>;
@@ -147,19 +149,6 @@ export function ProviderTable({ createButton }: ProviderTableProps) {
           ),
           meta: { width: 168, label: '连通性' },
           cell: (c) => <Connectivity account={c.row.original} />,
-        }),
-        col.display({
-          id: 'checked',
-          header: '测试于',
-          meta: { width: 120, label: '测试于' },
-          cell: (c) => {
-            const at = c.row.original.last_check?.checked_at;
-            return at ? (
-              <RelativeTime value={at} className="text-ink-2" />
-            ) : (
-              <span className="text-ink-2">从未</span>
-            );
-          },
         }),
         col.display({
           id: 'actions',

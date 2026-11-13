@@ -16,11 +16,19 @@ export function referenceName(reference: ResourceReference): string {
   return reference.name ?? reference.id;
 }
 
-/** 引用方的一句话概括：一个时写类型与名称，多个时写第一个与总数（"供应商账号 DashScope 等 3 个"）。 */
-export function summarizeReferences(references: readonly ResourceReference[]): string {
+/**
+ * 引用方的一句话概括：一个时写类型与名称，多个时写第一个与总数（"供应商账号 DashScope 等 3 个"）。引用方只可能是一种类型时
+ * （技能只被智能体版本引用）传 `withType: false`，只写名称。
+ */
+export function summarizeReferences(
+  references: readonly ResourceReference[],
+  { withType = true }: { withType?: boolean } = {},
+): string {
   const [first] = references;
   if (!first) return '';
-  const head = `${REFERENCE_TYPE_LABEL[first.type] ?? first.type} ${referenceName(first)}`;
+  const head = withType
+    ? `${REFERENCE_TYPE_LABEL[first.type] ?? first.type} ${referenceName(first)}`
+    : referenceName(first);
   return references.length === 1 ? head : `${head} 等 ${references.length} 个`;
 }
 

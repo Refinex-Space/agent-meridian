@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/domain/error-state';
 import { FilterBar, emptyValues, useSearchFilters, type FilterDef } from '@/components/domain/filter-bar';
 import { PermissionGate } from '@/components/domain/permission-gate';
 import { InUseDialog } from '@/components/domain/reference-list';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -55,7 +56,7 @@ export interface CatalogTableProps {
 }
 
 /**
- * 模型目录：名称、种类、供应商账号、上游模型名、上下文窗口、默认最大输出、能力与价格表；行内"测试"经直通接口调用一次模型，
+ * 模型目录：名称（非对话模型带种类）、供应商账号、上游模型名、上下文窗口、默认最大输出、能力与价格表；行内"测试"经直通接口调用一次模型，
  * 会产生少量费用（列头的提示写明）。
  */
 export function CatalogTable({ createButton }: CatalogTableProps) {
@@ -96,43 +97,45 @@ export function CatalogTable({ createButton }: CatalogTableProps) {
           header: '名称',
           enableHiding: false,
           sortFn: 'alphanumeric',
-          meta: { width: 200 },
-          cell: (c) => <span className="truncate font-mono text-12 font-medium">{c.getValue()}</span>,
-        }),
-        col.accessor('kind', {
-          header: '种类',
-          enableSorting: false,
-          meta: { width: 104 },
-          cell: (c) => MODEL_KIND_LABEL[c.getValue()],
+          meta: { label: '名称' },
+          // 对话模型是绝大多数：只给 Embedding 与重排贴种类（T20c 原型的做法）。
+          cell: (c) => (
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-mono text-12 font-medium">{c.getValue()}</span>
+              {c.row.original.kind !== 'chat' && (
+                <Badge className="shrink-0">{MODEL_KIND_LABEL[c.row.original.kind]}</Badge>
+              )}
+            </span>
+          ),
         }),
         col.accessor('provider_account_id', {
           header: '供应商账号',
           enableSorting: false,
-          meta: { width: 160 },
+          meta: { width: 136 },
           cell: (c) => <span className="truncate">{accountNames.get(c.getValue()) ?? c.getValue()}</span>,
         }),
         col.accessor('upstream_model', {
           header: '上游模型',
           enableSorting: false,
-          meta: { label: '上游模型' },
+          meta: { width: 120 },
           cell: (c) => <span className="truncate font-mono text-12 text-ink-2">{c.getValue()}</span>,
         }),
         col.accessor('context_window', {
           header: '上下文',
           sortFn: 'basic',
-          meta: { width: 88, align: 'right' },
+          meta: { width: 72, align: 'right' },
           cell: (c) => <span className="tabular-nums">{formatTokens(c.getValue())}</span>,
         }),
         col.accessor('max_output_tokens', {
-          header: '默认最大输出',
+          header: '最大输出',
           sortFn: 'basic',
-          meta: { width: 112, align: 'right' },
+          meta: { width: 80, align: 'right' },
           cell: (c) => <span className="tabular-nums">{formatTokens(c.getValue())}</span>,
         }),
         col.accessor('capabilities', {
           header: '能力',
           enableSorting: false,
-          meta: { width: 176 },
+          meta: { width: 152 },
           cell: (c) => {
             const text = c.row.original.kind === 'chat' ? capabilityText(c.getValue()) : '';
             return text ? <span className="truncate">{text}</span> : <span className="text-ink-2">无</span>;
@@ -141,7 +144,7 @@ export function CatalogTable({ createButton }: CatalogTableProps) {
         col.accessor('price_book_id', {
           header: '价格表',
           enableSorting: false,
-          meta: { width: 160 },
+          meta: { width: 128 },
           cell: (c) => {
             const id = c.getValue();
             return id ? (

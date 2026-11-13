@@ -26,7 +26,7 @@ import { meQuery, usePermission, useProject } from '@/lib/access';
 import type { Skill, SkillVersion } from '@/lib/api/types';
 import { cn } from '@/lib/cn';
 import { useCrumb } from '@/lib/crumbs';
-import { formatBytes, formatInstant, middleEllipsis } from '@/lib/format';
+import { formatBytes, formatDateTime, middleEllipsis } from '@/lib/format';
 
 import { skillQuery, skillVersionsQuery, useDeleteSkill } from '../api/queries';
 import { SkillUploadDialog } from '../components/skill-upload-dialog';
@@ -169,13 +169,13 @@ function Loaded({ skillId }: SkillDetailPageProps) {
     >
       <div className="flex max-w-260 flex-col gap-8 pt-6">
         <KeyValueList
-          columns={2}
+          className="max-w-200"
           items={[
             { label: '说明', value: skill.description },
-            { label: '创建于', value: formatInstant(skill.created_at) },
+            { label: '创建于', value: formatDateTime(skill.created_at) },
           ]}
         />
-        <Section id="skill-references" title="引用">
+        <Section id="skill-references" title="被引用">
           {referenced ? (
             <ReferenceList
               references={skill.references}

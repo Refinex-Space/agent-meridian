@@ -62,7 +62,7 @@ function Step({
     <li className="flex flex-col gap-3">
       <h3 className="text-14 font-semibold">{title}</h3>
       <p className="font-mono text-12 text-ink-2">{request}</p>
-      <CodeBlock code={code} language="json" label={label} />
+      <CodeBlock code={code} language="json" label={label} collapseAfter={0} />
     </li>
   );
 }
@@ -75,8 +75,9 @@ export function CustomToolsGuide() {
   return (
     <div className="flex max-w-220 flex-col gap-8 overflow-y-auto pt-4 pb-12">
       <p className="max-w-160 text-14">
-        自定义工具由业务系统在创建会话时声明、由业务系统执行。智能体调用它时本轮暂停，会话里出现一个等待回传结果的待处理动作；
-        业务系统执行后回传结果，智能体接着往下做。平台不登记项目级的自定义工具。
+        {
+          '自定义工具由业务系统在创建会话时声明、由业务系统执行。智能体调用它时本轮暂停，会话里出现一个等待回传结果的待处理动作；业务系统执行后回传结果，智能体接着往下做。平台不登记项目级的自定义工具。'
+        }
       </p>
       <ol className="flex flex-col gap-8">
         <Step

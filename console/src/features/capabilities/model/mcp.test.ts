@@ -26,7 +26,7 @@ const SERVER: McpServer = {
 
 describe('MCP 服务的表单', () => {
   it('校验服务名、地址与请求头（空行忽略、重名与缺凭据报在行上）', () => {
-    expect(validateMcpForm({ ...EMPTY_MCP_FORM, headers: [] })).toEqual({
+    expect(validateMcpForm(EMPTY_MCP_FORM)).toEqual({
       name: '小写字母开头，只用小写字母、数字与下划线，至多 32 个字符。',
       url: '写 http 或 https 开头的地址。',
     });

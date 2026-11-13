@@ -5,12 +5,15 @@ import { fixtureProject, openAs } from './support';
 
 /** 页面上所有输入框当前的值（包括已关闭的对话框里还在 DOM 中的）。 */
 const inputValues = (page: Page) =>
-  page.evaluate(() => Array.from(document.querySelectorAll('input, textarea')).map((el) => (el as HTMLInputElement).value));
+  page.evaluate(() =>
+    Array.from(document.querySelectorAll('input, textarea')).map((el) => (el as HTMLInputElement).value),
+  );
 
 /** 浏览器存储的全部内容：localStorage、sessionStorage、IndexedDB 的库名、Cookie 与 Cache Storage 的键。 */
 async function storageText(page: Page): Promise<string> {
   const inPage = await page.evaluate(async () => {
-    const dump = (s: Storage) => Object.fromEntries(Array.from({ length: s.length }, (_, i) => s.key(i)!).map((k) => [k, s.getItem(k)]));
+    const dump = (s: Storage) =>
+      Object.fromEntries(Array.from({ length: s.length }, (_, i) => s.key(i)!).map((k) => [k, s.getItem(k)]));
     const databases = (await indexedDB.databases()).map((d) => d.name);
     const caches = 'caches' in window ? await window.caches.keys() : [];
     return { local: dump(localStorage), session: dump(sessionStorage), databases, caches };
@@ -33,7 +36,8 @@ test.describe('凭据', () => {
     });
     page.on('request', (request) => {
       const body = request.postData() ?? '';
-      if (body.includes(first) || body.includes(second)) requestsWithPlaintext.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      if (body.includes(first) || body.includes(second))
+        requestsWithPlaintext.push(`${request.method()} ${new URL(request.url()).pathname}`);
     });
 
     await openAs(page, 'admin', `/projects/${fixtureProject()}/settings`);
@@ -79,7 +83,11 @@ test.describe('凭据', () => {
     ]);
 
     // 没有引用方的凭据可以删除：输入名称确认。
-    await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name: `${name} 的更多操作` }).click();
+    await page
+      .getByRole('row')
+      .filter({ hasText: name })
+      .getByRole('button', { name: `${name} 的更多操作` })
+      .click();
     await page.getByRole('menuitem', { name: '删除' }).click();
     const confirm = page.getByRole('alertdialog', { name: `删除凭据 ${name}` });
     await expect(confirm).toContainText('不能恢复');

@@ -24,5 +24,6 @@ describe('ReferenceList', () => {
     expect(summarizeReferences([])).toBe('');
     expect(summarizeReferences(refs.slice(0, 1))).toBe('供应商账号 DashScope');
     expect(summarizeReferences(refs)).toBe('供应商账号 DashScope 等 3 个');
+    expect(summarizeReferences(refs.slice(2), { withType: false })).toBe('support v3');
   });
 });

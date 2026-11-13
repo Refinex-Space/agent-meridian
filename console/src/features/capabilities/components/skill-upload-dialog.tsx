@@ -50,13 +50,21 @@ function serverMessages(error: unknown): string[] {
   return (error.problem?.errors ?? []).map((v) => v.message);
 }
 
+/** frontmatter 的值：字符串原样，标量列表用逗号连接（`allowed-tools`），其余写成单行 YAML。 */
+function frontmatterValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && value.every((v) => typeof v !== 'object' || v === null))
+    return value.join(', ');
+  return stringify(value, { collectionStyle: 'flow' }).trim();
+}
+
 function FrontmatterPreview({ draft }: { draft: SkillPackageDraft }) {
   const items: KeyValueItem[] = [
     { label: 'name', value: draft.name || null, mono: true },
     { label: 'description', value: draft.description || null },
     ...Object.entries(draft.extra).map(([key, value]) => ({
       label: key,
-      value: typeof value === 'string' ? value : stringify(value).trim(),
+      value: frontmatterValue(value),
       mono: typeof value !== 'string',
     })),
   ];

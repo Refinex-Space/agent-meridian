@@ -41,7 +41,12 @@ async function testModel(page: Page, name: string) {
 /** 等账本里出现这个模型的第 n 条用量（outbox → Stream → control-plane 入账是异步的）。 */
 async function usageOf(modelId: string, count: number) {
   const api = await adminClient();
-  let records: { cost: string | null; price_book_version: number | null; input_tokens: number; output_tokens: number }[] = [];
+  let records: {
+    cost: string | null;
+    price_book_version: number | null;
+    input_tokens: number;
+    output_tokens: number;
+  }[] = [];
   await expect
     .poll(
       async () => {
@@ -103,7 +108,12 @@ test.describe('模型', () => {
     await expect(page.getByRole('row').filter({ hasText: book })).toContainText('v1');
 
     // 用它计价的模型（上游是脚本化模型服务），测试一次产生第一条用量。
-    await addChatModel(page, { account: FIXTURE.providerAccount, name: model, upstream: 'scripted', priceBook: book });
+    await addChatModel(page, {
+      account: FIXTURE.providerAccount,
+      name: model,
+      upstream: 'scripted',
+      priceBook: book,
+    });
     const api = await adminClient();
     const models = await api.GET('/admin/v1/tenants/{tenant_id}/models', {
       params: { path: { tenant_id: projectPath().tenant_id }, query: { limit: 100 } },
@@ -146,7 +156,10 @@ test.describe('模型', () => {
   test('项目观察者只能看：看不到写操作，测试模型按钮说明原因', async ({ page }) => {
     await openAs(page, 'viewer', `/projects/${fixtureProject()}/models?tab=catalog`);
     await expect(page.getByRole('row').filter({ hasText: 'scripted-chat' })).toBeVisible();
-    await expect(page.getByRole('button', { name: '添加模型' }).first()).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByRole('button', { name: '添加模型' }).first()).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     await expect(
       page.getByRole('row').filter({ hasText: 'scripted-chat' }).getByRole('button', { name: '测试' }),
     ).toHaveAttribute('aria-disabled', 'true');

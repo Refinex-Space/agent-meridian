@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  formatDateTime,
   formatBytes,
   formatDuration,
   formatInteger,
@@ -28,6 +29,10 @@ describe('format', () => {
     expect(formatDuration(252_000)).toBe('4 分 12 秒');
     expect(formatDuration(120_000)).toBe('2 分');
     expect(formatDuration(7_500_000)).toBe('2 小时 5 分');
+  });
+
+  it('详情子表格的绝对时间到分钟（东八区）', () => {
+    expect(formatDateTime('2026-11-13T02:02:14.345Z')).toBe('2026-11-13 10:02');
   });
 
   it('千分位与字节', () => {
