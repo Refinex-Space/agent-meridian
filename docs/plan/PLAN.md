@@ -93,7 +93,7 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 | T21 | [控制台工程基座](tasks/T21-console-foundation.md) | 4 | T20c（`console/T20` 已合并回 `main`）、R2 | high | 大 | 无 | 已完成 | 5220288 |
 | T22 | [控制台：智能体与环境](tasks/T22-console-agents-environments.md) | 4 | T21 | high | 大 | 无 | 已完成 | 1cf2761 |
 | T23 | [控制台：能力、模型与凭据](tasks/T23-console-capabilities-models-secrets.md) | 4 | T22 | high | 中 | 无 | 已完成 | 4b1fad4 |
-| T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 未开始 | — |
+| T24 | [控制台：会话中心与 Playground](tasks/T24-console-sessions-playground.md) | 4 | T23 | xhigh | 大 | 无 | 进行中 | — |
 | T25a | [控制台：知识库、待处理与概览](tasks/T25a-console-knowledge-pending-overview.md) | 4 | T24 | high | 大 | 无 | 未开始 | — |
 | T25b | [控制台：用量与预算、设置](tasks/T25b-console-usage-settings.md) | 4 | T25a | high | 大 | 无 | 未开始 | — |
 | R3 | [控制台体验评审](tasks/R3-console-ux-review.md) | 4 | T25b | high | 中 | 无 | 未开始 | — |
@@ -175,7 +175,19 @@ git commit -m "docs: 建立交付计划、执行协议与工程规范"
 
 进行中的任务在这里维护自己的检查清单，每完成一项就勾选并提交。任务完成时清空本节。
 
-（当前没有进行中的任务）
+T24 控制台：会话中心与 Playground（开工基线 `verify.sh` 通过）
+
+- [ ] 后端补充：大结果按需读取的接口（runtime、OpenAPI、契约测试）；脚本化模型服务的 e2e 脚本；ADR-0057
+- [ ] 事件渲染器注册表（全部事件类型与兜底），时间轴与检查器改用它
+- [ ] SSE 客户端：断网与恢复、连接停滞的检测
+- [ ] 会话列表：筛选（URL）、"有 N 条更新"、批量归档、跳到详情；命令面板的最近会话与会话 ID（D97）、智能体详情的会话行（D98）
+- [ ] 会话详情（工作台）：头部（状态、StreamIndicator、中断、归档、删除、用量与成本）、线程树与线程切换、待处理动作（批准、拒绝、记住、自定义工具结果、恢复确认）、时间轴、检查器（完整内容、原始 JSON、权限结论、耗时、token 与成本、上下文构成、大结果按需加载）、发送消息（排队或插入当前轮）
+- [ ] 工作区：文件与产物浏览、预览、下载
+- [ ] Playground：智能体、版本、环境、以终端用户身份（`end_user_id`、`acl_tags`），与会话详情共用工作台
+- [ ] Vitest；e2e：A02 审批、A03 steer 与中断、A04 子线程截图、A05 断网重连、A06 1 万条事件性能与检查器计时、A01 live
+- [ ] 截图评审（亮暗 × 1280、1920，`tmp/evidence/T24/`）、外壳与模板基线、a11y；删除会话列表原型
+- [ ] A08 ego-browser 走查
+- [ ] 收尾：文档（console/CLAUDE.md 渲染器注册、frontend-design、console-api-map、架构设计）、`verify.sh`、验收记录
 
 ## 控制台设计轨道
 
